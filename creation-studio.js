@@ -1684,7 +1684,7 @@
         esc(el.content || '') + '</textarea>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">' +
           '<div><label style="font-size:9px;color:#64748b;display:block;margin-bottom:2px;">Color</label>' +
-          '<input type="color" id="ee-text-color" value="' + esc((el.style && el.style.color) || '#ffffff') + '" ' +
+          '<input type="color" id="ee-text-color" value="' + esc((el.style && el.style.color) || '#1a1a1a') + '" ' +
           'style="width:100%;height:28px;border:none;border-radius:4px;cursor:pointer;" /></div>' +
           '<div><label style="font-size:9px;color:#64748b;display:block;margin-bottom:2px;">Size (px)</label>' +
           '<input type="number" id="ee-font-size" value="' + ((el.style && el.style.fontSize) || 48) + '" ' +
@@ -1736,8 +1736,8 @@
 
   function resolveTextMaskFill(el, layer) {
     const detectedBg =
-      (layer && layer.style && layer.style.backgroundColor) ||
-      (el && el.style && el.style.backgroundColor) ||
+      (layer && layer.style && (layer.style.backgroundColor || layer.style.background)) ||
+      (el && el.style && (el.style.backgroundColor || el.style.background)) ||
       null;
     const yPct =
       (el && el.boundingBox && el.boundingBox.yPct != null)
@@ -1764,18 +1764,23 @@
     }
 
     if (canvasBg && isLightColor(canvasBg)) return canvasBg;
-    return '#000000';
+    return '#ffffff';
   }
 
   function applyTextEdit() {
     if (!studioActiveElement) return;
     const el = studioActiveElement;
+
+    studioCanvas.getObjects().filter(function (o) {
+      return o.name === 'mask_' + el.id || o.name === 'text_' + el.id;
+    }).forEach(function (o) { studioCanvas.remove(o); });
+
     const contentEl = document.getElementById('ee-text-content');
     const colorEl = document.getElementById('ee-text-color');
     const sizeEl = document.getElementById('ee-font-size');
     const famEl = document.getElementById('ee-font-family');
     const content = (contentEl && contentEl.value) || el.content || '';
-    const color = (colorEl && colorEl.value) || '#ffffff';
+    const color = (colorEl && colorEl.value) || (el.style && el.style.color) || '#1a1a1a';
     const fontSize = parseInt((sizeEl && sizeEl.value) || 48, 10);
     const fontFamily = (famEl && famEl.value) || 'Instrument Sans';
 
@@ -1785,21 +1790,20 @@
     const t = bb.yPct * fmt.displayH;
     const w = bb.wPct * fmt.displayW;
     const h = bb.hPct * fmt.displayH;
-    const padX = Math.max(12, w * 0.10);
-    const padY = Math.max(10, h * 0.20);
+    const padX = Math.min(8, Math.max(4, w * 0.02));
+    const padY = Math.min(8, Math.max(4, h * 0.05));
     const scaledFontSize = fontSize * (fmt.displayW / fmt.w);
     const maskFill = resolveTextMaskFill(el);
-
-    studioCanvas.getObjects().filter(function (o) {
-      return o.name === 'mask_' + el.id || o.name === 'text_' + el.id;
-    }).forEach(function (o) { studioCanvas.remove(o); });
+    const cornerRadius = (el.style && el.style.borderRadius) || 8;
 
     const maskRect = new fabric.Rect({
       name: 'mask_' + el.id,
       left: l - padX, top: t - padY,
       width: w + padX * 2, height: h + padY * 2,
       fill: maskFill,
-      opacity: 0.97, selectable: false, evented: false, isMaskRect: true,
+      opacity: 1.0,
+      rx: cornerRadius, ry: cornerRadius,
+      selectable: false, evented: false, isMaskRect: true,
     });
     studioCanvas.add(maskRect);
 
