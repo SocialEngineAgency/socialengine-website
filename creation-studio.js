@@ -119,6 +119,14 @@
     <div class="cs-canvas-area">
       <div class="cs-canvas-outer" id="cs-canvas-outer">
         <div class="cs-canvas-wrapper" id="cs-canvas-wrapper">
+          <video
+            id="studio-video-player"
+            muted
+            loop
+            playsinline
+            preload="auto"
+            style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:none;pointer-events:none;z-index:0;"
+          ></video>
           <canvas id="studio-canvas"></canvas>
         </div>
       </div>
@@ -455,12 +463,7 @@
     if (studioCanvas) {
       studioVideoBlobUrls.forEach(function (url) { try { URL.revokeObjectURL(url); } catch (_) {} });
       studioVideoBlobUrls = [];
-      studioVideoElements.forEach(function (v) {
-        try { v.pause(); } catch (_) {}
-        try { v.remove(); } catch (_) {}
-      });
       stopVideoRenderLoop();
-      studioVideoElements = [];
       updateVideoToolbar(false);
       try { studioCanvas.dispose(); } catch (e) {}
       studioCanvas = null;
@@ -475,33 +478,10 @@
       enableRetinaScaling: false,
     });
     global.studioCanvas = studioCanvas;
-
-    // Inject a native <canvas> behind Fabric for video rendering.
-    // Fabric's .canvas-container holds lower-canvas + upper-canvas; we prepend
-    // so video sits behind both Fabric layers.
-    const existingVideoBg = document.getElementById('studio-video-bg');
-    if (existingVideoBg) existingVideoBg.remove();
-
-    const videoBgCanvas = document.createElement('canvas');
-    videoBgCanvas.id = 'studio-video-bg';
-    videoBgCanvas.width = fmt.displayW;
-    videoBgCanvas.height = fmt.displayH;
-    videoBgCanvas.style.cssText = [
-      'position:absolute',
-      'top:0',
-      'left:0',
-      'width:' + fmt.displayW + 'px',
-      'height:' + fmt.displayH + 'px',
-      'display:none',
-      'pointer-events:none',
-      'z-index:0',
-    ].join(';');
-
-    const fabricWrapper = studioCanvas.wrapperEl;
-    fabricWrapper.style.position = 'relative';
-    fabricWrapper.insertBefore(videoBgCanvas, fabricWrapper.firstChild);
-    if (studioCanvas.lowerCanvasEl) studioCanvas.lowerCanvasEl.style.background = 'transparent';
-    if (studioCanvas.upperCanvasEl) studioCanvas.upperCanvasEl.style.background = 'transparent';
+    if (studioCanvas.wrapperEl) {
+      studioCanvas.wrapperEl.style.background = 'transparent';
+      studioCanvas.wrapperEl.style.zIndex = '1';
+    }
 
     studioCanvas.on('selection:created', updatePropsPanel);
     studioCanvas.on('selection:updated', updatePropsPanel);
@@ -539,12 +519,7 @@
 
     studioVideoBlobUrls.forEach(function (url) { try { URL.revokeObjectURL(url); } catch (_) {} });
     studioVideoBlobUrls = [];
-    studioVideoElements.forEach(function (v) {
-      try { v.pause(); } catch (_) {}
-      try { v.remove(); } catch (_) {}
-    });
     stopVideoRenderLoop();
-    studioVideoElements = [];
     updateVideoToolbar(false);
 
     const prevFmtKey = studioFormat;
@@ -561,14 +536,6 @@
     wrapper.style.height = fmt.displayH + 'px';
     studioCanvas.setWidth(fmt.displayW);
     studioCanvas.setHeight(fmt.displayH);
-
-    const videoBg = document.getElementById('studio-video-bg');
-    if (videoBg) {
-      videoBg.width = fmt.displayW;
-      videoBg.height = fmt.displayH;
-      videoBg.style.width = fmt.displayW + 'px';
-      videoBg.style.height = fmt.displayH + 'px';
-    }
 
     if (studioSaved[newFmt]) {
       studioCanvas.loadFromJSON(studioSaved[newFmt], function () {
@@ -1017,129 +984,119 @@
     };
   }
 
-  // ── Video: native canvas behind Fabric (ctx.drawImage) ─────────────────
+  // ── Video: native HTML5 <video> behind Fabric canvas ───────────────────
   function startVideoRenderLoop() {
-    if (studioVideoLoop) return;
+    // No-op — browser renders <video> natively; no RAF needed
     studioVideoLoop = true;
-
-    const videoBgCanvas = document.getElementById('studio-video-bg');
-    const videoBgCtx = videoBgCanvas ? videoBgCanvas.getContext('2d') : null;
-
-    function tick() {
-      if (!studioVideoLoop) return;
-
-      const vid = global._studioActiveVideo;
-      // Draw whenever a frame is available (including paused scrub)
-      if (vid && videoBgCtx && videoBgCanvas && vid.readyState >= 2) {
-        videoBgCtx.clearRect(0, 0, videoBgCanvas.width, videoBgCanvas.height);
-        videoBgCtx.drawImage(vid, 0, 0, videoBgCanvas.width, videoBgCanvas.height);
-      }
-
-      if (studioCanvas) studioCanvas.renderAll();
-      fabric.util.requestAnimFrame(tick);
-    }
-
-    fabric.util.requestAnimFrame(tick);
   }
 
   function stopVideoRenderLoop() {
     studioVideoLoop = false;
     studioVideoLoopId = null;
     global._studioActiveVideo = null;
-    const videoBgCanvas = document.getElementById('studio-video-bg');
-    if (videoBgCanvas) videoBgCanvas.style.display = 'none';
+    const v = document.getElementById('studio-video-player');
+    if (v) {
+      try { v.pause(); } catch (_) {}
+      v.style.display = 'none';
+      v.removeAttribute('src');
+      try { v.load(); } catch (_) {}
+    }
+    studioVideoElements = [];
     if (studioCanvas) {
       studioCanvas.backgroundColor = '#0E1A63';
+      if (studioCanvas.lowerCanvasEl) studioCanvas.lowerCanvasEl.style.background = '';
       studioCanvas.renderAll();
     }
   }
 
   async function addVideoToCanvas(videoUrl, videoMime, label) {
-    const fmt = STUDIO_FORMATS[studioFormat];
-
-    stopVideoRenderLoop();
-    studioVideoElements.forEach(function (v) {
-      try { v.pause(); } catch (_) {}
-      try { v.remove(); } catch (_) {}
-    });
-    studioVideoElements = [];
-
-    studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
-      studioCanvas.remove(o);
-    });
-
-    const videoBgCanvas = document.getElementById('studio-video-bg');
-    if (!videoBgCanvas) {
-      addChatMsg('assistant', '❌ Video canvas not found — please reload the page.');
+    const videoEl = document.getElementById('studio-video-player');
+    if (!videoEl) {
+      addChatMsg('assistant', '❌ Video element missing from HTML — check portal.html has <video id="studio-video-player"> inside cs-canvas-wrapper.');
       return;
     }
 
-    // Video element must be in DOM for frame decoding
-    const videoEl = document.createElement('video');
-    videoEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
-    document.body.appendChild(videoEl);
-    studioVideoElements.push(videoEl);
-
-    videoEl.muted = true;
-    videoEl.loop = true;
-    videoEl.playsInline = true;
-    videoEl.preload = 'auto';
-    if (videoUrl && String(videoUrl).startsWith('http')) videoEl.crossOrigin = 'anonymous';
-    videoEl.src = videoUrl;
-
     addChatMsg('assistant', '📹 Loading ' + (label || 'video') + '…');
 
-    await new Promise(function (resolve, reject) {
-      videoEl.addEventListener('canplay', resolve, { once: true });
-      videoEl.addEventListener('error', function () {
-        reject(new Error(
-          videoEl.error ? ('Code ' + videoEl.error.code + ': ' + videoEl.error.message) : 'Unknown video error'
-        ));
-      }, { once: true });
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+    studioVideoElements = [videoEl];
+
+    videoEl.src = videoUrl;
+
+    const canPlay = await new Promise(function (resolve) {
+      function onOk() {
+        videoEl.removeEventListener('canplay', onOk);
+        videoEl.removeEventListener('error', onErr);
+        resolve(true);
+      }
+      function onErr() {
+        videoEl.removeEventListener('canplay', onOk);
+        videoEl.removeEventListener('error', onErr);
+        resolve(false);
+      }
+      videoEl.addEventListener('canplay', onOk, { once: true });
+      videoEl.addEventListener('error', onErr, { once: true });
       videoEl.load();
     });
+
+    if (!canPlay) {
+      addChatMsg('assistant', '❌ "' + (label || 'video') + '" failed to load. Check the file isn\'t corrupted and is a supported format (MP4, WebM, MOV).');
+      return;
+    }
+
+    videoEl.style.display = 'block';
+
+    studioCanvas.backgroundColor = 'rgba(0,0,0,0)';
+    if (studioCanvas.lowerCanvasEl) studioCanvas.lowerCanvasEl.style.background = 'transparent';
+    if (studioCanvas.wrapperEl) studioCanvas.wrapperEl.style.background = 'transparent';
+    studioCanvas.renderAll();
 
     try {
       await videoEl.play();
     } catch (e) {
-      console.warn('[Studio] play() blocked:', e.message);
+      console.warn('[Studio] Autoplay:', e.message);
     }
 
-    // Transparent Fabric bg so native video canvas shows through
-    studioCanvas.backgroundColor = 'rgba(0,0,0,0)';
-    if (studioCanvas.lowerCanvasEl) studioCanvas.lowerCanvasEl.style.background = 'transparent';
-    studioCanvas.renderAll();
+    global._studioActiveVideo = videoEl;
 
-    videoBgCanvas.width = fmt.displayW;
-    videoBgCanvas.height = fmt.displayH;
-    videoBgCanvas.style.width = fmt.displayW + 'px';
-    videoBgCanvas.style.height = fmt.displayH + 'px';
-    videoBgCanvas.style.display = 'block';
-
-    // Invisible placeholder so Layers panel has an entry
+    studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
+      studioCanvas.remove(o);
+    });
     const placeholder = new fabric.Rect({
-      name: label || ('video-' + Date.now()),
+      name: label || 'video',
       width: 1,
       height: 1,
       opacity: 0,
       selectable: false,
       evented: false,
       isVideo: true,
-      _videoEl: videoEl,
-      hoverCursor: 'default',
     });
     studioCanvas.add(placeholder);
-    studioCanvas.sendToBack(placeholder);
-
-    global._studioActiveVideo = videoEl;
+    studioCanvas.renderAll();
 
     updateLayerPanel();
-    saveHistory('Video layer added');
-    startVideoRenderLoop();
     updateVideoToolbar(true);
+    saveHistory('Video added');
 
-    const dur = isFinite(videoEl.duration) ? Math.round(videoEl.duration) + 's' : 'unknown length';
-    addChatMsg('assistant', '✓ "' + (label || 'video') + '" playing (' + dur + '). Add text/shapes — they overlay the video.');
+    const dur = isFinite(videoEl.duration) ? Math.round(videoEl.duration) + 's' : '';
+    addChatMsg('assistant',
+      '✓ "' + (label || 'video') + '" playing' + (dur ? ' (' + dur + ')' : '') + '. ' +
+      'Add text/shapes — they overlay the video. ' +
+      '💡 Want me to detect text in this video?'
+    );
+    const msgs = document.getElementById('cs-chat-messages');
+    if (msgs) {
+      const wrap = document.createElement('div');
+      wrap.className = 'chat-msg assistant';
+      wrap.innerHTML = '<div class="chat-bubble" style="padding-top:4px">' +
+        '<button type="button" onclick="captureFrameAndAnalyze()" ' +
+        'style="background:#7C3AED;border:none;color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;">' +
+        '✦ Analyze frame</button></div>';
+      msgs.appendChild(wrap);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
   }
 
   function extractFrameFromVideo(videoEl, timeSeconds) {
@@ -1193,8 +1150,8 @@
       '<button type="button" class="cs-tool vt-btn" onclick="exportVideoWithOverlays()" title="Export video with overlays as WebM">⬇ Export video</button>' +
       '<button type="button" class="cs-tool vt-btn" onclick="exportVideoFrame()" title="Export current frame as PNG">⬇ Frame PNG</button>';
 
-    if (studioVideoElements.length > 0) {
-      const primaryVid = studioVideoElements[studioVideoElements.length - 1];
+    const primaryVid = document.getElementById('studio-video-player');
+    if (primaryVid) {
       if (vbar._timeInterval) clearInterval(vbar._timeInterval);
       vbar._timeInterval = setInterval(function () {
         if (!primaryVid.duration) return;
@@ -1212,44 +1169,43 @@
   }
 
   function toggleVideoPlay() {
+    const v = document.getElementById('studio-video-player');
     const btn = document.getElementById('vt-play');
-    const isPaused = studioVideoElements.some(function (v) { return v.paused; });
-    if (isPaused) {
-      studioVideoElements.forEach(function (v) { v.play().catch(function () {}); });
-      if (btn) btn.innerHTML = '⏸ Pause';
-      startVideoRenderLoop();
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(function () {});
+      if (btn) btn.textContent = '⏸ Pause';
     } else {
-      studioVideoElements.forEach(function (v) { v.pause(); });
-      if (btn) btn.innerHTML = '▶ Play';
-      if (studioCanvas) studioCanvas.renderAll();
+      v.pause();
+      if (btn) btn.textContent = '▶ Play';
     }
   }
 
-  function seekVideo(deltaSec) {
-    studioVideoElements.forEach(function (v) {
-      v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + deltaSec));
-    });
+  function seekVideo(delta) {
+    const v = document.getElementById('studio-video-player');
+    if (v) v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta));
   }
 
   function scrubVideo(pct) {
-    studioVideoElements.forEach(function (v) {
-      if (v.duration) v.currentTime = (pct / 100) * v.duration;
-    });
+    const v = document.getElementById('studio-video-player');
+    if (v && v.duration) v.currentTime = (pct / 100) * v.duration;
   }
 
   function muteToggleVideo() {
+    const v = document.getElementById('studio-video-player');
     const btn = document.getElementById('vt-mute');
-    studioVideoElements.forEach(function (v) { v.muted = !v.muted; });
-    if (btn && studioVideoElements[0]) {
-      btn.textContent = studioVideoElements[0].muted ? '🔇' : '🔊';
-    }
+    if (!v) return;
+    v.muted = !v.muted;
+    if (btn) btn.textContent = v.muted ? '🔇' : '🔊';
   }
 
   async function exportVideoWithOverlays() {
-    const vid = global._studioActiveVideo;
-    if (!vid) { addChatMsg('assistant', '❌ No video loaded.'); return; }
+    const vid = document.getElementById('studio-video-player') || global._studioActiveVideo;
+    if (!vid || vid.style.display === 'none') {
+      addChatMsg('assistant', '❌ No video loaded.');
+      return;
+    }
 
-    const videoBg = document.getElementById('studio-video-bg');
     const fmt = STUDIO_FORMATS[studioFormat];
     const duration = vid.duration || 15;
 
@@ -1274,7 +1230,7 @@
       function recordTick() {
         if (!recording) return;
         compCtx.clearRect(0, 0, compCanvas.width, compCanvas.height);
-        if (videoBg) compCtx.drawImage(videoBg, 0, 0);
+        if (vid.readyState >= 2) compCtx.drawImage(vid, 0, 0, compCanvas.width, compCanvas.height);
         if (studioCanvas && studioCanvas.lowerCanvasEl) {
           compCtx.drawImage(studioCanvas.lowerCanvasEl, 0, 0);
         }
@@ -1310,18 +1266,17 @@
 
   function buildCompositeCanvas() {
     const fmt = STUDIO_FORMATS[studioFormat];
-    const scale = fmt.w / fmt.displayW;
     const out = document.createElement('canvas');
     out.width = fmt.w;
     out.height = fmt.h;
     const ctx = out.getContext('2d');
+    const v = document.getElementById('studio-video-player');
+    const scale = fmt.w / fmt.displayW;
 
-    const videoBg = document.getElementById('studio-video-bg');
-    if (videoBg && videoBg.style.display !== 'none') {
-      ctx.drawImage(videoBg, 0, 0, fmt.w, fmt.h);
+    if (v && v.style.display !== 'none' && v.readyState >= 2) {
+      ctx.drawImage(v, 0, 0, fmt.w, fmt.h);
     } else {
-      const bg = (studioCanvas && studioCanvas.backgroundColor) || '#0E1A63';
-      ctx.fillStyle = (bg === 'rgba(0,0,0,0)' || bg === 'transparent') ? '#0E1A63' : bg;
+      ctx.fillStyle = '#0E1A63';
       ctx.fillRect(0, 0, fmt.w, fmt.h);
     }
 
@@ -1331,7 +1286,6 @@
       ctx.drawImage(studioCanvas.lowerCanvasEl, 0, 0);
       ctx.restore();
     }
-
     return out;
   }
 
@@ -1384,111 +1338,102 @@
 
     if (data.frameDataUrl) {
       studioPendingFrameDataUrl = data.frameDataUrl;
-      addChatMsg('assistant', '💡 Want me to detect any text in this video and make it editable?');
-      const msgs = document.getElementById('cs-chat-messages');
-      if (msgs) {
-        const wrap = document.createElement('div');
-        wrap.className = 'chat-msg assistant';
-        wrap.innerHTML = '<div class="chat-bubble" style="padding-top:4px">' +
-          '<button type="button" onclick="analyzeVideoFrame()" ' +
-          'style="background:#7C3AED;border:none;color:#fff;padding:5px 12px;border-radius:6px;' +
-          'cursor:pointer;font-size:12px;display:inline-block">' +
-          '✦ Analyze frame</button></div>';
-        msgs.appendChild(wrap);
-        msgs.scrollTop = msgs.scrollHeight;
-      }
+      // Analyze button is already offered from addVideoToCanvas via captureFrameAndAnalyze
     }
   }
 
-  async function analyzeVideoFrame() {
-    if (studioAnalysisInProgress) {
-      addChatMsg('assistant', '⏳ Analysis already in progress, please wait…');
+  async function captureFrameAndAnalyze() {
+    const v = document.getElementById('studio-video-player');
+    if (!v || v.readyState < 2) {
+      addChatMsg('assistant', '❌ Video not ready yet.');
       return;
     }
-    const dataUrl = studioPendingFrameDataUrl;
-    if (!dataUrl) {
-      addChatMsg('assistant', '❌ No video frame available to analyze. Re-upload the video.');
+    if (studioAnalysisInProgress) {
+      addChatMsg('assistant', '⏳ Analysis in progress…');
       return;
     }
     studioAnalysisInProgress = true;
     showRightTab('chat');
-    addChatMsg('assistant', '✦ Analyzing video frame for text and graphics…');
+    addChatMsg('assistant', '✦ Capturing frame and analyzing for text…');
+
     try {
+      const tmp = document.createElement('canvas');
+      tmp.width = v.videoWidth || 1080;
+      tmp.height = v.videoHeight || 1920;
+      tmp.getContext('2d').drawImage(v, 0, 0, tmp.width, tmp.height);
+      const dataUrl = tmp.toDataURL('image/jpeg', 0.88);
+
       const blob = await fetch(dataUrl).then(function (r) { return r.blob(); });
-      const formData = new FormData();
-      formData.append('image', blob, 'video-frame.jpg');
+      const fd = new FormData();
+      fd.append('image', blob, 'frame.jpg');
       const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
       const hash = global.__clientHash || global.clientHash || global._seHash || '';
-      const uploadResp = await fetch(apiBase() + '/api/studio/upload-image', {
+      const upResp = await fetch(apiBase() + '/api/studio/upload-image', {
         method: 'POST',
         headers: { 'x-client-email': email, 'x-client-hash': hash },
-        body: formData,
+        body: fd,
       });
-      const uploadData = await uploadResp.json();
-      if (!uploadData.url) throw new Error('Frame upload failed');
+      const upData = await upResp.json();
+      if (!upData.url) throw new Error('Frame upload failed');
 
-      const analyzeResp = await studioFetch('/api/studio/analyze-image', {
+      const analysis = await studioFetch('/api/studio/analyze-image', {
         method: 'POST',
-        body: JSON.stringify({ imageUrl: uploadData.url, format: studioFormat }),
+        body: JSON.stringify({ imageUrl: upData.url, format: studioFormat }),
       });
 
-      const layers = analyzeResp.layers || [];
       const fmt = STUDIO_FORMATS[studioFormat];
-      const fontSizeMap = {
+      const fsMap = {
         small: fmt.displayH * 0.025,
-        medium: fmt.displayH * 0.040,
-        large: fmt.displayH * 0.060,
-        xlarge: fmt.displayH * 0.090,
-        xxlarge: fmt.displayH * 0.130,
+        medium: fmt.displayH * 0.04,
+        large: fmt.displayH * 0.06,
+        xlarge: fmt.displayH * 0.09,
+        xxlarge: fmt.displayH * 0.13,
       };
-
       let added = 0;
+      const layers = analysis.layers || [];
       for (let i = 0; i < layers.length; i++) {
         const layer = layers[i];
-        if (layer.type === 'background_image' || layer.type === 'background_color') continue;
-        if (layer.type === 'text') {
-          const t = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
-            name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now() + '-' + i,
-            left: (layer.left / 100) * fmt.displayW,
-            top: (layer.top / 100) * fmt.displayH,
-            width: fmt.displayW * 0.88,
-            fontFamily: layer.isHeadline ? 'Newsreader' : 'Instrument Sans',
-            fontSize: fontSizeMap[layer.fontSize] || fontSizeMap.medium,
-            fill: layer.color || '#FFFFFF',
-            fontWeight: layer.fontWeight || 'normal',
-            textAlign: layer.textAlign || 'left',
-            lineHeight: 1.15,
-            selectable: true,
-            evented: true,
-          });
-          studioCanvas.add(t);
-          added++;
-        }
+        if (layer.type !== 'text') continue;
+        const t = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
+          name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now() + '-' + i,
+          left: (layer.left / 100) * fmt.displayW,
+          top: (layer.top / 100) * fmt.displayH,
+          width: fmt.displayW * 0.88,
+          fontFamily: layer.isHeadline ? 'Newsreader' : 'Instrument Sans',
+          fontSize: fsMap[layer.fontSize] || fsMap.medium,
+          fill: layer.color || '#FFFFFF',
+          fontWeight: layer.fontWeight || 'normal',
+          textAlign: layer.textAlign || 'left',
+          lineHeight: 1.15,
+          selectable: true,
+          evented: true,
+        });
+        studioCanvas.add(t);
+        added++;
       }
       studioCanvas.renderAll();
       updateLayerPanel();
-      saveHistory('AI: extracted text from video frame');
-      addChatMsg('assistant', '✓ Found ' + added + ' text element' + (added === 1 ? '' : 's') + ' — all editable. The video plays underneath.');
+      saveHistory('AI: text from video');
+      addChatMsg('assistant', '✓ Found ' + added + ' text element' + (added === 1 ? '' : 's') + ' — all editable on top of video.');
     } catch (e) {
-      addChatMsg('assistant', '❌ Frame analysis failed: ' + e.message);
+      addChatMsg('assistant', '❌ Analysis failed: ' + e.message);
     } finally {
       studioAnalysisInProgress = false;
     }
   }
 
+  // Back-compat alias
+  async function analyzeVideoFrame() {
+    return captureFrameAndAnalyze();
+  }
+
   function studioClearCanvas() {
     if (!confirm('Clear all layers and start fresh?')) return;
     studioCanvas.clear();
+    stopVideoRenderLoop();
     studioCanvas.setBackgroundColor('#0E1A63', studioCanvas.renderAll.bind(studioCanvas));
-    studioVideoElements.forEach(function (v) {
-      try { v.pause(); } catch (_) {}
-      try { v.src = ''; } catch (_) {}
-      try { v.remove(); } catch (_) {}
-    });
-    studioVideoElements = [];
     studioVideoBlobUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (_) {} });
     studioVideoBlobUrls = [];
-    stopVideoRenderLoop();
     updateVideoToolbar(false);
     studioPendingFrameDataUrl = null;
     studioAnalysisInProgress = false;
@@ -2109,6 +2054,7 @@
     exportVideoWithOverlays: exportVideoWithOverlays,
     exportVideoFrame: exportVideoFrame,
     analyzeVideoFrame: analyzeVideoFrame,
+    captureFrameAndAnalyze: captureFrameAndAnalyze,
     studioClearCanvas: studioClearCanvas,
     studioDeleteSelected: studioDeleteSelected,
     studioDuplicate: studioDuplicate,
