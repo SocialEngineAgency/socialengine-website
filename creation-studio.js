@@ -1750,6 +1750,13 @@
   }
 
   function applyTextEdit() {
+    console.log('[applyTextEdit] called', {
+      el: studioActiveElement,
+      email: global.__clientEmail,
+      hash: global.__clientHash ? 'set' : 'NOT SET',
+      canvas: !!studioCanvas,
+      format: studioFormat,
+    });
     if (!studioActiveElement) return;
     const el = studioActiveElement;
 
@@ -2437,6 +2444,10 @@
   async function sendStudioChat() {
     const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
     const hash = global.__clientHash || global.clientHash || global._seHash || '';
+    console.log('[sendStudioChat] auth check', {
+      email: global.__clientEmail,
+      hash: global.__clientHash ? 'set' : 'NOT SET',
+    });
     if (!email || !hash) {
       showStudioToast('⚠️ Not authenticated — please refresh and log in again.', 'error');
       return;

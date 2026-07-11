@@ -4215,6 +4215,10 @@
           window.__clientData = data;
           window.clientEmail = window.__clientEmail;
           window.clientHash = window.__clientHash;
+          console.log('[auth] client data loaded', {
+            email: clientEmail || window.__clientEmail,
+            hasHash: !!(clientHash || window.__clientHash),
+          });
 
           // Show dashboard
           document.getElementById('portal-login-view').classList.add('hidden');
@@ -6155,6 +6159,10 @@
       window.__clientHash = clientHash || window._seHash || data?.hash || data?.fields?.Hash || '';
       window.clientEmail = window.__clientEmail;
       window.clientHash = window.__clientHash;
+      console.log('[auth] client data loaded', {
+        email: clientEmail || window.__clientEmail,
+        hasHash: !!(clientHash || window.__clientHash),
+      });
       window.API = typeof API !== 'undefined' ? API : window._seAPI;
       const run = () => {
         if (typeof window.__renderCreationStudioImpl === 'function') {
