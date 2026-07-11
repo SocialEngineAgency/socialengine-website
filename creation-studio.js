@@ -466,8 +466,17 @@
     }
 
     const imageUrl = resolvePostImage(post);
-    if (imageUrl) loadBackgroundImage(imageUrl);
-    else addHeadlineFromPost();
+    if (imageUrl) {
+      loadBackgroundImage(imageUrl);
+    }
+    // Always add text elements on top — they render over the background
+    // Small timeout lets Fabric finish initializing before we add objects
+    setTimeout(function () {
+      if (!studioCanvas) return;
+      if (studioCanvas.getObjects().filter(function (o) { return ['i-text', 'text'].includes(o.type); }).length === 0) {
+        addHeadlineFromPost();
+      }
+    }, 800);
 
     updateLayerPanel();
     saveHistory('Initial load');
@@ -518,7 +527,15 @@
 
   function loadBackgroundImage(url) {
     fabric.Image.fromURL(url, function (img) {
-      if (!img || !studioCanvas) return;
+      if (!img || (img.width === 0 && img.height === 0)) {
+        // Image failed to load (CORS, expired URL, etc) — add text instead
+        console.warn('[Studio] Background image failed to load:', url);
+        if (studioCanvas && studioCanvas.getObjects().filter(function (o) { return ['i-text', 'text'].includes(o.type); }).length === 0) {
+          addHeadlineFromPost();
+        }
+        return;
+      }
+      if (!studioCanvas) return;
       img.set({ name: 'background', selectable: true, evented: true, locked: false, left: 0, top: 0 });
       const scaleX = studioCanvas.width / img.width;
       const scaleY = studioCanvas.height / img.height;

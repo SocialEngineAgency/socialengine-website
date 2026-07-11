@@ -7,7 +7,8 @@
   <meta name="description" content="Sign in to your SocialEngine client portal. Manage your social media content, analytics, and brand voice all in one place.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,600;6..72,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400&family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
@@ -2346,8 +2347,8 @@
     .cs-btn-approve { padding:7px 16px; border-radius:8px; background:#10B981; border:none; color:#fff; font-weight:700; font-size:13px; cursor:pointer; }
     .cs-btn-danger { padding:7px 12px; border-radius:8px; background:transparent; border:1px solid #ef4444; color:#ef4444; font-size:13px; cursor:pointer; }
     .cs-full-width { width:100%; margin-bottom:6px; }
-    .cs-main { display:grid; grid-template-columns:200px 1fr 280px; height:calc(100vh - 200px); min-height:560px; overflow:hidden; background:#0f172a; border-radius:0 0 12px 12px; border:1px solid #334155; border-top:none; }
-    .cs-layers { background:#1e293b; border-right:1px solid #334155; overflow-y:auto; display:flex; flex-direction:column; }
+    .cs-main { display:grid; grid-template-columns:200px 1fr 280px; height:calc(100vh - 100px); min-height:500px; overflow:hidden; background:#0f172a; border-radius:0 0 12px 12px; border:1px solid #334155; border-top:none; }
+    .cs-layers { background:#1e293b; border-right:1px solid #334155; overflow:hidden; display:flex; flex-direction:column; min-height:0; }
     .cs-panel-title { padding:10px 12px; font-size:10px; font-weight:700; color:#475569; letter-spacing:.08em; text-transform:uppercase; border-bottom:1px solid #334155; }
     #cs-layer-list { flex:1; overflow-y:auto; }
     .layer-item { display:flex; align-items:center; gap:6px; padding:8px 10px; cursor:pointer; border-bottom:1px solid #0f172a; font-size:12px; color:#94a3b8; }
@@ -2357,10 +2358,10 @@
     .layer-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .layer-vis,.layer-lock { font-size:12px; cursor:pointer; opacity:.5; }
     .layer-vis:hover,.layer-lock:hover { opacity:1; }
-    .cs-layer-actions { padding:8px; display:flex; gap:4px; border-top:1px solid #334155; }
+    .cs-layer-actions { padding:8px; display:flex; gap:4px; border-top:1px solid #334155; flex-shrink:0; }
     .cs-add-btn { flex:1; padding:5px; border-radius:6px; border:1px solid #334155; background:transparent; color:#64748b; font-size:11px; cursor:pointer; }
     .cs-add-btn:hover { background:#334155; color:#cbd5e1; }
-    .cs-canvas-area { display:flex; flex-direction:column; background:#0f172a; min-width:0; }
+    .cs-canvas-area { display:flex; flex-direction:column; background:#0f172a; overflow:hidden; min-height:0; min-width:0; }
     .cs-canvas-outer { flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; padding:24px; }
     .cs-canvas-wrapper { box-shadow:0 0 0 1px #334155, 0 20px 60px rgba(0,0,0,.5); border-radius:4px; overflow:hidden; background:#0E1A63; }
     .cs-canvas-toolbar { background:#1e293b; border-top:1px solid #334155; padding:8px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -4199,6 +4200,10 @@
           window._seAPI = API;
           window._seEmail = clientEmail;
           window._seHash = clientHash;
+          // Creation Studio AI chat / upload auth (must be set before Studio opens)
+          window.__clientEmail = clientEmail;
+          window.__clientHash = clientHash;
+          window.__clientData = data;
 
           // Show dashboard
           document.getElementById('portal-login-view').classList.add('hidden');
