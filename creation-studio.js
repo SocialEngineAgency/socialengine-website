@@ -1722,6 +1722,51 @@
     }
   }
 
+  function isLightColor(hex) {
+    if (!hex || typeof hex !== 'string') return false;
+    const raw = hex.trim();
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw)) return false;
+    let h = raw.slice(1);
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5;
+  }
+
+  function resolveTextMaskFill(el, layer) {
+    const detectedBg =
+      (layer && layer.style && layer.style.backgroundColor) ||
+      (el && el.style && el.style.backgroundColor) ||
+      null;
+    const yPct =
+      (el && el.boundingBox && el.boundingBox.yPct != null)
+        ? el.boundingBox.yPct
+        : (layer && layer.top != null ? layer.top / 100 : 0.5);
+    const inBannerZone = yPct < 0.2 || yPct > 0.8;
+    const canvasBg =
+      (studioCanvas && typeof studioCanvas.backgroundColor === 'string')
+        ? studioCanvas.backgroundColor
+        : null;
+
+    // Light detected bg always wins
+    if (detectedBg && isLightColor(detectedBg)) return detectedBg;
+
+    // Top/bottom banner zones: prefer detected banner bg when present
+    if (inBannerZone && detectedBg) return detectedBg;
+
+    if (detectedBg) {
+      // Never paint a dark mask over an apparently light video/canvas bg
+      if (!isLightColor(detectedBg) && canvasBg && isLightColor(canvasBg)) {
+        return canvasBg;
+      }
+      return detectedBg;
+    }
+
+    if (canvasBg && isLightColor(canvasBg)) return canvasBg;
+    return '#000000';
+  }
+
   function applyTextEdit() {
     if (!studioActiveElement) return;
     const el = studioActiveElement;
@@ -1740,9 +1785,10 @@
     const t = bb.yPct * fmt.displayH;
     const w = bb.wPct * fmt.displayW;
     const h = bb.hPct * fmt.displayH;
-    const padX = Math.max(12, w * 0.08);
-    const padY = Math.max(8, h * 0.15);
+    const padX = Math.max(12, w * 0.10);
+    const padY = Math.max(10, h * 0.20);
     const scaledFontSize = fontSize * (fmt.displayW / fmt.w);
+    const maskFill = resolveTextMaskFill(el);
 
     studioCanvas.getObjects().filter(function (o) {
       return o.name === 'mask_' + el.id || o.name === 'text_' + el.id;
@@ -1752,7 +1798,7 @@
       name: 'mask_' + el.id,
       left: l - padX, top: t - padY,
       width: w + padX * 2, height: h + padY * 2,
-      fill: (el.style && el.style.backgroundColor) || '#000000',
+      fill: maskFill,
       opacity: 0.97, selectable: false, evented: false, isMaskRect: true,
     });
     studioCanvas.add(maskRect);
@@ -1766,6 +1812,7 @@
       selectable: true, editable: true, isTextOverlay: true,
     });
     studioCanvas.add(textObj);
+    maskRect.moveTo(studioCanvas.getObjects().indexOf(textObj) - 1);
     studioCanvas.setActiveObject(textObj);
     textObj.on('moving', function () {
       maskRect.set({ left: textObj.left - padX, top: textObj.top - padY });
