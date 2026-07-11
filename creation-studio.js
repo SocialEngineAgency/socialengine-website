@@ -126,6 +126,8 @@
         </div>
         <div class="cs-tool-group">
           <button type="button" class="cs-tool" onclick="studioTriggerHiggsfield()" title="Generate background with Higgsfield">✦ Generate BG</button>
+          <input type="file" id="cs-design-upload" accept="image/*" style="display:none" onchange="studioAddImage(this)">
+          <button type="button" class="cs-tool" onclick="document.getElementById('cs-design-upload').click()" title="Upload a design to clone as editable layers" style="background:#7C3AED22;color:#a78bfa;border:1px solid #7C3AED;">↑ Clone design</button>
         </div>
       </div>
     </div>
@@ -839,26 +841,203 @@
   function studioAddImage(input) {
     const file = input.files && input.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      fabric.Image.fromURL(e.target.result, function (img) {
+
+    const modal = document.createElement('div');
+    modal.id = 'studio-analyze-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML =
+      '<div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px;max-width:420px;width:90%;">' +
+      '<h3 style="color:#e2e8f0;margin:0 0 8px;font-size:18px;">How do you want to add this image?</h3>' +
+      '<p style="color:#64748b;font-size:13px;margin:0 0 24px;line-height:1.5;">' +
+      '"Analyze &amp; Clone" uses AI to detect all text, shapes, and layers — so you can edit each element separately. ' +
+      '"Add as flat layer" drops it in as a single uneditable image.</p>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;">' +
+      '<button type="button" id="btn-analyze" style="padding:14px;border-radius:10px;background:#7C3AED;border:none;color:#fff;font-weight:700;font-size:14px;cursor:pointer;text-align:left;">' +
+      '✦ Analyze &amp; Clone — extract editable layers' +
+      '<span style="display:block;font-size:12px;font-weight:400;opacity:.8;margin-top:3px;">AI reads every text element, detects colors, reconstructs as editable layers</span></button>' +
+      '<button type="button" id="btn-flat" style="padding:14px;border-radius:10px;background:transparent;border:1px solid #334155;color:#cbd5e1;font-weight:600;font-size:14px;cursor:pointer;text-align:left;">' +
+      'Add as flat image layer' +
+      '<span style="display:block;font-size:12px;font-weight:400;opacity:.7;margin-top:3px;">Drops it in as a single object — position and scale only</span></button>' +
+      '<button type="button" id="btn-cancel" style="padding:10px;border-radius:8px;background:transparent;border:none;color:#475569;font-size:13px;cursor:pointer;">Cancel</button>' +
+      '</div></div>';
+    document.body.appendChild(modal);
+
+    // Read file once up front so button handlers don't race FileReader
+    const dataUrlPromise = new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function (e) { resolve(e.target.result); };
+      reader.onerror = function () { reject(new Error('Failed to read file')); };
+      reader.readAsDataURL(file);
+    });
+
+    function addFlatFromDataUrl(dataUrl) {
+      fabric.Image.fromURL(dataUrl, function (img) {
         const fmt = STUDIO_FORMATS[studioFormat];
+        const scale = Math.min(fmt.displayW / img.width, fmt.displayH / img.height);
         img.set({
           name: file.name.replace(/\.[^.]+$/, '') || 'image-' + Date.now(),
-          left: 0, top: 0,
+          left: 0, top: 0, scaleX: scale, scaleY: scale,
           selectable: true, evented: true, locked: false,
         });
-        const scale = Math.min(fmt.displayW / img.width, fmt.displayH / img.height);
-        img.set({ scaleX: scale, scaleY: scale });
         studioCanvas.add(img);
         studioCanvas.setActiveObject(img);
         studioCanvas.renderAll();
         updateLayerPanel();
         saveHistory('Image added');
       });
+    }
+
+    document.getElementById('btn-cancel').onclick = function () {
+      modal.remove();
+      input.value = '';
     };
-    reader.readAsDataURL(file);
-    input.value = '';
+
+    document.getElementById('btn-flat').onclick = async function () {
+      modal.remove();
+      try {
+        const dataUrl = await dataUrlPromise;
+        addFlatFromDataUrl(dataUrl);
+      } catch (e) {
+        if (typeof global.showToast === 'function') global.showToast('Could not load image');
+      }
+      input.value = '';
+    };
+
+    document.getElementById('btn-analyze').onclick = async function () {
+      modal.remove();
+      showRightTab('chat');
+      addChatMsg('assistant', '✦ Analyzing your design… extracting all text, colors, and layers. This takes 5-10 seconds.');
+      try {
+        const dataUrl = await dataUrlPromise;
+        const blob = await fetch(dataUrl).then(function (r) { return r.blob(); });
+        const formData = new FormData();
+        formData.append('image', blob, file.name || 'design.png');
+
+        const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
+        const hash = global.__clientHash || global.clientHash || global._seHash || '';
+        const uploadResp = await fetch(apiBase() + '/api/studio/upload-image', {
+          method: 'POST',
+          headers: { 'x-client-email': email, 'x-client-hash': hash },
+          body: formData,
+        });
+        const uploadData = await uploadResp.json();
+        if (!uploadData.url) throw new Error('Image upload failed');
+
+        const analyzeResp = await studioFetch('/api/studio/analyze-image', {
+          method: 'POST',
+          body: JSON.stringify({ imageUrl: uploadData.url, format: studioFormat }),
+        });
+
+        await reconstructCanvasFromAnalysis(dataUrl, analyzeResp);
+        addChatMsg('assistant', '✓ Done! Found ' + (analyzeResp.layers || []).length + ' layers — all text is now editable. Click any element to select and edit it.');
+      } catch (err) {
+        addChatMsg('assistant', '❌ Analysis failed: ' + err.message + '. Adding as flat layer instead.');
+        try {
+          const dataUrl = await dataUrlPromise;
+          addFlatFromDataUrl(dataUrl);
+        } catch (_) {}
+      }
+      input.value = '';
+    };
+  }
+
+  async function reconstructCanvasFromAnalysis(originalDataUrl, analysis) {
+    const layers = analysis.layers || [];
+    const backgroundColor = analysis.backgroundColor || '#0E1A63';
+    const fmt = STUDIO_FORMATS[studioFormat];
+
+    studioCanvas.clear();
+    studioCanvas.setBackgroundColor(backgroundColor, studioCanvas.renderAll.bind(studioCanvas));
+
+    const fontSizeMap = {
+      small: fmt.displayH * 0.025,
+      medium: fmt.displayH * 0.040,
+      large: fmt.displayH * 0.060,
+      xlarge: fmt.displayH * 0.090,
+      xxlarge: fmt.displayH * 0.130,
+    };
+
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i];
+      try {
+        if (layer.type === 'background_image') {
+          await new Promise(function (resolve) {
+            fabric.Image.fromURL(originalDataUrl, function (img) {
+              if (!img) { resolve(); return; }
+              img.set({
+                name: 'background',
+                left: 0, top: 0,
+                selectable: true, evented: true, locked: false,
+              });
+              const scaleX = fmt.displayW / img.width;
+              const scaleY = fmt.displayH / img.height;
+              const s = Math.max(scaleX, scaleY);
+              img.set({ scaleX: s, scaleY: s });
+              studioCanvas.insertAt(img, 0, false);
+              studioCanvas.renderAll();
+              resolve();
+            });
+          });
+        } else if (layer.type === 'background_color') {
+          studioCanvas.setBackgroundColor(layer.color || backgroundColor, studioCanvas.renderAll.bind(studioCanvas));
+        } else if (layer.type === 'rectangle') {
+          const rect = new fabric.Rect({
+            name: 'overlay-' + Date.now() + '-' + i,
+            left: (layer.left / 100) * fmt.displayW,
+            top: (layer.top / 100) * fmt.displayH,
+            width: (layer.width / 100) * fmt.displayW,
+            height: (layer.height / 100) * fmt.displayH,
+            fill: layer.fill || '#000000',
+            opacity: layer.opacity != null ? layer.opacity : 0.5,
+            globalCompositeOperation: layer.blendMode === 'multiply' ? 'multiply'
+              : layer.blendMode === 'overlay' ? 'overlay'
+              : layer.blendMode === 'screen' ? 'screen'
+              : 'source-over',
+            selectable: true, evented: true,
+          });
+          studioCanvas.add(rect);
+        } else if (layer.type === 'text') {
+          const fontSize = fontSizeMap[layer.fontSize] || fontSizeMap.medium;
+          const fontFamily = layer.isHeadline ? 'Newsreader' : 'Instrument Sans';
+          const textObj = new fabric.IText(layer.content || '', {
+            name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now() + '-' + i,
+            left: (layer.left / 100) * fmt.displayW,
+            top: (layer.top / 100) * fmt.displayH,
+            width: fmt.displayW * 0.9,
+            fontFamily: fontFamily,
+            fontSize: fontSize,
+            fill: layer.color || '#FFFFFF',
+            fontWeight: layer.fontWeight || 'normal',
+            fontStyle: layer.fontStyle || 'normal',
+            textAlign: layer.textAlign || 'left',
+            lineHeight: 1.2,
+            selectable: true, evented: true, locked: false,
+            splitByGrapheme: false,
+          });
+          studioCanvas.add(textObj);
+        } else if (layer.type === 'logo') {
+          const logoPlaceholder = new fabric.Rect({
+            name: 'logo-' + i,
+            left: (layer.left / 100) * fmt.displayW,
+            top: (layer.top / 100) * fmt.displayH,
+            width: (layer.width / 100) * fmt.displayW || 60,
+            height: (layer.height / 100) * fmt.displayH || 30,
+            fill: 'transparent',
+            stroke: '#7C3AED',
+            strokeDashArray: [4, 4],
+            strokeWidth: 1,
+            selectable: true, evented: true,
+          });
+          studioCanvas.add(logoPlaceholder);
+        }
+      } catch (layerErr) {
+        console.warn('[Studio] Failed to reconstruct layer:', layer, layerErr);
+      }
+    }
+
+    studioCanvas.renderAll();
+    updateLayerPanel();
+    saveHistory('AI: cloned design layers');
   }
 
   function studioDeleteSelected() {
