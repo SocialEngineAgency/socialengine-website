@@ -21,6 +21,10 @@
   let studioPendingOps = [];
   let studioZoom = 1;
   let studioKeyBound = false;
+  let studioVideoLoop = false;
+  let studioVideoLoopId = null;
+  let studioVideoElements = [];
+  let studioPendingFrameDataUrl = null;
 
   function postFields(post) {
     if (!post) return {};
@@ -105,7 +109,7 @@
         <button type="button" onclick="studioAddText()" class="cs-add-btn">+ Text</button>
         <button type="button" onclick="studioAddRect()" class="cs-add-btn">+ Shape</button>
         <button type="button" onclick="document.getElementById('cs-img-upload').click()" class="cs-add-btn">+ Image</button>
-        <input type="file" id="cs-img-upload" accept="image/*" style="display:none" onchange="studioAddImage(this)">
+        <input type="file" id="cs-img-upload" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi,.mkv,.m4v" style="display:none" onchange="studioAddImage(this)">
       </div>
     </div>
 
@@ -130,7 +134,7 @@
         </div>
         <div class="cs-tool-group">
           <button type="button" class="cs-tool" onclick="studioTriggerHiggsfield()" title="Generate background with Higgsfield">✦ Generate BG</button>
-          <input type="file" id="cs-design-upload" accept="image/*" style="display:none" onchange="studioAddImage(this)">
+          <input type="file" id="cs-design-upload" accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.avi,.m4v" style="display:none" onchange="studioAddImage(this)">
           <button type="button" class="cs-tool" onclick="document.getElementById('cs-design-upload').click()" title="Upload a design to clone as editable layers" style="background:#7C3AED22;color:#a78bfa;border:1px solid #7C3AED;">↑ Clone design</button>
         </div>
       </div>
@@ -446,6 +450,10 @@
     studioZoom = 1;
 
     if (studioCanvas) {
+      studioVideoElements.forEach(function (v) { try { v.pause(); } catch (_) {} });
+      stopVideoRenderLoop();
+      studioVideoElements = [];
+      updateVideoToolbar(false);
       try { studioCanvas.dispose(); } catch (e) {}
       studioCanvas = null;
     }
@@ -492,8 +500,14 @@
 
   function switchFormat(newFmt) {
     if (!studioCanvas || newFmt === studioFormat) return;
+
+    studioVideoElements.forEach(function (v) { try { v.pause(); } catch (_) {} });
+    stopVideoRenderLoop();
+    studioVideoElements = [];
+    updateVideoToolbar(false);
+
     const prevFmtKey = studioFormat;
-    studioSaved[prevFmtKey] = studioCanvas.toJSON(['name', 'locked', 'selectable', 'evented', 'hfPrompt']);
+    studioSaved[prevFmtKey] = studioCanvas.toJSON(['name', 'locked', 'selectable', 'evented', 'hfPrompt', 'isVideo']);
 
     document.querySelectorAll('.cs-fmt').forEach(function (b) {
       b.classList.toggle('active', b.dataset.fmt === newFmt);
@@ -588,7 +602,7 @@
     list.innerHTML = objects.map(function (obj, i) {
       const realIdx = studioCanvas.getObjects().length - 1 - i;
       const isSelected = obj === selected;
-      const typeIcon = { 'i-text': 'T', 'text': 'T', 'image': '🖼', 'rect': '□', 'ellipse': '○', 'line': '—', 'group': '⊞' }[obj.type] || '◆';
+      const typeIcon = obj.isVideo ? '🎬' : ({ 'i-text': 'T', 'text': 'T', 'image': '🖼', 'rect': '□', 'ellipse': '○', 'line': '—', 'group': '⊞' }[obj.type] || '◆');
       const name = obj.name || obj.type || 'Object';
       const isVisible = obj.visible !== false;
       const isLocked = obj.locked || !obj.selectable;
@@ -846,6 +860,15 @@
     const file = input.files && input.files[0];
     if (!file) return;
 
+    const isVideo = (file.type && file.type.startsWith('video/')) ||
+      /\.(mp4|mov|webm|avi|mkv|m4v|mts)$/i.test(file.name || '');
+
+    if (isVideo) {
+      handleVideoUpload(file);
+      input.value = '';
+      return;
+    }
+
     const modal = document.createElement('div');
     modal.id = 'studio-analyze-modal';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
@@ -943,6 +966,349 @@
       }
       input.value = '';
     };
+  }
+
+  // ── Video render loop (keeps Fabric canvas refreshed while video plays) ──
+  function startVideoRenderLoop() {
+    if (studioVideoLoop) return;
+    studioVideoLoop = true;
+    function tick() {
+      if (!studioVideoLoop || !studioCanvas) return;
+      studioCanvas.renderAll();
+      studioVideoLoopId = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  function stopVideoRenderLoop() {
+    studioVideoLoop = false;
+    if (studioVideoLoopId) {
+      cancelAnimationFrame(studioVideoLoopId);
+      studioVideoLoopId = null;
+    }
+  }
+
+  function addVideoToCanvas(videoUrl, videoMime, label) {
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const videoEl = document.createElement('video');
+    videoEl.src = videoUrl;
+    videoEl.crossOrigin = 'anonymous';
+    videoEl.loop = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoEl.preload = 'auto';
+    studioVideoElements.push(videoEl);
+
+    videoEl.addEventListener('loadeddata', function () {
+      const fabricVid = new fabric.Image(videoEl, {
+        name: label || 'video-' + Date.now(),
+        left: 0,
+        top: 0,
+        selectable: true,
+        evented: true,
+        locked: false,
+        isVideo: true,
+      });
+      const scaleX = fmt.displayW / (videoEl.videoWidth || fmt.displayW);
+      const scaleY = fmt.displayH / (videoEl.videoHeight || fmt.displayH);
+      const s = Math.max(scaleX, scaleY);
+      fabricVid.set({ scaleX: s, scaleY: s });
+
+      const existing = studioCanvas.getObjects().find(function (o) {
+        return o.isVideo || (label && o.name === label);
+      });
+      if (existing) studioCanvas.remove(existing);
+
+      studioCanvas.add(fabricVid);
+      studioCanvas.sendToBack(fabricVid);
+      studioCanvas.setActiveObject(fabricVid);
+      studioCanvas.renderAll();
+      updateLayerPanel();
+      saveHistory('Video layer added');
+
+      videoEl.play().catch(function () {});
+      startVideoRenderLoop();
+      updateVideoToolbar(true);
+    });
+
+    videoEl.addEventListener('error', function () {
+      addChatMsg('assistant', '❌ Video failed to load. The URL may not be accessible. Try uploading again.');
+    });
+
+    videoEl.load();
+  }
+
+  function extractFrameFromVideo(videoEl, timeSeconds) {
+    timeSeconds = timeSeconds == null ? 1.5 : timeSeconds;
+    return new Promise(function (resolve) {
+      const tmp = document.createElement('canvas');
+      tmp.width = videoEl.videoWidth || 1080;
+      tmp.height = videoEl.videoHeight || 1920;
+      const ctx = tmp.getContext('2d');
+      function seek() {
+        ctx.drawImage(videoEl, 0, 0, tmp.width, tmp.height);
+        resolve(tmp.toDataURL('image/jpeg', 0.88));
+      }
+      if (Math.abs(videoEl.currentTime - timeSeconds) < 0.1) {
+        seek();
+      } else {
+        videoEl.addEventListener('seeked', seek, { once: true });
+        videoEl.currentTime = Math.min(timeSeconds, (videoEl.duration || 2) - 0.1);
+      }
+    });
+  }
+
+  function updateVideoToolbar(hasVideo) {
+    let vbar = document.getElementById('cs-video-toolbar');
+    if (!hasVideo) {
+      if (vbar) {
+        if (vbar._timeInterval) clearInterval(vbar._timeInterval);
+        vbar.style.display = 'none';
+      }
+      return;
+    }
+    if (!vbar) {
+      vbar = document.createElement('div');
+      vbar.id = 'cs-video-toolbar';
+      vbar.className = 'cs-video-toolbar';
+      const canvasArea = document.querySelector('.cs-canvas-area');
+      const bottomBar = document.querySelector('.cs-canvas-toolbar');
+      if (canvasArea && bottomBar) canvasArea.insertBefore(vbar, bottomBar);
+      else if (canvasArea) canvasArea.appendChild(vbar);
+    }
+    vbar.style.display = 'flex';
+    vbar.innerHTML =
+      '<span class="vt-label">▶ VIDEO</span>' +
+      '<button type="button" class="cs-tool vt-btn" id="vt-play" onclick="toggleVideoPlay()" title="Play/Pause (Space)">⏸ Pause</button>' +
+      '<button type="button" class="cs-tool vt-btn" onclick="seekVideo(-5)" title="Back 5s">⏮ 5s</button>' +
+      '<button type="button" class="cs-tool vt-btn" onclick="seekVideo(5)" title="Fwd 5s">5s ⏭</button>' +
+      '<input type="range" id="vt-seek" min="0" max="100" value="0" step="0.1" oninput="scrubVideo(+this.value)" style="flex:1;accent-color:#7C3AED">' +
+      '<span id="vt-time" style="font-size:11px;color:#64748b;min-width:50px;text-align:right">0:00</span>' +
+      '<div class="vt-divider"></div>' +
+      '<button type="button" class="cs-tool vt-btn" onclick="muteToggleVideo()" id="vt-mute" title="Mute/Unmute">🔇</button>' +
+      '<button type="button" class="cs-tool vt-btn" onclick="exportVideoWithOverlays()" title="Export video with overlays as WebM">⬇ Export video</button>' +
+      '<button type="button" class="cs-tool vt-btn" onclick="exportVideoFrame()" title="Export current frame as PNG">⬇ Frame PNG</button>';
+
+    if (studioVideoElements.length > 0) {
+      const primaryVid = studioVideoElements[studioVideoElements.length - 1];
+      if (vbar._timeInterval) clearInterval(vbar._timeInterval);
+      vbar._timeInterval = setInterval(function () {
+        if (!primaryVid.duration) return;
+        const pct = (primaryVid.currentTime / primaryVid.duration) * 100;
+        const seekEl = document.getElementById('vt-seek');
+        const timeEl = document.getElementById('vt-time');
+        if (seekEl) seekEl.value = pct;
+        if (timeEl) {
+          const m = Math.floor(primaryVid.currentTime / 60);
+          const s = Math.floor(primaryVid.currentTime % 60).toString().padStart(2, '0');
+          timeEl.textContent = m + ':' + s;
+        }
+      }, 250);
+    }
+  }
+
+  function toggleVideoPlay() {
+    const btn = document.getElementById('vt-play');
+    studioVideoElements.forEach(function (v) {
+      if (v.paused) {
+        v.play();
+        if (btn) btn.textContent = '⏸ Pause';
+        startVideoRenderLoop();
+      } else {
+        v.pause();
+        if (btn) btn.textContent = '▶ Play';
+      }
+    });
+  }
+
+  function seekVideo(deltaSec) {
+    studioVideoElements.forEach(function (v) {
+      v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + deltaSec));
+    });
+  }
+
+  function scrubVideo(pct) {
+    studioVideoElements.forEach(function (v) {
+      if (v.duration) v.currentTime = (pct / 100) * v.duration;
+    });
+  }
+
+  function muteToggleVideo() {
+    const btn = document.getElementById('vt-mute');
+    studioVideoElements.forEach(function (v) { v.muted = !v.muted; });
+    if (btn && studioVideoElements[0]) {
+      btn.textContent = studioVideoElements[0].muted ? '🔇' : '🔊';
+    }
+  }
+
+  async function exportVideoWithOverlays() {
+    const primaryVid = studioVideoElements[studioVideoElements.length - 1];
+    if (!primaryVid) { alert('No video layer found'); return; }
+
+    const duration = primaryVid.duration || 15;
+    addChatMsg('assistant', '⏺ Recording ' + Math.round(duration) + 's of video with overlays… don\'t leave this page.');
+
+    try {
+      const stream = studioCanvas.lowerCanvasEl.captureStream(30);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9' : 'video/webm';
+      const recorder = new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 });
+      const chunks = [];
+      recorder.ondataavailable = function (e) {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      await new Promise(function (resolve, reject) {
+        recorder.onstop = resolve;
+        recorder.onerror = reject;
+        recorder.start(100);
+        primaryVid.currentTime = 0;
+        primaryVid.muted = true;
+        primaryVid.play().catch(function () {});
+        startVideoRenderLoop();
+        setTimeout(function () {
+          recorder.stop();
+          primaryVid.pause();
+        }, duration * 1000 + 200);
+      });
+
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const f = postFields(studioPost);
+      a.download = (f.post_label || 'reel') + '-with-overlays.webm';
+      a.click();
+      URL.revokeObjectURL(url);
+      addChatMsg('assistant', '✓ Video exported! The .webm file includes all your text and shape overlays.');
+    } catch (e) {
+      addChatMsg('assistant', '❌ Export failed: ' + e.message + '. Try the "Frame PNG" option instead.');
+    }
+  }
+
+  function exportVideoFrame() {
+    const dataUrl = studioCanvas.toDataURL({ format: 'png', multiplier: 1 });
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    const f = postFields(studioPost);
+    a.download = (f.post_label || 'frame') + '-thumbnail.png';
+    a.click();
+    addChatMsg('assistant', '✓ Frame exported as PNG — great for thumbnails!');
+  }
+
+  async function handleVideoUpload(file) {
+    showRightTab('chat');
+    addChatMsg('assistant', '↑ Uploading ' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + 'MB)… this may take a moment.');
+
+    try {
+      const formData = new FormData();
+      formData.append('video', file, file.name);
+
+      const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
+      const hash = global.__clientHash || global.clientHash || global._seHash || '';
+      const resp = await fetch(apiBase() + '/api/studio/upload-video', {
+        method: 'POST',
+        headers: { 'x-client-email': email, 'x-client-hash': hash },
+        body: formData,
+      });
+      if (!resp.ok) {
+        const e = await resp.json().catch(function () { return {}; });
+        throw new Error(e.error || resp.statusText);
+      }
+
+      const data = await resp.json();
+      addChatMsg('assistant', '✓ Video uploaded. Adding to canvas…');
+      addVideoToCanvas(data.url, data.mime, file.name.replace(/\.[^.]+$/, ''));
+
+      if (data.frameDataUrl) {
+        studioPendingFrameDataUrl = data.frameDataUrl;
+        setTimeout(function () {
+          addChatMsg('assistant', '💡 Want me to detect any text or graphics in this video frame and make them editable?');
+          const msgs = document.getElementById('cs-chat-messages');
+          if (msgs) {
+            const wrap = document.createElement('div');
+            wrap.className = 'chat-msg assistant';
+            wrap.innerHTML = '<div class="chat-bubble" style="padding-top:4px">' +
+              '<button type="button" onclick="analyzeVideoFrame()" ' +
+              'style="background:#7C3AED;border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">' +
+              '✦ Analyze frame for editable layers</button></div>';
+            msgs.appendChild(wrap);
+            msgs.scrollTop = msgs.scrollHeight;
+          }
+        }, 1200);
+      }
+    } catch (e) {
+      addChatMsg('assistant', '❌ Upload failed: ' + e.message);
+    }
+  }
+
+  async function analyzeVideoFrame() {
+    const dataUrl = studioPendingFrameDataUrl;
+    if (!dataUrl) {
+      addChatMsg('assistant', '❌ No video frame available to analyze. Re-upload the video.');
+      return;
+    }
+    showRightTab('chat');
+    addChatMsg('assistant', '✦ Analyzing video frame for text and graphics…');
+    try {
+      const blob = await fetch(dataUrl).then(function (r) { return r.blob(); });
+      const formData = new FormData();
+      formData.append('image', blob, 'video-frame.jpg');
+      const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
+      const hash = global.__clientHash || global.clientHash || global._seHash || '';
+      const uploadResp = await fetch(apiBase() + '/api/studio/upload-image', {
+        method: 'POST',
+        headers: { 'x-client-email': email, 'x-client-hash': hash },
+        body: formData,
+      });
+      const uploadData = await uploadResp.json();
+      if (!uploadData.url) throw new Error('Frame upload failed');
+
+      const analyzeResp = await studioFetch('/api/studio/analyze-image', {
+        method: 'POST',
+        body: JSON.stringify({ imageUrl: uploadData.url, format: studioFormat }),
+      });
+
+      const layers = analyzeResp.layers || [];
+      const fmt = STUDIO_FORMATS[studioFormat];
+      const fontSizeMap = {
+        small: fmt.displayH * 0.025,
+        medium: fmt.displayH * 0.040,
+        large: fmt.displayH * 0.060,
+        xlarge: fmt.displayH * 0.090,
+        xxlarge: fmt.displayH * 0.130,
+      };
+
+      let added = 0;
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        if (layer.type === 'background_image' || layer.type === 'background_color') continue;
+        if (layer.type === 'text') {
+          const t = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
+            name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now() + '-' + i,
+            left: (layer.left / 100) * fmt.displayW,
+            top: (layer.top / 100) * fmt.displayH,
+            width: fmt.displayW * 0.88,
+            fontFamily: layer.isHeadline ? 'Newsreader' : 'Instrument Sans',
+            fontSize: fontSizeMap[layer.fontSize] || fontSizeMap.medium,
+            fill: layer.color || '#FFFFFF',
+            fontWeight: layer.fontWeight || 'normal',
+            textAlign: layer.textAlign || 'left',
+            lineHeight: 1.15,
+            selectable: true,
+            evented: true,
+          });
+          studioCanvas.add(t);
+          added++;
+        }
+      }
+      studioCanvas.renderAll();
+      updateLayerPanel();
+      saveHistory('AI: extracted text from video frame');
+      addChatMsg('assistant', '✓ Found ' + added + ' text element' + (added === 1 ? '' : 's') + ' — all editable. The video plays underneath.');
+    } catch (e) {
+      addChatMsg('assistant', '❌ Frame analysis failed: ' + e.message);
+    }
   }
 
   async function reconstructCanvasFromAnalysis(originalDataUrl, analysis) {
@@ -1516,6 +1882,11 @@
     if (e.key === 'r' && !meta) { studioAddRect(); return; }
     if (e.key === 'o' && !meta) { studioAddEllipse(); return; }
     if (e.key === 'Escape') { studioCanvas.discardActiveObject(); studioCanvas.renderAll(); clearPropsPanel(); return; }
+    if (e.key === ' ' && studioVideoElements.length && !['INPUT', 'TEXTAREA'].includes((e.target && e.target.tagName) || '')) {
+      e.preventDefault();
+      toggleVideoPlay();
+      return;
+    }
     const obj = studioCanvas.getActiveObject();
     if (obj && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
       e.preventDefault();
@@ -1543,6 +1914,13 @@
     studioAddEllipse: studioAddEllipse,
     studioAddLine: studioAddLine,
     studioAddImage: studioAddImage,
+    toggleVideoPlay: toggleVideoPlay,
+    seekVideo: seekVideo,
+    scrubVideo: scrubVideo,
+    muteToggleVideo: muteToggleVideo,
+    exportVideoWithOverlays: exportVideoWithOverlays,
+    exportVideoFrame: exportVideoFrame,
+    analyzeVideoFrame: analyzeVideoFrame,
     studioDeleteSelected: studioDeleteSelected,
     studioDuplicate: studioDuplicate,
     studioLayerOrder: studioLayerOrder,
