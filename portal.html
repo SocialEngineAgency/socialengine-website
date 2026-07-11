@@ -4210,9 +4210,11 @@
           window._seEmail = clientEmail;
           window._seHash = clientHash;
           // Creation Studio AI chat / upload auth (must be set before Studio opens)
-          window.__clientEmail = clientEmail;
-          window.__clientHash = clientHash;
+          window.__clientEmail = clientEmail || data.email || data.fields?.Email || '';
+          window.__clientHash = clientHash || data.hash || data.fields?.Hash || '';
           window.__clientData = data;
+          window.clientEmail = window.__clientEmail;
+          window.clientHash = window.__clientHash;
 
           // Show dashboard
           document.getElementById('portal-login-view').classList.add('hidden');
@@ -4396,6 +4398,13 @@
       stopTierPolling();
       stopInboxPolling();
       clientEmail = ''; clientHash = ''; clientData = null;
+      window.__clientEmail = '';
+      window.__clientHash = '';
+      window.__clientData = null;
+      window.clientEmail = '';
+      window.clientHash = '';
+      window._seEmail = '';
+      window._seHash = '';
       document.getElementById('portal-login-view').classList.remove('hidden');
       document.getElementById('dashboard-view').classList.remove('active');
       document.body.classList.remove('portal-logged-in');
@@ -6142,10 +6151,10 @@
     // after creation-studio.js loads. This wrapper preserves portal login vars.
     function renderCreationStudio(data) {
       window.__clientData = data;
-      window.__clientEmail = clientEmail || window._seEmail || '';
-      window.__clientHash = clientHash || window._seHash || '';
-      window.clientEmail = clientEmail;
-      window.clientHash = clientHash;
+      window.__clientEmail = clientEmail || window._seEmail || data?.email || data?.fields?.Email || '';
+      window.__clientHash = clientHash || window._seHash || data?.hash || data?.fields?.Hash || '';
+      window.clientEmail = window.__clientEmail;
+      window.clientHash = window.__clientHash;
       window.API = typeof API !== 'undefined' ? API : window._seAPI;
       const run = () => {
         if (typeof window.__renderCreationStudioImpl === 'function') {

@@ -456,8 +456,8 @@
     }
 
     global.__clientData = data;
-    global.__clientEmail = global.clientEmail || global._seEmail || '';
-    global.__clientHash = global.clientHash || global._seHash || '';
+    global.__clientEmail = global.clientEmail || global._seEmail || (data && data.email) || (data && data.fields && data.fields.Email) || '';
+    global.__clientHash = global.clientHash || global._seHash || (data && data.hash) || (data && data.fields && data.fields.Hash) || '';
 
     const posts = monthPosts(data);
     content.innerHTML = creationStudioMarkup();
@@ -2438,7 +2438,7 @@
     const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
     const hash = global.__clientHash || global.clientHash || global._seHash || '';
     if (!email || !hash) {
-      addChatMsg('assistant', '❌ Not authenticated — please reload the page and log in again.');
+      showStudioToast('⚠️ Not authenticated — please refresh and log in again.', 'error');
       return;
     }
     global.__clientEmail = email;
@@ -2462,6 +2462,11 @@
         if (clean.src && clean.src.length > 200) clean.src = '[image data]';
         return clean;
       });
+      const manifestElements = (studioVideoManifest && studioVideoManifest.elements)
+        ? studioVideoManifest.elements.map(function (e) {
+            return { id: e.id, label: e.label, type: e.type, content: e.content };
+          })
+        : [];
       const resp = await studioFetch('/api/studio/ai-chat', {
         method: 'POST',
         body: JSON.stringify({
@@ -2470,6 +2475,9 @@
           message: msg,
           history: studioChatHistory.slice(-6),
           format: studioFormat,
+          email: email,
+          hash: hash,
+          manifestElements: manifestElements,
           postContext: {
             caption: f.caption,
             theme: f.theme,
@@ -2488,7 +2496,7 @@
         document.getElementById('cs-preview-desc').textContent = resp.previewDescription || resp.reply;
         document.getElementById('cs-preview-modal').style.display = 'block';
       } else if (resp.operations && resp.operations.length) {
-        executeOperations(resp.operations);
+        await executeOperations(resp.operations);
       }
     } catch (e) {
       const loadEl = document.getElementById(loadId);
@@ -2513,9 +2521,9 @@
     }
   }
 
-  function applyPendingOps() {
+  async function applyPendingOps() {
     document.getElementById('cs-preview-modal').style.display = 'none';
-    if (studioPendingOps.length) executeOperations(studioPendingOps);
+    if (studioPendingOps.length) await executeOperations(studioPendingOps);
     studioPendingOps = [];
   }
 
@@ -2525,12 +2533,20 @@
     addChatMsg('assistant', 'No problem, cancelled. What would you like to try instead?');
   }
 
-  function executeOperations(ops) {
+  async function executeOperations(ops) {
+    if (!Array.isArray(ops) || !ops.length) return;
     let changed = false;
-    ops.forEach(function (op) {
-      const obj = op.target ? studioCanvas.getObjects().find(function (o) { return o.name === op.target; }) : null;
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const action = op.action || op.type;
+      const obj = op.target
+        ? studioCanvas.getObjects().find(function (o) {
+            return o.name === op.target ||
+              (o.text && String(o.text).toLowerCase().indexOf(String(op.target || '').toLowerCase()) !== -1);
+          })
+        : null;
       const s = STUDIO_FORMATS[studioFormat].displayW / STUDIO_FORMATS[studioFormat].w;
-      switch (op.action) {
+      switch (action) {
         case 'setFontSize': if (obj) { obj.set('fontSize', op.value); changed = true; } break;
         case 'setFontFamily': if (obj) { obj.set('fontFamily', op.value); changed = true; } break;
         case 'setColor': if (obj) { obj.set('fill', op.value); changed = true; } break;
@@ -2564,18 +2580,35 @@
         case 'show': if (obj) { obj.set('visible', true); changed = true; } break;
         case 'delete': if (obj && !obj.locked) { studioCanvas.remove(obj); changed = true; } break;
         case 'duplicate':
-          if (obj) obj.clone(function (c) {
-            c.set({ name: (obj.name || 'obj') + '-copy', left: obj.left + 20, top: obj.top + 20 });
-            studioCanvas.add(c); changed = true; studioCanvas.renderAll(); updateLayerPanel();
-          });
+          if (obj) {
+            await new Promise(function (resolve) {
+              obj.clone(function (c) {
+                c.set({ name: (obj.name || 'obj') + '-copy', left: obj.left + 20, top: obj.top + 20 });
+                studioCanvas.add(c);
+                changed = true;
+                studioCanvas.renderAll();
+                updateLayerPanel();
+                resolve();
+              });
+            });
+          }
           break;
         case 'addText': {
           const t = new fabric.IText(op.text || 'New text', {
-            name: 'text-' + Date.now(), left: (op.x || 0) * s, top: (op.y || 0) * s,
-            fontSize: (op.fontSize || 40) * s, fill: op.color || '#FAFCF9',
-            fontFamily: op.fontFamily || 'Newsreader', selectable: true, evented: true,
+            name: 'text-' + Date.now(),
+            left: (op.x || 0) * s,
+            top: (op.y || 0) * s,
+            fontSize: (op.fontSize || 40) * s,
+            fill: op.color || '#FAFCF9',
+            fontFamily: op.fontFamily || 'Newsreader',
+            fontWeight: op.bold ? 'bold' : 'normal',
+            selectable: true,
+            evented: true,
           });
-          studioCanvas.add(t); changed = true; break;
+          studioCanvas.add(t);
+          studioCanvas.setActiveObject(t);
+          changed = true;
+          break;
         }
         case 'addRect': {
           const r = new fabric.Rect({
@@ -2586,14 +2619,36 @@
           studioCanvas.add(r); changed = true; break;
         }
         case 'setCanvasBg':
-          studioCanvas.setBackgroundColor(op.color, function () {}); changed = true; break;
-        case 'regenBackground':
-          studioRegenBackground(op.feedback || 'make it better', (obj && obj.hfPrompt) || postFields(studioPost).image_prompt || '');
+          studioCanvas.setBackgroundColor(op.color || op.value, function () {}); changed = true; break;
+        case 'regenBackground': {
+          const feedback = op.prompt || op.feedback || 'make it better';
+          const bg = studioCanvas.getObjects().find(function (o) { return o.name === 'background'; });
+          studioRegenBackground(feedback, (bg && bg.hfPrompt) || postFields(studioPost).image_prompt || '');
           break;
+        }
+        case 'removeWithInpaint': {
+          if (!studioVideoManifest || !studioVideoManifest.elements) {
+            showStudioToast('Run video analysis first before removing elements.', 'error');
+            break;
+          }
+          const target = op.elementLabel || op.target || '';
+          const targetLower = String(target).toLowerCase();
+          const matchedEl = studioVideoManifest.elements.find(function (e) {
+            return (e.label && e.label.toLowerCase().indexOf(targetLower) !== -1) ||
+              (e.content && String(e.content).toLowerCase().indexOf(targetLower) !== -1);
+          });
+          if (!matchedEl) {
+            showStudioToast('Couldn\'t find element matching "' + target + '" — try running analysis first.', 'error');
+            break;
+          }
+          showStudioToast('Starting ProPainter removal of "' + matchedEl.label + '"...');
+          await removeElementWithInpaint(matchedEl.id);
+          break;
+        }
         default:
-          console.warn('[Studio] Unknown op:', op.action);
+          console.warn('[Studio] Unknown op:', action);
       }
-    });
+    }
     if (changed) {
       studioCanvas.renderAll();
       updateLayerPanel();
