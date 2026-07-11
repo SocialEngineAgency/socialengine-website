@@ -455,7 +455,10 @@
     if (studioCanvas) {
       studioVideoBlobUrls.forEach(function (url) { try { URL.revokeObjectURL(url); } catch (_) {} });
       studioVideoBlobUrls = [];
-      studioVideoElements.forEach(function (v) { try { v.pause(); } catch (_) {} });
+      studioVideoElements.forEach(function (v) {
+        try { v.pause(); } catch (_) {}
+        try { v.remove(); } catch (_) {}
+      });
       stopVideoRenderLoop();
       studioVideoElements = [];
       updateVideoToolbar(false);
@@ -469,6 +472,7 @@
       backgroundColor: '#0E1A63',
       preserveObjectStacking: true,
       selection: true,
+      enableRetinaScaling: false,
     });
     global.studioCanvas = studioCanvas;
 
@@ -508,7 +512,10 @@
 
     studioVideoBlobUrls.forEach(function (url) { try { URL.revokeObjectURL(url); } catch (_) {} });
     studioVideoBlobUrls = [];
-    studioVideoElements.forEach(function (v) { try { v.pause(); } catch (_) {} });
+    studioVideoElements.forEach(function (v) {
+      try { v.pause(); } catch (_) {}
+      try { v.remove(); } catch (_) {}
+    });
     stopVideoRenderLoop();
     studioVideoElements = [];
     updateVideoToolbar(false);
@@ -981,69 +988,123 @@
     studioVideoLoop = true;
     function tick() {
       if (!studioVideoLoop || !studioCanvas) return;
+      studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
+        o.dirty = true;
+      });
       studioCanvas.renderAll();
-      studioVideoLoopId = requestAnimationFrame(tick);
+      fabric.util.requestAnimFrame(tick);
     }
-    tick();
+    fabric.util.requestAnimFrame(tick);
   }
 
   function stopVideoRenderLoop() {
     studioVideoLoop = false;
-    if (studioVideoLoopId) {
-      cancelAnimationFrame(studioVideoLoopId);
-      studioVideoLoopId = null;
-    }
+    studioVideoLoopId = null;
   }
 
-  function addVideoToCanvas(videoUrl, videoMime, label) {
+  async function addVideoToCanvas(videoUrl, videoMime, label) {
     const fmt = STUDIO_FORMATS[studioFormat];
+
+    stopVideoRenderLoop();
+
+    // Remove existing video layers and their DOM elements
+    studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
+      if (o._videoEl) {
+        try { o._videoEl.pause(); } catch (_) {}
+        try { o._videoEl.remove(); } catch (_) {}
+      }
+      studioCanvas.remove(o);
+    });
+    studioVideoElements.forEach(function (v) {
+      try { v.pause(); } catch (_) {}
+      try { v.remove(); } catch (_) {}
+    });
+    studioVideoElements = [];
+
+    // Create video element and ATTACH TO DOM IMMEDIATELY
+    // Browsers do not decode video frames for detached elements.
     const videoEl = document.createElement('video');
-    videoEl.src = videoUrl;
-    // Only set crossOrigin for http/https — blob URLs don't need it and it can block load
-    if (videoUrl && String(videoUrl).startsWith('http')) videoEl.crossOrigin = 'anonymous';
-    videoEl.loop = true;
-    videoEl.muted = true;
-    videoEl.playsInline = true;
-    videoEl.preload = 'auto';
+    videoEl.style.cssText = [
+      'position:fixed',
+      'top:-9999px',
+      'left:-9999px',
+      'width:1px',
+      'height:1px',
+      'opacity:0',
+      'pointer-events:none',
+      'z-index:-1',
+    ].join(';');
+    document.body.appendChild(videoEl);
     studioVideoElements.push(videoEl);
 
-    videoEl.addEventListener('loadeddata', function () {
-      const fabricVid = new fabric.Image(videoEl, {
-        name: label || 'video-' + Date.now(),
-        left: 0,
-        top: 0,
-        selectable: true,
-        evented: true,
-        locked: false,
-        isVideo: true,
-      });
-      const scaleX = fmt.displayW / (videoEl.videoWidth || fmt.displayW);
-      const scaleY = fmt.displayH / (videoEl.videoHeight || fmt.displayH);
-      const s = Math.max(scaleX, scaleY);
-      fabricVid.set({ scaleX: s, scaleY: s });
+    // Configure video AFTER appending to DOM
+    videoEl.muted = true;
+    videoEl.loop = true;
+    videoEl.playsInline = true;
+    videoEl.preload = 'auto';
+    // Only set crossOrigin for http/https — blob URLs don't need it
+    if (videoUrl && String(videoUrl).startsWith('http')) videoEl.crossOrigin = 'anonymous';
+    videoEl.src = videoUrl;
 
-      const existing = studioCanvas.getObjects().find(function (o) {
-        return o.isVideo || (label && o.name === label);
-      });
-      if (existing) studioCanvas.remove(existing);
+    addChatMsg('assistant', '📹 Loading ' + (label || 'video') + '…');
 
-      studioCanvas.add(fabricVid);
-      studioCanvas.sendToBack(fabricVid);
-      studioCanvas.setActiveObject(fabricVid);
-      studioCanvas.renderAll();
-      updateLayerPanel();
-      saveHistory('Video layer added');
-
-      videoEl.play().catch(function () {});
-      startVideoRenderLoop();
-      updateVideoToolbar(true);
+    await new Promise(function (resolve, reject) {
+      function onCanPlay() { cleanup(); resolve(); }
+      function onError() {
+        cleanup();
+        reject(new Error((videoEl.error && videoEl.error.message) || 'Video failed to decode'));
+      }
+      function cleanup() {
+        videoEl.removeEventListener('canplay', onCanPlay);
+        videoEl.removeEventListener('error', onError);
+      }
+      videoEl.addEventListener('canplay', onCanPlay, { once: true });
+      videoEl.addEventListener('error', onError, { once: true });
+      videoEl.load();
     });
 
-    videoEl.addEventListener('error', function () {
-      addChatMsg('assistant', '❌ Video failed to load. The URL may not be accessible. Try uploading again.');
+    try {
+      await videoEl.play();
+    } catch (playErr) {
+      console.warn('[Studio] Autoplay blocked:', playErr.message);
+    }
+
+    // Wait for the first real frame to be decoded
+    await new Promise(function (resolve) {
+      if (videoEl.currentTime > 0) { resolve(); return; }
+      videoEl.addEventListener('timeupdate', resolve, { once: true });
+      setTimeout(resolve, 800);
     });
 
-    videoEl.load();
+    const fabricVid = new fabric.Image(videoEl, {
+      name: label || ('video-' + Date.now()),
+      left: 0,
+      top: 0,
+      originX: 'left',
+      originY: 'top',
+      selectable: true,
+      evented: true,
+      locked: false,
+      isVideo: true,
+      objectCaching: false,
+    });
+
+    const scaleX = fmt.displayW / (videoEl.videoWidth || fmt.displayW);
+    const scaleY = fmt.displayH / (videoEl.videoHeight || fmt.displayH);
+    fabricVid.set({ scaleX: Math.max(scaleX, scaleY), scaleY: Math.max(scaleX, scaleY) });
+    fabricVid._videoEl = videoEl;
+
+    studioCanvas.add(fabricVid);
+    studioCanvas.sendToBack(fabricVid);
+    studioCanvas.renderAll();
+
+    updateLayerPanel();
+    saveHistory('Video layer added');
+    startVideoRenderLoop();
+    updateVideoToolbar(true);
+
+    const dur = Math.round(videoEl.duration) || '?';
+    addChatMsg('assistant', '✓ Playing "' + (label || 'video') + '" (' + dur + 's). Add text or shapes — they\'ll overlay the video. Hit ↓ Export video when done.');
   }
 
   function extractFrameFromVideo(videoEl, timeSeconds) {
@@ -1117,16 +1178,16 @@
 
   function toggleVideoPlay() {
     const btn = document.getElementById('vt-play');
-    studioVideoElements.forEach(function (v) {
-      if (v.paused) {
-        v.play();
-        if (btn) btn.textContent = '⏸ Pause';
-        startVideoRenderLoop();
-      } else {
-        v.pause();
-        if (btn) btn.textContent = '▶ Play';
-      }
-    });
+    const isPaused = studioVideoElements.some(function (v) { return v.paused; });
+    if (isPaused) {
+      studioVideoElements.forEach(function (v) { v.play().catch(function () {}); });
+      if (btn) btn.innerHTML = '⏸ Pause';
+      startVideoRenderLoop();
+    } else {
+      studioVideoElements.forEach(function (v) { v.pause(); });
+      if (btn) btn.innerHTML = '▶ Play';
+      if (studioCanvas) studioCanvas.renderAll();
+    }
   }
 
   function seekVideo(deltaSec) {
@@ -1212,7 +1273,12 @@
     const blobUrl = URL.createObjectURL(file);
     studioVideoBlobUrls.push(blobUrl);
 
-    addVideoToCanvas(blobUrl, file.type, file.name.replace(/\.[^.]+$/, ''));
+    try {
+      await addVideoToCanvas(blobUrl, file.type, file.name.replace(/\.[^.]+$/, ''));
+    } catch (e) {
+      addChatMsg('assistant', '❌ Video failed to load: ' + e.message);
+      return;
+    }
 
     // CDN upload in background for persistence only
     uploadVideoToServerBackground(file).catch(function (e) {
@@ -1337,6 +1403,7 @@
     studioVideoElements.forEach(function (v) {
       try { v.pause(); } catch (_) {}
       try { v.src = ''; } catch (_) {}
+      try { v.remove(); } catch (_) {}
     });
     studioVideoElements = [];
     studioVideoBlobUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (_) {} });
