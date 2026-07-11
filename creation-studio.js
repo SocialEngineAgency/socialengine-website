@@ -25,12 +25,15 @@
   let studioVideoLoopId = null;
   let studioVideoElements = [];
   let studioVideoBlobUrls = [];
-  let studioPendingFrameDataUrl = null;
+  let studioVideoManifest = null;
+  let studioServerVideoUrl = null;
   let studioAnalysisInProgress = false;
   let studioAnalysisMode = 'lite';
   let studioManifestCache = {};
-  let studioVideoManifest = null;
-  let studioServerVideoUrl = null;
+  let studioPendingFrameDataUrl = null;
+  let studioActiveElement = null;
+  let studioInpaintJobs = {};
+  let studioSAMModeActive = false;
 
   function postFields(post) {
     if (!post) return {};
@@ -102,7 +105,7 @@
       <button type="button" class="cs-btn-icon" onclick="studioRedo()" title="Redo (⌘Y)">↪</button>
       <div class="cs-topbar-divider"></div>
       <button type="button" class="cs-btn-icon" onclick="toggleVersionHistory()" title="Version history">🕐</button>
-      <button type="button" class="cs-btn-secondary" onclick="studioDownload()">↓ Download</button>
+      <button type="button" class="cs-btn-secondary" id="btn-studio-export" onclick="exportStudioOutput()">↓ Download</button>
       <button type="button" class="cs-btn-approve" id="cs-approve-btn" onclick="studioApprove()">✓ Approve</button>
     </div>
   </div>
@@ -115,6 +118,7 @@
         <button type="button" onclick="studioAddText()" class="cs-add-btn">+ Text</button>
         <button type="button" onclick="studioAddRect()" class="cs-add-btn">+ Shape</button>
         <button type="button" onclick="document.getElementById('cs-img-upload').click()" class="cs-add-btn">+ Image</button>
+        <button type="button" id="btn-sam-mode" onclick="toggleSAMMode()" class="cs-add-btn" title="Click canvas to segment an element">🎯 Segment</button>
         <button type="button" onclick="studioClearCanvas()" class="cs-add-btn" style="color:#ef4444;border-color:#7f1d1d">✕ Clear</button>
         <input type="file" id="cs-img-upload" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi,.mkv,.m4v" style="display:none" onchange="studioAddImage(this)">
       </div>
@@ -374,7 +378,17 @@
             <div id="studio-analyze-progress" style="display:none; margin-top:8px;">
               <div id="studio-analyze-status" style="font-size:10px; color:#94a3b8; line-height:1.4;"></div>
             </div>
-            <div id="studio-element-list" style="margin-top:10px; max-height:220px; overflow-y:auto;"></div>
+            <div id="studio-element-list-section" style="display:none; margin-top:10px;">
+              <div style="font-size:10px; font-weight:700; color:#a78bfa; letter-spacing:.05em; margin-bottom:6px;">
+                DETECTED ELEMENTS
+              </div>
+              <div id="studio-element-list"
+                style="display:flex; flex-direction:column; gap:4px; max-height:300px; overflow-y:auto;">
+              </div>
+              <div id="studio-element-editor"
+                style="display:none; margin-top:8px; padding:10px; background:#1e293b; border-radius:8px; border:1px solid #334155;">
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -526,6 +540,7 @@
     studioCanvas.on('object:modified', function () { saveHistory('Manual edit'); updateLayerPanel(); });
     studioCanvas.on('object:added', updateLayerPanel);
     studioCanvas.on('object:removed', updateLayerPanel);
+    studioCanvas.on('mouse:down', function (opt) { handleSAMClick(opt); });
 
     if (!studioKeyBound) {
       document.addEventListener('keydown', studioKeyHandler, false);
@@ -1372,10 +1387,11 @@
     });
     if (!resp.ok) return;
     const data = await resp.json();
-
-    studioServerVideoUrl = data.url || null;
+    if (data && (data.url || data.atlasUrl || data.videoUrl)) {
+      studioServerVideoUrl = data.url || data.atlasUrl || data.videoUrl;
+    }
     const vidObj = studioCanvas && studioCanvas.getObjects().find(function (o) { return o.isVideo; });
-    if (vidObj) vidObj.cdnUrl = data.url;
+    if (vidObj) vidObj.cdnUrl = studioServerVideoUrl;
 
     if (data.frameDataUrl) {
       studioPendingFrameDataUrl = data.frameDataUrl;
@@ -1492,19 +1508,21 @@
     },
   };
 
-  function showStudioToast(msg, kind) {
-    let el = document.getElementById('studio-toast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'studio-toast';
-      el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:600;color:#fff;pointer-events:none;transition:opacity .2s;max-width:90%;text-align:center;';
-      document.body.appendChild(el);
-    }
-    el.style.background = kind === 'error' ? '#b91c1c' : '#7C3AED';
-    el.textContent = msg;
-    el.style.opacity = '1';
-    clearTimeout(el._hide);
-    el._hide = setTimeout(function () { el.style.opacity = '0'; }, 3200);
+  function showStudioToast(message, type) {
+    type = type || 'success';
+    const existing = document.getElementById('studio-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'studio-toast';
+    const bg = type === 'error' ? '#7f1d1d' : '#064e3b';
+    const border = type === 'error' ? '#ef4444' : '#10B981';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
+      'background:' + bg + ';border:1px solid ' + border + ';color:#e2e8f0;' +
+      'padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;' +
+      'z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:90%;text-align:center;';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(function () { toast.remove(); }, 4000);
   }
 
   function setAnalysisMode(mode) {
@@ -1532,80 +1550,365 @@
     const notice = document.getElementById('studio-cache-notice');
     if (notice) notice.style.display = 'none';
     studioVideoManifest = null;
+    studioActiveElement = null;
     const list = document.getElementById('studio-element-list');
     if (list) list.innerHTML = '';
+    const section = document.getElementById('studio-element-list-section');
+    if (section) section.style.display = 'none';
+    const editor = document.getElementById('studio-element-editor');
+    if (editor) editor.style.display = 'none';
     return false;
   }
 
+  const ELEMENT_TYPE_ICONS = {
+    text: '✏️', logo: '🏷️', background: '🖼️', subject: '👤',
+    overlay: '📐', graphic: '🎨', effect: '✨', rectangle: '📐',
+  };
+  const ELEMENT_TYPE_COLORS = {
+    text: '#7C3AED', logo: '#10B981', background: '#334155',
+    subject: '#F59E0B', overlay: '#3B82F6', graphic: '#EC4899', effect: '#64748b',
+    rectangle: '#3B82F6',
+  };
+
+  function normalizeManifestElements(elements) {
+    return (Array.isArray(elements) ? elements : []).map(function (el, i) {
+      const type = el.type || 'text';
+      const left = el.left != null ? el.left : (el.boundingBox && el.boundingBox.xPct != null ? el.boundingBox.xPct * 100 : 5);
+      const top = el.top != null ? el.top : (el.boundingBox && el.boundingBox.yPct != null ? el.boundingBox.yPct * 100 : 5);
+      const width = el.width != null ? el.width : (el.boundingBox && el.boundingBox.wPct != null ? el.boundingBox.wPct * 100 : (type === 'text' ? 60 : 20));
+      const height = el.height != null ? el.height : (el.boundingBox && el.boundingBox.hPct != null ? el.boundingBox.hPct * 100 : (type === 'text' ? 8 : 10));
+      const content = el.content || '';
+      const label = el.label || (type === 'text' ? String(content).slice(0, 40) || 'Text' : (type.charAt(0).toUpperCase() + type.slice(1)));
+      const fontSizeMap = { small: 28, medium: 42, large: 64, xlarge: 96, xxlarge: 128 };
+      return {
+        id: el.id || ('el_' + i + '_' + Date.now()),
+        type: type,
+        label: label,
+        content: content,
+        boundingBox: el.boundingBox || {
+          xPct: left / 100,
+          yPct: top / 100,
+          wPct: width / 100,
+          hPct: height / 100,
+        },
+        style: el.style || {
+          color: el.color || '#ffffff',
+          fontSize: typeof el.fontSize === 'number' ? el.fontSize : (fontSizeMap[el.fontSize] || 48),
+          fontFamily: el.fontFamily || (el.isHeadline ? 'Newsreader' : 'Instrument Sans'),
+          fontWeight: el.fontWeight || 'normal',
+          textAlign: el.textAlign || 'left',
+          backgroundColor: el.fill || '#000000',
+        },
+      };
+    });
+  }
+
   function renderElementList(elements) {
-    const list = document.getElementById('studio-element-list');
-    if (!list) return;
-    const items = Array.isArray(elements) ? elements : [];
+    const container = document.getElementById('studio-element-list');
+    const section = document.getElementById('studio-element-list-section');
+    if (!container) return;
+    const items = normalizeManifestElements(elements);
+    if (studioVideoManifest) studioVideoManifest.elements = items;
+    container.innerHTML = '';
+    if (section) section.style.display = 'block';
+
     if (!items.length) {
-      list.innerHTML = '<div style="font-size:10px;color:#64748b;padding:6px 0;">No elements found.</div>';
+      container.innerHTML = '<div style="font-size:10px;color:#64748b;padding:6px 0;">No elements found.</div>';
       return;
     }
-    list.innerHTML = items.map(function (el, i) {
-      const label = el.type === 'text'
-        ? ('T ' + String(el.content || '').slice(0, 40))
-        : (el.type || 'element') + (el.color ? ' ' + el.color : '');
-      return '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #0f172a;">' +
-        '<span style="flex:1;font-size:10px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(label) + '</span>' +
-        '<button type="button" onclick="addManifestElement(' + i + ')" ' +
-        'style="flex-shrink:0;background:#334155;border:none;color:#e2e8f0;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">Add</button>' +
+
+    items.forEach(function (el) {
+      const icon = ELEMENT_TYPE_ICONS[el.type] || '◼';
+      const color = ELEMENT_TYPE_COLORS[el.type] || '#64748b';
+      const chip = document.createElement('div');
+      chip.dataset.elementId = el.id;
+      chip.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 8px;' +
+        'background:#0f172a;border:1px solid #334155;border-radius:6px;cursor:pointer;transition:border-color .15s;';
+      chip.innerHTML =
+        '<span style="font-size:13px;">' + icon + '</span>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(el.label) + '</div>' +
+          '<div style="font-size:9px;color:' + color + ';font-weight:700;text-transform:uppercase;letter-spacing:.05em;">' + esc(el.type) + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:3px;flex-shrink:0;">' +
+          '<button type="button" onclick="event.stopPropagation();openElementEditor(\'' + el.id + '\')" ' +
+          'style="background:#1e293b;border:none;border-radius:4px;color:#94a3b8;padding:3px 6px;cursor:pointer;font-size:10px;">✏️</button>' +
+          '<button type="button" onclick="event.stopPropagation();removeElementWithInpaint(\'' + el.id + '\')" ' +
+          'style="background:#1e293b;border:none;border-radius:4px;color:#ef4444;padding:3px 6px;cursor:pointer;font-size:10px;">🗑️</button>' +
         '</div>';
-    }).join('');
+      chip.addEventListener('mouseenter', function () { chip.style.borderColor = color; });
+      chip.addEventListener('mouseleave', function () { chip.style.borderColor = '#334155'; });
+      chip.addEventListener('click', function () { openElementEditor(el.id); });
+      container.appendChild(chip);
+    });
+  }
+
+  function openElementEditor(elementId) {
+    if (!studioVideoManifest) return;
+    const el = studioVideoManifest.elements.find(function (e) { return e.id === elementId; });
+    if (!el) return;
+    studioActiveElement = el;
+
+    const editorDiv = document.getElementById('studio-element-editor');
+    if (!editorDiv) return;
+    editorDiv.style.display = 'block';
+
+    const existingHL = studioCanvas.getObjects().find(function (o) { return o.isElementHighlight; });
+    if (existingHL) studioCanvas.remove(existingHL);
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const bb = el.boundingBox || { xPct: 0, yPct: 0, wPct: 0.2, hPct: 0.1 };
+    const hlRect = new fabric.Rect({
+      left: bb.xPct * fmt.displayW,
+      top: bb.yPct * fmt.displayH,
+      width: bb.wPct * fmt.displayW,
+      height: bb.hPct * fmt.displayH,
+      fill: 'transparent',
+      stroke: ELEMENT_TYPE_COLORS[el.type] || '#7C3AED',
+      strokeWidth: 2,
+      strokeDashArray: [4, 3],
+      selectable: false,
+      evented: false,
+      isElementHighlight: true,
+    });
+    studioCanvas.add(hlRect);
+    studioCanvas.renderAll();
+    setTimeout(function () {
+      try { studioCanvas.remove(hlRect); studioCanvas.renderAll(); } catch (_) {}
+    }, 4000);
+
+    if (el.type === 'text') {
+      editorDiv.innerHTML =
+        '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:8px;">✏️ Edit Text</div>' +
+        '<textarea id="ee-text-content" rows="2" ' +
+        'style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;padding:4px 6px;font-size:11px;resize:none;box-sizing:border-box;">' +
+        esc(el.content || '') + '</textarea>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">' +
+          '<div><label style="font-size:9px;color:#64748b;display:block;margin-bottom:2px;">Color</label>' +
+          '<input type="color" id="ee-text-color" value="' + esc((el.style && el.style.color) || '#ffffff') + '" ' +
+          'style="width:100%;height:28px;border:none;border-radius:4px;cursor:pointer;" /></div>' +
+          '<div><label style="font-size:9px;color:#64748b;display:block;margin-bottom:2px;">Size (px)</label>' +
+          '<input type="number" id="ee-font-size" value="' + ((el.style && el.style.fontSize) || 48) + '" ' +
+          'style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;padding:3px 6px;font-size:11px;box-sizing:border-box;" /></div>' +
+        '</div>' +
+        '<select id="ee-font-family" style="width:100%;margin-top:6px;background:#0f172a;border:1px solid #334155;border-radius:4px;color:#e2e8f0;padding:5px 6px;font-size:11px;">' +
+          '<option value="Newsreader">Newsreader</option>' +
+          '<option value="Instrument Sans">Instrument Sans</option>' +
+          '<option value="Inter">Inter</option>' +
+          '<option value="Bebas Neue">Bebas Neue</option>' +
+          '<option value="Montserrat">Montserrat</option>' +
+          '<option value="Oswald">Oswald</option>' +
+          '<option value="Anton">Anton</option>' +
+          '<option value="Poppins">Poppins</option>' +
+          '<option value="Raleway">Raleway</option>' +
+          '<option value="Playfair Display">Playfair Display</option>' +
+        '</select>' +
+        '<button type="button" onclick="applyTextEdit()" ' +
+        'style="width:100%;margin-top:8px;background:#7C3AED;color:#fff;border:none;border-radius:6px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;">Apply to Canvas</button>' +
+        '<button type="button" onclick="removeElementWithInpaint(\'' + el.id + '\')" ' +
+        'style="width:100%;margin-top:4px;background:#1e293b;color:#ef4444;border:1px solid #ef444444;border-radius:6px;padding:6px;font-size:10px;cursor:pointer;">🗑️ Remove + AI Fill</button>' +
+        '<button type="button" onclick="document.getElementById(\'studio-element-editor\').style.display=\'none\'" ' +
+        'style="width:100%;margin-top:4px;background:none;border:none;color:#475569;font-size:10px;cursor:pointer;">✕ Close</button>';
+      const ff = document.getElementById('ee-font-family');
+      if (ff && el.style && el.style.fontFamily) ff.value = el.style.fontFamily;
+    } else {
+      editorDiv.innerHTML =
+        '<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px;">' +
+        (ELEMENT_TYPE_ICONS[el.type] || '◼') + ' ' + esc(el.label) + '</div>' +
+        '<p style="font-size:10px;color:#94a3b8;margin:0 0 8px;">Remove this element and AI will fill the area with content-aware inpainting.</p>' +
+        '<button type="button" onclick="removeElementWithInpaint(\'' + el.id + '\')" ' +
+        'style="width:100%;background:#ef4444;color:#fff;border:none;border-radius:6px;padding:7px;font-size:11px;font-weight:600;cursor:pointer;">🗑️ Remove + AI Fill</button>' +
+        '<button type="button" onclick="document.getElementById(\'studio-element-editor\').style.display=\'none\'" ' +
+        'style="width:100%;margin-top:4px;background:none;border:none;color:#475569;font-size:10px;cursor:pointer;">✕ Close</button>';
+    }
+  }
+
+  function applyTextEdit() {
+    if (!studioActiveElement) return;
+    const el = studioActiveElement;
+    const contentEl = document.getElementById('ee-text-content');
+    const colorEl = document.getElementById('ee-text-color');
+    const sizeEl = document.getElementById('ee-font-size');
+    const famEl = document.getElementById('ee-font-family');
+    const content = (contentEl && contentEl.value) || el.content || '';
+    const color = (colorEl && colorEl.value) || '#ffffff';
+    const fontSize = parseInt((sizeEl && sizeEl.value) || 48, 10);
+    const fontFamily = (famEl && famEl.value) || 'Instrument Sans';
+
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const bb = el.boundingBox || { xPct: 0.05, yPct: 0.05, wPct: 0.6, hPct: 0.1 };
+    const l = bb.xPct * fmt.displayW;
+    const t = bb.yPct * fmt.displayH;
+    const w = bb.wPct * fmt.displayW;
+    const h = bb.hPct * fmt.displayH;
+    const padX = Math.max(12, w * 0.08);
+    const padY = Math.max(8, h * 0.15);
+    const scaledFontSize = fontSize * (fmt.displayW / fmt.w);
+
+    studioCanvas.getObjects().filter(function (o) {
+      return o.name === 'mask_' + el.id || o.name === 'text_' + el.id;
+    }).forEach(function (o) { studioCanvas.remove(o); });
+
+    const maskRect = new fabric.Rect({
+      name: 'mask_' + el.id,
+      left: l - padX, top: t - padY,
+      width: w + padX * 2, height: h + padY * 2,
+      fill: (el.style && el.style.backgroundColor) || '#000000',
+      opacity: 0.97, selectable: false, evented: false, isMaskRect: true,
+    });
+    studioCanvas.add(maskRect);
+
+    const textObj = new fabric.IText(content, {
+      name: 'text_' + el.id,
+      left: l, top: t, width: w,
+      fontSize: scaledFontSize, fontFamily: fontFamily, fill: color,
+      fontWeight: (el.style && el.style.fontWeight) || 'normal',
+      textAlign: (el.style && el.style.textAlign) || 'left',
+      selectable: true, editable: true, isTextOverlay: true,
+    });
+    studioCanvas.add(textObj);
+    studioCanvas.setActiveObject(textObj);
+    textObj.on('moving', function () {
+      maskRect.set({ left: textObj.left - padX, top: textObj.top - padY });
+      studioCanvas.renderAll();
+    });
+    studioCanvas.renderAll();
+    updateLayerPanel();
+    saveHistory('Text edit applied');
+    showStudioToast('Text applied to canvas');
+  }
+
+  async function removeElementWithInpaint(elementId) {
+    if (!studioVideoManifest) return;
+    const el = studioVideoManifest.elements.find(function (e) { return e.id === elementId; });
+    if (!el) return;
+    if (!studioServerVideoUrl) {
+      showStudioToast('Video still uploading to server — please wait a moment then try again.', 'error');
+      return;
+    }
+    if (!confirm('Remove "' + el.label + '" and use AI to fill the blank area?\n\nThis takes 1–3 minutes and costs ~$0.35.')) return;
+
+    const chip = document.querySelector('[data-element-id="' + elementId + '"]');
+    let tag = null;
+    if (chip) {
+      tag = document.createElement('span');
+      tag.style.cssText = 'font-size:9px;color:#F59E0B;margin-left:4px;';
+      tag.textContent = '⏳ Inpainting...';
+      chip.appendChild(tag);
+    }
+    try {
+      const maskData = await studioFetch('/api/studio/generate-mask-video', {
+        method: 'POST',
+        body: JSON.stringify({ videoUrl: studioServerVideoUrl, boundingBox: el.boundingBox }),
+      });
+      if (!maskData.success) throw new Error(maskData.error || 'Mask generation failed');
+      const inpaintData = await studioFetch('/api/studio/inpaint-video', {
+        method: 'POST',
+        body: JSON.stringify({
+          videoUrl: studioServerVideoUrl,
+          maskVideoUrl: maskData.maskUrl,
+          dilateRadius: 12,
+        }),
+      });
+      if (!inpaintData.success) throw new Error(inpaintData.error || 'Inpainting failed');
+      const videoEl = document.getElementById('studio-video-player');
+      if (videoEl) {
+        videoEl.src = inpaintData.url;
+        await videoEl.play().catch(function () {});
+      }
+      studioServerVideoUrl = inpaintData.url;
+      studioVideoManifest.elements = studioVideoManifest.elements.filter(function (e) { return e.id !== elementId; });
+      renderElementList(studioVideoManifest.elements);
+      const editor = document.getElementById('studio-element-editor');
+      if (editor) editor.style.display = 'none';
+      studioActiveElement = null;
+      showStudioToast('✅ "' + el.label + '" removed and AI filled the area!');
+    } catch (err) {
+      showStudioToast('❌ Inpaint failed: ' + err.message, 'error');
+      if (tag) tag.remove();
+    }
+  }
+
+  async function exportStudioOutput() {
+    if (!studioServerVideoUrl) { studioDownload(); return; }
+    const btn = document.getElementById('btn-studio-export');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting...'; }
+    try {
+      const data = await studioFetch('/api/studio/export-video', {
+        method: 'POST',
+        body: JSON.stringify({ videoUrl: studioServerVideoUrl, effects: global.studioEffectSettings || {} }),
+      });
+      if (!data.success) throw new Error(data.error || 'Export failed');
+      const a = document.createElement('a');
+      a.href = data.url;
+      a.download = data.filename || 'export.mp4';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showStudioToast('✅ Video downloaded!');
+    } catch (err) {
+      showStudioToast('❌ Export failed: ' + err.message, 'error');
+      studioDownload();
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '↓ Download'; }
+    }
+  }
+
+  function toggleSAMMode() {
+    studioSAMModeActive = !studioSAMModeActive;
+    const btn = document.getElementById('btn-sam-mode');
+    if (btn) {
+      btn.style.background = studioSAMModeActive ? '#7C3AED' : '';
+      btn.style.color = studioSAMModeActive ? '#fff' : '';
+      btn.textContent = studioSAMModeActive ? '🎯 Click…' : '🎯 Segment';
+    }
+    if (studioCanvas) studioCanvas.defaultCursor = studioSAMModeActive ? 'crosshair' : 'default';
+  }
+
+  async function handleSAMClick(opt) {
+    if (!studioSAMModeActive || !studioCanvas) return;
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const pointer = studioCanvas.getPointer(opt.e);
+    const normX = pointer.x / fmt.displayW;
+    const normY = pointer.y / fmt.displayH;
+    toggleSAMMode();
+    if (!studioServerVideoUrl) {
+      showStudioToast('Segment works after video uploads to server', 'error');
+      return;
+    }
+    showStudioToast('🎯 Segmenting element...');
+    try {
+      const data = await studioFetch('/api/studio/segment-image', {
+        method: 'POST',
+        body: JSON.stringify({ imageUrl: studioServerVideoUrl, points: [{ x: normX, y: normY }] }),
+      });
+      if (!data.success) throw new Error(data.error || 'Segment failed');
+      fabric.Image.fromURL(data.maskUrl, function (maskImg) {
+        if (!maskImg) return;
+        maskImg.set({
+          left: 0, top: 0,
+          scaleX: fmt.displayW / (data.imageWidth || fmt.displayW),
+          scaleY: fmt.displayH / (data.imageHeight || fmt.displayH),
+          opacity: 0.4, selectable: true, isSAMMask: true,
+          globalCompositeOperation: 'screen',
+        });
+        studioCanvas.add(maskImg);
+        studioCanvas.renderAll();
+        updateLayerPanel();
+        showStudioToast('✅ Element segmented — mask added to canvas');
+      }, { crossOrigin: 'anonymous' });
+    } catch (err) {
+      showStudioToast('❌ Segment failed: ' + err.message, 'error');
+    }
   }
 
   function addManifestElement(idx) {
     if (!studioVideoManifest || !studioVideoManifest.elements) return;
-    const layer = studioVideoManifest.elements[idx];
-    if (!layer) return;
-    const fmt = STUDIO_FORMATS[studioFormat];
-    const fsMap = {
-      small: fmt.displayH * 0.025,
-      medium: fmt.displayH * 0.04,
-      large: fmt.displayH * 0.06,
-      xlarge: fmt.displayH * 0.09,
-      xxlarge: fmt.displayH * 0.13,
-    };
-    if (layer.type === 'text') {
-      const t = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
-        name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now(),
-        left: ((layer.left || 5) / 100) * fmt.displayW,
-        top: ((layer.top || 5) / 100) * fmt.displayH,
-        width: fmt.displayW * 0.88,
-        fontFamily: layer.isHeadline ? 'Newsreader' : 'Instrument Sans',
-        fontSize: fsMap[layer.fontSize] || fsMap.medium,
-        fill: layer.color || '#FFFFFF',
-        fontWeight: layer.fontWeight || 'normal',
-        textAlign: layer.textAlign || 'left',
-        lineHeight: 1.15,
-        selectable: true,
-        evented: true,
-      });
-      studioCanvas.add(t);
-    } else if (layer.type === 'rectangle' || layer.type === 'overlay') {
-      const r = new fabric.Rect({
-        name: 'overlay-' + Date.now(),
-        left: ((layer.left || 0) / 100) * fmt.displayW,
-        top: ((layer.top || 0) / 100) * fmt.displayH,
-        width: ((layer.width || 20) / 100) * fmt.displayW,
-        height: ((layer.height || 10) / 100) * fmt.displayH,
-        fill: layer.fill || layer.color || '#000000',
-        opacity: layer.opacity != null ? layer.opacity : 0.4,
-        selectable: true,
-        evented: true,
-      });
-      studioCanvas.add(r);
-    } else {
-      showStudioToast('Element type "' + (layer.type || '?') + '" — add manually', 'error');
-      return;
-    }
-    studioCanvas.renderAll();
-    updateLayerPanel();
-    saveHistory('Added analyzed element');
-    showStudioToast('Element added to canvas');
+    const el = studioVideoManifest.elements[idx];
+    if (!el) return;
+    studioActiveElement = el;
+    openElementEditor(el.id);
+    if (el.type === 'text') applyTextEdit();
   }
 
   async function triggerAnalysis() {
@@ -1655,10 +1958,13 @@
       });
       if (!data.success) throw new Error(data.error || 'Analysis failed');
 
-      studioManifestCache[cacheKey] = data.manifest;
-      studioVideoManifest = data.manifest;
+      studioVideoManifest = data.manifest || { elements: [] };
+      if (studioVideoManifest.elements) {
+        studioVideoManifest.elements = normalizeManifestElements(studioVideoManifest.elements);
+      }
+      studioManifestCache[cacheKey] = studioVideoManifest;
 
-      if (statusEl) statusEl.textContent = '✅ Found ' + (data.manifest.elements || []).length + ' elements';
+      if (statusEl) statusEl.textContent = '✅ Found ' + (studioVideoManifest.elements || []).length + ' elements';
       setTimeout(function () {
         if (progressDiv) progressDiv.style.display = 'none';
       }, 2000);
@@ -1666,7 +1972,7 @@
       if (notice) notice.style.display = 'block';
       if (btn) { btn.textContent = config.btnText; btn.disabled = false; }
 
-      renderElementList(data.manifest.elements);
+      renderElementList(studioVideoManifest.elements);
       showRightTab('props');
     } catch (err) {
       if (statusEl) statusEl.textContent = '❌ Error: ' + err.message;
@@ -2373,6 +2679,11 @@
     triggerAnalysis: triggerAnalysis,
     triggerLiteLocalAnalysis: triggerLiteLocalAnalysis,
     addManifestElement: addManifestElement,
+    openElementEditor: openElementEditor,
+    applyTextEdit: applyTextEdit,
+    removeElementWithInpaint: removeElementWithInpaint,
+    exportStudioOutput: exportStudioOutput,
+    toggleSAMMode: toggleSAMMode,
     studioClearCanvas: studioClearCanvas,
     studioDeleteSelected: studioDeleteSelected,
     studioDuplicate: studioDuplicate,
