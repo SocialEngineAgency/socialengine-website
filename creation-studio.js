@@ -27,6 +27,10 @@
   let studioVideoBlobUrls = [];
   let studioPendingFrameDataUrl = null;
   let studioAnalysisInProgress = false;
+  let studioAnalysisMode = 'lite';
+  let studioManifestCache = {};
+  let studioVideoManifest = null;
+  let studioServerVideoUrl = null;
 
   function postFields(post) {
     if (!post) return {};
@@ -338,6 +342,39 @@
               <div class="swatch" style="background:#FFFFFF;border:1px solid #e2e8f0" onclick="applySwatchToSelected('#FFFFFF')" title="White"></div>
               <div class="swatch" style="background:#000000" onclick="applySwatchToSelected('#000000')" title="Black"></div>
             </div>
+          </div>
+        </div>
+
+        <div id="props-video-analyze" class="props-section" style="display:none">
+          <div class="props-group">
+            <label>Video analysis</label>
+            <div style="margin-bottom:8px;">
+              <div style="display:flex; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:2px; margin-bottom:6px;">
+                <button type="button" id="btn-mode-lite" onclick="setAnalysisMode('lite')"
+                  style="flex:1; padding:5px 0; border:none; border-radius:6px; font-size:10px; font-weight:600; cursor:pointer; background:#7C3AED; color:#fff; transition:all .15s;">
+                  ⚡ Lite
+                </button>
+                <button type="button" id="btn-mode-deep" onclick="setAnalysisMode('deep')"
+                  style="flex:1; padding:5px 0; border:none; border-radius:6px; font-size:10px; font-weight:600; cursor:pointer; background:transparent; color:#64748b; transition:all .15s;">
+                  🧠 Deep
+                </button>
+              </div>
+              <div id="studio-analyze-mode-desc"
+                style="font-size:9px; color:#64748b; text-align:center; margin-bottom:6px; min-height:24px; line-height:1.4;">
+                ⚡ <strong style="color:#94a3b8;">Lite:</strong> 3 frames · text &amp; colors only · ~$0.01
+              </div>
+              <button type="button" id="btn-run-analyze" onclick="triggerAnalysis()"
+                style="width:100%; background:#7C3AED; color:#fff; border:none; border-radius:6px; padding:7px; font-size:11px; font-weight:600; cursor:pointer;">
+                ⚡ Run Lite Analysis
+              </button>
+            </div>
+            <div id="studio-cache-notice" style="display:none; font-size:9px; color:#10B981; text-align:center; margin-top:4px;">
+              ✅ Using cached analysis · <a href="#" onclick="return clearAnalysisCache()" style="color:#64748b; text-decoration:underline;">Re-run</a>
+            </div>
+            <div id="studio-analyze-progress" style="display:none; margin-top:8px;">
+              <div id="studio-analyze-status" style="font-size:10px; color:#94a3b8; line-height:1.4;"></div>
+            </div>
+            <div id="studio-element-list" style="margin-top:10px; max-height:220px; overflow-y:auto;"></div>
           </div>
         </div>
       </div>
@@ -1121,6 +1158,9 @@
 
   function updateVideoToolbar(hasVideo) {
     let vbar = document.getElementById('cs-video-toolbar');
+    const analyzePanel = document.getElementById('props-video-analyze');
+    if (analyzePanel) analyzePanel.style.display = hasVideo ? 'block' : 'none';
+
     if (!hasVideo) {
       if (vbar) {
         if (vbar._timeInterval) clearInterval(vbar._timeInterval);
@@ -1333,12 +1373,15 @@
     if (!resp.ok) return;
     const data = await resp.json();
 
+    studioServerVideoUrl = data.url || null;
     const vidObj = studioCanvas && studioCanvas.getObjects().find(function (o) { return o.isVideo; });
     if (vidObj) vidObj.cdnUrl = data.url;
 
     if (data.frameDataUrl) {
       studioPendingFrameDataUrl = data.frameDataUrl;
-      // Analyze button is already offered from addVideoToCanvas via captureFrameAndAnalyze
+    }
+    if (studioServerVideoUrl) {
+      showStudioToast('Video uploaded — Deep analysis available');
     }
   }
 
@@ -1427,6 +1470,270 @@
     return captureFrameAndAnalyze();
   }
 
+  // ── Lite / Deep video analysis ─────────────────────────────────────────
+  const ANALYSIS_MODE_CONFIG = {
+    lite: {
+      frameCount: 3,
+      batchSize: 3,
+      elementTypes: 'text, dominant colors, and obvious logos only',
+      label: '⚡ Lite',
+      desc: '⚡ <strong style="color:#94a3b8;">Lite:</strong> 3 frames · text &amp; colors only · ~$0.01',
+      btnText: '⚡ Run Lite Analysis',
+      model: 'claude-haiku-4-5-20251001',
+    },
+    deep: {
+      frameCount: 30,
+      batchSize: 10,
+      elementTypes: 'every element: text, logos, backgrounds, subjects, overlays, graphics, and visual effects',
+      label: '🧠 Deep',
+      desc: '🧠 <strong style="color:#94a3b8;">Deep:</strong> 30 frames · all elements · ~$0.10–0.15',
+      btnText: '🧠 Run Deep Analysis',
+      model: 'claude-opus-4-5',
+    },
+  };
+
+  function showStudioToast(msg, kind) {
+    let el = document.getElementById('studio-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'studio-toast';
+      el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:600;color:#fff;pointer-events:none;transition:opacity .2s;max-width:90%;text-align:center;';
+      document.body.appendChild(el);
+    }
+    el.style.background = kind === 'error' ? '#b91c1c' : '#7C3AED';
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(el._hide);
+    el._hide = setTimeout(function () { el.style.opacity = '0'; }, 3200);
+  }
+
+  function setAnalysisMode(mode) {
+    studioAnalysisMode = mode;
+    const config = ANALYSIS_MODE_CONFIG[mode];
+    const desc = document.getElementById('studio-analyze-mode-desc');
+    const btn = document.getElementById('btn-run-analyze');
+    const liteBtn = document.getElementById('btn-mode-lite');
+    const deepBtn = document.getElementById('btn-mode-deep');
+    if (desc) desc.innerHTML = config.desc;
+    if (btn) btn.textContent = config.btnText;
+    if (liteBtn) {
+      liteBtn.style.background = mode === 'lite' ? '#7C3AED' : 'transparent';
+      liteBtn.style.color = mode === 'lite' ? '#fff' : '#64748b';
+    }
+    if (deepBtn) {
+      deepBtn.style.background = mode === 'deep' ? '#7C3AED' : 'transparent';
+      deepBtn.style.color = mode === 'deep' ? '#fff' : '#64748b';
+    }
+  }
+
+  function clearAnalysisCache() {
+    const cacheKey = studioServerVideoUrl || 'local';
+    delete studioManifestCache[cacheKey];
+    const notice = document.getElementById('studio-cache-notice');
+    if (notice) notice.style.display = 'none';
+    studioVideoManifest = null;
+    const list = document.getElementById('studio-element-list');
+    if (list) list.innerHTML = '';
+    return false;
+  }
+
+  function renderElementList(elements) {
+    const list = document.getElementById('studio-element-list');
+    if (!list) return;
+    const items = Array.isArray(elements) ? elements : [];
+    if (!items.length) {
+      list.innerHTML = '<div style="font-size:10px;color:#64748b;padding:6px 0;">No elements found.</div>';
+      return;
+    }
+    list.innerHTML = items.map(function (el, i) {
+      const label = el.type === 'text'
+        ? ('T ' + String(el.content || '').slice(0, 40))
+        : (el.type || 'element') + (el.color ? ' ' + el.color : '');
+      return '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #0f172a;">' +
+        '<span style="flex:1;font-size:10px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(label) + '</span>' +
+        '<button type="button" onclick="addManifestElement(' + i + ')" ' +
+        'style="flex-shrink:0;background:#334155;border:none;color:#e2e8f0;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">Add</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function addManifestElement(idx) {
+    if (!studioVideoManifest || !studioVideoManifest.elements) return;
+    const layer = studioVideoManifest.elements[idx];
+    if (!layer) return;
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const fsMap = {
+      small: fmt.displayH * 0.025,
+      medium: fmt.displayH * 0.04,
+      large: fmt.displayH * 0.06,
+      xlarge: fmt.displayH * 0.09,
+      xxlarge: fmt.displayH * 0.13,
+    };
+    if (layer.type === 'text') {
+      const t = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
+        name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now(),
+        left: ((layer.left || 5) / 100) * fmt.displayW,
+        top: ((layer.top || 5) / 100) * fmt.displayH,
+        width: fmt.displayW * 0.88,
+        fontFamily: layer.isHeadline ? 'Newsreader' : 'Instrument Sans',
+        fontSize: fsMap[layer.fontSize] || fsMap.medium,
+        fill: layer.color || '#FFFFFF',
+        fontWeight: layer.fontWeight || 'normal',
+        textAlign: layer.textAlign || 'left',
+        lineHeight: 1.15,
+        selectable: true,
+        evented: true,
+      });
+      studioCanvas.add(t);
+    } else if (layer.type === 'rectangle' || layer.type === 'overlay') {
+      const r = new fabric.Rect({
+        name: 'overlay-' + Date.now(),
+        left: ((layer.left || 0) / 100) * fmt.displayW,
+        top: ((layer.top || 0) / 100) * fmt.displayH,
+        width: ((layer.width || 20) / 100) * fmt.displayW,
+        height: ((layer.height || 10) / 100) * fmt.displayH,
+        fill: layer.fill || layer.color || '#000000',
+        opacity: layer.opacity != null ? layer.opacity : 0.4,
+        selectable: true,
+        evented: true,
+      });
+      studioCanvas.add(r);
+    } else {
+      showStudioToast('Element type "' + (layer.type || '?') + '" — add manually', 'error');
+      return;
+    }
+    studioCanvas.renderAll();
+    updateLayerPanel();
+    saveHistory('Added analyzed element');
+    showStudioToast('Element added to canvas');
+  }
+
+  async function triggerAnalysis() {
+    const cacheKey = studioServerVideoUrl || 'local';
+    if (studioManifestCache[cacheKey]) {
+      studioVideoManifest = studioManifestCache[cacheKey];
+      renderElementList(studioVideoManifest.elements);
+      const notice = document.getElementById('studio-cache-notice');
+      if (notice) notice.style.display = 'block';
+      showStudioToast('Using cached analysis — no extra cost!');
+      return;
+    }
+
+    if (!studioServerVideoUrl) {
+      if (studioAnalysisMode === 'deep') {
+        showStudioToast('⏳ Video still uploading to server — try Lite for now or wait a moment.', 'error');
+        return;
+      }
+      await triggerLiteLocalAnalysis();
+      return;
+    }
+
+    const config = ANALYSIS_MODE_CONFIG[studioAnalysisMode];
+    const progressDiv = document.getElementById('studio-analyze-progress');
+    const statusEl = document.getElementById('studio-analyze-status');
+    const btn = document.getElementById('btn-run-analyze');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyzing...'; }
+    if (progressDiv) progressDiv.style.display = 'block';
+    if (statusEl) {
+      statusEl.textContent = studioAnalysisMode === 'lite'
+        ? 'Capturing 3 frames & running quick analysis...'
+        : 'Extracting 30 frames & running full analysis (this takes ~30s)...';
+    }
+
+    try {
+      const data = await studioFetch('/api/studio/deep-analyze-video', {
+        method: 'POST',
+        body: JSON.stringify({
+          videoUrl: studioServerVideoUrl,
+          videoId: 'video_' + Date.now(),
+          mode: studioAnalysisMode,
+          frameCount: config.frameCount,
+          model: config.model,
+          elementTypes: config.elementTypes,
+        }),
+      });
+      if (!data.success) throw new Error(data.error || 'Analysis failed');
+
+      studioManifestCache[cacheKey] = data.manifest;
+      studioVideoManifest = data.manifest;
+
+      if (statusEl) statusEl.textContent = '✅ Found ' + (data.manifest.elements || []).length + ' elements';
+      setTimeout(function () {
+        if (progressDiv) progressDiv.style.display = 'none';
+      }, 2000);
+      const notice = document.getElementById('studio-cache-notice');
+      if (notice) notice.style.display = 'block';
+      if (btn) { btn.textContent = config.btnText; btn.disabled = false; }
+
+      renderElementList(data.manifest.elements);
+      showRightTab('props');
+    } catch (err) {
+      if (statusEl) statusEl.textContent = '❌ Error: ' + err.message;
+      if (btn) { btn.disabled = false; btn.textContent = config.btnText; }
+      showStudioToast(err.message, 'error');
+    }
+  }
+
+  async function triggerLiteLocalAnalysis() {
+    const v = document.getElementById('studio-video-player') || global._studioActiveVideo;
+    if (!v) { showStudioToast('No video loaded', 'error'); return; }
+
+    const btn = document.getElementById('btn-run-analyze');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Capturing frames...'; }
+
+    try {
+      const frames = [];
+      const duration = v.duration || 10;
+      const timestamps = [0.1, 0.5, 0.9].map(function (t) { return t * Math.min(duration, 30); });
+      const wasPaused = v.paused;
+      const prevTime = v.currentTime;
+
+      for (let i = 0; i < timestamps.length; i++) {
+        const t = timestamps[i];
+        v.currentTime = t;
+        await new Promise(function (r) {
+          v.addEventListener('seeked', r, { once: true });
+          setTimeout(r, 800);
+        });
+        const tmp = document.createElement('canvas');
+        const vw = v.videoWidth || 640;
+        const vh = v.videoHeight || 1138;
+        tmp.width = 640;
+        tmp.height = Math.max(1, Math.round(640 * vh / vw));
+        tmp.getContext('2d').drawImage(v, 0, 0, tmp.width, tmp.height);
+        frames.push(tmp.toDataURL('image/jpeg', 0.75));
+      }
+
+      v.currentTime = prevTime;
+      if (!wasPaused) v.play().catch(function () {});
+
+      const data = await studioFetch('/api/studio/analyze-video-frames', {
+        method: 'POST',
+        body: JSON.stringify({
+          frames: frames.map(function (f, i) { return { time: timestamps[i], dataUrl: f }; }),
+          mode: 'lite',
+        }),
+      });
+      if (!data.success) throw new Error(data.error || 'Analysis failed');
+
+      studioVideoManifest = { elements: data.layers || data.elements || [], videoId: 'local' };
+      studioManifestCache.local = studioVideoManifest;
+      renderElementList(studioVideoManifest.elements);
+      const notice = document.getElementById('studio-cache-notice');
+      if (notice) notice.style.display = 'block';
+      showStudioToast('⚡ Lite analysis done — ' + studioVideoManifest.elements.length + ' elements found');
+      showRightTab('props');
+    } catch (err) {
+      showStudioToast('❌ ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = ANALYSIS_MODE_CONFIG[studioAnalysisMode].btnText;
+      }
+    }
+  }
+
   function studioClearCanvas() {
     if (!confirm('Clear all layers and start fresh?')) return;
     studioCanvas.clear();
@@ -1434,10 +1741,16 @@
     studioCanvas.setBackgroundColor('#0E1A63', studioCanvas.renderAll.bind(studioCanvas));
     studioVideoBlobUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (_) {} });
     studioVideoBlobUrls = [];
+    studioServerVideoUrl = null;
+    studioVideoManifest = null;
     updateVideoToolbar(false);
     studioPendingFrameDataUrl = null;
     studioAnalysisInProgress = false;
     studioChatHistory = [];
+    const list = document.getElementById('studio-element-list');
+    if (list) list.innerHTML = '';
+    const notice = document.getElementById('studio-cache-notice');
+    if (notice) notice.style.display = 'none';
     updateLayerPanel();
     clearPropsPanel();
     studioHistory = [];
@@ -2055,6 +2368,11 @@
     exportVideoFrame: exportVideoFrame,
     analyzeVideoFrame: analyzeVideoFrame,
     captureFrameAndAnalyze: captureFrameAndAnalyze,
+    setAnalysisMode: setAnalysisMode,
+    clearAnalysisCache: clearAnalysisCache,
+    triggerAnalysis: triggerAnalysis,
+    triggerLiteLocalAnalysis: triggerLiteLocalAnalysis,
+    addManifestElement: addManifestElement,
     studioClearCanvas: studioClearCanvas,
     studioDeleteSelected: studioDeleteSelected,
     studioDuplicate: studioDuplicate,
