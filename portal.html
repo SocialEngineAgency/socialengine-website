@@ -7,9 +7,11 @@
   <meta name="description" content="Sign in to your SocialEngine client portal. Manage your social media content, analytics, and brand voice all in one place.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,600;6..72,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="./creation-studio.js" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -2325,6 +2327,120 @@
     .soc5-pw-submit:hover { transform: translateY(-1px); box-shadow: 0 14px 30px -12px rgba(124,58,237,0.72); }
     .soc5-pw-submit:disabled { opacity: 0.6; cursor: wait; transform: none; }
     .soc5-pw-fine { font-size: 0.76rem; color: #64748B; text-align: center; margin: 0.85rem 0 0; }
+
+    /* ── Creation Studio (Fabric.js) ───────────────────────────── */
+    .cs-root { margin: -8px -4px 0; }
+    .cs-topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#1e293b; border-bottom:1px solid #334155; gap:12px; flex-wrap:wrap; border-radius:12px 12px 0 0; }
+    .cs-topbar-left { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .cs-brand-lock { background:#064e3b; color:#6ee7b7; padding:3px 10px; border-radius:6px; font-size:11px; font-weight:700; }
+    .cs-post-name { color:#94a3b8; font-size:13px; font-weight:600; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cs-post-select { background:#0f172a; border:1px solid #475569; color:#e2e8f0; border-radius:8px; padding:6px 10px; font-size:12px; max-width:220px; }
+    .cs-format-tabs { display:flex; gap:4px; }
+    .cs-fmt { padding:6px 14px; border-radius:8px; border:1px solid #475569; background:transparent; color:#94a3b8; font-size:12px; font-weight:600; cursor:pointer; }
+    .cs-fmt.active { background:#7C3AED; color:#fff; border-color:#7C3AED; }
+    .cs-topbar-right { display:flex; align-items:center; gap:8px; }
+    .cs-btn-icon { width:32px; height:32px; border-radius:6px; border:1px solid #475569; background:transparent; color:#94a3b8; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .cs-btn-icon:hover { background:#334155; color:#fff; }
+    .cs-topbar-divider { width:1px; height:20px; background:#334155; }
+    .cs-btn-secondary { padding:7px 14px; border-radius:8px; border:1px solid #475569; background:transparent; color:#cbd5e1; font-size:13px; font-weight:600; cursor:pointer; }
+    .cs-btn-approve { padding:7px 16px; border-radius:8px; background:#10B981; border:none; color:#fff; font-weight:700; font-size:13px; cursor:pointer; }
+    .cs-btn-danger { padding:7px 12px; border-radius:8px; background:transparent; border:1px solid #ef4444; color:#ef4444; font-size:13px; cursor:pointer; }
+    .cs-full-width { width:100%; margin-bottom:6px; }
+    .cs-main { display:grid; grid-template-columns:200px 1fr 280px; height:calc(100vh - 200px); min-height:560px; overflow:hidden; background:#0f172a; border-radius:0 0 12px 12px; border:1px solid #334155; border-top:none; }
+    .cs-layers { background:#1e293b; border-right:1px solid #334155; overflow-y:auto; display:flex; flex-direction:column; }
+    .cs-panel-title { padding:10px 12px; font-size:10px; font-weight:700; color:#475569; letter-spacing:.08em; text-transform:uppercase; border-bottom:1px solid #334155; }
+    #cs-layer-list { flex:1; overflow-y:auto; }
+    .layer-item { display:flex; align-items:center; gap:6px; padding:8px 10px; cursor:pointer; border-bottom:1px solid #0f172a; font-size:12px; color:#94a3b8; }
+    .layer-item:hover { background:#334155; }
+    .layer-item.selected { background:#2d1b69; color:#c4b5fd; }
+    .layer-icon { font-size:11px; width:16px; text-align:center; }
+    .layer-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .layer-vis,.layer-lock { font-size:12px; cursor:pointer; opacity:.5; }
+    .layer-vis:hover,.layer-lock:hover { opacity:1; }
+    .cs-layer-actions { padding:8px; display:flex; gap:4px; border-top:1px solid #334155; }
+    .cs-add-btn { flex:1; padding:5px; border-radius:6px; border:1px solid #334155; background:transparent; color:#64748b; font-size:11px; cursor:pointer; }
+    .cs-add-btn:hover { background:#334155; color:#cbd5e1; }
+    .cs-canvas-area { display:flex; flex-direction:column; background:#0f172a; min-width:0; }
+    .cs-canvas-outer { flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; padding:24px; }
+    .cs-canvas-wrapper { box-shadow:0 0 0 1px #334155, 0 20px 60px rgba(0,0,0,.5); border-radius:4px; overflow:hidden; background:#0E1A63; }
+    .cs-canvas-toolbar { background:#1e293b; border-top:1px solid #334155; padding:8px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .cs-tool-group { display:flex; align-items:center; gap:4px; padding-right:12px; border-right:1px solid #334155; }
+    .cs-tool-group:last-child { border-right:none; }
+    .cs-tool { padding:6px 10px; border-radius:6px; border:1px solid transparent; background:transparent; color:#64748b; font-size:13px; font-weight:600; cursor:pointer; }
+    .cs-tool:hover { background:#334155; color:#cbd5e1; }
+    .cs-zoom-label { font-size:12px; color:#64748b; min-width:40px; text-align:center; }
+    .cs-right-panel { background:#1e293b; border-left:1px solid #334155; overflow:hidden; display:flex; flex-direction:column; min-width:0; }
+    .cs-right-tabs { display:flex; border-bottom:1px solid #334155; }
+    .cs-rtab { flex:1; padding:10px; border:none; background:transparent; color:#64748b; font-size:13px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; }
+    .cs-rtab.active { color:#a78bfa; border-bottom-color:#7C3AED; background:#0f172a; }
+    .cs-chat-badge { color:#10B981; font-size:10px; }
+    .cs-props-content,.cs-chat-content,.cs-history-content { flex:1; overflow-y:auto; }
+    .props-section { padding:12px 14px; border-bottom:1px solid #0f172a; }
+    .props-section label { display:block; font-size:10px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
+    .props-group { margin-bottom:10px; }
+    .props-row { display:flex; align-items:center; gap:6px; }
+    .props-half { flex:1; }
+    .props-mini { display:flex; flex-direction:column; align-items:center; gap:2px; }
+    .props-mini label { font-size:9px; }
+    .props-mini input { width:52px; }
+    .props-hint { font-size:12px; color:#475569; line-height:1.5; }
+    .props-section input[type=number], .props-section input[type=text], .props-section select {
+      background:#0f172a; border:1px solid #334155; border-radius:6px; color:#e2e8f0;
+      padding:5px 8px; font-size:12px; width:100%; }
+    .props-section input[type=range] { width:100%; accent-color:#7C3AED; }
+    .color-row { display:flex; align-items:center; gap:6px; }
+    .color-row input[type=color] { width:32px; height:28px; border:none; background:none; cursor:pointer; border-radius:4px; }
+    .prop-toggle { padding:5px 10px; border-radius:6px; border:1px solid #334155; background:transparent; color:#64748b; cursor:pointer; }
+    .prop-toggle.active { background:#7C3AED; color:#fff; border-color:#7C3AED; }
+    .prop-align { flex:1; padding:5px; border-radius:6px; border:1px solid #334155; background:transparent; color:#64748b; font-size:11px; cursor:pointer; }
+    .prop-align:hover { background:#334155; color:#cbd5e1; }
+    .filter-row { display:flex; align-items:center; gap:6px; font-size:11px; color:#64748b; margin-bottom:4px; }
+    .filter-row span:first-child { width:70px; }
+    .filter-row span:last-child { width:25px; text-align:right; font-size:10px; }
+    .brand-swatches { display:flex; gap:8px; flex-wrap:wrap; }
+    .swatch { width:28px; height:28px; border-radius:6px; cursor:pointer; transition:transform .1s; }
+    .swatch:hover { transform:scale(1.2); }
+    .cs-btn-icon-sm { padding:4px 8px; border-radius:5px; border:1px solid #334155; background:transparent; color:#64748b; font-size:11px; cursor:pointer; }
+    .cs-btn-icon-sm:hover { background:#334155; color:#cbd5e1; }
+    .cs-chat-content { display:flex; flex-direction:column; height:100%; }
+    .chat-messages { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+    .chat-msg.user { align-items:flex-end; display:flex; flex-direction:column; }
+    .chat-msg.assistant { align-items:flex-start; display:flex; flex-direction:column; }
+    .chat-bubble { max-width:95%; padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.5; }
+    .chat-msg.user .chat-bubble { background:#7C3AED; color:#fff; border-radius:10px 10px 2px 10px; }
+    .chat-msg.assistant .chat-bubble { background:#334155; color:#e2e8f0; border-radius:10px 10px 10px 2px; }
+    .chat-msg.assistant.loading .chat-bubble { color:#64748b; animation:csPulse 1.5s infinite; }
+    @keyframes csPulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+    .variation-picker { padding:10px 12px; border-top:1px solid #334155; }
+    .variation-title { font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:8px; }
+    .variation-thumbs { display:flex; gap:8px; overflow-x:auto; }
+    .variation-thumb { flex-shrink:0; cursor:pointer; border-radius:8px; border:2px solid #334155; overflow:hidden; }
+    .variation-thumb:hover { border-color:#7C3AED; }
+    .variation-thumb img { width:80px; height:80px; object-fit:cover; display:block; }
+    .variation-thumb .var-label { font-size:10px; color:#64748b; text-align:center; padding:4px; background:#1e293b; }
+    .preview-modal { background:#0f172a; border:1px solid #334155; border-radius:10px; margin:10px 12px; }
+    .preview-modal-inner { padding:14px; }
+    .preview-desc { font-size:13px; color:#cbd5e1; line-height:1.5; margin-bottom:12px; }
+    .preview-modal-actions { display:flex; gap:8px; }
+    .chat-input-area { padding:10px 12px; border-top:1px solid #334155; display:flex; gap:8px; align-items:flex-end; }
+    .chat-input-area textarea { flex:1; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#e2e8f0; padding:8px 10px; font-size:13px; resize:none; font-family:inherit; }
+    .chat-send-btn { width:36px; height:36px; border-radius:8px; background:#7C3AED; border:none; color:#fff; font-size:18px; cursor:pointer; flex-shrink:0; }
+    .cs-history-content { padding:12px; }
+    .history-item { padding:10px 12px; border-radius:8px; border:1px solid #334155; margin-bottom:8px; cursor:pointer; }
+    .history-item:hover { border-color:#7C3AED; }
+    .history-item .hist-label { font-size:13px; font-weight:600; color:#e2e8f0; }
+    .history-item .hist-time { font-size:11px; color:#475569; margin-top:2px; }
+    .history-item.current { border-color:#10B981; }
+    .history-item.current .hist-label::after { content:' · current'; color:#10B981; font-size:11px; }
+    @media (max-width: 1100px) {
+      .cs-main { grid-template-columns:160px 1fr 240px; }
+    }
+    @media (max-width: 860px) {
+      .cs-main { grid-template-columns:1fr; height:auto; }
+      .cs-layers, .cs-right-panel { max-height:280px; }
+      .cs-canvas-area { min-height:480px; }
+    }
+
 
 </style>
 </head>
@@ -5286,7 +5402,7 @@
         'ai-coach': 'Your AI marketing strategist',
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
-        'creation-studio': 'Brand-locked graphics — Claude Design → re-import → approve',
+        'creation-studio': 'Fabric canvas editor — layers, AI chat, Higgsfield backgrounds',
         'ad-studio': 'Create scroll-stopping ad creatives for any platform',
         'settings': 'Account and platform settings'
       };
@@ -6007,293 +6123,32 @@
     }, { threshold: 0.1 });
     featureCards.forEach(card => cardObserver.observe(card));
 
-    // ━━━ Creation Studio (OPA / charity) ━━━
-    // Brand-locked shell → Claude Design link-out → re-import export → Approve.
-    let _csSelectedPostId = null;
-    let _csFormat = '1:1';
-    let _csImported = false;
-    let _csPendingUploadUrl = null;
-
-    function _csEscape(s) {
-      return String(s || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function _csBrandLock(data) {
-      const c = data?.client || {};
-      const assets = data?.brand_assets || {};
-      const colors = Array.isArray(assets.primary_colors) ? assets.primary_colors.slice(0, 5)
-        : Array.isArray(assets.colors) ? assets.colors.slice(0, 5)
-        : ['#1B2A4A', '#7C3AED', '#E8E0F0'];
-      const logo = assets.logo_url || assets.logo || '';
-      const typeNote = assets.typography || assets.font_primary || 'Brand type locked';
-      return { colors, logo, typeNote, name: c.business_name || 'Brand' };
-    }
-
-    function _csMonthPosts(data) {
-      const monthStr = new Date().toISOString().substring(0, 7);
-      const all = (data?.content || []).filter(p => p.status !== 'Rejected');
-      const monthOrCharity = all.filter(p =>
-        String(p.scheduled_date || '').startsWith(monthStr)
-        || String(p.client_type_mode || '') === 'charity'
-      );
-      const list = monthOrCharity.length ? monthOrCharity : all.slice(0, 24);
-      return list.sort((a, b) => String(a.scheduled_date || '').localeCompare(String(b.scheduled_date || '')));
-    }
-
+    // ━━━ Creation Studio (Fabric.js — creation-studio.js) ━━━
+    // Auth sync before Fabric module render; module owns window.renderCreationStudio
+    // after creation-studio.js loads. This wrapper preserves portal login vars.
     function renderCreationStudio(data) {
+      window.__clientData = data;
+      window.__clientEmail = clientEmail || window._seEmail || '';
+      window.__clientHash = clientHash || window._seHash || '';
+      window.clientEmail = clientEmail;
+      window.clientHash = clientHash;
+      window.API = typeof API !== 'undefined' ? API : window._seAPI;
+      const run = () => {
+        if (typeof window.__renderCreationStudioImpl === 'function') {
+          window.__renderCreationStudioImpl(data);
+          return true;
+        }
+        return false;
+      };
+      if (run()) return;
       const content = document.getElementById('dash-content');
-      const posts = _csMonthPosts(data);
-      if (!_csSelectedPostId && posts[0]) _csSelectedPostId = posts[0].id;
-      const post = posts.find(p => p.id === _csSelectedPostId) || posts[0] || null;
-      if (post) _csSelectedPostId = post.id;
-      const brand = _csBrandLock(data);
-      const imgUrl = post ? (resolveImageUrl(post) || '') : '';
-      const hasImage = !!imgUrl;
-      const canApprove = _csImported || hasImage;
-      const formatAspect = { '9:16': '9/16', '1:1': '1/1', '4:5': '4/5' }[_csFormat] || '1/1';
-      const objectPos = _csFormat === '9:16' ? 'center top' : 'center center';
-      const charityHint = isCharityClient(data) ? '' : `
-        <div style="margin-bottom:14px;padding:10px 12px;border-radius:8px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);font-size:0.75rem;color:rgba(255,255,255,0.55);line-height:1.45;">
-          Tip: this account isn’t flagged as charity yet. Studio still works on your content. To enable the OPA calendar path, set <code>charity_mission</code> (or use create-charity-client).
-        </div>`;
-
-      content.innerHTML = `
-        <div class="studio-header" style="margin-bottom:18px;">
-          <div class="studio-header__left">
-            <h2>Creation Studio</h2>
-            <p>Brand-locked graphics · Claude Design → re-import → approve</p>
-          </div>
-        </div>
-        ${charityHint}
-
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:18px;">
-          <span style="font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,255,255,0.35);">Brand lock</span>
-          ${brand.logo ? `<img src="${_csEscape(brand.logo)}" alt="" style="height:28px;width:auto;border-radius:4px;object-fit:contain;" onerror="this.style.display='none'"/>` : ''}
-          <strong style="color:#fff;font-size:0.85rem;">${_csEscape(brand.name)}</strong>
-          <div style="display:flex;gap:4px;margin-left:4px;">
-            ${brand.colors.map(c => `<span title="${_csEscape(c)}" style="width:16px;height:16px;border-radius:4px;background:${_csEscape(c)};border:1px solid rgba(255,255,255,0.15);"></span>`).join('')}
-          </div>
-          <span style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-left:auto;">${_csEscape(brand.typeNote)} · logo, palette &amp; type locked</span>
-        </div>
-
-        <div style="display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:18px;align-items:start;">
-          <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px;max-height:70vh;overflow:auto;">
-            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:10px;">Posts</div>
-            ${posts.length ? posts.map(p => {
-              const active = p.id === _csSelectedPostId;
-              const thumb = resolveImageUrl(p);
-              const label = p.post_label || (p.caption || '').split('\n')[0] || 'Untitled';
-              return `<button type="button" onclick="csSelectPost('${p.id}')" style="display:flex;gap:10px;width:100%;text-align:left;padding:8px;margin-bottom:6px;border-radius:8px;border:1px solid ${active ? 'rgba(124,58,237,0.45)' : 'rgba(255,255,255,0.06)'};background:${active ? 'rgba(124,58,237,0.12)' : 'transparent'};cursor:pointer;color:#fff;font-family:var(--font-body);">
-                <div style="width:40px;height:40px;border-radius:6px;background:rgba(255,255,255,0.06);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
-                  ${thumb ? `<img src="${_csEscape(thumb)}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.remove()"/>` : '<span style="font-size:0.6rem;color:rgba(255,255,255,0.3);">—</span>'}
-                </div>
-                <div style="min-width:0;flex:1;">
-                  <div style="font-size:0.75rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_csEscape(label)}</div>
-                  <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);margin-top:2px;">${_csEscape(p.scheduled_date || '')} · ${_csEscape(p.status || '')}</div>
-                </div>
-              </button>`;
-            }).join('') : `<p style="font-size:0.78rem;color:rgba(255,255,255,0.4);line-height:1.45;margin:0;">No posts yet. For OPA, run build-charity-month; otherwise generate content first.</p>`}
-          </div>
-
-          <div>
-            ${!post ? `<p style="color:rgba(255,255,255,0.45);">Select a post to edit.</p>` : `
-            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;">
-              <h3 style="margin:0;color:#fff;font-size:1.05rem;font-family:var(--font-display);">${_csEscape(post.post_label || 'Post')}</h3>
-              <span style="font-size:0.7rem;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.55);">${_csEscape(post.status || '')}</span>
-              ${_csImported ? '<span style="font-size:0.7rem;padding:3px 8px;border-radius:999px;background:rgba(34,197,94,0.15);color:#4ade80;">Re-imported</span>' : ''}
-            </div>
-
-            <div style="display:flex;gap:6px;margin-bottom:14px;">
-              ${['9:16','1:1','4:5'].map(f => `
-                <button type="button" onclick="csSetFormat('${f}')" style="padding:6px 12px;border-radius:8px;border:1px solid ${_csFormat===f?'rgba(124,58,237,0.5)':'rgba(255,255,255,0.1)'};background:${_csFormat===f?'rgba(124,58,237,0.15)':'rgba(255,255,255,0.03)'};color:#fff;font-size:0.72rem;cursor:pointer;font-family:var(--font-body);">${f} ${f==='9:16'?'Story/Reel':f==='1:1'?'Feed':'Feed'}</button>
-              `).join('')}
-            </div>
-
-            <div style="display:grid;grid-template-columns:minmax(220px,340px) 1fr;gap:18px;align-items:start;">
-              <div style="background:#0c1220;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;display:flex;justify-content:center;">
-                <div style="width:100%;max-width:${_csFormat==='9:16'?'220px':'280px'};aspect-ratio:${formatAspect};border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;">
-                  ${hasImage
-                    ? `<img src="${_csEscape(imgUrl)}" alt="Preview" style="width:100%;height:100%;object-fit:cover;object-position:${objectPos};" onerror="this.parentElement.innerHTML='<span style=color:rgba(255,255,255,0.35);font-size:0.75rem>Preview unavailable</span>'"/>`
-                    : `<span style="color:rgba(255,255,255,0.35);font-size:0.78rem;padding:16px;text-align:center;">No graphic yet — open Claude Design, then re-import</span>`}
-                </div>
-              </div>
-
-              <div style="display:flex;flex-direction:column;gap:12px;">
-                <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;">
-                  <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.55);margin-bottom:8px;">Hollie workflow</div>
-                  <ol style="margin:0;padding-left:18px;font-size:0.78rem;color:rgba(255,255,255,0.55);line-height:1.55;">
-                    <li>Copy the brief + open Claude Design</li>
-                    <li>Export PNG/JPG from Claude Design</li>
-                    <li>Re-import here, then Approve</li>
-                  </ol>
-                  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
-                    <button type="button" onclick="csCopyBrief()" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Copy brief</button>
-                    <a href="https://claude.ai/design" target="_blank" rel="noopener" onclick="csCopyBrief()" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.15);color:#fff;font-size:0.75rem;font-weight:600;text-decoration:none;font-family:var(--font-body);">Open Claude Design</a>
-                  </div>
-                </div>
-
-                <div style="padding:14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;">
-                  <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.55);margin-bottom:8px;">Re-import export</div>
-                  <input type="file" id="cs-file-input" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="csHandleFile(event)"/>
-                  <button type="button" onclick="document.getElementById('cs-file-input').click()" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Upload PNG / JPG</button>
-                  ${_csPendingUploadUrl ? `<div style="margin-top:8px;font-size:0.7rem;color:rgba(255,255,255,0.4);">Uploaded — attaching to post…</div>` : ''}
-                </div>
-
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                  <button type="button" id="cs-approve-btn" onclick="csApprove()" ${canApprove ? '' : 'disabled'} style="padding:10px 18px;border-radius:8px;border:none;background:${canApprove ? 'linear-gradient(135deg,#7C3AED,#5B21B6)' : 'rgba(255,255,255,0.08)'};color:${canApprove ? '#fff' : 'rgba(255,255,255,0.35)'};font-size:0.8rem;font-weight:700;cursor:${canApprove ? 'pointer' : 'not-allowed'};font-family:var(--font-body);">Approve</button>
-                  ${hasImage ? `<a href="${_csEscape(imgUrl)}" download style="padding:10px 18px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:#fff;font-size:0.8rem;font-weight:600;text-decoration:none;font-family:var(--font-body);">Download</a>` : ''}
-                </div>
-
-                <details style="margin-top:4px;">
-                  <summary style="cursor:pointer;font-size:0.72rem;color:rgba(255,255,255,0.4);">Caption / image prompt</summary>
-                  <pre style="white-space:pre-wrap;font-size:0.72rem;color:rgba(255,255,255,0.55);background:rgba(0,0,0,0.25);padding:10px;border-radius:8px;margin-top:8px;max-height:180px;overflow:auto;">${_csEscape(post.caption || '')}\n\n—\nImage prompt: ${_csEscape(post.image_prompt || '(none)')}</pre>
-                </details>
-              </div>
-            </div>
-            `}
-          </div>
-        </div>
-      `;
-      if (typeof lucide !== 'undefined') lucide.createIcons();
+      if (content) content.innerHTML = '<div style="padding:48px;text-align:center;color:rgba(255,255,255,0.55);">Loading Creation Studio…</div>';
+      let n = 0;
+      const t = setInterval(() => {
+        n++;
+        if (run() || n > 50) clearInterval(t);
+      }, 100);
     }
-
-    window.csSelectPost = function(postId) {
-      _csSelectedPostId = postId;
-      _csImported = false;
-      _csPendingUploadUrl = null;
-      renderCreationStudio(clientData);
-    };
-
-    window.csSetFormat = function(fmt) {
-      _csFormat = fmt;
-      renderCreationStudio(clientData);
-    };
-
-    window.csCopyBrief = async function() {
-      const posts = _csMonthPosts(clientData);
-      const post = posts.find(p => p.id === _csSelectedPostId);
-      if (!post) { showToast('Select a post first'); return; }
-      const brand = _csBrandLock(clientData);
-      const brief = [
-        `Brand: ${brand.name}`,
-        `Palette: ${brand.colors.join(', ')}`,
-        `Type: ${brand.typeNote}`,
-        `Format: ${_csFormat}`,
-        `Post: ${post.post_label || ''}`,
-        `Theme: ${post.theme || ''}`,
-        '',
-        'Caption:',
-        post.caption || '',
-        '',
-        'Image prompt:',
-        post.image_prompt || '',
-        '',
-        'Constraints: illustrated/abstract style preferred; no real faces; keep logo/palette/type on-brand.',
-      ].join('\n');
-      try {
-        await navigator.clipboard.writeText(brief);
-        showToast('Brief copied — paste into Claude Design');
-      } catch {
-        showToast('Could not copy — select text from Caption / image prompt');
-      }
-    };
-
-    window.csHandleFile = async function(event) {
-      const file = event.target?.files?.[0];
-      if (!file) return;
-      if (!_csSelectedPostId) { showToast('Select a post first'); return; }
-      showToast('Uploading…');
-      try {
-        const formData = new FormData();
-        formData.append('image', file);
-        const up = await fetch(`${API}/api/studio/upload-image`, {
-          method: 'POST',
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
-          body: formData,
-        });
-        const upData = await up.json().catch(() => ({}));
-        if (!up.ok || !upData.url) {
-          showToast(upData.error || 'Upload failed');
-          return;
-        }
-        _csPendingUploadUrl = upData.url;
-        renderCreationStudio(clientData);
-
-        const imp = await fetch(`${API}/api/studio/import-to-content`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-client-email': clientEmail,
-            'x-client-hash': clientHash,
-          },
-          body: JSON.stringify({ postId: _csSelectedPostId, mediaUrl: upData.url }),
-        });
-        const impData = await imp.json().catch(() => ({}));
-        if (!imp.ok) {
-          showToast(impData.error || 'Import failed');
-          return;
-        }
-        _csImported = true;
-        _csPendingUploadUrl = null;
-        // Patch local clientData so preview updates without full refetch
-        const row = (clientData.content || []).find(p => p.id === _csSelectedPostId);
-        if (row && impData.image_url) {
-          row.image_url = impData.image_url;
-          if (Array.isArray(row.media)) row.media = [{ url: impData.image_url }];
-        }
-        showToast('Graphic re-imported — ready to approve');
-        renderCreationStudio(clientData);
-        refreshClientDataSnapshot?.().catch?.(() => {});
-      } catch (e) {
-        showToast('Upload/import failed');
-        console.error('[CS] import error', e);
-      } finally {
-        if (event.target) event.target.value = '';
-      }
-    };
-
-    window.csApprove = async function() {
-      if (!_csSelectedPostId) return;
-      const posts = _csMonthPosts(clientData);
-      const post = posts.find(p => p.id === _csSelectedPostId);
-      if (!post) return;
-      if (!_csImported && !resolveImageUrl(post)) {
-        showToast('Re-import a graphic before approving');
-        return;
-      }
-      const btn = document.getElementById('cs-approve-btn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
-      try {
-        const res = await fetch(`${API}/api/approve-post`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            postId: _csSelectedPostId,
-            clientEmail,
-            clientHash,
-            editedCaption: post.caption || '',
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          showToast(data.error || 'Approve failed');
-          if (btn) { btn.disabled = false; btn.textContent = 'Approve'; }
-          return;
-        }
-        post.status = data.status || 'Approved';
-        showToast(data.status === 'Scheduled' ? '🗓️ Post scheduled!' : '✓ Post approved!');
-        _csImported = false;
-        renderCreationStudio(clientData);
-        refreshClientDataSnapshot?.().catch?.(() => {});
-      } catch {
-        showToast('Approve failed');
-        if (btn) { btn.disabled = false; btn.textContent = 'Approve'; }
-      }
-    };
 
     // ━━━ Content Studio Page ━━━
     function renderContentPage(data) {
