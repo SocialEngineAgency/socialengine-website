@@ -1440,40 +1440,22 @@
         body: JSON.stringify({ imageUrl: upData.url, format: studioFormat }),
       });
 
-      const fmt = STUDIO_FORMATS[studioFormat];
-      const fsMap = {
-        small: fmt.displayH * 0.025,
-        medium: fmt.displayH * 0.04,
-        large: fmt.displayH * 0.06,
-        xlarge: fmt.displayH * 0.09,
-        xxlarge: fmt.displayH * 0.13,
-      };
-      let added = 0;
-      const layers = analysis.layers || [];
-      for (let i = 0; i < layers.length; i++) {
-        const layer = layers[i];
-        if (layer.type !== 'text') continue;
-        const t = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
-          name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now() + '-' + i,
-          left: (layer.left / 100) * fmt.displayW,
-          top: (layer.top / 100) * fmt.displayH,
-          width: fmt.displayW * 0.88,
-          fontFamily: layer.isHeadline ? 'Newsreader' : 'Instrument Sans',
-          fontSize: fsMap[layer.fontSize] || fsMap.medium,
-          fill: layer.color || '#FFFFFF',
-          fontWeight: layer.fontWeight || 'normal',
-          textAlign: layer.textAlign || 'left',
-          lineHeight: 1.15,
-          selectable: true,
-          evented: true,
-        });
-        studioCanvas.add(t);
-        added++;
-      }
-      studioCanvas.renderAll();
-      updateLayerPanel();
-      saveHistory('AI: text from video');
-      addChatMsg('assistant', '✓ Found ' + added + ' text element' + (added === 1 ? '' : 's') + ' — all editable on top of video.');
+      // Detect only — do NOT auto-add Fabric text/mask overlays onto the video canvas.
+      // Overlays are created only when the user explicitly edits via openElementEditor → applyTextEdit.
+      const layers = analysis.layers || analysis.elements || [];
+      const normalized = normalizeManifestElements(layers);
+      studioVideoManifest = { elements: normalized, videoId: studioServerVideoUrl || 'local', source: 'frame' };
+      const cacheKey = studioServerVideoUrl || 'local';
+      studioManifestCache[cacheKey] = studioVideoManifest;
+      renderElementList(studioVideoManifest.elements);
+
+      const n = studioVideoManifest.elements.length;
+      const msg = n === 0
+        ? 'No elements detected in this frame.'
+        : ('✓ Found ' + n + ' element' + (n === 1 ? '' : 's') + ' — select one to edit.');
+      addChatMsg('assistant', msg);
+      showStudioToast(msg);
+      if (n > 0) showRightTab('props');
     } catch (e) {
       addChatMsg('assistant', '❌ Analysis failed: ' + e.message);
     } finally {
