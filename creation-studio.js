@@ -45,8 +45,12 @@
     const headers = authHeaders(Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {}));
     const resp = await fetch(apiBase() + path, Object.assign({}, opts, { headers: headers }));
     if (!resp.ok) {
-      const err = await resp.json().catch(function () { return { error: resp.statusText }; });
-      throw new Error(err.error || resp.statusText);
+      let errMsg = resp.statusText;
+      try {
+        const j = await resp.json();
+        errMsg = j.error || errMsg;
+      } catch (_) { /* keep statusText */ }
+      throw new Error(resp.status + ': ' + errMsg);
     }
     return resp.json();
   }
@@ -588,7 +592,7 @@
       const name = obj.name || obj.type || 'Object';
       const isVisible = obj.visible !== false;
       const isLocked = obj.locked || !obj.selectable;
-      return '<div class="layer-item ' + (isSelected ? 'selected' : '') + '" onclick="selectLayerObject(' + realIdx + ')">' +
+      return '<div class="layer-item ' + (isSelected ? 'selected' : '') + (isLocked ? ' layer-locked' : '') + '" onclick="selectLayerObject(' + realIdx + ')">' +
         '<span class="layer-icon">' + typeIcon + '</span>' +
         '<span class="layer-name">' + esc(name) + '</span>' +
         '<span class="layer-vis" onclick="event.stopPropagation();toggleLayerVisibility(' + realIdx + ')">' + (isVisible ? '👁' : '○') + '</span>' +
@@ -946,8 +950,9 @@
     const backgroundColor = analysis.backgroundColor || '#0E1A63';
     const fmt = STUDIO_FORMATS[studioFormat];
 
+    // Clear canvas and set background color — do NOT load the composite as a full-opacity bg
     studioCanvas.clear();
-    studioCanvas.setBackgroundColor(backgroundColor, studioCanvas.renderAll.bind(studioCanvas));
+    studioCanvas.setBackgroundColor(backgroundColor, function () {});
 
     const fontSizeMap = {
       small: fmt.displayH * 0.025,
@@ -957,87 +962,112 @@
       xxlarge: fmt.displayH * 0.130,
     };
 
+    // STEP 1: Dim locked reference of the original (position guide only)
+    await new Promise(function (resolve) {
+      fabric.Image.fromURL(originalDataUrl, function (img) {
+        if (!img) { resolve(); return; }
+        const scaleX = fmt.displayW / img.width;
+        const scaleY = fmt.displayH / img.height;
+        const s = Math.max(scaleX, scaleY);
+        img.set({
+          name: '🔒 Original (guide)',
+          left: 0,
+          top: 0,
+          scaleX: s,
+          scaleY: s,
+          opacity: 0.15,
+          selectable: false,
+          evented: false,
+          locked: true,
+          hoverCursor: 'default',
+        });
+        studioCanvas.add(img);
+        studioCanvas.sendToBack(img);
+        studioCanvas.renderAll();
+        resolve();
+      });
+    });
+
+    // STEP 2: Editable layers on top (skip background_image — handled as guide above)
     for (let i = 0; i < layers.length; i++) {
       const layer = layers[i];
       try {
         if (layer.type === 'background_image') {
-          await new Promise(function (resolve) {
-            fabric.Image.fromURL(originalDataUrl, function (img) {
-              if (!img) { resolve(); return; }
-              img.set({
-                name: 'background',
-                left: 0, top: 0,
-                selectable: true, evented: true, locked: false,
-              });
-              const scaleX = fmt.displayW / img.width;
-              const scaleY = fmt.displayH / img.height;
-              const s = Math.max(scaleX, scaleY);
-              img.set({ scaleX: s, scaleY: s });
-              studioCanvas.insertAt(img, 0, false);
-              studioCanvas.renderAll();
-              resolve();
-            });
-          });
+          continue;
         } else if (layer.type === 'background_color') {
-          studioCanvas.setBackgroundColor(layer.color || backgroundColor, studioCanvas.renderAll.bind(studioCanvas));
+          studioCanvas.setBackgroundColor(layer.color || backgroundColor, function () {});
         } else if (layer.type === 'rectangle') {
+          const isFullBleed = (layer.width > 90 && layer.height > 90);
+          if (isFullBleed && (layer.opacity != null ? layer.opacity : 1) > 0.7) {
+            continue;
+          }
           const rect = new fabric.Rect({
             name: 'overlay-' + Date.now() + '-' + i,
             left: (layer.left / 100) * fmt.displayW,
             top: (layer.top / 100) * fmt.displayH,
             width: (layer.width / 100) * fmt.displayW,
             height: (layer.height / 100) * fmt.displayH,
-            fill: layer.fill || '#000000',
+            fill: layer.fill || 'transparent',
             opacity: layer.opacity != null ? layer.opacity : 0.5,
             globalCompositeOperation: layer.blendMode === 'multiply' ? 'multiply'
               : layer.blendMode === 'overlay' ? 'overlay'
-              : layer.blendMode === 'screen' ? 'screen'
               : 'source-over',
-            selectable: true, evented: true,
+            selectable: true,
+            evented: true,
           });
           studioCanvas.add(rect);
         } else if (layer.type === 'text') {
           const fontSize = fontSizeMap[layer.fontSize] || fontSizeMap.medium;
           const fontFamily = layer.isHeadline ? 'Newsreader' : 'Instrument Sans';
-          const textObj = new fabric.IText(layer.content || '', {
+          const textObj = new fabric.IText(String(layer.content || '').replace(/\\n/g, '\n'), {
             name: (layer.isHeadline ? 'headline' : 'text') + '-' + Date.now() + '-' + i,
             left: (layer.left / 100) * fmt.displayW,
             top: (layer.top / 100) * fmt.displayH,
-            width: fmt.displayW * 0.9,
+            width: fmt.displayW * 0.88,
             fontFamily: fontFamily,
             fontSize: fontSize,
-            fill: layer.color || '#FFFFFF',
+            fill: layer.color || '#1a1a2e',
             fontWeight: layer.fontWeight || 'normal',
             fontStyle: layer.fontStyle || 'normal',
             textAlign: layer.textAlign || 'left',
-            lineHeight: 1.2,
-            selectable: true, evented: true, locked: false,
-            splitByGrapheme: false,
+            lineHeight: 1.15,
+            selectable: true,
+            evented: true,
+            locked: false,
           });
           studioCanvas.add(textObj);
         } else if (layer.type === 'logo') {
-          const logoPlaceholder = new fabric.Rect({
+          const logoPh = new fabric.Rect({
             name: 'logo-' + i,
             left: (layer.left / 100) * fmt.displayW,
             top: (layer.top / 100) * fmt.displayH,
-            width: (layer.width / 100) * fmt.displayW || 60,
-            height: (layer.height / 100) * fmt.displayH || 30,
+            width: ((layer.width || 20) / 100) * fmt.displayW,
+            height: ((layer.height || 10) / 100) * fmt.displayH,
             fill: 'transparent',
             stroke: '#7C3AED',
             strokeDashArray: [4, 4],
             strokeWidth: 1,
-            selectable: true, evented: true,
+            selectable: true,
+            evented: true,
           });
-          studioCanvas.add(logoPlaceholder);
+          studioCanvas.add(logoPh);
         }
       } catch (layerErr) {
-        console.warn('[Studio] Failed to reconstruct layer:', layer, layerErr);
+        console.warn('[Studio] Layer reconstruction failed:', layer && layer.type, layerErr);
       }
     }
 
     studioCanvas.renderAll();
     updateLayerPanel();
     saveHistory('AI: cloned design layers');
+
+    setTimeout(function () {
+      addChatMsg('assistant',
+        '💡 Tip: The original image is loaded as a faint guide (15% opacity, locked). ' +
+        'Your text layers are editable — click any text to change color, size, or content. ' +
+        'Click the 👁 next to "🔒 Original (guide)" in the Layers panel to hide it when you\'re done.'
+      );
+    }, 500);
   }
 
   function studioDeleteSelected() {
@@ -1253,6 +1283,15 @@
   }
 
   async function sendStudioChat() {
+    const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
+    const hash = global.__clientHash || global.clientHash || global._seHash || '';
+    if (!email || !hash) {
+      addChatMsg('assistant', '❌ Not authenticated — please reload the page and log in again.');
+      return;
+    }
+    global.__clientEmail = email;
+    global.__clientHash = hash;
+
     const input = document.getElementById('cs-chat-input');
     const msg = input.value.trim();
     if (!msg) return;

@@ -2354,6 +2354,8 @@
     .layer-item { display:flex; align-items:center; gap:6px; padding:8px 10px; cursor:pointer; border-bottom:1px solid #0f172a; font-size:12px; color:#94a3b8; }
     .layer-item:hover { background:#334155; }
     .layer-item.selected { background:#2d1b69; color:#c4b5fd; }
+    .layer-item.layer-locked { opacity: 0.6; font-style: italic; }
+    .layer-item.layer-locked .layer-name { color: #475569; }
     .layer-icon { font-size:11px; width:16px; text-align:center; }
     .layer-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .layer-vis,.layer-lock { font-size:12px; cursor:pointer; opacity:.5; }
@@ -4025,6 +4027,7 @@
             if (body.new_hash) {
               clientHash = body.new_hash;
               window._seHash = clientHash;
+              window.__clientHash = clientHash;
               try {
                 if (window.sessionStorage) sessionStorage.setItem('se_hash', clientHash);
                 if (window.localStorage) localStorage.setItem('se_hash', clientHash);
