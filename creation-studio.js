@@ -24,7 +24,9 @@
   let studioVideoLoop = false;
   let studioVideoLoopId = null;
   let studioVideoElements = [];
+  let studioVideoBlobUrls = [];
   let studioPendingFrameDataUrl = null;
+  let studioAnalysisInProgress = false;
 
   function postFields(post) {
     if (!post) return {};
@@ -109,6 +111,7 @@
         <button type="button" onclick="studioAddText()" class="cs-add-btn">+ Text</button>
         <button type="button" onclick="studioAddRect()" class="cs-add-btn">+ Shape</button>
         <button type="button" onclick="document.getElementById('cs-img-upload').click()" class="cs-add-btn">+ Image</button>
+        <button type="button" onclick="studioClearCanvas()" class="cs-add-btn" style="color:#ef4444;border-color:#7f1d1d">✕ Clear</button>
         <input type="file" id="cs-img-upload" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.webm,.avi,.mkv,.m4v" style="display:none" onchange="studioAddImage(this)">
       </div>
     </div>
@@ -450,6 +453,8 @@
     studioZoom = 1;
 
     if (studioCanvas) {
+      studioVideoBlobUrls.forEach(function (url) { try { URL.revokeObjectURL(url); } catch (_) {} });
+      studioVideoBlobUrls = [];
       studioVideoElements.forEach(function (v) { try { v.pause(); } catch (_) {} });
       stopVideoRenderLoop();
       studioVideoElements = [];
@@ -501,6 +506,8 @@
   function switchFormat(newFmt) {
     if (!studioCanvas || newFmt === studioFormat) return;
 
+    studioVideoBlobUrls.forEach(function (url) { try { URL.revokeObjectURL(url); } catch (_) {} });
+    studioVideoBlobUrls = [];
     studioVideoElements.forEach(function (v) { try { v.pause(); } catch (_) {} });
     stopVideoRenderLoop();
     studioVideoElements = [];
@@ -992,7 +999,8 @@
     const fmt = STUDIO_FORMATS[studioFormat];
     const videoEl = document.createElement('video');
     videoEl.src = videoUrl;
-    videoEl.crossOrigin = 'anonymous';
+    // Only set crossOrigin for http/https — blob URLs don't need it and it can block load
+    if (videoUrl && String(videoUrl).startsWith('http')) videoEl.crossOrigin = 'anonymous';
     videoEl.loop = true;
     videoEl.muted = true;
     videoEl.playsInline = true;
@@ -1198,56 +1206,65 @@
 
   async function handleVideoUpload(file) {
     showRightTab('chat');
-    addChatMsg('assistant', '↑ Uploading ' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + 'MB)… this may take a moment.');
+    addChatMsg('assistant', '📹 Loading ' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + 'MB)…');
 
-    try {
-      const formData = new FormData();
-      formData.append('video', file, file.name);
+    // Blob URL for instant same-origin playback — avoids Atlas Content-Disposition:attachment
+    const blobUrl = URL.createObjectURL(file);
+    studioVideoBlobUrls.push(blobUrl);
 
-      const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
-      const hash = global.__clientHash || global.clientHash || global._seHash || '';
-      const resp = await fetch(apiBase() + '/api/studio/upload-video', {
-        method: 'POST',
-        headers: { 'x-client-email': email, 'x-client-hash': hash },
-        body: formData,
-      });
-      if (!resp.ok) {
-        const e = await resp.json().catch(function () { return {}; });
-        throw new Error(e.error || resp.statusText);
+    addVideoToCanvas(blobUrl, file.type, file.name.replace(/\.[^.]+$/, ''));
+
+    // CDN upload in background for persistence only
+    uploadVideoToServerBackground(file).catch(function (e) {
+      console.warn('[Studio] Background video upload failed:', e.message);
+    });
+  }
+
+  async function uploadVideoToServerBackground(file) {
+    const formData = new FormData();
+    formData.append('video', file, file.name);
+    const email = global.__clientEmail || global.clientEmail || global._seEmail || '';
+    const hash = global.__clientHash || global.clientHash || global._seHash || '';
+    const resp = await fetch(apiBase() + '/api/studio/upload-video', {
+      method: 'POST',
+      headers: { 'x-client-email': email, 'x-client-hash': hash },
+      body: formData,
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+
+    const vidObj = studioCanvas && studioCanvas.getObjects().find(function (o) { return o.isVideo; });
+    if (vidObj) vidObj.cdnUrl = data.url;
+
+    if (data.frameDataUrl) {
+      studioPendingFrameDataUrl = data.frameDataUrl;
+      addChatMsg('assistant', '💡 Want me to detect any text in this video and make it editable?');
+      const msgs = document.getElementById('cs-chat-messages');
+      if (msgs) {
+        const wrap = document.createElement('div');
+        wrap.className = 'chat-msg assistant';
+        wrap.innerHTML = '<div class="chat-bubble" style="padding-top:4px">' +
+          '<button type="button" onclick="analyzeVideoFrame()" ' +
+          'style="background:#7C3AED;border:none;color:#fff;padding:5px 12px;border-radius:6px;' +
+          'cursor:pointer;font-size:12px;display:inline-block">' +
+          '✦ Analyze frame</button></div>';
+        msgs.appendChild(wrap);
+        msgs.scrollTop = msgs.scrollHeight;
       }
-
-      const data = await resp.json();
-      addChatMsg('assistant', '✓ Video uploaded. Adding to canvas…');
-      addVideoToCanvas(data.url, data.mime, file.name.replace(/\.[^.]+$/, ''));
-
-      if (data.frameDataUrl) {
-        studioPendingFrameDataUrl = data.frameDataUrl;
-        setTimeout(function () {
-          addChatMsg('assistant', '💡 Want me to detect any text or graphics in this video frame and make them editable?');
-          const msgs = document.getElementById('cs-chat-messages');
-          if (msgs) {
-            const wrap = document.createElement('div');
-            wrap.className = 'chat-msg assistant';
-            wrap.innerHTML = '<div class="chat-bubble" style="padding-top:4px">' +
-              '<button type="button" onclick="analyzeVideoFrame()" ' +
-              'style="background:#7C3AED;border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">' +
-              '✦ Analyze frame for editable layers</button></div>';
-            msgs.appendChild(wrap);
-            msgs.scrollTop = msgs.scrollHeight;
-          }
-        }, 1200);
-      }
-    } catch (e) {
-      addChatMsg('assistant', '❌ Upload failed: ' + e.message);
     }
   }
 
   async function analyzeVideoFrame() {
+    if (studioAnalysisInProgress) {
+      addChatMsg('assistant', '⏳ Analysis already in progress, please wait…');
+      return;
+    }
     const dataUrl = studioPendingFrameDataUrl;
     if (!dataUrl) {
       addChatMsg('assistant', '❌ No video frame available to analyze. Re-upload the video.');
       return;
     }
+    studioAnalysisInProgress = true;
     showRightTab('chat');
     addChatMsg('assistant', '✦ Analyzing video frame for text and graphics…');
     try {
@@ -1308,7 +1325,32 @@
       addChatMsg('assistant', '✓ Found ' + added + ' text element' + (added === 1 ? '' : 's') + ' — all editable. The video plays underneath.');
     } catch (e) {
       addChatMsg('assistant', '❌ Frame analysis failed: ' + e.message);
+    } finally {
+      studioAnalysisInProgress = false;
     }
+  }
+
+  function studioClearCanvas() {
+    if (!confirm('Clear all layers and start fresh?')) return;
+    studioCanvas.clear();
+    studioCanvas.setBackgroundColor('#0E1A63', studioCanvas.renderAll.bind(studioCanvas));
+    studioVideoElements.forEach(function (v) {
+      try { v.pause(); } catch (_) {}
+      try { v.src = ''; } catch (_) {}
+    });
+    studioVideoElements = [];
+    studioVideoBlobUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (_) {} });
+    studioVideoBlobUrls = [];
+    stopVideoRenderLoop();
+    updateVideoToolbar(false);
+    studioPendingFrameDataUrl = null;
+    studioAnalysisInProgress = false;
+    studioChatHistory = [];
+    updateLayerPanel();
+    clearPropsPanel();
+    studioHistory = [];
+    studioHistoryIdx = -1;
+    saveHistory('Canvas cleared');
   }
 
   async function reconstructCanvasFromAnalysis(originalDataUrl, analysis) {
@@ -1921,6 +1963,7 @@
     exportVideoWithOverlays: exportVideoWithOverlays,
     exportVideoFrame: exportVideoFrame,
     analyzeVideoFrame: analyzeVideoFrame,
+    studioClearCanvas: studioClearCanvas,
     studioDeleteSelected: studioDeleteSelected,
     studioDuplicate: studioDuplicate,
     studioLayerOrder: studioLayerOrder,
