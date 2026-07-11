@@ -2490,7 +2490,7 @@
         <nav class="dash-sidebar__nav" aria-label="Dashboard navigation">
           <button class="dash-nav-item active" data-nav="dashboard"><i data-lucide="layout-dashboard"></i> Home</button>
           <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content</button>
-          <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio" style="display:none;"><i data-lucide="palette"></i> Studio</button>
+          <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="palette"></i> Studio</button>
           <button class="dash-nav-item" data-nav="video-studio"><i data-lucide="video"></i> Create</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
           <button class="dash-nav-item" data-nav="ai-studio"><i data-lucide="cpu"></i> AI Tools</button>
@@ -5319,8 +5319,9 @@
     function updateCreationStudioNav(data) {
       const btn = document.getElementById('nav-creation-studio');
       if (!btn) return;
-      const show = isCharityClient(data);
-      btn.style.display = show ? '' : 'none';
+      // Always visible — staff + charity clients use this first; non-charity
+      // still get the shell (empty-state / any-content picker inside).
+      btn.style.display = '';
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
     function updateBreadcrumb(nav) {
@@ -6034,23 +6035,17 @@
 
     function _csMonthPosts(data) {
       const monthStr = new Date().toISOString().substring(0, 7);
-      return (data?.content || [])
-        .filter(p => String(p.scheduled_date || '').startsWith(monthStr) || String(p.client_type_mode || '') === 'charity')
-        .filter(p => p.status !== 'Rejected')
-        .sort((a, b) => String(a.scheduled_date || '').localeCompare(String(b.scheduled_date || '')));
+      const all = (data?.content || []).filter(p => p.status !== 'Rejected');
+      const monthOrCharity = all.filter(p =>
+        String(p.scheduled_date || '').startsWith(monthStr)
+        || String(p.client_type_mode || '') === 'charity'
+      );
+      const list = monthOrCharity.length ? monthOrCharity : all.slice(0, 24);
+      return list.sort((a, b) => String(a.scheduled_date || '').localeCompare(String(b.scheduled_date || '')));
     }
 
     function renderCreationStudio(data) {
       const content = document.getElementById('dash-content');
-      if (!isCharityClient(data)) {
-        content.innerHTML = `
-          <div style="padding:48px 24px;text-align:center;max-width:480px;margin:0 auto;">
-            <h2 style="font-family:var(--font-display);color:#fff;margin:0 0 8px;">Creation Studio</h2>
-            <p style="color:rgba(255,255,255,0.45);font-size:0.875rem;line-height:1.5;">This workspace is for charity / OPA clients. Set <code>client_type</code> or <code>charity_mission</code> on the client to enable it.</p>
-          </div>`;
-        return;
-      }
-
       const posts = _csMonthPosts(data);
       if (!_csSelectedPostId && posts[0]) _csSelectedPostId = posts[0].id;
       const post = posts.find(p => p.id === _csSelectedPostId) || posts[0] || null;
@@ -6061,6 +6056,10 @@
       const canApprove = _csImported || hasImage;
       const formatAspect = { '9:16': '9/16', '1:1': '1/1', '4:5': '4/5' }[_csFormat] || '1/1';
       const objectPos = _csFormat === '9:16' ? 'center top' : 'center center';
+      const charityHint = isCharityClient(data) ? '' : `
+        <div style="margin-bottom:14px;padding:10px 12px;border-radius:8px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);font-size:0.75rem;color:rgba(255,255,255,0.55);line-height:1.45;">
+          Tip: this account isn’t flagged as charity yet. Studio still works on your content. To enable the OPA calendar path, set <code>charity_mission</code> (or use create-charity-client).
+        </div>`;
 
       content.innerHTML = `
         <div class="studio-header" style="margin-bottom:18px;">
@@ -6069,6 +6068,7 @@
             <p>Brand-locked graphics · Claude Design → re-import → approve</p>
           </div>
         </div>
+        ${charityHint}
 
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:18px;">
           <span style="font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,255,255,0.35);">Brand lock</span>
@@ -6082,7 +6082,7 @@
 
         <div style="display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:18px;align-items:start;">
           <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px;max-height:70vh;overflow:auto;">
-            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:10px;">This month</div>
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:10px;">Posts</div>
             ${posts.length ? posts.map(p => {
               const active = p.id === _csSelectedPostId;
               const thumb = resolveImageUrl(p);
@@ -6096,7 +6096,7 @@
                   <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);margin-top:2px;">${_csEscape(p.scheduled_date || '')} · ${_csEscape(p.status || '')}</div>
                 </div>
               </button>`;
-            }).join('') : `<p style="font-size:0.78rem;color:rgba(255,255,255,0.4);line-height:1.45;margin:0;">No posts this month yet. Run <code>POST /api/admin/build-charity-month</code> to generate the calendar.</p>`}
+            }).join('') : `<p style="font-size:0.78rem;color:rgba(255,255,255,0.4);line-height:1.45;margin:0;">No posts yet. For OPA, run build-charity-month; otherwise generate content first.</p>`}
           </div>
 
           <div>
