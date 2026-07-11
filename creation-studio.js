@@ -476,6 +476,33 @@
     });
     global.studioCanvas = studioCanvas;
 
+    // Inject a native <canvas> behind Fabric for video rendering.
+    // Fabric's .canvas-container holds lower-canvas + upper-canvas; we prepend
+    // so video sits behind both Fabric layers.
+    const existingVideoBg = document.getElementById('studio-video-bg');
+    if (existingVideoBg) existingVideoBg.remove();
+
+    const videoBgCanvas = document.createElement('canvas');
+    videoBgCanvas.id = 'studio-video-bg';
+    videoBgCanvas.width = fmt.displayW;
+    videoBgCanvas.height = fmt.displayH;
+    videoBgCanvas.style.cssText = [
+      'position:absolute',
+      'top:0',
+      'left:0',
+      'width:' + fmt.displayW + 'px',
+      'height:' + fmt.displayH + 'px',
+      'display:none',
+      'pointer-events:none',
+      'z-index:0',
+    ].join(';');
+
+    const fabricWrapper = studioCanvas.wrapperEl;
+    fabricWrapper.style.position = 'relative';
+    fabricWrapper.insertBefore(videoBgCanvas, fabricWrapper.firstChild);
+    if (studioCanvas.lowerCanvasEl) studioCanvas.lowerCanvasEl.style.background = 'transparent';
+    if (studioCanvas.upperCanvasEl) studioCanvas.upperCanvasEl.style.background = 'transparent';
+
     studioCanvas.on('selection:created', updatePropsPanel);
     studioCanvas.on('selection:updated', updatePropsPanel);
     studioCanvas.on('selection:cleared', clearPropsPanel);
@@ -534,6 +561,14 @@
     wrapper.style.height = fmt.displayH + 'px';
     studioCanvas.setWidth(fmt.displayW);
     studioCanvas.setHeight(fmt.displayH);
+
+    const videoBg = document.getElementById('studio-video-bg');
+    if (videoBg) {
+      videoBg.width = fmt.displayW;
+      videoBg.height = fmt.displayH;
+      videoBg.style.width = fmt.displayW + 'px';
+      videoBg.style.height = fmt.displayH + 'px';
+    }
 
     if (studioSaved[newFmt]) {
       studioCanvas.loadFromJSON(studioSaved[newFmt], function () {
@@ -982,129 +1017,129 @@
     };
   }
 
-  // ── Video render loop (keeps Fabric canvas refreshed while video plays) ──
+  // ── Video: native canvas behind Fabric (ctx.drawImage) ─────────────────
   function startVideoRenderLoop() {
     if (studioVideoLoop) return;
     studioVideoLoop = true;
+
+    const videoBgCanvas = document.getElementById('studio-video-bg');
+    const videoBgCtx = videoBgCanvas ? videoBgCanvas.getContext('2d') : null;
+
     function tick() {
-      if (!studioVideoLoop || !studioCanvas) return;
-      studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
-        o.dirty = true;
-      });
-      studioCanvas.renderAll();
+      if (!studioVideoLoop) return;
+
+      const vid = global._studioActiveVideo;
+      // Draw whenever a frame is available (including paused scrub)
+      if (vid && videoBgCtx && videoBgCanvas && vid.readyState >= 2) {
+        videoBgCtx.clearRect(0, 0, videoBgCanvas.width, videoBgCanvas.height);
+        videoBgCtx.drawImage(vid, 0, 0, videoBgCanvas.width, videoBgCanvas.height);
+      }
+
+      if (studioCanvas) studioCanvas.renderAll();
       fabric.util.requestAnimFrame(tick);
     }
+
     fabric.util.requestAnimFrame(tick);
   }
 
   function stopVideoRenderLoop() {
     studioVideoLoop = false;
     studioVideoLoopId = null;
+    global._studioActiveVideo = null;
+    const videoBgCanvas = document.getElementById('studio-video-bg');
+    if (videoBgCanvas) videoBgCanvas.style.display = 'none';
+    if (studioCanvas) {
+      studioCanvas.backgroundColor = '#0E1A63';
+      studioCanvas.renderAll();
+    }
   }
 
   async function addVideoToCanvas(videoUrl, videoMime, label) {
     const fmt = STUDIO_FORMATS[studioFormat];
 
     stopVideoRenderLoop();
-
-    // Remove existing video layers and their DOM elements
-    studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
-      if (o._videoEl) {
-        try { o._videoEl.pause(); } catch (_) {}
-        try { o._videoEl.remove(); } catch (_) {}
-      }
-      studioCanvas.remove(o);
-    });
     studioVideoElements.forEach(function (v) {
       try { v.pause(); } catch (_) {}
       try { v.remove(); } catch (_) {}
     });
     studioVideoElements = [];
 
-    // Create video element and ATTACH TO DOM IMMEDIATELY
-    // Browsers do not decode video frames for detached elements.
+    studioCanvas.getObjects().filter(function (o) { return o.isVideo; }).forEach(function (o) {
+      studioCanvas.remove(o);
+    });
+
+    const videoBgCanvas = document.getElementById('studio-video-bg');
+    if (!videoBgCanvas) {
+      addChatMsg('assistant', '❌ Video canvas not found — please reload the page.');
+      return;
+    }
+
+    // Video element must be in DOM for frame decoding
     const videoEl = document.createElement('video');
-    videoEl.style.cssText = [
-      'position:fixed',
-      'top:-9999px',
-      'left:-9999px',
-      'width:1px',
-      'height:1px',
-      'opacity:0',
-      'pointer-events:none',
-      'z-index:-1',
-    ].join(';');
+    videoEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
     document.body.appendChild(videoEl);
     studioVideoElements.push(videoEl);
 
-    // Configure video AFTER appending to DOM
     videoEl.muted = true;
     videoEl.loop = true;
     videoEl.playsInline = true;
     videoEl.preload = 'auto';
-    // Only set crossOrigin for http/https — blob URLs don't need it
     if (videoUrl && String(videoUrl).startsWith('http')) videoEl.crossOrigin = 'anonymous';
     videoEl.src = videoUrl;
 
     addChatMsg('assistant', '📹 Loading ' + (label || 'video') + '…');
 
     await new Promise(function (resolve, reject) {
-      function onCanPlay() { cleanup(); resolve(); }
-      function onError() {
-        cleanup();
-        reject(new Error((videoEl.error && videoEl.error.message) || 'Video failed to decode'));
-      }
-      function cleanup() {
-        videoEl.removeEventListener('canplay', onCanPlay);
-        videoEl.removeEventListener('error', onError);
-      }
-      videoEl.addEventListener('canplay', onCanPlay, { once: true });
-      videoEl.addEventListener('error', onError, { once: true });
+      videoEl.addEventListener('canplay', resolve, { once: true });
+      videoEl.addEventListener('error', function () {
+        reject(new Error(
+          videoEl.error ? ('Code ' + videoEl.error.code + ': ' + videoEl.error.message) : 'Unknown video error'
+        ));
+      }, { once: true });
       videoEl.load();
     });
 
     try {
       await videoEl.play();
-    } catch (playErr) {
-      console.warn('[Studio] Autoplay blocked:', playErr.message);
+    } catch (e) {
+      console.warn('[Studio] play() blocked:', e.message);
     }
 
-    // Wait for the first real frame to be decoded
-    await new Promise(function (resolve) {
-      if (videoEl.currentTime > 0) { resolve(); return; }
-      videoEl.addEventListener('timeupdate', resolve, { once: true });
-      setTimeout(resolve, 800);
-    });
-
-    const fabricVid = new fabric.Image(videoEl, {
-      name: label || ('video-' + Date.now()),
-      left: 0,
-      top: 0,
-      originX: 'left',
-      originY: 'top',
-      selectable: true,
-      evented: true,
-      locked: false,
-      isVideo: true,
-      objectCaching: false,
-    });
-
-    const scaleX = fmt.displayW / (videoEl.videoWidth || fmt.displayW);
-    const scaleY = fmt.displayH / (videoEl.videoHeight || fmt.displayH);
-    fabricVid.set({ scaleX: Math.max(scaleX, scaleY), scaleY: Math.max(scaleX, scaleY) });
-    fabricVid._videoEl = videoEl;
-
-    studioCanvas.add(fabricVid);
-    studioCanvas.sendToBack(fabricVid);
+    // Transparent Fabric bg so native video canvas shows through
+    studioCanvas.backgroundColor = 'rgba(0,0,0,0)';
+    if (studioCanvas.lowerCanvasEl) studioCanvas.lowerCanvasEl.style.background = 'transparent';
     studioCanvas.renderAll();
+
+    videoBgCanvas.width = fmt.displayW;
+    videoBgCanvas.height = fmt.displayH;
+    videoBgCanvas.style.width = fmt.displayW + 'px';
+    videoBgCanvas.style.height = fmt.displayH + 'px';
+    videoBgCanvas.style.display = 'block';
+
+    // Invisible placeholder so Layers panel has an entry
+    const placeholder = new fabric.Rect({
+      name: label || ('video-' + Date.now()),
+      width: 1,
+      height: 1,
+      opacity: 0,
+      selectable: false,
+      evented: false,
+      isVideo: true,
+      _videoEl: videoEl,
+      hoverCursor: 'default',
+    });
+    studioCanvas.add(placeholder);
+    studioCanvas.sendToBack(placeholder);
+
+    global._studioActiveVideo = videoEl;
 
     updateLayerPanel();
     saveHistory('Video layer added');
     startVideoRenderLoop();
     updateVideoToolbar(true);
 
-    const dur = Math.round(videoEl.duration) || '?';
-    addChatMsg('assistant', '✓ Playing "' + (label || 'video') + '" (' + dur + 's). Add text or shapes — they\'ll overlay the video. Hit ↓ Export video when done.');
+    const dur = isFinite(videoEl.duration) ? Math.round(videoEl.duration) + 's' : 'unknown length';
+    addChatMsg('assistant', '✓ "' + (label || 'video') + '" playing (' + dur + '). Add text/shapes — they overlay the video.');
   }
 
   function extractFrameFromVideo(videoEl, timeSeconds) {
@@ -1211,14 +1246,22 @@
   }
 
   async function exportVideoWithOverlays() {
-    const primaryVid = studioVideoElements[studioVideoElements.length - 1];
-    if (!primaryVid) { alert('No video layer found'); return; }
+    const vid = global._studioActiveVideo;
+    if (!vid) { addChatMsg('assistant', '❌ No video loaded.'); return; }
 
-    const duration = primaryVid.duration || 15;
-    addChatMsg('assistant', '⏺ Recording ' + Math.round(duration) + 's of video with overlays… don\'t leave this page.');
+    const videoBg = document.getElementById('studio-video-bg');
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const duration = vid.duration || 15;
+
+    const compCanvas = document.createElement('canvas');
+    compCanvas.width = fmt.displayW;
+    compCanvas.height = fmt.displayH;
+    const compCtx = compCanvas.getContext('2d');
+
+    addChatMsg('assistant', '⏺ Recording ' + Math.round(duration) + 's…');
 
     try {
-      const stream = studioCanvas.lowerCanvasEl.captureStream(30);
+      const stream = compCanvas.captureStream(30);
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
         ? 'video/webm;codecs=vp9' : 'video/webm';
       const recorder = new MediaRecorder(stream, { mimeType: mimeType, videoBitsPerSecond: 8000000 });
@@ -1227,18 +1270,28 @@
         if (e.data && e.data.size > 0) chunks.push(e.data);
       };
 
+      let recording = true;
+      function recordTick() {
+        if (!recording) return;
+        compCtx.clearRect(0, 0, compCanvas.width, compCanvas.height);
+        if (videoBg) compCtx.drawImage(videoBg, 0, 0);
+        if (studioCanvas && studioCanvas.lowerCanvasEl) {
+          compCtx.drawImage(studioCanvas.lowerCanvasEl, 0, 0);
+        }
+        requestAnimationFrame(recordTick);
+      }
+
       await new Promise(function (resolve, reject) {
         recorder.onstop = resolve;
         recorder.onerror = reject;
         recorder.start(100);
-        primaryVid.currentTime = 0;
-        primaryVid.muted = true;
-        primaryVid.play().catch(function () {});
-        startVideoRenderLoop();
+        vid.currentTime = 0;
+        vid.play().catch(function () {});
+        recordTick();
         setTimeout(function () {
+          recording = false;
           recorder.stop();
-          primaryVid.pause();
-        }, duration * 1000 + 200);
+        }, duration * 1000 + 300);
       });
 
       const blob = new Blob(chunks, { type: 'video/webm' });
@@ -1249,16 +1302,43 @@
       a.download = (f.post_label || 'reel') + '-with-overlays.webm';
       a.click();
       URL.revokeObjectURL(url);
-      addChatMsg('assistant', '✓ Video exported! The .webm file includes all your text and shape overlays.');
+      addChatMsg('assistant', '✓ Video exported with overlays!');
     } catch (e) {
       addChatMsg('assistant', '❌ Export failed: ' + e.message + '. Try the "Frame PNG" option instead.');
     }
   }
 
+  function buildCompositeCanvas() {
+    const fmt = STUDIO_FORMATS[studioFormat];
+    const scale = fmt.w / fmt.displayW;
+    const out = document.createElement('canvas');
+    out.width = fmt.w;
+    out.height = fmt.h;
+    const ctx = out.getContext('2d');
+
+    const videoBg = document.getElementById('studio-video-bg');
+    if (videoBg && videoBg.style.display !== 'none') {
+      ctx.drawImage(videoBg, 0, 0, fmt.w, fmt.h);
+    } else {
+      const bg = (studioCanvas && studioCanvas.backgroundColor) || '#0E1A63';
+      ctx.fillStyle = (bg === 'rgba(0,0,0,0)' || bg === 'transparent') ? '#0E1A63' : bg;
+      ctx.fillRect(0, 0, fmt.w, fmt.h);
+    }
+
+    if (studioCanvas && studioCanvas.lowerCanvasEl) {
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.drawImage(studioCanvas.lowerCanvasEl, 0, 0);
+      ctx.restore();
+    }
+
+    return out;
+  }
+
   function exportVideoFrame() {
-    const dataUrl = studioCanvas.toDataURL({ format: 'png', multiplier: 1 });
+    const exportCanvas = buildCompositeCanvas();
     const a = document.createElement('a');
-    a.href = dataUrl;
+    a.href = exportCanvas.toDataURL('image/png');
     const f = postFields(studioPost);
     a.download = (f.post_label || 'frame') + '-thumbnail.png';
     a.click();
@@ -1927,10 +2007,9 @@
 
   function studioDownload() {
     if (!studioCanvas) return;
-    const multiplier = STUDIO_FORMATS[studioFormat].w / STUDIO_FORMATS[studioFormat].displayW;
-    const dataUrl = studioCanvas.toDataURL({ format: 'png', multiplier: multiplier });
+    const exportCanvas = buildCompositeCanvas();
     const a = document.createElement('a');
-    a.href = dataUrl;
+    a.href = exportCanvas.toDataURL('image/png');
     const f = postFields(studioPost);
     a.download = (f.post_label || 'post') + '-' + studioFormat.replace(':', '-') + '.png';
     a.click();
@@ -1938,8 +2017,8 @@
 
   async function studioApprove() {
     if (!studioPost || !studioPost.id || !studioCanvas) return;
-    const multiplier = STUDIO_FORMATS[studioFormat].w / STUDIO_FORMATS[studioFormat].displayW;
-    const dataUrl = studioCanvas.toDataURL({ format: 'png', multiplier: multiplier });
+    const exportCanvas = buildCompositeCanvas();
+    const dataUrl = exportCanvas.toDataURL('image/png');
     const blob = await (await fetch(dataUrl)).blob();
     const formData = new FormData();
     formData.append('image', blob, 'studio-export.png');
