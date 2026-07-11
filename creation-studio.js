@@ -1486,7 +1486,7 @@
       label: '🧠 Deep',
       desc: '🧠 <strong style="color:#94a3b8;">Deep:</strong> 30 frames · all elements · ~$0.10–0.15',
       btnText: '🧠 Run Deep Analysis',
-      model: 'claude-opus-4-5',
+      model: 'claude-opus-4-6',
     },
   };
 
