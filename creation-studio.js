@@ -1796,19 +1796,40 @@
     });
     studioCanvas.add(maskRect);
 
+    // No fixed `width` — Fabric wraps/truncates IText when width is set, which
+    // fights natural single-line layout for overlay replacement text.
     const textObj = new fabric.IText(content, {
       name: 'text_' + el.id,
-      left: l, top: t, width: w,
+      left: l, top: t,
       fontSize: scaledFontSize, fontFamily: fontFamily, fill: color,
       fontWeight: (el.style && el.style.fontWeight) || 'normal',
       textAlign: (el.style && el.style.textAlign) || 'left',
+      objectCaching: false,
+      dirty: true,
+      paintFirst: 'fill',
       selectable: true, editable: true, isTextOverlay: true,
     });
     studioCanvas.add(textObj);
+    // Expand mask to cover rendered text so original video text doesn't peek out.
+    function syncMaskToText() {
+      const textW = textObj.width || 0;
+      const textH = textObj.height || 0;
+      maskRect.set({
+        left: textObj.left - padX,
+        top: textObj.top - padY,
+        width: Math.max(w, textW) + padX * 2,
+        height: Math.max(h, textH) + padY * 2,
+      });
+    }
+    syncMaskToText();
     maskRect.moveTo(studioCanvas.getObjects().indexOf(textObj) - 1);
     studioCanvas.setActiveObject(textObj);
     textObj.on('moving', function () {
-      maskRect.set({ left: textObj.left - padX, top: textObj.top - padY });
+      syncMaskToText();
+      studioCanvas.renderAll();
+    });
+    textObj.on('changed', function () {
+      syncMaskToText();
       studioCanvas.renderAll();
     });
     studioCanvas.renderAll();
