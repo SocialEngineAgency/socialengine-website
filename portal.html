@@ -2452,6 +2452,8 @@
 
 
 </style>
+<!-- Adobe Express Embed SDK v4 -->
+<script src="https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js"></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
@@ -3685,7 +3687,8 @@
           <div class="studio-modal__actions" data-post-id="${post.id}">
             <button class="studio-modal__btn studio-modal__btn--approve" onclick="studioApprove('${post.id}', this)">Approve</button>
             <button class="studio-modal__btn studio-modal__btn--reject" onclick="openRejectModal('${post.id}')">Reject</button>
-            ${regenLeft > 0 
+            <button class="studio-modal__btn" style="background:linear-gradient(135deg,#E0005E,#FF7C00);color:#fff;border:none;" onclick="openAdobeExpress({id:'${post.id}',video_url:'${videoUrl}',image_url:'${imageUrl}',content_type:'${post.content_type||''}',postId:'${post.id}'})">✏️ Edit in Adobe Express</button>
+            ${regenLeft > 0
               ? `<button class="studio-modal__btn studio-modal__btn--regen" onclick="openRegenModal('${post.id}', ${regenLeft})">Regenerate <span style="font-size:0.68rem;opacity:0.5;">${regenLeft} left</span></button>`
               : `<button class="studio-modal__btn studio-modal__btn--regen" style="opacity:0.4;cursor:default;position:relative;" onclick="showToast('All 3 free regenerations used on this post. Upgrade your plan for unlimited regens.')">Regenerate <span style="font-size:0.68rem;opacity:0.7;color:#f44336;">0 left</span></button>`
             }
@@ -13721,7 +13724,116 @@
     try { _exposeOnWindow('triggerCompetitorSnipe',   typeof triggerCompetitorSnipe   !== 'undefined' ? triggerCompetitorSnipe   : undefined); } catch(_){}
     try { _exposeOnWindow('voiceFeedback',            typeof voiceFeedback            !== 'undefined' ? voiceFeedback            : undefined); } catch(_){}
 
+  // ── Adobe Express Embed SDK integration ──────────────────────────────────
+  const ADOBE_CLIENT_ID   = '9c347511e2e34f0d9f117eb6247a9401';
+  const ADOBE_APP_NAME    = 'SocialEngine Studio';
+  let _adobeSDK           = null;
+  let _adobePostData      = null;
+
+  async function initAdobeExpress() {
+    if (_adobeSDK) return _adobeSDK;
+    if (!window.CCEverywhere) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load Adobe Express SDK'));
+        document.head.appendChild(s);
+      });
+    }
+    _adobeSDK = await window.CCEverywhere.initialize(
+      { clientId: ADOBE_CLIENT_ID, appName: ADOBE_APP_NAME },
+      { locale: (navigator.language || 'en_US').replace('-', '_') }
+    );
+    return _adobeSDK;
+  }
+
+  window.openAdobeExpress = async function(postData) {
+    _adobePostData = postData || null;
+    const overlay = document.getElementById('adobe-express-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    try {
+      const sdk = await initAdobeExpress();
+      const mediaUrl = postData?.video_url || postData?.image_url || postData?.media_url || postData?.url || null;
+      const isVideo = mediaUrl ? /\.(mp4|mov|webm)/i.test(mediaUrl) || String(postData?.content_type || '').includes('video') : false;
+      const callbacks = {
+        onPublish: (_intent, publishParams) => handleAdobePublish(publishParams),
+        onClose:   () => closeAdobeExpress(),
+        onError:   (err) => { console.error('[AdobeExpress]', err); closeAdobeExpress(); }
+      };
+      const outputParams = { outputType: 'base64' };
+      if (mediaUrl && isVideo) {
+        await sdk.editor.editVideo({ asset: { type: 'video', dataType: 'url', data: mediaUrl } }, outputParams, callbacks);
+      } else if (mediaUrl) {
+        await sdk.editor.editImage({ asset: { type: 'image', dataType: 'url', data: mediaUrl } }, outputParams, callbacks);
+      } else {
+        await sdk.editor.create({ templateType: 'socialMedia' }, outputParams, callbacks);
+      }
+    } catch (err) {
+      console.error('[AdobeExpress] open error:', err);
+      if (typeof showToast === 'function') showToast('Could not open Adobe Express: ' + err.message);
+      closeAdobeExpress();
+    }
+  };
+
+  window.closeAdobeExpress = function() {
+    const overlay = document.getElementById('adobe-express-overlay');
+    if (overlay) overlay.style.display = 'none';
+    _adobePostData = null;
+  };
+
+  async function handleAdobePublish(publishParams) {
+    try {
+      if (typeof showToast === 'function') showToast('Saving your design…');
+      const asset = publishParams?.asset;
+      if (!asset?.data) throw new Error('No asset data from Adobe Express');
+      const email = window.__clientEmail || '';
+      const hash  = window.__clientHash  || '';
+      const resp  = await fetch(`${typeof API !== 'undefined' ? API : ''}/api/studio/save-express-design`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-client-email': email, 'x-client-hash': hash },
+        body: JSON.stringify({
+          email, hash,
+          assetData:   asset.data,
+          assetType:   asset.type    || 'image',
+          dataType:    asset.dataType || 'base64',
+          fileSize:    asset.fileSize,
+          postId:      _adobePostData?.id || _adobePostData?.postId || null,
+          contentType: _adobePostData?.content_type || null,
+        }),
+      });
+      const result = await resp.json();
+      if (!result.success) throw new Error(result.error || 'Save failed');
+      if (typeof showToast === 'function') showToast('Design saved! ✓');
+      closeAdobeExpress();
+      // Refresh content feed so new version appears
+      if (typeof loadStudioPosts === 'function') loadStudioPosts();
+    } catch (err) {
+      console.error('[AdobeExpress] save error:', err);
+      if (typeof showToast === 'function') showToast('Save failed: ' + err.message);
+    }
+  }
+  // ── /Adobe Express ────────────────────────────────────────────────────────
+
   })();
 </script>
+
+<!-- Adobe Express editor overlay -->
+<div id="adobe-express-overlay"
+     style="display:none; position:fixed; inset:0; z-index:10000;
+            background:rgba(0,0,0,0.88); flex-direction:column;
+            align-items:center; justify-content:center;">
+  <div id="adobe-express-host"
+       style="width:100%; height:100vh; position:relative; overflow:hidden;">
+  </div>
+  <button onclick="closeAdobeExpress()"
+          style="position:absolute; top:16px; right:20px; z-index:10001;
+                 background:rgba(255,255,255,0.12); color:#fff;
+                 border:1px solid rgba(255,255,255,0.3); padding:7px 18px;
+                 border-radius:8px; font-size:13px; cursor:pointer;
+                 backdrop-filter:blur(4px);">
+    ✕ Close
+  </button>
+</div>
 </body>
 </html>
