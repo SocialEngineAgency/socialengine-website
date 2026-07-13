@@ -14231,7 +14231,7 @@
         const fallbackIcon = isVidThumb ? '🎬' : '🖼️';
         const fallbackDiv = `<div style="width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">${fallbackIcon}</div>`;
         const mediaEl = thumb
-          ? `<img src="${thumb}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;" onerror="this.outerHTML='${fallbackDiv.replace(/'/g, '&#39;')}';">`
+          ? `<img src="${thumb}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;" onerror="_schedThumbFail(this,'${fallbackIcon}')">`
           : fallbackDiv;
         return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
           <td style="padding:10px 14px;">${mediaEl}</td>
@@ -14255,7 +14255,16 @@
     }
   }
   // ── /Schedule Section ─────────────────────────────────────────────────────
+  // Thumbnail error fallback — called via onerror to avoid double-quote escaping issues
+  function _schedThumbFail(img, icon) {
+    const div = document.createElement('div');
+    div.style.cssText = 'width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;';
+    div.textContent = icon || '🖼️';
+    img.parentNode.replaceChild(div, img);
+  }
+
   // Expose schedule helpers to global scope so inline HTML event handlers can reach them
+  window._schedThumbFail     = _schedThumbFail;
   window._handleSchedDrop    = _handleSchedDrop;
   window._removeSchedFile    = _removeSchedFile;
   window._renderSchedCards   = _renderSchedCards;
