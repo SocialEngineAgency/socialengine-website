@@ -2618,6 +2618,7 @@
           <button class="dash-nav-item active" data-nav="dashboard"><i data-lucide="layout-dashboard"></i> Home</button>
           <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content</button>
           <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="palette"></i> Studio</button>
+          <button class="dash-nav-item" data-nav="schedule"><i data-lucide="calendar"></i> Schedule</button>
           <button class="dash-nav-item" data-nav="video-studio"><i data-lucide="video"></i> Create</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
           <button class="dash-nav-item" data-nav="ai-studio"><i data-lucide="cpu"></i> AI Tools</button>
@@ -5507,6 +5508,7 @@
         else if (nav === 'ad-studio') { renderAdStudio(); }
         else if (nav === 'ai-studio') { console.log('[SE] Nav click: ai-studio'); renderAIStudio(); }
         else if (nav === 'settings') { renderSettingsPage(clientData); }
+        else if (nav === 'schedule') { renderScheduleSection(); }
       });
     });
 
@@ -13858,6 +13860,388 @@
     }
   }
   // ── /Adobe Express ────────────────────────────────────────────────────────
+
+  // ━━━ SCHEDULE SECTION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  let _schedFiles = []; // Array of { file, caption, platforms, date, time, description, tone }
+
+  function renderScheduleSection() {
+    const content = document.getElementById('dash-content');
+    if (!content) return;
+    content.innerHTML = `
+<div style="max-width:860px;margin:0 auto;padding:28px 24px 48px;">
+
+  <!-- Header -->
+  <div style="margin-bottom:24px;">
+    <h2 style="font-size:1.35rem;font-weight:700;color:var(--color-text);margin:0 0 6px;">Schedule Posts</h2>
+    <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0;">Upload your videos & images, generate captions with AI, then schedule to Instagram &amp; Facebook.</p>
+  </div>
+
+  <!-- Drop zone -->
+  <div id="sched-dropzone"
+       onclick="document.getElementById('sched-file-input').click()"
+       ondragover="event.preventDefault();this.style.borderColor='#7C3AED';"
+       ondragleave="this.style.borderColor='rgba(255,255,255,0.12)';"
+       ondrop="event.preventDefault();this.style.borderColor='rgba(255,255,255,0.12)';_handleSchedDrop(event.dataTransfer.files);"
+       style="border:2px dashed rgba(255,255,255,0.12);border-radius:14px;padding:40px 24px;text-align:center;cursor:pointer;transition:border-color 0.2s;background:rgba(255,255,255,0.02);margin-bottom:20px;">
+    <div style="font-size:2rem;margin-bottom:10px;">📁</div>
+    <div style="font-size:0.95rem;font-weight:600;color:var(--color-text);margin-bottom:6px;">Drop videos &amp; images here</div>
+    <div style="font-size:0.8rem;color:var(--color-text-muted);">or click to browse — select multiple files at once</div>
+    <div style="font-size:0.72rem;color:rgba(255,255,255,0.25);margin-top:8px;">MP4, MOV, WebM, JPG, PNG supported</div>
+    <input type="file" id="sched-file-input" multiple accept="video/*,image/*"
+           style="display:none" onchange="_handleSchedDrop(this.files)">
+  </div>
+
+  <!-- File cards -->
+  <div id="sched-cards" style="display:flex;flex-direction:column;gap:16px;"></div>
+
+  <!-- Schedule All button -->
+  <div id="sched-footer" style="display:none;margin-top:24px;">
+    <div id="sched-global-err" style="display:none;padding:10px 16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:#f87171;font-size:0.82rem;margin-bottom:12px;"></div>
+    <div id="sched-progress-wrap" style="display:none;margin-bottom:12px;">
+      <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+        <div id="sched-progress-bar" style="height:100%;background:#7C3AED;border-radius:2px;width:0%;transition:width 0.3s;"></div>
+      </div>
+      <div id="sched-progress-label" style="font-size:0.75rem;color:rgba(255,255,255,0.4);margin-top:5px;text-align:center;"></div>
+    </div>
+    <button id="sched-submit-btn" onclick="_scheduleAll()"
+            style="width:100%;padding:14px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:background 0.15s;letter-spacing:0.01em;">
+      🗓 Schedule All Posts
+    </button>
+  </div>
+
+  <!-- Upcoming scheduled posts -->
+  <div style="margin-top:40px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="font-size:1rem;font-weight:600;color:var(--color-text);margin:0;">Upcoming Scheduled Posts</h3>
+      <button onclick="_loadUpcomingScheduled()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.75rem;cursor:pointer;padding:4px 8px;border-radius:6px;transition:color 0.15s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">↻ Refresh</button>
+    </div>
+    <div id="sched-upcoming" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;min-height:80px;">
+      <div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading…</div>
+    </div>
+  </div>
+
+</div>`;
+    _renderSchedCards();
+    _loadUpcomingScheduled();
+  }
+
+  function _handleSchedDrop(fileList) {
+    const allowed = ['video/mp4','video/quicktime','video/webm','image/jpeg','image/png','image/webp','image/gif'];
+    Array.from(fileList).forEach(f => {
+      const ok = allowed.some(t => f.type.startsWith(t.split('/')[0]));
+      if (ok) _schedFiles.push({ file: f, caption: '', platforms: ['Instagram','Facebook'], date: '', time: '09:00', description: '', tone: 'engaging' });
+    });
+    _renderSchedCards();
+    const footer = document.getElementById('sched-footer');
+    if (footer) footer.style.display = _schedFiles.length ? 'block' : 'none';
+  }
+
+  function _removeSchedFile(idx) {
+    _schedFiles.splice(idx, 1);
+    _renderSchedCards();
+    const footer = document.getElementById('sched-footer');
+    if (footer) footer.style.display = _schedFiles.length ? 'block' : 'none';
+  }
+
+  function _renderSchedCards() {
+    const container = document.getElementById('sched-cards');
+    if (!container) return;
+    if (!_schedFiles.length) { container.innerHTML = ''; return; }
+
+    container.innerHTML = _schedFiles.map((item, idx) => {
+      const isVid  = item.file.type.startsWith('video/');
+      const previewId = 'sched-preview-' + idx;
+      const sizeStr   = (item.file.size / 1024 / 1024).toFixed(1) + ' MB';
+      const today     = new Date().toISOString().split('T')[0];
+
+      return `<div id="sched-card-${idx}" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;">
+
+  <!-- Card header -->
+  <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);">
+    <div style="width:32px;height:32px;border-radius:8px;background:${isVid ? 'rgba(124,58,237,0.15)' : 'rgba(16,185,129,0.12)'};display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">${isVid ? '🎬' : '🖼️'}</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:0.83rem;font-weight:600;color:var(--color-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.file.name}</div>
+      <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);">${sizeStr} · ${isVid ? 'Video' : 'Image'}</div>
+    </div>
+    <button onclick="_removeSchedFile(${idx})" title="Remove"
+            style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.15);color:#f87171;border-radius:7px;padding:5px 10px;font-size:0.72rem;cursor:pointer;">✕ Remove</button>
+  </div>
+
+  <!-- Card body -->
+  <div style="display:grid;grid-template-columns:180px 1fr;gap:0;">
+
+    <!-- Thumbnail -->
+    <div style="background:#000;display:flex;align-items:center;justify-content:center;min-height:160px;border-right:1px solid rgba(255,255,255,0.06);">
+      <div id="${previewId}" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:0.75rem;padding:12px;text-align:center;">
+        Loading preview…
+      </div>
+    </div>
+
+    <!-- Fields -->
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+
+      <!-- AI caption generator -->
+      <div style="background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15);border-radius:10px;padding:12px;">
+        <div style="font-size:0.72rem;font-weight:600;color:#A78BFA;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">✨ AI Caption Generator</div>
+        <textarea id="sched-desc-${idx}" rows="2" placeholder="Describe your content… e.g. 'A heartwarming video of volunteers handing out meals at a food bank'"
+                  oninput="_schedFiles[${idx}].description=this.value"
+                  style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:0.8rem;padding:9px 11px;resize:vertical;font-family:var(--font-body);box-sizing:border-box;outline:none;line-height:1.4;">${item.description}</textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <select id="sched-tone-${idx}" onchange="_schedFiles[${idx}].tone=this.value"
+                  style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--color-text);border-radius:7px;padding:6px 10px;font-size:0.78rem;font-family:var(--font-body);cursor:pointer;flex:1;min-width:120px;">
+            <option value="engaging" ${item.tone==='engaging'?'selected':''}>Tone: Engaging</option>
+            <option value="inspirational" ${item.tone==='inspirational'?'selected':''}>Tone: Inspirational</option>
+            <option value="informational" ${item.tone==='informational'?'selected':''}>Tone: Informational</option>
+            <option value="heartfelt" ${item.tone==='heartfelt'?'selected':''}>Tone: Heartfelt</option>
+            <option value="humorous" ${item.tone==='humorous'?'selected':''}>Tone: Humorous</option>
+            <option value="urgent" ${item.tone==='urgent'?'selected':''}>Tone: Urgent/CTA</option>
+          </select>
+          <button onclick="_generateCaption(${idx})" id="sched-ai-btn-${idx}"
+                  style="background:#7C3AED;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 0.15s;">
+            ✨ Generate Caption
+          </button>
+        </div>
+      </div>
+
+      <!-- Caption textarea -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+          <label style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;">Caption &amp; Hashtags</label>
+          <span id="sched-charcount-${idx}" style="font-size:0.7rem;color:rgba(255,255,255,0.25);">0 / 2200</span>
+        </div>
+        <textarea id="sched-caption-${idx}" rows="4" placeholder="Write your caption here, or use AI to generate one above…"
+                  oninput="_schedFiles[${idx}].caption=this.value;document.getElementById('sched-charcount-${idx}').textContent=this.value.length+' / 2200';document.getElementById('sched-charcount-${idx}').style.color=this.value.length>2000?'#f87171':'rgba(255,255,255,0.25)';"
+                  style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:var(--color-text);font-size:0.83rem;padding:11px 13px;resize:vertical;font-family:var(--font-body);box-sizing:border-box;outline:none;line-height:1.5;min-height:90px;">${item.caption}</textarea>
+      </div>
+
+      <!-- Platforms + schedule row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+
+        <!-- Platforms -->
+        <div>
+          <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Platforms</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.82rem;color:var(--color-text);">
+              <input type="checkbox" id="sched-ig-${idx}" ${item.platforms.includes('Instagram')?'checked':''}
+                     onchange="const arr=_schedFiles[${idx}].platforms;const has=arr.includes('Instagram');if(this.checked&&!has)arr.push('Instagram');if(!this.checked&&has)arr.splice(arr.indexOf('Instagram'),1);"
+                     style="accent-color:#7C3AED;width:15px;height:15px;">
+              📸 Instagram
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.82rem;color:var(--color-text);">
+              <input type="checkbox" id="sched-fb-${idx}" ${item.platforms.includes('Facebook')?'checked':''}
+                     onchange="const arr=_schedFiles[${idx}].platforms;const has=arr.includes('Facebook');if(this.checked&&!has)arr.push('Facebook');if(!this.checked&&has)arr.splice(arr.indexOf('Facebook'),1);"
+                     style="accent-color:#7C3AED;width:15px;height:15px;">
+              👥 Facebook
+            </label>
+          </div>
+        </div>
+
+        <!-- Date -->
+        <div>
+          <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Post Date</div>
+          <input type="date" id="sched-date-${idx}" value="${item.date || today}"
+                 min="${today}"
+                 onchange="_schedFiles[${idx}].date=this.value"
+                 style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:0.82rem;padding:8px 10px;font-family:var(--font-body);cursor:pointer;box-sizing:border-box;outline:none;">
+        </div>
+
+        <!-- Time -->
+        <div>
+          <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Time</div>
+          <input type="time" id="sched-time-${idx}" value="${item.time || '09:00'}"
+                 onchange="_schedFiles[${idx}].time=this.value"
+                 style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:0.82rem;padding:8px 10px;font-family:var(--font-body);cursor:pointer;box-sizing:border-box;outline:none;">
+        </div>
+
+      </div><!-- /grid -->
+
+    </div><!-- /fields -->
+  </div><!-- /card body -->
+
+</div>`;
+    }).join('');
+
+    // Render previews async after DOM update
+    _schedFiles.forEach((item, idx) => _renderSchedPreview(item.file, idx));
+  }
+
+  function _renderSchedPreview(file, idx) {
+    const el = document.getElementById('sched-preview-' + idx);
+    if (!el) return;
+    const url = URL.createObjectURL(file);
+    if (file.type.startsWith('video/')) {
+      el.innerHTML = `<video src="${url}" muted playsinline style="max-width:100%;max-height:160px;object-fit:contain;border-radius:4px;" onloadedmetadata="this.currentTime=1"></video>`;
+    } else {
+      el.innerHTML = `<img src="${url}" style="max-width:100%;max-height:160px;object-fit:contain;border-radius:4px;">`;
+    }
+  }
+
+  async function _generateCaption(idx) {
+    const item   = _schedFiles[idx];
+    const desc   = (document.getElementById('sched-desc-' + idx)?.value || item.description || '').trim();
+    const tone   = document.getElementById('sched-tone-' + idx)?.value || item.tone || 'engaging';
+    const capEl  = document.getElementById('sched-caption-' + idx);
+    const btnEl  = document.getElementById('sched-ai-btn-' + idx);
+    const platform = item.platforms[0] || 'Instagram';
+
+    if (!desc) { if (typeof showToast === 'function') showToast('Add a description first so AI knows what to write about.'); return; }
+
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '✨ Generating…'; }
+
+    try {
+      const resp = await fetch(`${API}/api/studio/generate-caption`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+        body: JSON.stringify({ description: desc, platform, tone, hashtag_count: 8 }),
+      });
+      const data = await resp.json();
+      if (data.success && data.caption) {
+        _schedFiles[idx].caption = data.caption;
+        if (capEl) {
+          capEl.value = data.caption;
+          const cc = document.getElementById('sched-charcount-' + idx);
+          if (cc) cc.textContent = data.caption.length + ' / 2200';
+        }
+        if (typeof showToast === 'function') showToast('Caption generated! Feel free to edit it.');
+      } else {
+        if (typeof showToast === 'function') showToast('AI caption failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('Caption generation error: ' + e.message);
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✨ Generate Caption'; }
+    }
+  }
+
+  async function _scheduleAll() {
+    if (!_schedFiles.length) return;
+    const errEl  = document.getElementById('sched-global-err');
+    const progWrap = document.getElementById('sched-progress-wrap');
+    const progBar  = document.getElementById('sched-progress-bar');
+    const progLbl  = document.getElementById('sched-progress-label');
+    const submitBtn = document.getElementById('sched-submit-btn');
+
+    // Sync latest textarea values before submitting
+    _schedFiles.forEach((item, idx) => {
+      const capEl  = document.getElementById('sched-caption-' + idx);
+      const dateEl = document.getElementById('sched-date-' + idx);
+      const timeEl = document.getElementById('sched-time-' + idx);
+      if (capEl)  item.caption  = capEl.value;
+      if (dateEl) item.date     = dateEl.value;
+      if (timeEl) item.time     = timeEl.value;
+    });
+
+    // Validate
+    const missing = _schedFiles.findIndex(f => !f.date);
+    if (missing > -1) {
+      if (errEl) { errEl.textContent = `Post ${missing + 1} (${_schedFiles[missing].file.name}) needs a schedule date.`; errEl.style.display = 'block'; }
+      return;
+    }
+    if (errEl) errEl.style.display = 'none';
+
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Scheduling…'; }
+    if (progWrap)  progWrap.style.display = 'block';
+
+    let successCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < _schedFiles.length; i++) {
+      const item = _schedFiles[i];
+      if (progLbl) progLbl.textContent = `Uploading ${i + 1} of ${_schedFiles.length}: ${item.file.name}`;
+      if (progBar) progBar.style.width = ((i / _schedFiles.length) * 100) + '%';
+
+      try {
+        const fd = new FormData();
+        fd.append('file', item.file, item.file.name);
+        fd.append('caption', item.caption || '');
+        fd.append('platforms', item.platforms.join(','));
+        fd.append('scheduled_date', item.date);
+        fd.append('scheduled_time', item.time || '09:00');
+
+        const resp = await fetch(`${API}/api/studio/quick-schedule`, {
+          method: 'POST',
+          headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+          body: fd,
+        });
+        const data = await resp.json();
+        if (data.success) successCount++;
+        else errors.push(`${item.file.name}: ${data.error || 'failed'}`);
+      } catch (e) {
+        errors.push(`${item.file.name}: ${e.message}`);
+      }
+    }
+
+    if (progBar) progBar.style.width = '100%';
+    if (progLbl) progLbl.textContent = 'Done!';
+
+    if (successCount > 0) {
+      if (typeof showToast === 'function') showToast(`${successCount} post${successCount > 1 ? 's' : ''} scheduled successfully! 🎉`);
+      _schedFiles = [];
+      _renderSchedCards();
+      const footer = document.getElementById('sched-footer');
+      if (footer) footer.style.display = 'none';
+      if (progWrap) progWrap.style.display = 'none';
+    }
+
+    if (errors.length) {
+      if (errEl) { errEl.textContent = 'Some posts failed: ' + errors.join('; '); errEl.style.display = 'block'; }
+    }
+
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '🗓 Schedule All Posts'; }
+    _loadUpcomingScheduled();
+  }
+
+  async function _loadUpcomingScheduled() {
+    const el = document.getElementById('sched-upcoming');
+    if (!el) return;
+    el.innerHTML = '<div style="text-align:center;padding:28px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading…</div>';
+    try {
+      const resp = await fetch(`${API}/api/content/list`, {
+        headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+      });
+      const data = await resp.json();
+      const posts = (data.posts || data.records || data || []).filter(p => {
+        const st = (p.status || p.Status || p.fields?.status || '').toLowerCase();
+        return st === 'approved' || st === 'scheduled';
+      });
+
+      if (!posts.length) {
+        el.innerHTML = '<div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.85rem;">No upcoming scheduled posts yet — upload your first content above!</div>';
+        return;
+      }
+
+      const rows = posts.map(p => {
+        const f = p.fields || p;
+        const date  = f.scheduled_date || f.scheduledDate || '';
+        const caption = (f.full_post_text || f.caption || '').slice(0, 70);
+        const platform = f.platform || '—';
+        const thumb = f.image_url || f.video_url || '';
+        const mediaEl = thumb
+          ? `<img src="${thumb}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`
+          : `<div style="width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">${(f.content_type||'').includes('video')?'🎬':'🖼️'}</div>`;
+        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <td style="padding:10px 14px;">${mediaEl}</td>
+          <td style="padding:10px 14px;font-size:0.82rem;color:rgba(255,255,255,0.7);max-width:260px;">${caption || '<span style="color:rgba(255,255,255,0.2)">No caption</span>'}${caption.length >= 70 ? '…' : ''}</td>
+          <td style="padding:10px 14px;font-size:0.78rem;color:rgba(255,255,255,0.4);">${platform}</td>
+          <td style="padding:10px 14px;font-size:0.78rem;color:rgba(255,255,255,0.4);white-space:nowrap;">${date || '—'}</td>
+        </tr>`;
+      }).join('');
+
+      el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Media</th>
+          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Caption</th>
+          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Platforms</th>
+          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Scheduled Date</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    } catch (err) {
+      el.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Could not load posts: ${err.message}</div>`;
+    }
+  }
+  // ── /Schedule Section ─────────────────────────────────────────────────────
 
   })();
 </script>
