@@ -13780,14 +13780,16 @@
     try {
       const sdk   = await _initAdobeSDK();
 
-      // Detect API shape: sdk might be the editor directly, or { editor }
-      const editor = (sdk && typeof sdk.editImage === 'function')             ? sdk
-                   : (sdk && sdk.editor && typeof sdk.editor.editImage === 'function') ? sdk.editor
-                   : null;
+      // sdk.editor exists — discover its actual method names at runtime
+      const editor = sdk?.editor;
+      if (!editor) throw new Error('sdk.editor missing. SDK keys: ' + Object.keys(sdk||{}).join(', '));
 
-      if (!editor) {
-        throw new Error('Unexpected SDK shape. Keys: ' + Object.keys(sdk || {}).join(', '));
+      // Enumerate all callable methods (own + prototype)
+      const editorMethods = new Set();
+      for (let o = editor; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+        Object.getOwnPropertyNames(o).forEach(k => { if (typeof editor[k] === 'function') editorMethods.add(k); });
       }
+      console.log('[AdobeExpress] editor methods:', [...editorMethods]);
 
       const mediaUrl = postData?.video_url || postData?.image_url || postData?.url || null;
       const isVideo  = mediaUrl
@@ -13801,14 +13803,21 @@
       };
       const outputParams = { outputType: 'base64' };
 
-      _adobeShowStatus('', false); // clear status — editor is about to open
-      if (mediaUrl && isVideo) {
-        editor.editVideo({ asset: { type: 'video', dataType: 'url', data: mediaUrl } }, outputParams, callbacks);
-      } else if (mediaUrl) {
-        editor.editImage({ asset: { type: 'image', dataType: 'url', data: mediaUrl } }, outputParams, callbacks);
-      } else {
-        editor.create({ templateType: 'socialMedia' }, outputParams, callbacks);
-      }
+      // Try method names in order of preference (v3 → v4 naming variations)
+      const tryEdit = (imageAsset, videoAsset) => {
+        if (isVideo && videoAsset) {
+          if (typeof editor.editVideo        === 'function') return editor.editVideo(videoAsset, outputParams, callbacks);
+          if (typeof editor.createWithAsset  === 'function') return editor.createWithAsset(videoAsset, outputParams, callbacks);
+        }
+        if (typeof editor.editImage          === 'function') return editor.editImage(imageAsset, outputParams, callbacks);
+        if (typeof editor.createWithAsset    === 'function') return editor.createWithAsset(imageAsset, outputParams, callbacks);
+        if (typeof editor.create             === 'function') return editor.create({}, outputParams, callbacks);
+        throw new Error('No usable editor method found. Methods: ' + [...editorMethods].join(', '));
+      };
+
+      _adobeShowStatus('', false);
+      const assetConfig = { asset: { type: isVideo ? 'video' : 'image', dataType: 'url', data: mediaUrl || '' } };
+      tryEdit(assetConfig, assetConfig);
     } catch (err) {
       _adobeShowStatus('Error: ' + err.message, true);
     }
