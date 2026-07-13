@@ -3687,7 +3687,7 @@
           <div class="studio-modal__actions" data-post-id="${post.id}">
             <button class="studio-modal__btn studio-modal__btn--approve" onclick="studioApprove('${post.id}', this)">Approve</button>
             <button class="studio-modal__btn studio-modal__btn--reject" onclick="openRejectModal('${post.id}')">Reject</button>
-            <button class="studio-modal__btn" style="background:linear-gradient(135deg,#E0005E,#FF7C00);color:#fff;border:none;" onclick="openAdobeExpress({id:'${post.id}',video_url:'${videoUrl}',image_url:'${imageUrl}',content_type:'${post.content_type||''}',postId:'${post.id}'})">✏️ Edit in Adobe Express</button>
+            <button class="studio-modal__btn" style="background:linear-gradient(135deg,#E0005E,#FF7C00);color:#fff;border:none;" onclick="openAdobeExpressCurrentPost()">✏️ Edit in Adobe Express</button>
             ${regenLeft > 0
               ? `<button class="studio-modal__btn studio-modal__btn--regen" onclick="openRegenModal('${post.id}', ${regenLeft})">Regenerate <span style="font-size:0.68rem;opacity:0.5;">${regenLeft} left</span></button>`
               : `<button class="studio-modal__btn studio-modal__btn--regen" style="opacity:0.4;cursor:default;position:relative;" onclick="showToast('All 3 free regenerations used on this post. Upgrade your plan for unlimited regens.')">Regenerate <span style="font-size:0.68rem;opacity:0.7;color:#f44336;">0 left</span></button>`
@@ -13725,6 +13725,21 @@
     try { _exposeOnWindow('voiceFeedback',            typeof voiceFeedback            !== 'undefined' ? voiceFeedback            : undefined); } catch(_){}
 
   // ── Adobe Express Embed SDK integration ──────────────────────────────────
+  // Simple wrapper — reads current post from already-in-scope studioPostsList
+  window.openAdobeExpressCurrentPost = function() {
+    const post = studioPostsList[studioCurrentIndex];
+    if (!post) return;
+    const mediaUrl = post.video_url || resolveImageUrl(post) || '';
+    window.openAdobeExpress({
+      id:           post.id,
+      postId:       post.id,
+      video_url:    post.video_url || '',
+      image_url:    resolveImageUrl(post) || '',
+      content_type: post.content_type || '',
+      url:          mediaUrl,
+    });
+  };
+
   const ADOBE_CLIENT_ID   = '9c347511e2e34f0d9f117eb6247a9401';
   const ADOBE_APP_NAME    = 'SocialEngine Studio';
   let _adobeSDK           = null;
