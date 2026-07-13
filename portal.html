@@ -14244,6 +14244,14 @@
     }
   }
   // ── /Schedule Section ─────────────────────────────────────────────────────
+  // Expose schedule helpers to global scope so inline HTML event handlers can reach them
+  window._handleSchedDrop    = _handleSchedDrop;
+  window._removeSchedFile    = _removeSchedFile;
+  window._renderSchedCards   = _renderSchedCards;
+  window._renderSchedPreview = _renderSchedPreview;
+  window._generateCaption    = _generateCaption;
+  window._scheduleAll        = _scheduleAll;
+  window._loadUpcomingScheduled = _loadUpcomingScheduled;
 
   })();
 </script>
