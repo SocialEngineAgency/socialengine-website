@@ -13773,18 +13773,14 @@
 
   window.openAdobeExpress = async function(postData) {
     _adobePostData = postData || null;
-    const overlay = document.getElementById('adobe-express-overlay');
-    if (overlay) overlay.style.display = 'flex';
-    _adobeShowStatus('Loading Adobe Express…', false);
+    if (typeof showToast === 'function') showToast('Opening Adobe Express…');
 
     try {
-      const sdk   = await _initAdobeSDK();
-
-      // sdk.editor exists — discover its actual method names at runtime
+      const sdk    = await _initAdobeSDK();
       const editor = sdk?.editor;
-      if (!editor) throw new Error('sdk.editor missing. SDK keys: ' + Object.keys(sdk||{}).join(', '));
+      if (!editor) throw new Error('SDK editor missing. Keys: ' + Object.keys(sdk||{}).join(', '));
 
-      // Enumerate all callable methods (own + prototype)
+      // Log available methods to console
       const editorMethods = new Set();
       for (let o = editor; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
         Object.getOwnPropertyNames(o).forEach(k => { if (typeof editor[k] === 'function') editorMethods.add(k); });
@@ -13796,30 +13792,33 @@
         ? /\.(mp4|mov|webm)/i.test(mediaUrl) || String(postData?.content_type || '').includes('video')
         : false;
 
-      const callbacks = {
-        onPublish: (_intent, publishParams) => _handleAdobePublish(publishParams),
-        onClose:   ()  => window.closeAdobeExpress(),
-        onError:   (e) => _adobeShowStatus('Express error: ' + JSON.stringify(e), true),
+      // v4 requires callbacks wrapped in exportConfig: { callbacks: {...} }
+      const exportConfig = {
+        callbacks: {
+          onPublish: (_intent, publishParams) => _handleAdobePublish(publishParams),
+          onClose:   ()  => { if (typeof showToast === 'function') showToast('Editor closed'); },
+          onError:   (e) => {
+            console.error('[AdobeExpress] onError', e);
+            if (typeof showToast === 'function') showToast('Adobe error: ' + JSON.stringify(e));
+          },
+        },
       };
-      const outputParams = { outputType: 'base64' };
+      const appConfig = { outputType: 'base64' };
+      const docConfig = mediaUrl
+        ? { asset: { type: isVideo ? 'video' : 'image', dataType: 'url', data: mediaUrl } }
+        : {};
 
-      // Try method names in order of preference (v3 → v4 naming variations)
-      const tryEdit = (imageAsset, videoAsset) => {
-        if (isVideo && videoAsset) {
-          if (typeof editor.editVideo        === 'function') return editor.editVideo(videoAsset, outputParams, callbacks);
-          if (typeof editor.createWithAsset  === 'function') return editor.createWithAsset(videoAsset, outputParams, callbacks);
-        }
-        if (typeof editor.editImage          === 'function') return editor.editImage(imageAsset, outputParams, callbacks);
-        if (typeof editor.createWithAsset    === 'function') return editor.createWithAsset(imageAsset, outputParams, callbacks);
-        if (typeof editor.create             === 'function') return editor.create({}, outputParams, callbacks);
-        throw new Error('No usable editor method found. Methods: ' + [...editorMethods].join(', '));
-      };
+      // Try every known method in v3/v4 order
+      if      (isVideo && typeof editor.editVideo       === 'function') editor.editVideo(docConfig, appConfig, exportConfig);
+      else if (isVideo && typeof editor.createWithAsset === 'function') editor.createWithAsset(docConfig, appConfig, exportConfig);
+      else if (           typeof editor.editImage       === 'function') editor.editImage(docConfig, appConfig, exportConfig);
+      else if (           typeof editor.createWithAsset === 'function') editor.createWithAsset(docConfig, appConfig, exportConfig);
+      else if (           typeof editor.create          === 'function') editor.create({}, appConfig, exportConfig);
+      else throw new Error('No editor method found. Methods: ' + [...editorMethods].join(', '));
 
-      _adobeShowStatus('', false);
-      const assetConfig = { asset: { type: isVideo ? 'video' : 'image', dataType: 'url', data: mediaUrl || '' } };
-      tryEdit(assetConfig, assetConfig);
     } catch (err) {
-      _adobeShowStatus('Error: ' + err.message, true);
+      console.error('[AdobeExpress] open error:', err);
+      if (typeof showToast === 'function') showToast('Adobe Express error: ' + err.message);
     }
   };
 
