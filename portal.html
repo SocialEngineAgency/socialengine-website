@@ -14197,14 +14197,16 @@
     if (!el) return;
     el.innerHTML = '<div style="text-align:center;padding:28px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading…</div>';
     try {
-      const resp = await fetch(`${API}/api/content/list`, {
+      const resp = await fetch(`${API}/api/client-data`, {
         headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
       });
       const data = await resp.json();
-      const posts = (data.posts || data.records || data || []).filter(p => {
-        const st = (p.status || p.Status || p.fields?.status || '').toLowerCase();
-        return st === 'approved' || st === 'scheduled';
-      });
+      // content is an array of Airtable records with { id, fields: { status, scheduled_date, ... } }
+      const allContent = data.content || [];
+      const posts = allContent.filter(r => {
+        const st = (r.fields?.status || '').toLowerCase();
+        return (st === 'approved' || st === 'scheduled') && r.fields?.scheduled_date;
+      }).sort((a, b) => (a.fields?.scheduled_date || '').localeCompare(b.fields?.scheduled_date || ''));
 
       if (!posts.length) {
         el.innerHTML = '<div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.85rem;">No upcoming scheduled posts yet — upload your first content above!</div>';
