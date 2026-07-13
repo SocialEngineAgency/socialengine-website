@@ -13792,29 +13792,27 @@
         ? /\.(mp4|mov|webm)/i.test(mediaUrl) || String(postData?.content_type || '').includes('video')
         : false;
 
-      // v4 requires callbacks wrapped in exportConfig: { callbacks: {...} }
-      const exportConfig = {
+      // v4: callbacks go INSIDE appConfig (not a separate exportConfig)
+      const appConfig = {
+        outputType: 'base64',
         callbacks: {
-          onPublish: (_intent, publishParams) => _handleAdobePublish(publishParams),
-          onClose:   ()  => { if (typeof showToast === 'function') showToast('Editor closed'); },
-          onError:   (e) => {
+          onCancel:  ()               => { if (typeof showToast === 'function') showToast('Editor closed'); },
+          onPublish: (intent, params) => _handleAdobePublish(params),
+          onError:   (e)              => {
             console.error('[AdobeExpress] onError', e);
             if (typeof showToast === 'function') showToast('Adobe error: ' + JSON.stringify(e));
           },
         },
       };
-      const appConfig = { outputType: 'base64' };
-      const docConfig = mediaUrl
-        ? { asset: { type: isVideo ? 'video' : 'image', dataType: 'url', data: mediaUrl } }
-        : {};
 
-      // Try every known method in v3/v4 order
-      if      (isVideo && typeof editor.editVideo       === 'function') editor.editVideo(docConfig, appConfig, exportConfig);
-      else if (isVideo && typeof editor.createWithAsset === 'function') editor.createWithAsset(docConfig, appConfig, exportConfig);
-      else if (           typeof editor.editImage       === 'function') editor.editImage(docConfig, appConfig, exportConfig);
-      else if (           typeof editor.createWithAsset === 'function') editor.createWithAsset(docConfig, appConfig, exportConfig);
-      else if (           typeof editor.create          === 'function') editor.create({}, appConfig, exportConfig);
-      else throw new Error('No editor method found. Methods: ' + [...editorMethods].join(', '));
+      if (mediaUrl) {
+        // v4: createWithAsset(docConfig, appConfig) — exactly TWO args
+        const docConfig = { asset: { type: isVideo ? 'video' : 'image', dataType: 'url', data: mediaUrl } };
+        editor.createWithAsset(docConfig, appConfig);
+      } else {
+        // v4: create(appConfig) — exactly ONE arg, blank canvas
+        editor.create(appConfig);
+      }
 
     } catch (err) {
       console.error('[AdobeExpress] open error:', err);
@@ -13831,8 +13829,9 @@
   async function _handleAdobePublish(publishParams) {
     try {
       _adobeShowStatus('Saving…', false);
-      const asset = publishParams?.asset;
-      if (!asset?.data) throw new Error('No asset data from Adobe Express');
+      // v4: publishParams.asset is an ARRAY — grab first element
+      const asset = Array.isArray(publishParams?.asset) ? publishParams.asset[0] : publishParams?.asset;
+      if (!asset?.data) throw new Error('No asset data from Adobe Express. publishParams: ' + JSON.stringify(publishParams));
       const email = window.__clientEmail || '';
       const hash  = window.__clientHash  || '';
       const apiBase = typeof API !== 'undefined' ? API : '';
