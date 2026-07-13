@@ -14203,9 +14203,12 @@
       const data = await resp.json();
       // /api/client-data flattens fields: { id, status, scheduled_date, ... }
       const allContent = data.content || [];
+      console.log('[Schedule] total content records:', allContent.length);
+      console.log('[Schedule] sample record:', JSON.stringify(allContent[0] || {}).slice(0, 300));
       const posts = allContent.filter(r => {
         const st = (r.fields?.status || r.status || '').toLowerCase();
         const date = r.fields?.scheduled_date || r.scheduled_date;
+        console.log('[Schedule] record:', r.id, 'status:', st, 'date:', date);
         return (st === 'approved' || st === 'scheduled') && date;
       }).sort((a, b) => {
         const ad = a.fields?.scheduled_date || a.scheduled_date || '';
@@ -14224,9 +14227,12 @@
         const caption = (f.full_post_text || f.caption || '').slice(0, 70);
         const platform = f.platform || '—';
         const thumb = f.image_url || f.video_url || '';
+        const isVidThumb = (f.content_type||'').toLowerCase().includes('video') || (f.video_url && !f.image_url);
+        const fallbackIcon = isVidThumb ? '🎬' : '🖼️';
+        const fallbackDiv = `<div style="width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">${fallbackIcon}</div>`;
         const mediaEl = thumb
-          ? `<img src="${thumb}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`
-          : `<div style="width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">${(f.content_type||'').includes('video')?'🎬':'🖼️'}</div>`;
+          ? `<img src="${thumb}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;" onerror="this.outerHTML='${fallbackDiv.replace(/'/g, '&#39;')}';">`
+          : fallbackDiv;
         return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
           <td style="padding:10px 14px;">${mediaEl}</td>
           <td style="padding:10px 14px;font-size:0.82rem;color:rgba(255,255,255,0.7);max-width:260px;">${caption || '<span style="color:rgba(255,255,255,0.2)">No caption</span>'}${caption.length >= 70 ? '…' : ''}</td>
