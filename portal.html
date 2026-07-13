@@ -14201,12 +14201,17 @@
         headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
       });
       const data = await resp.json();
-      // content is an array of Airtable records with { id, fields: { status, scheduled_date, ... } }
+      // /api/client-data flattens fields: { id, status, scheduled_date, ... }
       const allContent = data.content || [];
       const posts = allContent.filter(r => {
-        const st = (r.fields?.status || '').toLowerCase();
-        return (st === 'approved' || st === 'scheduled') && r.fields?.scheduled_date;
-      }).sort((a, b) => (a.fields?.scheduled_date || '').localeCompare(b.fields?.scheduled_date || ''));
+        const st = (r.fields?.status || r.status || '').toLowerCase();
+        const date = r.fields?.scheduled_date || r.scheduled_date;
+        return (st === 'approved' || st === 'scheduled') && date;
+      }).sort((a, b) => {
+        const ad = a.fields?.scheduled_date || a.scheduled_date || '';
+        const bd = b.fields?.scheduled_date || b.scheduled_date || '';
+        return ad.localeCompare(bd);
+      });
 
       if (!posts.length) {
         el.innerHTML = '<div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.85rem;">No upcoming scheduled posts yet — upload your first content above!</div>';
