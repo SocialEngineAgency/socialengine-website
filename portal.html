@@ -13952,17 +13952,33 @@
   async function _handleAdobePublish(publishParams) {
     try {
       _adobeShowStatus('Saving…', false);
-      // ── DEBUG: log everything Adobe Express sent us ──────────────────────
-      console.log('[AdobePublish] raw publishParams:', JSON.stringify(publishParams, null, 2).slice(0, 2000));
-      // v4: publishParams.asset is an ARRAY — grab first element
       const asset = Array.isArray(publishParams?.asset) ? publishParams.asset[0] : publishParams?.asset;
-      console.log('[AdobePublish] asset keys:', asset ? Object.keys(asset) : 'null');
-      console.log('[AdobePublish] asset.type:', asset?.type, '| asset.dataType:', asset?.dataType, '| asset.data length:', asset?.data?.length, '| data starts with:', asset?.data?.slice(0,30));
-      if (!asset?.data) throw new Error('No asset data from Adobe Express. publishParams: ' + JSON.stringify(publishParams));
-      const email = window.__clientEmail || '';
-      const hash  = window.__clientHash  || '';
+      if (!asset?.data) throw new Error('No asset data from Adobe Express.');
+
+      const email   = window.__clientEmail || '';
+      const hash    = window.__clientHash  || '';
       const apiBase = typeof API !== 'undefined' ? API : '';
-      const resp = await fetch(`${apiBase}/api/studio/save-express-design`, {
+
+      // Build the preview URL from whatever Adobe Express gave us:
+      // asset.data may be a full data URL, a bare base64 string, or an https URL.
+      const isVideo = !!(asset.type || '').includes('video');
+      let previewUrl = null;
+      if (!isVideo) {
+        if (asset.dataType === 'url' || (typeof asset.data === 'string' && asset.data.startsWith('http'))) {
+          previewUrl = asset.data;                              // already a URL
+        } else if (asset.data.startsWith('data:')) {
+          previewUrl = asset.data;                              // already a data URL
+        } else {
+          const mime = asset.mimeType || asset.type || 'image/png';
+          previewUrl = `data:${mime};base64,${asset.data}`;    // bare base64 → wrap it
+        }
+      }
+
+      // Fire-and-forget: save to backend (Atlas CDN + Airtable update).
+      // We do NOT await success before updating the UI — the preview is
+      // built from asset.data which we already have in memory.
+      const postId = _adobePostData?.id || _adobePostData?.postId || null;
+      fetch(`${apiBase}/api/studio/save-express-design`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'x-client-email': email, 'x-client-hash': hash },
         body: JSON.stringify({
@@ -13971,49 +13987,36 @@
           assetType:   asset.type     || 'image',
           dataType:    asset.dataType || 'base64',
           fileSize:    asset.fileSize,
-          postId:      _adobePostData?.id   || _adobePostData?.postId || null,
+          postId,
           contentType: _adobePostData?.content_type || null,
         }),
-      });
-      const result = await resp.json();
-      if (!result.success) throw new Error(result.error || 'Save failed');
+      }).then(r => r.json()).then(result => {
+        if (!result.success) console.warn('[AdobeExpress] backend save failed:', result.error);
+        else console.log('[AdobeExpress] backend save OK, CDN url:', result.url?.slice(0,80));
+      }).catch(e => console.warn('[AdobeExpress] backend save error:', e.message));
 
-      // Build a data URL from the asset Adobe Express returned.
-      // We use this for in-session preview because the CDN URL (result.url)
-      // may require auth headers that browser <img> tags cannot send.
-      const isVideo = (asset.type || '').includes('video') || (result.mimeType || '').includes('video');
-      const previewUrl = asset.data?.startsWith('data:')
-        ? asset.data
-        : `data:${result.mimeType || 'image/png'};base64,${asset.data}`;
-      console.log('[AdobePublish] server result:', JSON.stringify(result).slice(0,200));
-      console.log('[AdobePublish] previewUrl starts with:', previewUrl?.slice(0,60), '| length:', previewUrl?.length);
-      console.log('[AdobePublish] studioCurrentIndex:', typeof studioCurrentIndex !== 'undefined' ? studioCurrentIndex : 'UNDEFINED');
-      console.log('[AdobePublish] studioPostsList length:', studioPostsList?.length);
-
-      // Store on the post object so resolveImageUrl can pick it up
+      // Update in-memory post list so navigating Prev/Next still shows edited image
       if (typeof studioCurrentIndex !== 'undefined' && studioPostsList?.[studioCurrentIndex]) {
-        studioPostsList[studioCurrentIndex]._expressPreview = isVideo ? null : previewUrl;
+        if (!isVideo && previewUrl) studioPostsList[studioCurrentIndex]._expressPreview = previewUrl;
         studioPostsList[studioCurrentIndex].status = 'express_edited';
       }
 
-      // closeAdobeExpress also restores .studio-modal; re-render with updated post data
+      // Close Adobe Express overlay (restores .studio-modal display)
       window.closeAdobeExpress();
-      if (typeof renderStudioModalContent === 'function') renderStudioModalContent();
 
-      // Belt-and-suspenders: directly patch the preview img after render.
-      // If the modal was showing a placeholder (no <img> element), create one.
-      setTimeout(() => {
-        if (isVideo || !previewUrl) return;
-        const container = document.querySelector('.studio-modal__preview');
-        if (!container) return;
-        let previewEl = container.querySelector('img');
-        if (previewEl) {
-          previewEl.src = previewUrl;
-        } else {
-          // Placeholder was shown — replace with the edited image
-          container.innerHTML = `<img src="${previewUrl}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;">`;
+      // ── Directly update the DOM — do NOT call renderStudioModalContent()
+      // because that rebuilds the entire modal HTML and would overwrite our img.
+      if (!isVideo && previewUrl) {
+        const previewContainer = document.querySelector('.studio-modal__preview');
+        if (previewContainer) {
+          let img = previewContainer.querySelector('img');
+          if (img) {
+            img.src = previewUrl;
+          } else {
+            previewContainer.innerHTML = `<img src="${previewUrl}" style="max-width:100%;max-height:100%;object-fit:contain;display:block;" alt="Edited">`;
+          }
         }
-      }, 50);
+      }
 
       if (typeof showToast === 'function') showToast('Design saved! ✓');
     } catch (err) {
