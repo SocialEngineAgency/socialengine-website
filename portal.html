@@ -506,6 +506,81 @@
     .shopify-intel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
     @media (max-width: 800px) { .shopify-intel-grid { grid-template-columns: repeat(2, 1fr); } }
 
+    /* ━━━ Grow (Meta growth analytics) ━━━ */
+    .grow-header { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-5); }
+    .grow-header__left { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; }
+    .grow-header__right { margin-left: auto; display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+    .grow-field-label { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-faint); margin-bottom: 6px; }
+    .grow-business { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 0.9rem; font-weight: 600; color: var(--color-text); min-width: 150px; }
+    .grow-business select { background: transparent; border: none; color: var(--color-text); font-size: 0.9rem; font-weight: 600; font-family: var(--font-body); outline: none; cursor: pointer; width: 100%; }
+    .grow-business select option { background: var(--color-surface); color: var(--color-text); }
+    .grow-pills { display: inline-flex; padding: 3px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); gap: 2px; }
+    .grow-pill { padding: 7px 18px; background: transparent; border: none; border-radius: 7px; color: var(--color-text-muted); font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: var(--font-body); transition: all 0.15s; }
+    .grow-pill:hover { color: var(--color-text); }
+    .grow-pill.active { background: var(--color-accent); color: #fff; box-shadow: 0 2px 8px -2px rgba(124,58,237,0.5); }
+    .grow-meta-status { display: inline-flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--color-text-muted); font-weight: 500; }
+    .grow-meta-dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; box-shadow: 0 0 0 3px rgba(34,197,94,0.15); }
+    .grow-meta-dot.off { background: var(--color-text-faint); box-shadow: none; }
+    .grow-updated { font-size: 0.75rem; color: var(--color-text-faint); }
+    .grow-refresh-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: 0.78rem; font-weight: 600; cursor: pointer; font-family: var(--font-body); transition: all 0.15s; }
+    .grow-refresh-btn:hover { border-color: rgba(124,58,237,0.4); color: #fff; }
+    .grow-refresh-btn.spinning svg { animation: spin 0.8s linear infinite; }
+    .grow-kpi-delta { font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; }
+    .grow-kpi-delta.up { color: #34D399; }
+    .grow-kpi-delta.down { color: #F87171; }
+    .grow-kpi-delta.flat { color: var(--color-text-muted); }
+    .grow-kpi-card__icon { display: inline-flex; align-items: center; gap: 6px; }
+    .grow-main-row { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-5); margin-bottom: var(--space-5); }
+    @media (max-width: 900px) { .grow-main-row { grid-template-columns: 1fr; } }
+    .grow-legend { display: flex; align-items: center; gap: var(--space-4); }
+    .grow-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--color-text-muted); }
+    .grow-legend-line { width: 16px; height: 3px; border-radius: 2px; }
+    .grow-chart-svg { width: 100%; height: auto; display: block; }
+    .grow-split-block { margin-bottom: var(--space-5); }
+    .grow-split-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .grow-split-name { font-size: 0.85rem; font-weight: 600; color: var(--color-text); }
+    .grow-split-pct { font-size: 0.85rem; font-weight: 700; color: var(--color-text); }
+    .grow-split-sub { font-size: 0.72rem; color: var(--color-text-faint); margin-top: 5px; }
+    .grow-besttime-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+    .grow-besttime-day { font-size: 0.85rem; font-weight: 700; color: var(--color-text); }
+    .grow-besttime-time { font-size: 0.8rem; color: var(--color-text-muted); }
+    .grow-ghost-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 9px 14px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-size: 0.78rem; font-weight: 600; cursor: pointer; font-family: var(--font-body); transition: all 0.15s; }
+    .grow-ghost-btn:hover { border-color: rgba(124,58,237,0.4); }
+    .grow-lower-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); margin-bottom: var(--space-5); }
+    @media (max-width: 900px) { .grow-lower-row { grid-template-columns: 1fr; } }
+    .grow-post { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-divider); }
+    .grow-post:last-child { border-bottom: none; }
+    .grow-post__rank { font-family: var(--font-display); font-size: 1rem; font-weight: 700; color: var(--color-text-faint); width: 16px; flex-shrink: 0; }
+    .grow-post__body { flex: 1; min-width: 0; }
+    .grow-post__title { font-size: 0.85rem; font-weight: 600; color: var(--color-text); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .grow-post__meta { font-size: 0.72rem; color: var(--color-text-faint); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .grow-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.03em; }
+    .grow-badge.fb { background: rgba(24,119,242,0.15); color: #4C9DFF; }
+    .grow-badge.ig { background: rgba(168,85,247,0.15); color: #C084FC; }
+    .grow-eng-good { color: #34D399; font-weight: 600; }
+    .grow-eng-mid { color: #94A3B8; font-weight: 600; }
+    .grow-mini-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 7px; color: var(--color-text); font-size: 0.72rem; font-weight: 600; cursor: pointer; font-family: var(--font-body); flex-shrink: 0; transition: all 0.15s; }
+    .grow-mini-btn:hover { border-color: rgba(124,58,237,0.4); color: #fff; }
+    .grow-low { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+    .grow-low__body { flex: 1; min-width: 0; }
+    .grow-low__title { font-size: 0.8rem; font-weight: 600; color: var(--color-text); }
+    .grow-low__meta { font-size: 0.68rem; color: var(--color-text-faint); }
+    .grow-insight { background: linear-gradient(180deg, rgba(124,58,237,0.06), rgba(255,255,255,0.01)); border: 1px solid rgba(124,58,237,0.18); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 12px; }
+    .grow-insight__title { font-size: 0.85rem; font-weight: 700; color: var(--color-text); margin: 0 0 6px; }
+    .grow-insight__body { font-size: 0.78rem; color: var(--color-text-muted); line-height: 1.55; margin: 0; }
+    .grow-claude-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.25); border-radius: 20px; font-size: 0.62rem; font-weight: 700; color: #A855F7; }
+    .grow-cta-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 18px; background: var(--color-accent); color: #fff; border: none; border-radius: var(--radius-md); font-size: 0.85rem; font-weight: 700; cursor: pointer; font-family: var(--font-body); transition: all 0.15s; }
+    .grow-cta-btn:hover { background: var(--color-accent-hover); transform: translateY(-1px); }
+    .grow-cta-btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+    .grow-connect { border: 1px dashed rgba(124,58,237,0.35); border-radius: var(--radius-md); padding: 16px; background: rgba(124,58,237,0.03); }
+    .grow-connect__title { font-size: 0.85rem; font-weight: 700; color: var(--color-text); margin: 0 0 3px; }
+    .grow-connect__sub { font-size: 0.75rem; color: var(--color-text-muted); margin: 0 0 12px; }
+    .grow-empty { text-align: center; max-width: 460px; margin: 0 auto; padding: 40px 24px; }
+    .grow-empty__icon { width: 60px; height: 60px; margin: 0 auto 18px; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(124,58,237,0.14), rgba(255,255,255,0.03)); color: #A855F7; }
+    .grow-empty__title { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
+    .grow-empty__desc { font-size: 0.86rem; color: var(--color-text-muted); line-height: 1.6; margin: 0 0 22px; }
+    .grow-sample-tag { display: inline-block; padding: 2px 8px; background: rgba(255,200,50,0.1); border: 1px solid rgba(255,200,50,0.25); border-radius: 6px; font-size: 0.66rem; font-weight: 600; color: rgba(255,200,50,0.85); }
+
 
     /* ━━━ Quick Action Buttons (Dashboard) ━━━ */
     .dash-quick-action { display:flex;align-items:center;gap:10px;padding:14px 16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;color:rgba(255,255,255,0.6);font-size:0.78rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;text-align:left; }
@@ -6407,30 +6482,33 @@
       document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
     };
 
-    // ━━━ Analytics Page ━━━
+    // ━━━ Grow — Meta growth analytics ━━━
+    let growPeriod = '30d';
+    let growLastPayload = null;
+
     function renderAnalyticsPage(data) {
       const content = document.getElementById('dash-content');
       if (!content) return; // Guard against timing issue where nav fires before content root mounts
       data = data || {};
       data.client = data.client || {};
 
-      // Free tier: show full upgrade page instead of analytics
+      // Free tier: show full upgrade page instead of Grow
       if (!isPaid()) {
         content.innerHTML = `
           <div style="margin-bottom:var(--space-6);">
-            <h2 style="font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;color:var(--color-text);margin:0 0 var(--space-1);">Analytics</h2>
-            <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin:0;">Content pipeline metrics for ${data.client.business_name || 'your brand'} &mdash; <span style="color:rgba(255,200,50,0.7);font-weight:500;">engagement projections update once social accounts are connected</span></p>
+            <h2 style="font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;color:var(--color-text);margin:0 0 var(--space-1);">Grow</h2>
+            <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin:0;">Meta growth analytics for ${data.client.business_name || 'your brand'} &mdash; <span style="color:rgba(255,200,50,0.7);font-weight:500;">connect Instagram &amp; Facebook to unlock live performance</span></p>
           </div>
           ${upgradeFullpageHTML(
-            'bar-chart-3',
-            'Analytics Dashboard',
-            'See exactly what\'s working. Track engagement rates, follower growth, best-performing content types, and revenue attribution across all your platforms.',
+            'trending-up',
+            'Grow — Performance Analytics',
+            'See exactly what\'s working. Track reach, impressions, engagement rate, and follower growth across Instagram &amp; Facebook — plus AI insights powered by Claude.',
             [
-              'Real-time engagement tracking per post',
-              'Follower growth trends by platform',
+              'Reach &amp; impressions over time',
+              'Engagement rate &amp; follower growth',
               'Best time to post analysis',
-              'Revenue attribution from social',
-              'Content performance comparison',
+              'Top &amp; lowest performing posts',
+              'AI growth insights &amp; strategy reports',
             ]
           )}
         `;
@@ -6438,332 +6516,411 @@
         return;
       }
 
-      // Show loading state, then fetch real analytics
+      const bizName = data.client.business_name || 'Your brand';
       content.innerHTML = `
-        <div style="margin-bottom:var(--space-6);display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <h2 style="font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;color:var(--color-text);margin:0 0 var(--space-1);">Analytics</h2>
-            <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin:0;">Content pipeline metrics for ${data.client.business_name || 'your brand'} &mdash; <span style="color:rgba(255,200,50,0.7);font-weight:500;">engagement projections update once social accounts are connected</span></p>
+        <div class="grow-header">
+          <div class="grow-header__left">
+            <div>
+              <div class="grow-field-label">Client</div>
+              <div class="grow-business"><i data-lucide="building-2" style="width:15px;height:15px;color:var(--color-text-muted);"></i>${bizName}</div>
+            </div>
+            <div>
+              <div class="grow-field-label">Period</div>
+              <div class="grow-pills" id="grow-pills">
+                <button class="grow-pill${growPeriod==='7d'?' active':''}" data-period="7d">7d</button>
+                <button class="grow-pill${growPeriod==='30d'?' active':''}" data-period="30d">30d</button>
+                <button class="grow-pill${growPeriod==='90d'?' active':''}" data-period="90d">90d</button>
+              </div>
+            </div>
+            <div id="grow-meta-status" class="grow-meta-status" style="align-self:flex-end;padding-bottom:9px;"><span class="grow-meta-dot off"></span> Checking…</div>
           </div>
-          <div style="display:flex;gap:8px;">
-            <button id="analytics-download-pdf" style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:var(--radius-md);color:#7C3AED;font-size:0.8rem;cursor:pointer;font-family:var(--font-body);font-weight:600;"><i data-lucide="download" style="width:14px;height:14px;"></i> Download Report</button>
-            <button id="analytics-refresh" style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:transparent;border:1px solid var(--color-border);border-radius:var(--radius-md);color:var(--color-text-muted);font-size:0.8rem;cursor:pointer;font-family:var(--font-body);"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh</button>
+          <div class="grow-header__right">
+            <span class="grow-updated" id="grow-updated"></span>
+            <button class="grow-refresh-btn" id="grow-refresh"><i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh</button>
           </div>
         </div>
-        <div id="analytics-body"><div class="dash-loading"><div class="dash-loading__spinner"></div></div></div>
+        <div id="grow-body"><div class="dash-loading"><div class="dash-loading__spinner"></div></div></div>
       `;
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
 
-      document.getElementById('analytics-refresh')?.addEventListener('click', () => loadAnalytics(data));
-      loadAnalytics(data);
+      document.getElementById('grow-pills')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.grow-pill'); if (!btn) return;
+        const p = btn.dataset.period; if (p === growPeriod) return;
+        growPeriod = p;
+        document.querySelectorAll('#grow-pills .grow-pill').forEach(b => b.classList.toggle('active', b.dataset.period === p));
+        loadGrow(data);
+      });
+      document.getElementById('grow-refresh')?.addEventListener('click', () => {
+        const btn = document.getElementById('grow-refresh'); btn?.classList.add('spinning');
+        loadGrow(data, { refresh: true });
+      });
+      loadGrow(data);
     }
 
-    async function loadAnalytics(data) {
-      const body = document.getElementById('analytics-body');
-      if (!body) return;
-      body.innerHTML = '<div class="dash-loading"><div class="dash-loading__spinner"></div></div>';
+    function growNum(n) {
+      if (n == null || isNaN(n)) return '—';
+      return Number(n).toLocaleString();
+    }
 
-      let analytics = null;
+    function growDeltaHTML(delta, unit) {
+      if (delta == null) return `<div class="grow-kpi-delta flat">— vs prior period</div>`;
+      const up = delta >= 0;
+      const cls = delta === 0 ? 'flat' : up ? 'up' : 'down';
+      const arrow = delta === 0 ? '→' : up ? '↗' : '↘';
+      const val = unit === 'pp' ? `${up?'+':''}${delta}pp` : `${up?'+':''}${delta}%`;
+      return `<div class="grow-kpi-delta ${cls}">${arrow} ${val} vs prior period</div>`;
+    }
+
+    // SVG line chart — Facebook (blue) + Instagram (purple)
+    function growLineChart(labels, fb, ig) {
+      const W = 720, H = 250, padL = 44, padR = 16, padT = 16, padB = 28;
+      const series = [];
+      const hasFb = fb && fb.some(v => v > 0);
+      const hasIg = ig && ig.some(v => v > 0);
+      if (hasFb) series.push({ data: fb, color: '#3B9EFF' });
+      if (hasIg) series.push({ data: ig, color: '#A855F7' });
+      const allVals = [].concat(...series.map(s => s.data));
+      if (!allVals.length) return '<p style="font-size:0.8rem;color:var(--color-text-muted);text-align:center;padding:40px 0;">No reach data for this period yet.</p>';
+      let maxV = Math.max(...allVals, 1);
+      let minV = Math.min(...allVals, 0);
+      if (minV === maxV) { maxV = minV + 1; }
+      const n = labels.length;
+      const x = (i) => padL + (n <= 1 ? 0 : (i / (n - 1)) * (W - padL - padR));
+      const y = (v) => padT + (1 - (v - minV) / (maxV - minV)) * (H - padT - padB);
+
+      const smooth = (pts) => {
+        if (pts.length < 2) return pts.length ? `M ${pts[0].x} ${pts[0].y}` : '';
+        let d = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p0 = pts[i === 0 ? 0 : i - 1], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+          const cp1x = p1.x + (p2.x - p0.x) / 6, cp1y = p1.y + (p2.y - p0.y) / 6;
+          const cp2x = p2.x - (p3.x - p1.x) / 6, cp2y = p2.y - (p3.y - p1.y) / 6;
+          d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+        }
+        return d;
+      };
+
+      // Y gridlines / labels
+      let grid = '';
+      for (let g = 0; g <= 3; g++) {
+        const val = minV + (maxV - minV) * (g / 3);
+        const yy = y(val);
+        grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+        grid += `<text x="${padL - 8}" y="${(yy + 3).toFixed(1)}" text-anchor="end" fill="var(--color-text-faint)" font-size="10" font-family="sans-serif">${Math.round(val).toLocaleString()}</text>`;
+      }
+      // X labels (~4)
+      let xlabels = '';
+      const step = Math.max(1, Math.floor(n / 4));
+      for (let i = 0; i < n; i += step) {
+        xlabels += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" fill="var(--color-text-faint)" font-size="10" font-family="sans-serif">${labels[i]}</text>`;
+      }
+      const lines = series.map(s => {
+        const pts = s.data.map((v, i) => ({ x: x(i), y: y(v) }));
+        const path = smooth(pts);
+        const last = pts[pts.length - 1];
+        return `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${s.color}"/>`;
+      }).join('');
+
+      return `<svg class="grow-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${grid}${xlabels}${lines}</svg>`;
+    }
+
+    async function loadGrow(data, opts) {
+      opts = opts || {};
+      const body = document.getElementById('grow-body');
+      if (!body) return;
+      if (!opts.refresh) body.innerHTML = '<div class="dash-loading"><div class="dash-loading__spinner"></div></div>';
+
+      let payload = null;
       try {
-        const res = await fetch(`${API}/api/client-analytics`, {
+        const res = await fetch(`${API}/api/client-analytics/grow?period=${growPeriod}${opts.refresh ? '&refresh=1' : ''}`, {
           headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
         });
-        if (res.ok) analytics = await res.json();
-      } catch(e) { /* fall through to local data */ }
+        if (res.ok) payload = await res.json();
+      } catch (e) { /* network */ }
 
-      const posts = data.content || [];
-      const c = data.client || {};
-      const profile = data.profile || {};
-      const bv = data.brand_voice || {};
+      document.getElementById('grow-refresh')?.classList.remove('spinning');
 
-      // Use analytics API data if available, fall back to local content data
-      const totalContent = analytics?.total_content ?? posts.length;
-      const postsPublished = analytics?.posts_published ?? posts.filter(p => p.status === 'Published' || p.status === 'Scheduled').length;
-      const contentThisWeek = analytics?.content_this_week ?? (() => {
-        const weekAgo = Date.now() - 7*24*60*60*1000;
-        return posts.filter(p => p.scheduled_date && new Date(p.scheduled_date).getTime() > weekAgo).length;
-      })();
-      const decidedPosts = posts.filter(p => ['Approved','Scheduled','Published','Rejected'].includes(p.status));
-      const approvedPosts = posts.filter(p => ['Approved','Scheduled','Published'].includes(p.status));
-      const approvalRatePct = analytics?.approval_rate ?? (() => {
-        if (!decidedPosts.length) return 0;
-        return Math.round(approvedPosts.length / decidedPosts.length * 100);
-      })();
-      const approvalDisplay = decidedPosts.length < 5 ? `${approvedPosts.length}/${decidedPosts.length}` : `${approvalRatePct}%`;
-
-      const platformCounts = analytics?.platform_counts ?? (() => {
-        const pc = {};
-        posts.forEach(p => { const pl = (p.platform || 'other').toLowerCase(); pc[pl] = (pc[pl]||0)+1; });
-        return pc;
-      })();
-
-      const statusCounts = analytics?.status_counts ?? (() => {
-        const sc = {};
-        posts.forEach(p => { const st = p.status || 'Draft'; sc[st] = (sc[st]||0)+1; });
-        return sc;
-      })();
-
-      // Timeline: posts per week for last 8 weeks
-      const weeklyTimeline = analytics?.weekly_timeline ?? (() => {
-        const weeks = [];
-        for (let i=7; i>=0; i--) {
-          const start = new Date(); start.setDate(start.getDate() - i*7 - 6); start.setHours(0,0,0,0);
-          const end = new Date(); end.setDate(end.getDate() - i*7); end.setHours(23,59,59,999);
-          const label = start.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-          const count = posts.filter(p => {
-            if (!p.scheduled_date) return false;
-            const d = new Date(p.scheduled_date + 'T12:00:00');
-            return d >= start && d <= end;
-          }).length;
-          weeks.push({ label, count });
-        }
-        return weeks;
-      })();
-      const maxWeekly = Math.max(...weeklyTimeline.map(w => w.count), 1);
-
-      const approvalColor = approvalRatePct >= 80 ? 'analytics-kpi-card__value--green' : approvalRatePct >= 50 ? 'analytics-kpi-card__value--yellow' : 'analytics-kpi-card__value--red';
-
-      const platformColors = { instagram: '#E1306C', tiktok: '#69C9D0', facebook: '#1877F2', pinterest: '#E60023', linkedin: '#0A66C2', twitter: '#1DA1F2', x: '#000' };
-      const statusColors = { 'Draft': '#6B7280', 'Ready for Review': '#F59E0B', 'Approved': '#7C3AED', 'Published': '#8B5CF6', 'Scheduled': '#3B82F6', 'Rejected': '#EF4444', 'Regenerating': '#EC4899' };
-      const totalPlatform = Object.values(platformCounts).reduce((a,b)=>a+b,0) || 1;
-      const totalStatus = Object.values(statusCounts).reduce((a,b)=>a+b,0) || 1;
-
-      // Shopify & Social data from analytics
-      const shopifyData = analytics?.shopify;
-      const socialData = analytics?.social_profiles || {};
-      const igData = socialData.instagram;
-      const ttData = socialData.tiktok;
-      const hasShopify = c.shopify_domain || shopifyData;
-      const hasSocial = igData || ttData;
-
-      // Build donut SVG for status breakdown
-      function buildDonut(segments) {
-        const r = 40, cx = 50, cy = 50, circ = 2 * Math.PI * r;
-        let offset = 0;
-        const total = segments.reduce((a,s)=>a+s.count,0)||1;
-        const paths = segments.map(s => {
-          const pct = s.count/total;
-          const dash = circ * pct;
-          const gap = circ - dash;
-          const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="18" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" style="transform-origin:${cx}px ${cy}px;transform:rotate(-90deg);"/>`;
-          offset += circ * pct;
-          return el;
-        }).join('');
-        return `<svg viewBox="0 0 100 100" width="100" height="100"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="18"/>${paths}<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" fill="var(--color-text)" font-size="14" font-weight="700" font-family="sans-serif">${totalStatus}</text></svg>`;
+      if (!payload) {
+        body.innerHTML = `<div class="analytics-card"><div class="analytics-card__body"><p style="color:var(--color-text-muted);font-size:0.85rem;text-align:center;padding:30px 0;">Couldn't load growth analytics. <button class="grow-mini-btn" onclick="loadGrow(window.__clientData,{refresh:true})" style="margin-left:8px;">Retry</button></p></div></div>`;
+        return;
       }
 
-      const statusSegments = Object.entries(statusCounts).map(([st, cnt]) => ({ label: st, count: cnt, color: statusColors[st] || '#6B7280' }));
+      growLastPayload = payload;
 
-      body.innerHTML = `
-        <!-- KPI Cards -->
+      // Meta status pill + updated time
+      const statusEl = document.getElementById('grow-meta-status');
+      if (statusEl) {
+        statusEl.innerHTML = payload.meta_connected
+          ? `<span class="grow-meta-dot"></span> Meta connected`
+          : `<span class="grow-meta-dot off"></span> Meta not connected`;
+      }
+      const updEl = document.getElementById('grow-updated');
+      if (updEl && payload.last_updated) {
+        const t = new Date(payload.last_updated);
+        updEl.textContent = `Updated ${t.toLocaleDateString('en-US',{month:'short',day:'numeric'})} ${t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
+      }
+
+      body.innerHTML = payload.meta_connected ? growRenderConnected(payload, data) : growRenderDisconnected(payload, data);
+      setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+    }
+
+    function growRenderConnected(p, data) {
+      const t = p.totals || {};
+      const eng = t.engagement_rate || {};
+      const split = p.platform_split || {};
+      const ig = split.instagram || {}; const fb = split.facebook || {};
+      const engBadge = (r) => r == null ? '' : `<span class="${r >= 4 ? 'grow-eng-good' : 'grow-eng-mid'}">${r}% eng</span>`;
+
+      const topHTML = (p.top_posts || []).length ? p.top_posts.map((post, i) => `
+        <div class="grow-post">
+          <div class="grow-post__rank">${i + 1}</div>
+          <div class="grow-post__body">
+            <div class="grow-post__title">${_growEsc(post.title)}</div>
+            <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)} ${post.eng_rate != null ? '· ' : ''}${growNum(post.likes)} likes</div>
+          </div>
+          <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
+        </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
+
+      const lowHTML = (p.low_posts || []).length ? p.low_posts.map((post, i) => `
+        <div class="grow-low">
+          <div class="grow-low__body">
+            <div class="grow-low__title">${_growEsc(post.title)}</div>
+            <div class="grow-low__meta">${post.date} · ${post.platform.toUpperCase()} · ${post.media_type}${post.eng_rate != null ? ' · ' + post.eng_rate + '% eng' : ''}</div>
+          </div>
+          <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'why')">Why? <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
+        </div>`).join('') : '';
+
+      const bestTimes = (p.best_times || []).map(bt => `
+        <div class="grow-besttime-row"><span class="grow-besttime-day">${bt.day}</span><span class="grow-besttime-time">${bt.time}</span></div>`).join('');
+
+      const splitBlock = (name, obj, color, connected) => `
+        <div class="grow-split-block">
+          <div class="grow-split-head"><span class="grow-split-name">${name}</span><span class="grow-split-pct">${connected ? (obj.reach_pct ?? 0) + '%' : 'Not connected'}</span></div>
+          <div class="bar-row__track"><div class="bar-row__fill" style="width:${connected ? (obj.reach_pct ?? 0) : 0}%;background:${color};"></div></div>
+          ${connected ? `<div class="grow-split-sub">${growNum(obj.reach)} reach</div>` : `<div class="grow-split-sub">Connect to compare platforms</div>`}
+        </div>`;
+
+      return `
         <div class="analytics-kpi-grid">
           <div class="analytics-kpi-card">
-            <div class="analytics-kpi-card__label">Total Content Created</div>
-            <div class="analytics-kpi-card__value">${totalContent}</div>
-            <div class="analytics-kpi-card__sub">Pieces across all platforms</div>
+            <div class="analytics-kpi-card__label grow-kpi-card__icon"><i data-lucide="users" style="width:13px;height:13px;"></i> Total reach</div>
+            <div class="analytics-kpi-card__value">${growNum(t.reach?.value)}</div>
+            ${growDeltaHTML(t.reach?.delta_pct)}
           </div>
           <div class="analytics-kpi-card">
-            <div class="analytics-kpi-card__label">Approval Rate</div>
-            <div class="analytics-kpi-card__value ${approvalColor}">${approvalDisplay}</div>
-            <div class="analytics-kpi-card__sub">${decidedPosts.length < 5 ? `${approvedPosts.length} approved of ${decidedPosts.length} reviewed` : approvalRatePct >= 80 ? 'Excellent — keep it up' : approvalRatePct >= 50 ? 'Good — room to grow' : 'Needs attention'}</div>
+            <div class="analytics-kpi-card__label grow-kpi-card__icon"><i data-lucide="eye" style="width:13px;height:13px;"></i> Impressions</div>
+            <div class="analytics-kpi-card__value">${growNum(t.impressions?.value)}</div>
+            ${growDeltaHTML(t.impressions?.delta_pct)}
           </div>
           <div class="analytics-kpi-card">
-            <div class="analytics-kpi-card__label">Posts Published</div>
-            <div class="analytics-kpi-card__value">${postsPublished}</div>
-            <div class="analytics-kpi-card__sub">Sent to your audience</div>
+            <div class="analytics-kpi-card__label grow-kpi-card__icon"><i data-lucide="heart" style="width:13px;height:13px;"></i> Engagement rate</div>
+            <div class="analytics-kpi-card__value">${eng.value != null ? eng.value + '%' : '—'}</div>
+            ${growDeltaHTML(eng.delta_pp, 'pp')}
           </div>
           <div class="analytics-kpi-card">
-            <div class="analytics-kpi-card__label">Content This Week</div>
-            <div class="analytics-kpi-card__value">${contentThisWeek}</div>
-            <div class="analytics-kpi-card__sub">Scheduled last 7 days</div>
+            <div class="analytics-kpi-card__label grow-kpi-card__icon"><i data-lucide="user-plus" style="width:13px;height:13px;"></i> New followers</div>
+            <div class="analytics-kpi-card__value">${growNum(t.new_followers?.value)}</div>
+            ${growDeltaHTML(t.new_followers?.delta_pct)}
           </div>
         </div>
 
-        <!-- Charts Row -->
-        <div class="analytics-charts-row">
-          <!-- Platform breakdown -->
+        <div class="grow-main-row">
           <div class="analytics-card">
-            <div class="analytics-card__header"><h3 class="analytics-card__title">Content by Platform</h3></div>
+            <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;">
+              <h3 class="analytics-card__title">Reach over time</h3>
+              <div class="grow-legend">
+                <span class="grow-legend-item"><span class="grow-legend-line" style="background:#3B9EFF;"></span> Facebook</span>
+                <span class="grow-legend-item"><span class="grow-legend-line" style="background:#A855F7;"></span> Instagram</span>
+              </div>
+            </div>
             <div class="analytics-card__body">
-              ${Object.keys(platformCounts).length === 0 ? '<p style="font-size:var(--text-sm);color:var(--color-text-muted);">No content yet</p>' :
-                Object.entries(platformCounts).sort((a,b)=>b[1]-a[1]).map(([pl, cnt]) => {
-                  const pct = Math.round(cnt/totalPlatform*100);
-                  const color = platformColors[pl] || 'var(--color-accent)';
-                  return `<div class="bar-row">
-                    <div class="bar-row__meta">
-                      <span style="color:var(--color-text);font-weight:500;text-transform:capitalize;">${pl}</span>
-                      <span style="color:var(--color-text-muted);">${cnt} (${pct}%)</span>
-                    </div>
-                    <div class="bar-row__track"><div class="bar-row__fill" style="width:${pct}%;background:${color};"></div></div>
-                  </div>`;
-                }).join('')
-              }
+              ${p.insights_available ? growLineChart(p.series?.labels || [], p.series?.facebook || [], p.series?.instagram || []) : '<p style="font-size:0.8rem;color:var(--color-text-muted);text-align:center;padding:44px 0;">Reach time-series isn\'t available from Meta for this account yet. Follower &amp; engagement metrics below are live.</p>'}
             </div>
           </div>
-
-          <!-- Status donut -->
           <div class="analytics-card">
-            <div class="analytics-card__header"><h3 class="analytics-card__title">Content by Status</h3></div>
+            <div class="analytics-card__header"><h3 class="analytics-card__title">Platform split</h3></div>
             <div class="analytics-card__body">
-              <div class="donut-wrap">
-                ${buildDonut(statusSegments)}
-                <div class="donut-legend">
-                  ${statusSegments.map(s => `<div class="donut-legend-item"><div class="donut-legend-dot" style="background:${s.color};"></div><span>${s.label}</span><span style="margin-left:auto;font-weight:600;color:var(--color-text);">${s.count}</span></div>`).join('')}
-                </div>
-              </div>
+              ${splitBlock('Instagram', ig, '#A855F7', true)}
+              ${splitBlock('Facebook', fb, '#3B9EFF', !!split.fb_connected)}
+              <div style="border-top:1px solid var(--color-divider);margin:16px 0 14px;"></div>
+              <div class="grow-field-label" style="margin-bottom:10px;">Best time to post ${p.best_times_estimated ? '<span class="grow-sample-tag" style="margin-left:6px;">estimated</span>' : ''}</div>
+              ${bestTimes}
+              <button class="grow-ghost-btn" style="margin-top:12px;" onclick="showToast('Full posting heatmap is coming soon — best times above are derived from your post history.')">Full heatmap <i data-lucide="arrow-up-right" style="width:13px;height:13px;"></i></button>
             </div>
           </div>
         </div>
 
-        <!-- Content Timeline -->
-        <div class="analytics-card" style="margin-bottom:var(--space-5);">
-          <div class="analytics-card__header"><h3 class="analytics-card__title">Content Timeline — Last 8 Weeks</h3></div>
-          <div class="analytics-card__body">
-            <div class="timeline-bars">
-              ${weeklyTimeline.map(w => {
-                const heightPct = maxWeekly > 0 ? Math.max(4, Math.round(w.count/maxWeekly*100)) : 4;
-                return `<div class="timeline-bar-wrap" title="${w.label}: ${w.count} posts">
-                  <div class="timeline-bar" style="height:${heightPct}%;">${w.count > 0 ? `<span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:0.65rem;font-weight:700;color:#7C3AED;">${w.count}</span>` : ''}</div>
-                  <div class="timeline-label">${w.label}</div>
-                </div>`;
-              }).join('')}
+        <div class="grow-lower-row">
+          <div class="analytics-card">
+            <div class="analytics-card__header"><h3 class="analytics-card__title">Top posts — by engagement</h3></div>
+            <div class="analytics-card__body">
+              ${topHTML}
+              ${lowHTML ? `<div style="border-top:1px solid var(--color-divider);margin:14px 0 10px;"></div><div class="grow-field-label" style="margin-bottom:6px;">Lowest performers</div>${lowHTML}` : ''}
             </div>
-            ${weeklyTimeline.filter(w => w.count > 0).length <= 2 ? `<div style="margin-top:12px;padding:10px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;font-size:0.72rem;color:rgba(255,255,255,0.35);line-height:1.5;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Your content calendar is just getting started. This chart will fill in as more content is scheduled and published over the coming weeks.</div>` : ''}
+          </div>
+          <div class="analytics-card">
+            <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;">
+              <h3 class="analytics-card__title" style="display:flex;align-items:center;gap:8px;"><i data-lucide="sparkles" style="width:16px;height:16px;color:#A855F7;"></i> AI insights</h3>
+              <span class="grow-claude-badge"><i data-lucide="sparkles" style="width:11px;height:11px;"></i> Powered by Claude</span>
+            </div>
+            <div class="analytics-card__body">
+              <div id="grow-insights-area">
+                <p style="font-size:0.82rem;color:var(--color-text-muted);line-height:1.5;margin:0 0 14px;">Get 3 AI-generated insights about what's driving your growth this period.</p>
+                <button class="grow-cta-btn" id="grow-gen-insights" onclick="growGenerateInsights()"><i data-lucide="sparkles" style="width:15px;height:15px;"></i> Generate AI insights</button>
+              </div>
+              <div style="margin-top:14px;">
+                <button class="grow-ghost-btn" onclick="growGenerateStrategy()"><i data-lucide="file-text" style="width:14px;height:14px;"></i> Generate full strategy report</button>
+              </div>
+              ${!split.fb_connected ? `
+              <div class="grow-connect" style="margin-top:14px;">
+                <div class="grow-connect__title">Connect your Facebook Page</div>
+                <div class="grow-connect__sub">Link Facebook to compare reach across platforms and pull page insights.</div>
+                <button class="grow-cta-btn" onclick="connectFacebookOAuth()"><i data-lucide="plug" style="width:15px;height:15px;"></i> Connect Facebook</button>
+              </div>` : ''}
+            </div>
           </div>
         </div>
 
-        <!-- Shopify Intelligence (only if connected) -->
-        ${hasShopify ? `
-        <div class="analytics-card" style="margin-bottom:var(--space-5);">
-          <div class="analytics-card__header" style="display:flex;align-items:center;gap:10px;">
-            <i data-lucide="shopping-bag" style="width:18px;height:18px;color:var(--color-accent);"></i>
-            <h3 class="analytics-card__title">Shopify Intelligence</h3>
-          </div>
-          <div class="analytics-card__body">
-            <div class="shopify-intel-grid">
-              <div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">Products in Catalog</div>
-                <div class="analytics-kpi-card__value">${shopifyData?.product_count ?? '—'}</div>
-                <div class="analytics-kpi-card__sub">${c.shopify_domain || 'Your store'}</div>
-              </div>
-              <div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">Low Stock Alerts</div>
-                <div class="analytics-kpi-card__value ${(shopifyData?.low_stock_count||0) > 0 ? 'analytics-kpi-card__value--yellow' : ''}">${shopifyData?.low_stock_count ?? '—'}</div>
-                <div class="analytics-kpi-card__sub">Items running low</div>
-              </div>
-              ${shopifyData?.revenue_30d != null ? `<div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">30-Day Revenue</div>
-                <div class="analytics-kpi-card__value analytics-kpi-card__value--green">$${Number(shopifyData.revenue_30d).toLocaleString()}</div>
-                <div class="analytics-kpi-card__sub">Last 30 days</div>
-              </div>` : ''}
-              ${shopifyData?.recent_orders != null ? `<div class="analytics-kpi-card">
-                <div class="analytics-kpi-card__label">Recent Orders</div>
-                <div class="analytics-kpi-card__value">${shopifyData.recent_orders}</div>
-                <div class="analytics-kpi-card__sub">Last 30 days</div>
-              </div>` : ''}
-            </div>
-          </div>
-        </div>` : ''}
-
-        <!-- Social Profiles (only if data available) -->
-        ${hasSocial ? `
-        <div class="analytics-card" style="margin-bottom:var(--space-5);">
-          <div class="analytics-card__header" style="display:flex;align-items:center;gap:10px;">
-            <i data-lucide="users" style="width:18px;height:18px;color:var(--color-accent);"></i>
-            <h3 class="analytics-card__title">Social Profiles</h3>
-          </div>
-          <div class="analytics-card__body">
-            <div class="social-profile-grid">
-              ${igData ? `<div class="social-profile-card">
-                <div class="social-profile-card__platform">
-                  <div class="social-profile-card__icon" style="background:linear-gradient(135deg,#833AB4,#E1306C,#F77737);">📸</div>
-                  <div>
-                    <div class="social-profile-card__name">Instagram</div>
-                    <div class="social-profile-card__handle">@${igData.username || c.instagram_handle || '—'}</div>
-                  </div>
-                </div>
-                <div class="social-stat-row">
-                  <div class="social-stat"><div class="social-stat__num">${igData.followers_count != null ? Number(igData.followers_count).toLocaleString() : '—'}</div><div class="social-stat__label">Followers</div></div>
-                  <div class="social-stat"><div class="social-stat__num">${igData.media_count != null ? Number(igData.media_count).toLocaleString() : '—'}</div><div class="social-stat__label">Posts</div></div>
-                </div>
-                ${igData.biography ? `<p style="font-size:0.78rem;color:var(--color-text-muted);margin:var(--space-3) 0 0;line-height:1.5;">${igData.biography.substring(0,120)}${igData.biography.length>120?'…':''}</p>` : ''}
-              </div>` : ''}
-              ${ttData ? `<div class="social-profile-card">
-                <div class="social-profile-card__platform">
-                  <div class="social-profile-card__icon" style="background:#000;border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="#69C9D0"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1 0-5.78c.27 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15a6.34 6.34 0 0 0 10.86 4.34c1.17-1.16 1.82-2.75 1.82-4.4V8.6a8.16 8.16 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.03z"/></svg></div>
-                  <div>
-                    <div class="social-profile-card__name">TikTok</div>
-                    <div class="social-profile-card__handle">@${ttData.username || c.tiktok_handle || '—'}</div>
-                  </div>
-                </div>
-                <div class="social-stat-row">
-                  <div class="social-stat"><div class="social-stat__num">${ttData.follower_count != null ? Number(ttData.follower_count).toLocaleString() : '—'}</div><div class="social-stat__label">Followers</div></div>
-                  <div class="social-stat"><div class="social-stat__num">${ttData.video_count != null ? Number(ttData.video_count).toLocaleString() : '—'}</div><div class="social-stat__label">Videos</div></div>
-                </div>
-                ${ttData.bio_description ? `<p style="font-size:0.78rem;color:var(--color-text-muted);margin:var(--space-3) 0 0;line-height:1.5;">${ttData.bio_description.substring(0,120)}${ttData.bio_description.length>120?'…':''}</p>` : ''}
-              </div>` : ''}
-            </div>
-          </div>
-        </div>` : ''}
-
-        <!-- Content Velocity & Insights -->
-        <div class="analytics-card" style="margin-bottom:var(--space-5);">
-          <div class="analytics-card__header" style="display:flex;align-items:center;gap:10px;">
-            <i data-lucide="zap" style="width:18px;height:18px;color:var(--color-accent);"></i>
-            <h3 class="analytics-card__title">Content Velocity & Insights</h3>
-          </div>
-          <div class="analytics-card__body">
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;">
-              <div style="padding:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
-                <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.5);margin-bottom:6px;">Posting Cadence</div>
-                <div style="font-size:1.3rem;font-weight:700;color:#fff;">${totalContent > 0 ? (totalContent / Math.max(1, Object.keys(platformCounts).length)).toFixed(1) : '0'}</div>
-                <div style="font-size:0.68rem;color:rgba(255,255,255,0.35);margin-top:2px;">avg posts/platform</div>
-              </div>
-              <div style="padding:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
-                <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.5);margin-bottom:6px;">Approval Speed</div>
-                <div style="font-size:1.3rem;font-weight:700;color:#fff;">${approvalRatePct >= 80 ? '< 24h' : approvalRatePct >= 50 ? '1-2 days' : '—'}</div>
-                <div style="font-size:0.68rem;color:rgba(255,255,255,0.35);margin-top:2px;">avg turnaround</div>
-              </div>
-              <div style="padding:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
-                <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.5);margin-bottom:6px;">Content Mix</div>
-                <div style="font-size:1.3rem;font-weight:700;color:#fff;">${posts.filter(p => (p.content_type||'').toLowerCase().includes('reel') || (p.content_type||'').toLowerCase().includes('video')).length}/${posts.filter(p => !(p.content_type||'').toLowerCase().includes('reel') && !(p.content_type||'').toLowerCase().includes('video')).length}</div>
-                <div style="font-size:0.68rem;color:rgba(255,255,255,0.35);margin-top:2px;">video / static ratio</div>
-              </div>
-            </div>
-
-            ${false ? '' : `
-            <div style="padding:16px 20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                <span style="font-size:0.75rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.06em;">Live Performance</span>
-              </div>
-              <p style="font-size:0.8rem;color:rgba(255,255,255,0.35);margin:0;line-height:1.5;">Connect your social accounts in Settings to see real engagement data — reach, impressions, follower growth, and engagement rate tracked automatically.</p>
-            </div>`}
-          </div>
-        </div>
-
-        <!-- Brand Voice Summary -->
-        ${(profile || bv) ? `
-        <div class="analytics-card">
-          <div class="analytics-card__header" style="display:flex;align-items:center;gap:10px;">
-            <i data-lucide="fingerprint" style="width:18px;height:18px;color:var(--color-accent);"></i>
-            <h3 class="analytics-card__title">Brand Voice Summary</h3>
-          </div>
-          <div class="analytics-card__body">
-            ${profile?.archetype ? `<div class="archetype-badge">\ud83c\udfad ${profile.archetype}</div>` : ''}
-            ${bv?.tone_adjectives ? `<div style="margin-bottom:var(--space-4);">
-              ${bv.tone_adjectives.split(',').map(t => `<span class="bv-tag">${t.trim()}</span>`).join('')}
-            </div>` : ''}
-            ${profile?.voice_summary ? `<p style="font-size:var(--text-sm);color:var(--color-text-muted);line-height:1.7;margin:0 0 var(--space-3);">${profile.voice_summary}</p>` : ''}
-            ${bv?.last_updated ? `<div style="font-size:0.75rem;color:var(--color-text-muted);">Last updated: ${new Date(bv.last_updated).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>` : ''}
-          </div>
-        </div>` : ''}
+        ${growContentPipelineSecondary(data)}
       `;
-      setTimeout(() => { 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        // PDF Download handler
-        document.getElementById('analytics-download-pdf')?.addEventListener('click', () => generateAnalyticsPDF(data, { totalContent, postsPublished, contentThisWeek, approvalRatePct, platformCounts, statusCounts }));
-      }, 50);
+    }
+
+    function growRenderDisconnected(p, data) {
+      return `
+        <div class="analytics-card" style="margin-bottom:var(--space-5);">
+          <div class="analytics-card__body">
+            <div class="grow-empty">
+              <div class="grow-empty__icon"><i data-lucide="trending-up" style="width:28px;height:28px;"></i></div>
+              <div class="grow-empty__title">Connect Meta to see your growth</div>
+              <div class="grow-empty__desc">Link your Instagram &amp; Facebook accounts to pull live reach, impressions, engagement rate, follower growth, and AI-powered insights — all in one place.</div>
+              <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button class="grow-cta-btn" style="width:auto;" onclick="connectInstagramOAuth()"><i data-lucide="instagram" style="width:16px;height:16px;"></i> Connect Meta account</button>
+                <button class="grow-ghost-btn" style="width:auto;" onclick="connectFacebookOAuth()"><i data-lucide="facebook" style="width:15px;height:15px;"></i> Connect Facebook</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        ${growContentPipelineSecondary(data)}
+      `;
+    }
+
+    // Compact content-pipeline summary (works without Meta — uses local content data)
+    function growContentPipelineSecondary(data) {
+      const posts = (data && data.content) || [];
+      if (!posts.length) return '';
+      const total = posts.length;
+      const published = posts.filter(p => p.status === 'Published' || p.status === 'Scheduled').length;
+      const decided = posts.filter(p => ['Approved','Scheduled','Published','Rejected'].includes(p.status));
+      const approved = posts.filter(p => ['Approved','Scheduled','Published'].includes(p.status));
+      const approvalPct = decided.length ? Math.round(approved.length / decided.length * 100) : 0;
+      const approvalDisp = decided.length < 5 ? `${approved.length}/${decided.length}` : `${approvalPct}%`;
+      const pc = {}; posts.forEach(p => { const pl = (p.platform || 'other').toLowerCase(); pc[pl] = (pc[pl]||0)+1; });
+      const totalPc = Object.values(pc).reduce((a,b)=>a+b,0) || 1;
+      const colors = { instagram:'#E1306C', tiktok:'#69C9D0', facebook:'#1877F2', pinterest:'#E60023', linkedin:'#0A66C2' };
+      const bars = Object.entries(pc).sort((a,b)=>b[1]-a[1]).map(([pl,cnt]) => {
+        const pct = Math.round(cnt/totalPc*100);
+        return `<div class="bar-row"><div class="bar-row__meta"><span style="color:var(--color-text);font-weight:500;text-transform:capitalize;">${pl}</span><span style="color:var(--color-text-muted);">${cnt} (${pct}%)</span></div><div class="bar-row__track"><div class="bar-row__fill" style="width:${pct}%;background:${colors[pl]||'var(--color-accent)'};"></div></div></div>`;
+      }).join('');
+      return `
+        <div class="analytics-card">
+          <div class="analytics-card__header" style="display:flex;align-items:center;gap:10px;"><i data-lucide="layout-list" style="width:16px;height:16px;color:var(--color-text-muted);"></i><h3 class="analytics-card__title">Content pipeline</h3></div>
+          <div class="analytics-card__body">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px;">
+              <div><div class="grow-field-label">Total created</div><div style="font-size:1.4rem;font-weight:700;color:var(--color-text);">${total}</div></div>
+              <div><div class="grow-field-label">Approval rate</div><div style="font-size:1.4rem;font-weight:700;color:var(--color-text);">${approvalDisp}</div></div>
+              <div><div class="grow-field-label">Published</div><div style="font-size:1.4rem;font-weight:700;color:var(--color-text);">${published}</div></div>
+            </div>
+            ${bars}
+          </div>
+        </div>`;
+    }
+
+    function _growEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    // ── AI wiring ──
+    async function growGenerateInsights() {
+      const area = document.getElementById('grow-insights-area');
+      if (!area || !growLastPayload) return;
+      area.innerHTML = '<div style="display:flex;align-items:center;gap:10px;color:var(--color-text-muted);font-size:0.82rem;padding:14px 0;"><div class="dash-loading__spinner" style="width:18px;height:18px;border-width:2px;"></div> Analyzing your metrics…</div>';
+      try {
+        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          body: JSON.stringify({ mode: 'insights', period: growPeriod, metrics: growLastPayload })
+        });
+        const d = await res.json();
+        if (!res.ok || !d.insights || !d.insights.length) throw new Error(d.error || 'No insights');
+        area.innerHTML = d.insights.map(i => `<div class="grow-insight"><h4 class="grow-insight__title">${_growEsc(i.title)}</h4><p class="grow-insight__body">${_growEsc(i.body)}</p></div>`).join('');
+      } catch (e) {
+        area.innerHTML = `<p style="font-size:0.82rem;color:var(--color-text-muted);margin:0 0 12px;">Couldn't generate insights right now.</p><button class="grow-cta-btn" onclick="growGenerateInsights()"><i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> Try again</button>`;
+        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+      }
+    }
+
+    async function growGenerateStrategy() {
+      if (!growLastPayload) return;
+      growModal('Growth strategy report', '<div style="display:flex;align-items:center;gap:10px;color:var(--color-text-muted);font-size:0.85rem;padding:20px 0;"><div class="dash-loading__spinner" style="width:20px;height:20px;border-width:2px;"></div> Writing your strategy report…</div>');
+      try {
+        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          body: JSON.stringify({ mode: 'strategy', period: growPeriod, metrics: growLastPayload })
+        });
+        const d = await res.json();
+        if (!res.ok || !d.report) throw new Error(d.error || 'No report');
+        growModal('Growth strategy report', `<div style="font-size:0.86rem;color:var(--color-text);line-height:1.65;white-space:pre-wrap;">${_growMarkdown(d.report)}</div>`);
+      } catch (e) {
+        growModal('Growth strategy report', '<p style="color:var(--color-text-muted);font-size:0.85rem;">Couldn\'t generate the report right now. Please try again.</p>');
+      }
+    }
+
+    async function growAnalyzePost(idx, kind) {
+      if (!growLastPayload) return;
+      const list = kind === 'why' ? growLastPayload.low_posts : growLastPayload.top_posts;
+      const post = list && list[idx];
+      if (!post) return;
+      const title = kind === 'why' ? 'Why did this underperform?' : 'Post analysis';
+      growModal(title, '<div style="display:flex;align-items:center;gap:10px;color:var(--color-text-muted);font-size:0.85rem;padding:20px 0;"><div class="dash-loading__spinner" style="width:20px;height:20px;border-width:2px;"></div> Analyzing this post…</div>');
+      try {
+        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          body: JSON.stringify({ mode: 'post', period: growPeriod, post, metrics: growLastPayload })
+        });
+        const d = await res.json();
+        if (!res.ok || !d.analysis) throw new Error(d.error || 'No analysis');
+        growModal(title, `<div style="font-size:0.8rem;color:var(--color-text-muted);margin-bottom:12px;">${_growEsc(post.title)} · ${post.date}</div><div style="font-size:0.88rem;color:var(--color-text);line-height:1.6;">${_growEsc(d.analysis)}</div>`);
+      } catch (e) {
+        growModal(title, '<p style="color:var(--color-text-muted);font-size:0.85rem;">Couldn\'t analyze this post right now. Please try again.</p>');
+      }
+    }
+
+    function _growMarkdown(md) {
+      return _growEsc(md)
+        .replace(/^### (.*)$/gm, '<h4 style="font-size:0.95rem;font-weight:700;margin:16px 0 6px;">$1</h4>')
+        .replace(/^## (.*)$/gm, '<h3 style="font-size:1.05rem;font-weight:700;margin:18px 0 8px;">$1</h3>')
+        .replace(/^# (.*)$/gm, '<h3 style="font-size:1.05rem;font-weight:700;margin:18px 0 8px;">$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\s*[-*] (.*)$/gm, '<div style="margin:3px 0 3px 4px;">• $1</div>');
+    }
+
+    function growModal(title, bodyHTML) {
+      let modal = document.getElementById('grow-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'grow-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:10002;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);padding:20px;';
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML = `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);max-width:560px;width:100%;max-height:82vh;overflow:auto;padding:24px;box-shadow:0 24px 60px -20px rgba(0,0,0,0.6);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:var(--color-text);margin:0;">${_growEsc(title)}</h3>
+          <button onclick="document.getElementById('grow-modal')?.remove()" style="background:none;border:none;color:var(--color-text-muted);cursor:pointer;font-size:1.4rem;line-height:1;">&times;</button>
+        </div>
+        ${bodyHTML}
+      </div>`;
     }
 
     function generateAnalyticsPDF(data, metrics) {
@@ -11632,6 +11789,13 @@
   window.seRenderOnboardingScreen = seRenderOnboardingScreen;
   window.postOnboardingStep = postOnboardingStep;
   window.maybeOpenOnboardingAfterLogin = maybeOpenOnboardingAfterLogin;
+  // Grow (Meta growth analytics) — inline onclick handlers
+  window.loadGrow = loadGrow;
+  window.growGenerateInsights = growGenerateInsights;
+  window.growGenerateStrategy = growGenerateStrategy;
+  window.growAnalyzePost = growAnalyzePost;
+  window.growModal = growModal;
+  if (typeof showToast === 'function') window.showToast = showToast;
 
     // ━━━ Direct OAuth Connect Functions ━━━
     function _seRemoveConnectBanner() {
