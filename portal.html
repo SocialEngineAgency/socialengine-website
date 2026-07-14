@@ -13952,8 +13952,12 @@
   async function _handleAdobePublish(publishParams) {
     try {
       _adobeShowStatus('Saving…', false);
+      // ── DEBUG: log everything Adobe Express sent us ──────────────────────
+      console.log('[AdobePublish] raw publishParams:', JSON.stringify(publishParams, null, 2).slice(0, 2000));
       // v4: publishParams.asset is an ARRAY — grab first element
       const asset = Array.isArray(publishParams?.asset) ? publishParams.asset[0] : publishParams?.asset;
+      console.log('[AdobePublish] asset keys:', asset ? Object.keys(asset) : 'null');
+      console.log('[AdobePublish] asset.type:', asset?.type, '| asset.dataType:', asset?.dataType, '| asset.data length:', asset?.data?.length, '| data starts with:', asset?.data?.slice(0,30));
       if (!asset?.data) throw new Error('No asset data from Adobe Express. publishParams: ' + JSON.stringify(publishParams));
       const email = window.__clientEmail || '';
       const hash  = window.__clientHash  || '';
@@ -13981,6 +13985,10 @@
       const previewUrl = asset.data?.startsWith('data:')
         ? asset.data
         : `data:${result.mimeType || 'image/png'};base64,${asset.data}`;
+      console.log('[AdobePublish] server result:', JSON.stringify(result).slice(0,200));
+      console.log('[AdobePublish] previewUrl starts with:', previewUrl?.slice(0,60), '| length:', previewUrl?.length);
+      console.log('[AdobePublish] studioCurrentIndex:', typeof studioCurrentIndex !== 'undefined' ? studioCurrentIndex : 'UNDEFINED');
+      console.log('[AdobePublish] studioPostsList length:', studioPostsList?.length);
 
       // Store on the post object so resolveImageUrl can pick it up
       if (typeof studioCurrentIndex !== 'undefined' && studioPostsList?.[studioCurrentIndex]) {
