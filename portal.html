@@ -3080,6 +3080,11 @@
       clearNativeOAuthFailure(target);
       await refreshClientData();
       rerenderNativeOAuthSurfaces();
+      // Instagram/Facebook must complete analytics via native Meta OAuth (writes
+      // meta_page_token + instagram_user_id that Grow needs). Do NOT bounce these
+      // through Upload-Post, which never persists those fields.
+      if (target === 'instagram') return connectInstagramOAuth();
+      if (target === 'facebook') return connectFacebookOAuth();
       showToast(`Re-opening ${getNativePlatformLabel(target)} native analytics OAuth…`);
       return connectViaUploadPost(target);
     }

@@ -8,7 +8,7 @@ const {
   shouldStartNativeOAuth,
 } = require('../portal-native-oauth.js');
 
-test('buildNativeOAuthUrl encodes auth query params for the platform endpoint', () => {
+test('buildNativeOAuthUrl targets the real native Meta route with auth params', () => {
   const url = buildNativeOAuthUrl(
     'https://api.socialengine.test',
     'instagram',
@@ -18,7 +18,7 @@ test('buildNativeOAuthUrl encodes auth query params for the platform endpoint', 
 
   assert.equal(
     url,
-    'https://api.socialengine.test/api/social/native-oauth/instagram?email=owner%2Bbrand%40example.com&hash=hash%2Fwith%20spaces'
+    'https://api.socialengine.test/api/auth/instagram?client_email=owner%2Bbrand%40example.com&client_hash=hash%2Fwith%20spaces'
   );
 });
 

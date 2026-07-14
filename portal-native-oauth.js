@@ -70,12 +70,18 @@
     return meta.nativeFields.length > 0 && meta.nativeFields.every((field) => hasTruthyValue(clientRecord?.[field]));
   }
 
+  // Real native OAuth routes live on the API server:
+  //   instagram -> /api/auth/instagram   (Meta Login)
+  //   facebook  -> /api/auth/facebook    (Meta Login)
+  //   tiktok    -> /api/auth/tiktok      (TikTok OAuth)
+  // These read `client_email` / `client_hash` query params and write the
+  // native analytics fields (meta_page_token, instagram_user_id, etc.).
   function buildNativeOAuthUrl(apiBase, platform, email, hash) {
     const target = normalizePlatform(platform);
     const base = String(apiBase || '').replace(/\/+$/, '');
     const emailParam = encodeURIComponent(String(email || ''));
     const hashParam = encodeURIComponent(String(hash || ''));
-    return `${base}/api/social/native-oauth/${encodeURIComponent(target)}?email=${emailParam}&hash=${hashParam}`;
+    return `${base}/api/auth/${encodeURIComponent(target)}?client_email=${emailParam}&client_hash=${hashParam}`;
   }
 
   function getPlatformConnectionState(platform, clientRecord, uploadPostSnapshot) {

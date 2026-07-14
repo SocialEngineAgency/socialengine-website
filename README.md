@@ -71,31 +71,31 @@ The deployed portal's implemented navigation does not expose separate sidebar it
 - `Calendar` -> the content calendar/state within `Content`
 - `Inbox` -> the inbox/filter surface within `Engage`
 
-## Native OAuth follow-up for analytics
+## Native OAuth for analytics + publishing
 
-The portal now treats social connection as a two-step flow:
+Instagram/Facebook connect now uses **direct native Meta OAuth** end-to-end. The
+old `api/native-oauth.js` 501 stub has been removed — native OAuth is served by
+the live API server (Railway), not this repo.
 
-1. **Upload-Post OAuth** connects publishing.
-2. **Native OAuth** connects platform analytics tokens used by the Grow tab.
+Live native OAuth routes (on the API server):
 
-The backend endpoint stub for the second step lives at `api/native-oauth.js` and is intended to back:
+- `GET /api/auth/instagram` -> Meta Login (Instagram Business via Page)
+- `GET /api/auth/facebook`  -> Meta Login (Facebook Page)
+- `GET /api/auth/tiktok`    -> TikTok OAuth
+- `GET /api/auth/meta/callback` -> unified Meta callback
 
-- `GET /api/social/native-oauth/instagram`
-- `GET /api/social/native-oauth/tiktok`
-- `GET /api/social/native-oauth/facebook`
+Each start route reads `client_email` + `client_hash`, redirects to Meta Login,
+and the callback exchanges the code for a long-lived token, resolves the Page +
+IG Business account, and writes the tokens into Airtable.
 
-That endpoint should:
+Airtable fields written by the Meta callback:
 
-- authenticate the client via `email` + `hash`
-- start the platform-native OAuth flow
-- exchange the returned code for tokens
-- write the resulting values into Airtable
+- `meta_user_token`, `meta_token_expires`
+- `meta_page_id`, `meta_page_token`, `meta_page_name`
+- `instagram_user_id`, `instagram_handle`, `instagram_token` (when the Page has an IG Business account)
+- `social_connected`, `facebook_connected`
 
-Expected Airtable fields:
-
-- Instagram: `instagram_user_id`
-- TikTok: `tiktok_access_token`
-- Facebook / Meta: `meta_page_id`, `meta_page_token`
+TikTok native OAuth writes `tiktok_access_token`.
 
 If native OAuth fails, the portal keeps the publishing connection but warns the client that Grow analytics will be limited until the native step is completed.
 
