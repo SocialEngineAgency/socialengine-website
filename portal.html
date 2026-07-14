@@ -12143,6 +12143,8 @@
 
     function adSelectedSummaryHTML() {
       if (!_adSelectedProduct) return '';
+      // Campaign-focus mode shows its own inline summary; suppress the product summary card
+      if (_adSelectedProduct.id === 'campaign-topic') return '';
       const title = adEscapeHtml(_adSelectedProduct.title || 'Selected product');
       const image = adEscapeHtml(_adSelectedProduct.image || '');
       const price = adEscapeHtml(_adSelectedProduct.price || '');
@@ -12203,6 +12205,118 @@
       if (btn) btn.disabled = !_adSelectedProduct;
       adSyncSelectedProductCard();
       adRenderSelectedSummary();
+    }
+
+    // ── Campaign Focus helpers (no-product clients) ──────────────────────────
+    const AD_CAMPAIGN_TOPICS = [
+      { id: 'awareness', label: '📣 Brand Awareness', text: 'Raise awareness about our brand, mission, and what we do' },
+      { id: 'event',     label: '📅 Event / Campaign', text: 'Promote an upcoming event, campaign, or fundraiser' },
+      { id: 'cause',     label: '❤️ Cause / Impact',   text: 'Highlight our cause, the impact we make, and why it matters' },
+      { id: 'signup',    label: '✍️ Sign Up / Join',    text: 'Encourage people to sign up, register, or get involved' },
+      { id: 'donate',    label: '💛 Donate / Support',  text: 'Drive donations and financial support for our cause' },
+      { id: 'story',     label: '🙌 Share a Story',     text: 'Share a real story, testimonial, or human impact moment' },
+    ];
+
+    function adCampaignFocusHTML() {
+      const chips = AD_CAMPAIGN_TOPICS.map(t =>
+        `<button class="ad-platform-chip" data-topic-id="${t.id}" data-topic-text="${adEscapeHtml(t.text)}" onclick="adPickCampaignTopic(this)" style="font-size:0.76rem;padding:7px 13px;">${t.label}</button>`
+      ).join('');
+      return `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.45);font-family:var(--font-body);margin-bottom:8px;letter-spacing:0.04em;text-transform:uppercase;">Quick pick</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;" id="ad-topic-chips">${chips}</div>
+        </div>
+        <div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.45);font-family:var(--font-body);margin-bottom:6px;letter-spacing:0.04em;text-transform:uppercase;">Or describe it yourself</div>
+          <textarea id="ad-campaign-focus-input" rows="2" placeholder="e.g. 'Promote our annual walk fundraiser happening in September' or 'Raise awareness about oesophageal cancer symptoms'" oninput="adCampaignFocusTyped()" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#fff;font-size:0.78rem;padding:10px 12px;font-family:var(--font-body);resize:vertical;outline:none;box-sizing:border-box;transition:border-color 0.15s;" onfocus="this.style.borderColor='rgba(139,92,246,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'"></textarea>
+        </div>
+        <div id="ad-campaign-focus-summary"></div>
+      `;
+    }
+
+    window.adPickCampaignTopic = function(btn) {
+      document.querySelectorAll('#ad-topic-chips .ad-platform-chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      const text = btn.dataset.topicText || btn.textContent;
+      const inp = document.getElementById('ad-campaign-focus-input');
+      if (inp) inp.value = '';
+      adSetSelectedProduct({ id: 'campaign-topic', title: text, image: '', price: '', product_url: '' });
+      const summary = document.getElementById('ad-campaign-focus-summary');
+      if (summary) summary.innerHTML = `<div style="margin-top:10px;padding:9px 12px;border-radius:8px;border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.07);font-size:0.74rem;color:rgba(167,139,250,0.9);font-family:var(--font-body);">✓ Campaign focus set: <strong style="color:#fff;">${adEscapeHtml(text)}</strong></div>`;
+    };
+
+    window.adCampaignFocusTyped = function() {
+      const inp = document.getElementById('ad-campaign-focus-input');
+      const text = (inp?.value || '').trim();
+      // Deselect chips when typing custom text
+      document.querySelectorAll('#ad-topic-chips .ad-platform-chip').forEach(c => c.classList.remove('active'));
+      if (text.length >= 5) {
+        adSetSelectedProduct({ id: 'campaign-topic', title: text, image: '', price: '', product_url: '' });
+        const summary = document.getElementById('ad-campaign-focus-summary');
+        if (summary) summary.innerHTML = `<div style="margin-top:10px;padding:9px 12px;border-radius:8px;border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.07);font-size:0.74rem;color:rgba(167,139,250,0.9);font-family:var(--font-body);">✓ Campaign focus set: <strong style="color:#fff;">${adEscapeHtml(text)}</strong></div>`;
+      } else {
+        adSetSelectedProduct(null);
+        const summary = document.getElementById('ad-campaign-focus-summary');
+        if (summary) summary.innerHTML = '';
+      }
+    };
+
+    // ── Product card HTML helper (extracted for reuse in _adApplyLoadedProducts) ──
+    function adProductCardHTML(p) {
+      const img = p.primary_image || '';
+      const title = (p.title || 'Product').replace(/"/g, '&quot;');
+      const price = p.price && p.price !== '0.00' ? '$' + parseFloat(p.price).toFixed(2) : '';
+      const purl = (p.product_url || '').replace(/"/g, '&quot;');
+      return '<div class="ad-product-pick" data-product-id="' + (p.id||'') + '" data-title="' + title + '" data-image="' + img + '" data-price="' + price + '" data-product-url="' + purl + '" onclick="adSelectProduct(this)" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;overflow:hidden;transition:all 0.15s;">' +
+        (img ? '<img src="' + img + '" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;" loading="lazy">' : '<div style="width:100%;aspect-ratio:1;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;"><span style="font-size:1.5rem;opacity:0.15;">📦</span></div>') +
+        '<div style="padding:8px;"><div style="font-size:0.68rem;color:rgba(255,255,255,0.6);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-body);">' + title + '</div>' +
+        (price ? '<div style="font-size:0.65rem;color:rgba(139,92,246,0.7);font-weight:600;margin-top:2px;">' + price + '</div>' : '') +
+        '</div></div>';
+    }
+
+    // ── In-place product selector patch (avoids full re-render jump) ─────────
+    function _adApplyLoadedProducts() {
+      const products = _vcShopifyProducts || [];
+      const sel = document.getElementById('ad-product-selector');
+      if (!sel) return;
+
+      if (products.length === 0) {
+        // No products for this client — switch to campaign focus mode
+        window._adClientHasNoProducts = true;
+        // Update the card header
+        const card = sel.closest('.dash-card');
+        if (card) {
+          const h3 = card.querySelector('h3');
+          if (h3) h3.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:rgba(139,92,246,0.15);border-radius:6px;font-size:0.7rem;font-weight:700;color:rgba(139,92,246,0.9);">1</span> Campaign Focus';
+          const p = card.querySelector('p');
+          if (p) p.textContent = 'What do you want this ad to promote or communicate?';
+          // Remove product search bar if present
+          const searchRow = card.querySelector('#ad-product-search');
+          if (searchRow) searchRow.closest('div[style*="flex"]')?.remove();
+          // Remove product count label if present
+          const countEl = card.querySelector('#ad-product-count');
+          if (countEl) countEl.remove();
+        }
+        // Swap selector to campaign focus layout
+        sel.style.display = 'block';
+        sel.style.grid = '';
+        sel.style.gridTemplateColumns = '';
+        sel.style.maxHeight = '';
+        sel.style.overflowY = '';
+        sel.innerHTML = adCampaignFocusHTML();
+        // Update button hint
+        const hint = document.getElementById('ad-generate-btn')?.nextElementSibling;
+        if (hint && hint.tagName === 'P') hint.textContent = 'Enter a campaign focus above to enable generation';
+      } else {
+        // Products loaded — update grid in-place
+        window._adClientHasNoProducts = false;
+        const productsToRender = adProductsForRender(products);
+        sel.innerHTML = productsToRender.map(p => adProductCardHTML(p)).join('');
+        const countEl = document.getElementById('ad-product-count');
+        if (countEl) countEl.textContent = productsToRender.length + ' shown';
+        adSyncSelectedProductCard();
+        adRenderSelectedSummary();
+      }
     }
 
     function adProductsForRender(products) {
@@ -12320,8 +12434,8 @@
             _vcCatalogLoadingMore = false;
             _vcProductsLoaded = true;
             window._adProductsLoading = false;
-            // Re-render Ad Studio with products
-            if (document.getElementById('ad-product-selector')) renderAdStudio();
+            // Patch only the product selector in-place — avoids full re-render jump
+            if (document.getElementById('ad-product-selector')) _adApplyLoadedProducts();
           }).catch(() => { window._adProductsLoading = false; });
         }
       }
@@ -12348,9 +12462,21 @@
             </div>
           </div>
 
-          <!-- Step 1: Select Product -->
+          <!-- Step 1: Select Product / Campaign Focus -->
           <div class="dash-card" style="margin-bottom:20px;overflow:hidden;">
             <div style="padding:24px;">
+              ${window._adClientHasNoProducts ? `
+              <!-- No-product client: Campaign Focus mode -->
+              <h3 style="font-family:var(--font-display);font-size:1rem;font-weight:600;color:#fff;margin:0 0 4px;display:flex;align-items:center;gap:8px;">
+                <span style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:rgba(139,92,246,0.15);border-radius:6px;font-size:0.7rem;font-weight:700;color:rgba(139,92,246,0.9);">1</span>
+                Campaign Focus
+              </h3>
+              <p style="font-size:0.78rem;color:var(--color-text-muted);margin:0 0 14px;">What do you want this ad to promote or communicate?</p>
+              <div id="ad-product-selector" style="padding:2px;">
+                ${adCampaignFocusHTML()}
+              </div>
+              ` : `
+              <!-- Product client: Product selector mode -->
               <h3 style="font-family:var(--font-display);font-size:1rem;font-weight:600;color:#fff;margin:0 0 4px;display:flex;align-items:center;gap:8px;">
                 <span style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:rgba(139,92,246,0.15);border-radius:6px;font-size:0.7rem;font-weight:700;color:rgba(139,92,246,0.9);">1</span>
                 Select Product
@@ -12361,21 +12487,12 @@
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="2" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input id="ad-product-search" type="text" value="${adEscapeHtml(_adProductSearchQuery)}" oninput="adSearchProducts()" placeholder="Search by color, type, season (e.g. pink lingerie, purple ravewear)" style="width:100%;padding:9px 12px 9px 32px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.76rem;font-family:var(--font-body);outline:none;box-sizing:border-box;">
                 </div>
-                <div style="font-size:0.68rem;color:rgba(255,255,255,0.45);font-family:var(--font-body);">${productsToRender.length} shown</div>
+                <div style="font-size:0.68rem;color:rgba(255,255,255,0.45);font-family:var(--font-body);" id="ad-product-count">${productsToRender.length} shown</div>
               </div>
               <div id="ad-product-selector" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(139,92,246,0.3) transparent;padding:2px;">
-                ${hasProducts ? productsToRender.map(p => {
-                  const img = p.primary_image || '';
-                  const title = (p.title || 'Product').replace(/"/g, '&quot;');
-                  const price = p.price && p.price !== '0.00' ? '$' + parseFloat(p.price).toFixed(2) : '';
-                  const purl = (p.product_url || '').replace(/"/g, '&quot;');
-                  return '<div class="ad-product-pick" data-product-id="' + (p.id||'') + '" data-title="' + title + '" data-image="' + img + '" data-price="' + price + '" data-product-url="' + purl + '" onclick="adSelectProduct(this)" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;overflow:hidden;transition:all 0.15s;">' +
-                    (img ? '<img src="' + img + '" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;" loading="lazy">' : '<div style="width:100%;aspect-ratio:1;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;"><span style="font-size:1.5rem;opacity:0.15;">📦</span></div>') +
-                    '<div style="padding:8px;"><div style="font-size:0.68rem;color:rgba(255,255,255,0.6);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-body);">' + title + '</div>' +
-                    (price ? '<div style="font-size:0.65rem;color:rgba(139,92,246,0.7);font-weight:600;margin-top:2px;">' + price + '</div>' : '') +
-                    '</div></div>';
-                }).join('') : '<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.3);font-size:0.82rem;font-family:var(--font-body);"><div style="width:24px;height:24px;border:2px solid rgba(139,92,246,0.2);border-top-color:rgba(139,92,246,0.7);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div><p>' + (_adProductSearchQuery ? 'No products matched that search.' : 'Loading products...') + '</p></div>'}
+                ${hasProducts ? productsToRender.map(p => adProductCardHTML(p)).join('') : '<div style="text-align:center;padding:32px;color:rgba(255,255,255,0.3);font-size:0.82rem;font-family:var(--font-body);">' + (_adProductSearchQuery ? 'No products matched that search.' : 'Loading products…') + '</div>'}
               </div>
+              `}
             </div>
           </div>
 
@@ -12425,7 +12542,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
               Generate Ad Creative
             </button>
-            <p style="font-size:0.68rem;color:rgba(255,255,255,0.25);margin:8px 0 0;font-family:var(--font-body);">Select a product to enable generation</p>
+            <p style="font-size:0.68rem;color:rgba(255,255,255,0.25);margin:8px 0 0;font-family:var(--font-body);">${window._adClientHasNoProducts ? 'Enter a campaign focus above to enable generation' : 'Select a product to enable generation'}</p>
           </div>
 
           <!-- Output Area (hidden until generated) -->
