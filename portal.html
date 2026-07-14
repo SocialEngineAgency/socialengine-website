@@ -3472,9 +3472,13 @@
     function resolveImageUrl(post) {
       if (!post || typeof post !== 'object') return '';
       const isHttp = (u) => typeof u === 'string' && /^https?:\/\//.test(u) && !u.includes('portal.html');
+      const isData = (u) => typeof u === 'string' && u.startsWith('data:image/');
 
-      // 1. image_url text field
-      if (isHttp(post.image_url)) return post.image_url;
+      // 0. In-session Adobe Express preview (data URL set after editing)
+      if (isData(post._expressPreview)) return post._expressPreview;
+
+      // 1. image_url text field (http/https or data URL)
+      if (isHttp(post.image_url) || isData(post.image_url)) return post.image_url;
 
       // 2. legacy image field (multilineText containing JSON array)
       const legacy = post.image;
@@ -13968,26 +13972,31 @@
       const result = await resp.json();
       if (!result.success) throw new Error(result.error || 'Save failed');
 
-      // Update the in-memory post so the modal shows the new image immediately.
-      // Use asset.data as a data URL for instant local preview — the CDN URL
-      // (result.url) may require auth headers that <img> tags can't send.
+      // Build a data URL from the asset Adobe Express returned.
+      // We use this for in-session preview because the CDN URL (result.url)
+      // may require auth headers that browser <img> tags cannot send.
+      const isVideo = (asset.type || '').includes('video') || (result.mimeType || '').includes('video');
+      const previewUrl = asset.data?.startsWith('data:')
+        ? asset.data
+        : `data:${result.mimeType || 'image/png'};base64,${asset.data}`;
+
+      // Store on the post object so resolveImageUrl can pick it up
       if (typeof studioCurrentIndex !== 'undefined' && studioPostsList?.[studioCurrentIndex]) {
-        const isVideo = (asset.type || '').includes('video') || (result.mimeType || '').includes('video');
-        // Build a data URL if asset.data isn't already one
-        const previewUrl = asset.data?.startsWith('data:')
-          ? asset.data
-          : `data:${asset.dataType === 'base64' ? (result.mimeType || 'image/png') : 'image/png'};base64,${asset.data}`;
-        if (isVideo) {
-          studioPostsList[studioCurrentIndex].video_url = previewUrl;
-        } else {
-          studioPostsList[studioCurrentIndex].image_url = previewUrl;
-        }
+        studioPostsList[studioCurrentIndex]._expressPreview = isVideo ? null : previewUrl;
         studioPostsList[studioCurrentIndex].status = 'express_edited';
       }
 
-      // closeAdobeExpress also restores .studio-modal; then re-render the modal with fresh data
+      // closeAdobeExpress also restores .studio-modal; re-render with updated post data
       window.closeAdobeExpress();
       if (typeof renderStudioModalContent === 'function') renderStudioModalContent();
+
+      // Belt-and-suspenders: directly patch the preview <img> src in case
+      // renderStudioModalContent replaced it before our data was in place
+      setTimeout(() => {
+        const previewEl = document.querySelector('.studio-modal__preview img');
+        if (previewEl && !isVideo && previewUrl) previewEl.src = previewUrl;
+      }, 0);
+
       if (typeof showToast === 'function') showToast('Design saved! ✓');
     } catch (err) {
       _adobeShowStatus('Save failed: ' + err.message, true);
