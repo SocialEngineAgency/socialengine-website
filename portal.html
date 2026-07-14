@@ -4209,6 +4209,11 @@
           clientEmail = email;
           clientHash = hash;
           clientData = data;
+          // Persist session so page refresh doesn't log out
+          try {
+            localStorage.setItem('se_saved_email', email);
+            localStorage.setItem('se_saved_hash', hash);
+          } catch (_) {}
           // Expose to window for components outside IIFE scope
           window._seAPI = API;
           window._seEmail = clientEmail;
@@ -4405,6 +4410,8 @@
     document.getElementById('dash-logout')?.addEventListener('click', () => {
       stopTierPolling();
       stopInboxPolling();
+      // Clear persisted session so auto-login doesn't re-authenticate
+      try { localStorage.removeItem('se_saved_email'); localStorage.removeItem('se_saved_hash'); } catch (_) {}
       clientEmail = ''; clientHash = ''; clientData = null;
       window.__clientEmail = '';
       window.__clientHash = '';
@@ -4424,6 +4431,54 @@
       document.getElementById('login-password').value = '';
       window.scrollTo(0, 0);
     });
+
+    // ━━━ Auto-login from persisted session ━━━
+    (async function tryAutoLogin() {
+      try {
+        const savedEmail = localStorage.getItem('se_saved_email');
+        const savedHash  = localStorage.getItem('se_saved_hash');
+        if (!savedEmail || !savedHash) return;
+        // Validate saved credentials are still good
+        const res = await fetch(`${API}/api/client-data`, {
+          headers: { 'x-client-email': savedEmail, 'x-client-hash': savedHash },
+        });
+        if (!res.ok) {
+          localStorage.removeItem('se_saved_email');
+          localStorage.removeItem('se_saved_hash');
+          return;
+        }
+        const data = await res.json();
+        clientEmail = savedEmail;
+        clientHash  = savedHash;
+        clientData  = data;
+        window._seAPI = API;
+        window._seEmail = clientEmail; window._seHash = clientHash;
+        window.__clientEmail = clientEmail; window.__clientHash = clientHash;
+        window.__clientData = data;
+        window.clientEmail = clientEmail; window.clientHash = clientHash;
+        document.getElementById('portal-login-view').classList.add('hidden');
+        document.getElementById('dashboard-view').classList.add('active');
+        document.body.classList.add('portal-logged-in');
+        document.querySelector('.header')?.style.setProperty('display', 'none', 'important');
+        document.getElementById('portal-footer').style.display = 'none';
+        activeNav = 'dashboard';
+        if (data?.client?.must_change_password === true) {
+          try { await soc5ForcePasswordChange(); } catch (_) {}
+        }
+        renderDashboard(data, true);
+        updateCreationStudioNav(data);
+        prefetchStudioCatalogSilently().catch(() => {});
+        startTierPolling();
+        updateSidebarCredits();
+        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
+        window.scrollTo(0, 0);
+        setTimeout(() => { maybeOpenOnboardingAfterLogin(); }, 80);
+      } catch (_) {
+        // Network error or bad saved creds — stay on login screen
+        localStorage.removeItem('se_saved_email');
+        localStorage.removeItem('se_saved_hash');
+      }
+    })();
 
     const CHECK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
     const ARROW_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
@@ -11799,7 +11854,30 @@
     }
 
     function connectInstagramOAuth() {
-      connectViaUploadPost('instagram');
+      // Use native Meta OAuth if META_APP_ID is configured on the server,
+      // otherwise fall back to Upload-Post.
+      const email = encodeURIComponent(window.__clientEmail || '');
+      const hash  = encodeURIComponent(window.__clientHash  || '');
+      const nativeUrl = `${API}/api/auth/instagram?client_email=${email}&client_hash=${hash}`;
+      const popup = window.open(nativeUrl, 'ig_connect', 'width=600,height=700,left=300,top=100');
+      if (!popup) { connectViaUploadPost('instagram'); return; }
+      const timer = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(timer);
+          // Reload client data to pick up newly saved credentials
+          if (typeof loadClientData === 'function') loadClientData();
+          showToast('Instagram connection updated');
+        }
+      }, 1000);
+      window.addEventListener('message', function onMsg(e) {
+        if (e.data?.type === 'social_connected' && e.data?.platform === 'instagram') {
+          clearInterval(timer);
+          window.removeEventListener('message', onMsg);
+          popup.close();
+          if (typeof loadClientData === 'function') loadClientData();
+          showToast('Instagram connected! ✅');
+        }
+      });
     }
 
     function connectTikTokOAuth() {
@@ -11807,7 +11885,29 @@
     }
 
     function connectFacebookOAuth() {
-      connectViaUploadPost('facebook');
+      // Use native Meta OAuth if META_APP_ID is configured on the server,
+      // otherwise fall back to Upload-Post.
+      const email = encodeURIComponent(window.__clientEmail || '');
+      const hash  = encodeURIComponent(window.__clientHash  || '');
+      const nativeUrl = `${API}/api/auth/facebook?client_email=${email}&client_hash=${hash}`;
+      const popup = window.open(nativeUrl, 'fb_connect', 'width=600,height=700,left=300,top=100');
+      if (!popup) { connectViaUploadPost('facebook'); return; }
+      const timer = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(timer);
+          if (typeof loadClientData === 'function') loadClientData();
+          showToast('Facebook connection updated');
+        }
+      }, 1000);
+      window.addEventListener('message', function onMsg(e) {
+        if (e.data?.type === 'social_connected' && e.data?.platform === 'facebook') {
+          clearInterval(timer);
+          window.removeEventListener('message', onMsg);
+          popup.close();
+          if (typeof loadClientData === 'function') loadClientData();
+          showToast('Facebook connected! ✅');
+        }
+      });
     }
 
 
@@ -13775,6 +13875,9 @@
 
   window.openAdobeExpress = async function(postData) {
     _adobePostData = postData || null;
+    // Hide the studio modal so Adobe Express isn't buried behind it
+    const studioModal = document.querySelector('.studio-modal');
+    if (studioModal) studioModal.style.setProperty('display', 'none', 'important');
     if (typeof showToast === 'function') showToast('Opening Adobe Express…');
 
     try {
@@ -13798,7 +13901,12 @@
       const appConfig = {
         outputType: 'base64',
         callbacks: {
-          onCancel:  ()               => { if (typeof showToast === 'function') showToast('Editor closed'); },
+          onCancel:  ()               => {
+            // Restore studio modal when Adobe Express is dismissed
+            const m = document.querySelector('.studio-modal');
+            if (m) m.style.removeProperty('display');
+            if (typeof showToast === 'function') showToast('Editor closed');
+          },
           onPublish: (intent, params) => _handleAdobePublish(params),
           onError:   (e)              => {
             console.error('[AdobeExpress] onError', e);
@@ -13825,10 +13933,16 @@
   window.closeAdobeExpress = function() {
     const overlay = document.getElementById('adobe-express-overlay');
     if (overlay) overlay.style.display = 'none';
+    // Always restore the studio modal when Adobe Express closes
+    const studioModal = document.querySelector('.studio-modal');
+    if (studioModal) studioModal.style.removeProperty('display');
     _adobePostData = null;
   };
 
   async function _handleAdobePublish(publishParams) {
+    // Restore studio modal now that Adobe Express is done
+    const studioModal = document.querySelector('.studio-modal');
+    if (studioModal) studioModal.style.removeProperty('display');
     try {
       _adobeShowStatus('Saving…', false);
       // v4: publishParams.asset is an ARRAY — grab first element
