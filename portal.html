@@ -10557,8 +10557,16 @@
               } catch { /* non-fatal */ }
               if (typeof rerenderCurrentPage === 'function') rerenderCurrentPage();
               if (typeof showToast === 'function') {
-                showToast('Instagram connected' + (ig.handle ? ' — @' + ig.handle : ''));
+                showToast('Meta connected' + (ig.handle ? ' — @' + ig.handle : '') + '. Opening Grow…');
               }
+              // Force Grow to refetch (bypass any stale disconnected cache).
+              try {
+                const growNav = document.querySelector('[data-nav="analytics"]');
+                if (growNav) growNav.click();
+                setTimeout(() => {
+                  if (typeof loadGrow === 'function') loadGrow(clientData, { refresh: true });
+                }, 200);
+              } catch { /* non-fatal */ }
               return;
             }
           }
