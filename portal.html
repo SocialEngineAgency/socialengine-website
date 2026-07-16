@@ -6792,15 +6792,18 @@
     }
 
     function growRenderDisconnected(p, data) {
+      const fbOnly = !!(p && p.fb_connected);
       return `
         <div class="analytics-card" style="margin-bottom:var(--space-5);">
           <div class="analytics-card__body">
             <div class="grow-empty">
               <div class="grow-empty__icon"><i data-lucide="trending-up" style="width:28px;height:28px;"></i></div>
-              <div class="grow-empty__title">Connect Meta to see your growth</div>
-              <div class="grow-empty__desc">Link your Instagram &amp; Facebook accounts to pull live reach, impressions, engagement rate, follower growth, and AI-powered insights — all in one place.</div>
+              <div class="grow-empty__title">${fbOnly ? 'Instagram Business still needed' : 'Connect Meta to see your growth'}</div>
+              <div class="grow-empty__desc">${fbOnly
+                ? 'Your Facebook Page is linked, but Grow needs the Instagram Business account attached to that Page. In Meta Business Suite, link OPA’s Instagram to the Page, then click Connect Instagram below and pick that Page.'
+                : 'Connect Instagram (with the Facebook Page that has OPA’s Instagram Business linked). That saves Meta tokens and unlocks live reach, engagement, and insights.'}</div>
               <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-                <button class="grow-cta-btn" style="width:auto;" onclick="connectInstagramOAuth()"><i data-lucide="instagram" style="width:16px;height:16px;"></i> Connect Meta account</button>
+                <button class="grow-cta-btn" style="width:auto;" onclick="connectInstagramOAuth()"><i data-lucide="instagram" style="width:16px;height:16px;"></i> Connect Instagram</button>
                 <button class="grow-ghost-btn" style="width:auto;" onclick="connectFacebookOAuth()"><i data-lucide="facebook" style="width:15px;height:15px;"></i> Connect Facebook</button>
               </div>
             </div>
