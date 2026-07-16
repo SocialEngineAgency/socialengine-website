@@ -14374,20 +14374,20 @@
     </button>
   </div>
 
-  <!-- Upcoming scheduled posts -->
+  <!-- Content Calendar -->
   <div style="margin-top:40px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      <h3 style="font-size:1rem;font-weight:600;color:var(--color-text);margin:0;">Upcoming Scheduled Posts</h3>
-      <button onclick="_loadUpcomingScheduled()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.75rem;cursor:pointer;padding:4px 8px;border-radius:6px;transition:color 0.15s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">↻ Refresh</button>
-    </div>
-    <div id="sched-upcoming" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;min-height:80px;">
-      <div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading…</div>
-    </div>
+    <h3 style="font-size:1rem;font-weight:600;color:var(--color-text);margin:0 0 3px;">Content Calendar</h3>
+    <p style="font-size:0.8rem;color:rgba(255,255,255,0.3);margin:0 0 18px;">All scheduled content across platforms</p>
+    <div id="sched-cal-wrap"><div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div></div>
   </div>
 
-</div>`;
+</div>
+
+<!-- Calendar detail panel (slide-in from right) -->
+<div id="cal-panel" style="position:fixed;right:0;top:0;width:360px;height:100vh;background:#111827;border-left:1px solid rgba(255,255,255,0.08);padding:28px 24px;overflow-y:auto;z-index:1100;transform:translateX(100%);opacity:0;transition:transform 0.25s ease,opacity 0.25s ease;box-shadow:-20px 0 60px rgba(0,0,0,0.5);"></div>
+`;
     _renderSchedCards();
-    _loadUpcomingScheduled();
+    _loadCalendar();
   }
 
   function _handleSchedDrop(fileList) {
@@ -14656,68 +14656,223 @@
     _loadUpcomingScheduled();
   }
 
-  async function _loadUpcomingScheduled() {
-    const el = document.getElementById('sched-upcoming');
+  // ── Content Calendar ─────────────────────────────────────────────────────────
+  let _calYear  = new Date().getFullYear();
+  let _calMonth = new Date().getMonth(); // 0-indexed
+  let _calPosts = [];
+
+  async function _loadCalendar(opts) {
+    opts = opts || {};
+    const el = document.getElementById('sched-cal-wrap');
     if (!el) return;
-    el.innerHTML = '<div style="text-align:center;padding:28px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading…</div>';
+    if (!opts.silent) el.innerHTML = '<div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div>';
     try {
       const resp = await fetch(`${API}/api/client-data`, {
-        headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+        headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' }
       });
       const data = await resp.json();
-      // /api/client-data flattens fields: { id, status, scheduled_date, ... }
-      const allContent = data.content || [];
-      console.log('[Schedule] total content records:', allContent.length);
-      console.log('[Schedule] sample record:', JSON.stringify(allContent[0] || {}).slice(0, 300));
-      const posts = allContent.filter(r => {
-        const st = (r.fields?.status || r.status || '').toLowerCase();
-        const date = r.fields?.scheduled_date || r.scheduled_date;
-        console.log('[Schedule] record:', r.id, 'status:', st, 'date:', date);
-        return (st === 'approved' || st === 'scheduled') && date;
-      }).sort((a, b) => {
-        const ad = a.fields?.scheduled_date || a.scheduled_date || '';
-        const bd = b.fields?.scheduled_date || b.scheduled_date || '';
-        return ad.localeCompare(bd);
+      _calPosts = (data.content || []).filter(r => {
+        const f = r.fields || r;
+        return !!(f.scheduled_date || f.scheduledDate);
       });
+    } catch (e) {
+      el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${e.message}</div>`;
+      return;
+    }
+    _renderCalendar();
+  }
 
-      if (!posts.length) {
-        el.innerHTML = '<div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.85rem;">No upcoming scheduled posts yet — upload your first content above!</div>';
-        return;
-      }
+  function _renderCalendar() {
+    const el = document.getElementById('sched-cal-wrap');
+    if (!el) return;
 
-      const rows = posts.map(p => {
-        const f = p.fields || p;
-        const date  = f.scheduled_date || f.scheduledDate || '';
-        const caption = (f.full_post_text || f.caption || '').slice(0, 70);
-        const platform = f.platform || '—';
-        const thumb = f.image_url || f.video_url || '';
-        const isVidThumb = (f.content_type||'').toLowerCase().includes('video') || (f.video_url && !f.image_url);
-        const fallbackIcon = isVidThumb ? '🎬' : '🖼️';
-        const fallbackDiv = `<div style="width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">${fallbackIcon}</div>`;
-        const mediaEl = thumb
-          ? `<img src="${thumb}" style="width:52px;height:38px;object-fit:cover;border-radius:6px;" onerror="_schedThumbFail(this,'${fallbackIcon}')">`
-          : fallbackDiv;
-        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-          <td style="padding:10px 14px;">${mediaEl}</td>
-          <td style="padding:10px 14px;font-size:0.82rem;color:rgba(255,255,255,0.7);max-width:260px;">${caption || '<span style="color:rgba(255,255,255,0.2)">No caption</span>'}${caption.length >= 70 ? '…' : ''}</td>
-          <td style="padding:10px 14px;font-size:0.78rem;color:rgba(255,255,255,0.4);">${platform}</td>
-          <td style="padding:10px 14px;font-size:0.78rem;color:rgba(255,255,255,0.4);white-space:nowrap;">${date || '—'}</td>
-        </tr>`;
+    const monthLabel = new Date(_calYear, _calMonth, 1)
+      .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const firstDow = new Date(_calYear, _calMonth, 1).getDay();
+    const daysInMonth = new Date(_calYear, _calMonth + 1, 0).getDate();
+
+    // Build date → posts lookup
+    const byDate = {};
+    for (const p of _calPosts) {
+      const f = p.fields || p;
+      const dateKey = (f.scheduled_date || f.scheduledDate || '').slice(0, 10);
+      if (!dateKey) continue;
+      if (!byDate[dateKey]) byDate[dateKey] = [];
+      byDate[dateKey].push({ id: p.id, ...f });
+    }
+
+    function chipColors(status) {
+      const s = (status || '').toLowerCase();
+      if (s === 'approved')  return { bg: 'rgba(34,197,94,0.12)',  border: '#22C55E', text: '#86EFAC' };
+      if (s === 'scheduled') return { bg: 'rgba(124,58,237,0.18)', border: '#7C3AED', text: '#C4B5FD' };
+      if (s === 'published') return { bg: 'rgba(6,182,212,0.12)',  border: '#06B6D4', text: '#67E8F9' };
+      if (s === 'pending')   return { bg: 'rgba(245,158,11,0.12)', border: '#F59E0B', text: '#FCD34D' };
+      if (s === 'rejected')  return { bg: 'rgba(239,68,68,0.10)',  border: '#EF4444', text: '#FCA5A5' };
+      return                        { bg: 'rgba(100,116,139,0.10)',border: '#475569', text: '#94A3B8' };
+    }
+
+    function platIcon(platform) {
+      const p = (platform || '').toLowerCase();
+      if (p.includes('instagram')) return '📸';
+      if (p.includes('facebook'))  return '👥';
+      if (p.includes('tiktok'))    return '🎵';
+      return '📝';
+    }
+
+    // Empty leading cells
+    let cells = '';
+    for (let i = 0; i < firstDow; i++) {
+      cells += `<div style="min-height:96px;background:rgba(255,255,255,0.01);border-radius:8px;border:1px solid rgba(255,255,255,0.03);"></div>`;
+    }
+
+    // Day cells
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateKey = `${_calYear}-${String(_calMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday = dateKey === todayStr;
+      const dayPosts = byDate[dateKey] || [];
+      const shown = dayPosts.slice(0, 3);
+      const extra = dayPosts.length - 3;
+
+      const chips = shown.map(p => {
+        const c = chipColors(p.status);
+        const icon = platIcon(p.platform || p.platforms);
+        const text = (p.full_post_text || p.caption || '').slice(0, 26);
+        const safeId = (p.id || '').replace(/['"]/g, '');
+        return `<div onclick="event.stopPropagation();_openCalPost('${safeId}')"
+          style="display:flex;align-items:center;gap:3px;padding:2px 5px;margin-bottom:2px;
+                 background:${c.bg};border-left:2px solid ${c.border};border-radius:0 4px 4px 0;
+                 cursor:pointer;transition:opacity 0.12s;"
+          onmouseover="this.style.opacity='0.75'" onmouseout="this.style.opacity='1'">
+          <span style="font-size:0.6rem;flex-shrink:0;">${icon}</span>
+          <span style="font-size:0.62rem;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">${text || 'No caption'}</span>
+        </div>`;
       }).join('');
 
-      el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
-        <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
-          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Media</th>
-          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Caption</th>
-          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Platforms</th>
-          <th style="padding:9px 14px;text-align:left;font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;">Scheduled Date</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-    } catch (err) {
-      el.innerHTML = `<div style="text-align:center;padding:24px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Could not load posts: ${err.message}</div>`;
+      const moreEl = extra > 0
+        ? `<div style="font-size:0.6rem;color:rgba(255,255,255,0.28);padding:1px 5px;">+${extra} more</div>`
+        : '';
+
+      cells += `<div style="min-height:96px;background:${isToday ? 'rgba(124,58,237,0.07)' : 'rgba(255,255,255,0.015)'};
+          border:1px solid ${isToday ? 'rgba(124,58,237,0.35)' : 'rgba(255,255,255,0.06)'};
+          border-radius:8px;padding:6px;overflow:hidden;">
+        <div style="font-size:0.73rem;font-weight:${isToday ? '700' : '500'};
+                    color:${isToday ? '#A78BFA' : 'rgba(255,255,255,0.35)'};margin-bottom:4px;">${d}</div>
+        ${chips}${moreEl}
+      </div>`;
     }
+
+    const dayHeaders = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+      .map(d => `<div style="text-align:center;font-size:0.68rem;font-weight:600;color:rgba(255,255,255,0.22);
+                              text-transform:uppercase;letter-spacing:0.05em;padding-bottom:8px;">${d}</div>`)
+      .join('');
+
+    const legendItems = [
+      { label:'Approved',  color:'#22C55E' },
+      { label:'Scheduled', color:'#7C3AED' },
+      { label:'Published', color:'#06B6D4' },
+      { label:'Pending',   color:'#F59E0B' },
+      { label:'Draft',     color:'#475569' },
+    ].map(({ label, color }) =>
+      `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:0.7rem;color:rgba(255,255,255,0.35);">
+        <span style="width:7px;height:7px;border-radius:50%;background:${color};flex-shrink:0;"></span>${label}
+      </span>`
+    ).join('');
+
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span style="font-size:0.975rem;font-weight:600;color:var(--color-text);">${monthLabel}</span>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <button onclick="_calToday()" style="padding:4px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);">Today</button>
+          <button onclick="_calPrevMonth()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.8rem;cursor:pointer;">←</button>
+          <button onclick="_calNextMonth()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.8rem;cursor:pointer;">→</button>
+          <button onclick="_loadCalendar()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.35);font-size:0.8rem;cursor:pointer;" title="Refresh">↻</button>
+        </div>
+      </div>
+      <div style="margin-bottom:12px;">${legendItems}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
+        ${dayHeaders}${cells}
+      </div>`;
   }
+
+  function _calPrevMonth() {
+    _calMonth--; if (_calMonth < 0) { _calMonth = 11; _calYear--; } _renderCalendar();
+  }
+  function _calNextMonth() {
+    _calMonth++; if (_calMonth > 11) { _calMonth = 0; _calYear++; } _renderCalendar();
+  }
+  function _calToday() {
+    const n = new Date(); _calYear = n.getFullYear(); _calMonth = n.getMonth(); _renderCalendar();
+  }
+
+  function _openCalPost(postId) {
+    const p = _calPosts.find(p => p.id === postId);
+    if (!p) return;
+    const f = p.fields || p;
+    const status = f.status || 'draft';
+
+    function badge(s) {
+      const sl = s.toLowerCase();
+      if (sl === 'approved')  return { bg: 'rgba(34,197,94,0.15)',  color: '#86EFAC',  label: 'Approved' };
+      if (sl === 'scheduled') return { bg: 'rgba(124,58,237,0.15)', color: '#C4B5FD',  label: 'Scheduled' };
+      if (sl === 'published') return { bg: 'rgba(6,182,212,0.12)',  color: '#67E8F9',  label: 'Published' };
+      if (sl === 'pending')   return { bg: 'rgba(245,158,11,0.12)', color: '#FCD34D',  label: 'Pending Review' };
+      if (sl === 'rejected')  return { bg: 'rgba(239,68,68,0.10)',  color: '#FCA5A5',  label: 'Rejected' };
+      return                         { bg: 'rgba(100,116,139,0.10)',color: '#94A3B8',  label: 'Draft' };
+    }
+
+    const b = badge(status);
+    const caption   = f.full_post_text || f.caption || '';
+    const imageUrl  = f.image_url || '';
+    const videoUrl  = f.video_url || '';
+    const platform  = f.platform || f.platforms || '—';
+    const rawDate   = f.scheduled_date || f.scheduledDate || '';
+    const dateLabel = rawDate
+      ? new Date(rawDate).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' })
+      : '—';
+    const contentType = f.content_type || '';
+
+    const mediaHTML = imageUrl
+      ? `<img src="${imageUrl}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;" onerror="this.style.display='none'">`
+      : videoUrl
+      ? `<video src="${videoUrl}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;" controls></video>`
+      : '';
+
+    const panel = document.getElementById('cal-panel');
+    if (!panel) return;
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h3 style="font-size:0.92rem;font-weight:700;color:var(--color-text);margin:0;">Post Details</h3>
+        <button onclick="_closeCalPanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:7px;width:28px;height:28px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">✕</button>
+      </div>
+      ${mediaHTML}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <span style="padding:4px 10px;background:${b.bg};border-radius:20px;font-size:0.72rem;font-weight:600;color:${b.color};">${b.label}</span>
+        <span style="font-size:0.78rem;color:rgba(255,255,255,0.35);">${platform}</span>
+        ${contentType ? `<span style="font-size:0.7rem;color:rgba(255,255,255,0.22);">${contentType}</span>` : ''}
+      </div>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">Scheduled</div>
+        <div style="font-size:0.84rem;color:rgba(255,255,255,0.7);">${dateLabel}</div>
+      </div>
+      ${caption ? `<div>
+        <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Caption</div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.62);line-height:1.65;max-height:220px;overflow-y:auto;white-space:pre-wrap;">${caption}</div>
+      </div>` : ''}
+    `;
+
+    panel.style.transform = 'translateX(0)';
+    panel.style.opacity   = '1';
+  }
+
+  function _closeCalPanel() {
+    const panel = document.getElementById('cal-panel');
+    if (panel) { panel.style.transform = 'translateX(100%)'; panel.style.opacity = '0'; }
+  }
+
+  // Alias so any legacy references still work
+  function _loadUpcomingScheduled() { _loadCalendar(); }
   // ── /Schedule Section ─────────────────────────────────────────────────────
   // Thumbnail error fallback — called via onerror to avoid double-quote escaping issues
   function _schedThumbFail(img, icon) {
@@ -14736,6 +14891,13 @@
   window._generateCaption    = _generateCaption;
   window._scheduleAll        = _scheduleAll;
   window._loadUpcomingScheduled = _loadUpcomingScheduled;
+  window._loadCalendar    = _loadCalendar;
+  window._renderCalendar  = _renderCalendar;
+  window._calPrevMonth    = _calPrevMonth;
+  window._calNextMonth    = _calNextMonth;
+  window._calToday        = _calToday;
+  window._openCalPost     = _openCalPost;
+  window._closeCalPanel   = _closeCalPanel;
 
   })();
 </script>
