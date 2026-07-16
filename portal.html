@@ -14327,333 +14327,344 @@
 
   // ━━━ SCHEDULE SECTION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  let _schedFiles = []; // Array of { file, caption, platforms, date, time, description, tone }
+  // ── Batch Queue State ─────────────────────────────────────────────────────
+  let _batchFiles   = []; // { file, objectUrl, caption, platforms, date, time, status, description }
+  let _batchDragIdx = null;
 
   function renderScheduleSection() {
     const content = document.getElementById('dash-content');
     if (!content) return;
+    _batchDragIdx = null;
     content.innerHTML = `
-<div style="max-width:860px;margin:0 auto;padding:28px 24px 48px;">
+<div id="sched-layout" style="display:flex;height:calc(100vh - 64px);min-height:600px;overflow:hidden;">
 
-  <!-- Header -->
-  <div style="margin-bottom:24px;">
-    <h2 style="font-size:1.35rem;font-weight:700;color:var(--color-text);margin:0 0 6px;">Schedule Posts</h2>
-    <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0;">Upload your videos & images, generate captions with AI, then schedule to Instagram &amp; Facebook.</p>
-  </div>
-
-  <!-- Drop zone -->
-  <div id="sched-dropzone"
-       onclick="document.getElementById('sched-file-input').click()"
-       ondragover="event.preventDefault();this.style.borderColor='#7C3AED';"
-       ondragleave="this.style.borderColor='rgba(255,255,255,0.12)';"
-       ondrop="event.preventDefault();this.style.borderColor='rgba(255,255,255,0.12)';_handleSchedDrop(event.dataTransfer.files);"
-       style="border:2px dashed rgba(255,255,255,0.12);border-radius:14px;padding:40px 24px;text-align:center;cursor:pointer;transition:border-color 0.2s;background:rgba(255,255,255,0.02);margin-bottom:20px;">
-    <div style="font-size:2rem;margin-bottom:10px;">📁</div>
-    <div style="font-size:0.95rem;font-weight:600;color:var(--color-text);margin-bottom:6px;">Drop videos &amp; images here</div>
-    <div style="font-size:0.8rem;color:var(--color-text-muted);">or click to browse — select multiple files at once</div>
-    <div style="font-size:0.72rem;color:rgba(255,255,255,0.25);margin-top:8px;">MP4, MOV, WebM, JPG, PNG supported</div>
-    <input type="file" id="sched-file-input" multiple accept="video/*,image/*"
-           style="display:none" onchange="_handleSchedDrop(this.files)">
-  </div>
-
-  <!-- File cards -->
-  <div id="sched-cards" style="display:flex;flex-direction:column;gap:16px;"></div>
-
-  <!-- Schedule All button -->
-  <div id="sched-footer" style="display:none;margin-top:24px;">
-    <div id="sched-global-err" style="display:none;padding:10px 16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;color:#f87171;font-size:0.82rem;margin-bottom:12px;"></div>
-    <div id="sched-progress-wrap" style="display:none;margin-bottom:12px;">
-      <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
-        <div id="sched-progress-bar" style="height:100%;background:#7C3AED;border-radius:2px;width:0%;transition:width 0.3s;"></div>
+  <!-- Left: Calendar column -->
+  <div id="sched-cal-col" style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:20px 24px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div>
+        <h2 style="font-size:1.2rem;font-weight:700;color:var(--color-text);margin:0 0 2px;">Content Calendar</h2>
+        <p style="font-size:0.8rem;color:rgba(255,255,255,0.3);margin:0;">Schedule and view all your content</p>
       </div>
-      <div id="sched-progress-label" style="font-size:0.75rem;color:rgba(255,255,255,0.4);margin-top:5px;text-align:center;"></div>
+      <button onclick="_openBatchUpload()" style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:#7C3AED;color:#fff;border:none;border-radius:9px;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">↑ Upload Batch</button>
     </div>
-    <button id="sched-submit-btn" onclick="_scheduleAll()"
-            style="width:100%;padding:14px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:background 0.15s;letter-spacing:0.01em;">
-      🗓 Schedule All Posts
-    </button>
+    <div style="flex:1;overflow-y:auto;padding:20px 24px;position:relative;">
+      <div id="sched-cal-wrap"><div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div></div>
+    </div>
   </div>
 
-  <!-- Content Calendar -->
-  <div style="margin-top:40px;">
-    <h3 style="font-size:1rem;font-weight:600;color:var(--color-text);margin:0 0 3px;">Content Calendar</h3>
-    <p style="font-size:0.8rem;color:rgba(255,255,255,0.3);margin:0 0 18px;">All scheduled content across platforms</p>
-    <div id="sched-cal-wrap"><div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div></div>
+  <!-- Right: Batch queue panel (hidden until files uploaded) -->
+  <div id="sched-queue-col" style="width:340px;border-left:1px solid rgba(255,255,255,0.07);display:none;flex-direction:column;overflow:hidden;flex-shrink:0;">
+    <div id="sched-queue-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden;"></div>
   </div>
 
 </div>
 
 <!-- Calendar detail panel (slide-in from right) -->
 <div id="cal-panel" style="position:fixed;right:0;top:0;width:360px;height:100vh;background:#111827;border-left:1px solid rgba(255,255,255,0.08);padding:28px 24px;overflow-y:auto;z-index:1100;transform:translateX(100%);opacity:0;transition:transform 0.25s ease,opacity 0.25s ease;box-shadow:-20px 0 60px rgba(0,0,0,0.5);"></div>
+
+<input type="file" id="sched-file-input" multiple accept="video/*,image/*" style="display:none" onchange="_handleBatchUpload(this.files)">
 `;
-    _renderSchedCards();
     _loadCalendar();
   }
 
-  function _handleSchedDrop(fileList) {
+  function _openBatchUpload() {
+    const el = document.getElementById('sched-file-input');
+    if (el) el.click();
+  }
+
+  function _handleBatchUpload(fileList) {
     const allowed = ['video/mp4','video/quicktime','video/webm','image/jpeg','image/png','image/webp','image/gif'];
-    Array.from(fileList).forEach(f => {
-      const ok = allowed.some(t => f.type.startsWith(t.split('/')[0]));
-      if (ok) _schedFiles.push({ file: f, caption: '', platforms: ['Instagram','Facebook'], date: '', time: '09:00', description: '', tone: 'engaging' });
-    });
-    _renderSchedCards();
-    const footer = document.getElementById('sched-footer');
-    if (footer) footer.style.display = _schedFiles.length ? 'block' : 'none';
+    const newFiles = Array.from(fileList)
+      .filter(f => allowed.some(t => f.type === t || f.type.startsWith(t.split('/')[0] + '/')))
+      .map(f => ({
+        file: f,
+        objectUrl: URL.createObjectURL(f),
+        caption: '',
+        platforms: ['Instagram'],
+        date: '',
+        time: '09:00',
+        status: 'pending',
+        description: '',
+      }));
+    if (!newFiles.length) {
+      if (typeof showToast === 'function') showToast('No supported files. Use MP4, MOV, JPG, or PNG.');
+      return;
+    }
+    _batchFiles = _batchFiles.concat(newFiles);
+    const queueCol = document.getElementById('sched-queue-col');
+    if (queueCol) queueCol.style.display = 'flex';
+    _renderCalendar();
+    _renderBatchQueue();
   }
 
-  function _removeSchedFile(idx) {
-    _schedFiles.splice(idx, 1);
-    _renderSchedCards();
-    const footer = document.getElementById('sched-footer');
-    if (footer) footer.style.display = _schedFiles.length ? 'block' : 'none';
-  }
+  function _renderBatchQueue() {
+    const inner = document.getElementById('sched-queue-inner');
+    if (!inner) return;
 
-  function _renderSchedCards() {
-    const container = document.getElementById('sched-cards');
-    if (!container) return;
-    if (!_schedFiles.length) { container.innerHTML = ''; return; }
+    const total     = _batchFiles.length;
+    const captioned = _batchFiles.filter(f => f.caption).length;
+    const scheduled = _batchFiles.filter(f => f.status === 'scheduled').length;
 
-    container.innerHTML = _schedFiles.map((item, idx) => {
-      const isVid  = item.file.type.startsWith('video/');
-      const previewId = 'sched-preview-' + idx;
-      const sizeStr   = (item.file.size / 1024 / 1024).toFixed(1) + ' MB';
-      const today     = new Date().toISOString().split('T')[0];
+    const cards = _batchFiles.map((item, idx) => {
+      const isScheduled = item.status === 'scheduled';
+      const hasCap      = !!item.caption;
+      const hasDate     = !!item.date;
+      const isVideo     = item.file.type.startsWith('video/');
 
-      return `<div id="sched-card-${idx}" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;">
+      const thumbEl = isVideo
+        ? `<div style="width:46px;height:46px;border-radius:7px;background:rgba(124,58,237,0.12);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🎬</div>`
+        : `<img src="${item.objectUrl}" style="width:46px;height:46px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`;
 
-  <!-- Card header -->
-  <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);">
-    <div style="width:32px;height:32px;border-radius:8px;background:${isVid ? 'rgba(124,58,237,0.15)' : 'rgba(16,185,129,0.12)'};display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">${isVid ? '🎬' : '🖼️'}</div>
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:0.83rem;font-weight:600;color:var(--color-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.file.name}</div>
-      <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);">${sizeStr} · ${isVid ? 'Video' : 'Image'}</div>
-    </div>
-    <button onclick="_removeSchedFile(${idx})" title="Remove"
-            style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.15);color:#f87171;border-radius:7px;padding:5px 10px;font-size:0.72rem;cursor:pointer;">✕ Remove</button>
-  </div>
+      const statusColor = isScheduled ? '#22C55E' : hasCap ? '#7C3AED' : '#475569';
+      const statusLabel = isScheduled ? '✓ Scheduled' : hasCap ? 'Captioned' : 'Pending';
+      const statusBg    = isScheduled ? 'rgba(34,197,94,0.12)' : hasCap ? 'rgba(124,58,237,0.12)' : 'rgba(71,85,105,0.12)';
 
-  <!-- Card body -->
-  <div style="display:grid;grid-template-columns:180px 1fr;gap:0;">
+      const platBtns = ['Instagram','Facebook','TikTok'].map(p => {
+        const on = item.platforms.includes(p);
+        return `<button onclick="_batchTogglePlatform(${idx},'${p}')" style="padding:3px 7px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:0.5px solid ${on?'rgba(124,58,237,0.4)':'rgba(255,255,255,0.1)'};color:${on?'#C4B5FD':'rgba(255,255,255,0.3)'};background:${on?'rgba(124,58,237,0.12)':'rgba(255,255,255,0.02)'};font-family:var(--font-body);">${p}</button>`;
+      }).join('');
 
-    <!-- Thumbnail -->
-    <div style="background:#000;display:flex;align-items:center;justify-content:center;min-height:160px;border-right:1px solid rgba(255,255,255,0.06);">
-      <div id="${previewId}" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:0.75rem;padding:12px;text-align:center;">
-        Loading preview…
-      </div>
-    </div>
+      const dateLabel = hasDate
+        ? new Date(item.date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' })
+        : 'Set date';
 
-    <!-- Fields -->
-    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      const captionSection = hasCap
+        ? `<div style="font-size:0.72rem;color:rgba(255,255,255,0.55);line-height:1.5;max-height:52px;overflow:hidden;margin-bottom:8px;">${item.caption.slice(0,140)}${item.caption.length>140?'…':''}</div>`
+        : `<textarea id="bq-desc-${idx}" placeholder="Describe this post for AI…" oninput="_batchFiles[${idx}].description=this.value" style="width:100%;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.5);font-size:0.72rem;padding:7px 9px;resize:none;height:42px;font-family:var(--font-body);outline:none;margin-bottom:8px;box-sizing:border-box;">${item.description}</textarea>`;
 
-      <!-- AI caption generator -->
-      <div style="background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15);border-radius:10px;padding:12px;">
-        <div style="font-size:0.72rem;font-weight:600;color:#A78BFA;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">✨ AI Caption Generator</div>
-        <textarea id="sched-desc-${idx}" rows="2" placeholder="Describe your content… e.g. 'A heartwarming video of volunteers handing out meals at a food bank'"
-                  oninput="_schedFiles[${idx}].description=this.value"
-                  style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:0.8rem;padding:9px 11px;resize:vertical;font-family:var(--font-body);box-sizing:border-box;outline:none;line-height:1.4;">${item.description}</textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-          <select id="sched-tone-${idx}" onchange="_schedFiles[${idx}].tone=this.value"
-                  style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--color-text);border-radius:7px;padding:6px 10px;font-size:0.78rem;font-family:var(--font-body);cursor:pointer;flex:1;min-width:120px;">
-            <option value="engaging" ${item.tone==='engaging'?'selected':''}>Tone: Engaging</option>
-            <option value="inspirational" ${item.tone==='inspirational'?'selected':''}>Tone: Inspirational</option>
-            <option value="informational" ${item.tone==='informational'?'selected':''}>Tone: Informational</option>
-            <option value="heartfelt" ${item.tone==='heartfelt'?'selected':''}>Tone: Heartfelt</option>
-            <option value="humorous" ${item.tone==='humorous'?'selected':''}>Tone: Humorous</option>
-            <option value="urgent" ${item.tone==='urgent'?'selected':''}>Tone: Urgent/CTA</option>
-          </select>
-          <button onclick="_generateCaption(${idx})" id="sched-ai-btn-${idx}"
-                  style="background:#7C3AED;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:0.78rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 0.15s;">
-            ✨ Generate Caption
-          </button>
-        </div>
-      </div>
+      return `<div draggable="true" ondragstart="_batchDragStart(${idx},event)" id="bq-card-${idx}"
+        style="background:${isScheduled?'rgba(34,197,94,0.04)':'rgba(255,255,255,0.025)'};border:0.5px solid ${isScheduled?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;">
 
-      <!-- Caption textarea -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-          <label style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;">Caption &amp; Hashtags</label>
-          <span id="sched-charcount-${idx}" style="font-size:0.7rem;color:rgba(255,255,255,0.25);">0 / 2200</span>
-        </div>
-        <textarea id="sched-caption-${idx}" rows="4" placeholder="Write your caption here, or use AI to generate one above…"
-                  oninput="_schedFiles[${idx}].caption=this.value;document.getElementById('sched-charcount-${idx}').textContent=this.value.length+' / 2200';document.getElementById('sched-charcount-${idx}').style.color=this.value.length>2000?'#f87171':'rgba(255,255,255,0.25)';"
-                  style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:var(--color-text);font-size:0.83rem;padding:11px 13px;resize:vertical;font-family:var(--font-body);box-sizing:border-box;outline:none;line-height:1.5;min-height:90px;">${item.caption}</textarea>
-      </div>
-
-      <!-- Platforms + schedule row -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-
-        <!-- Platforms -->
-        <div>
-          <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Platforms</div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.82rem;color:var(--color-text);">
-              <input type="checkbox" id="sched-ig-${idx}" ${item.platforms.includes('Instagram')?'checked':''}
-                     onchange="const arr=_schedFiles[${idx}].platforms;const has=arr.includes('Instagram');if(this.checked&&!has)arr.push('Instagram');if(!this.checked&&has)arr.splice(arr.indexOf('Instagram'),1);"
-                     style="accent-color:#7C3AED;width:15px;height:15px;">
-              📸 Instagram
-            </label>
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.82rem;color:var(--color-text);">
-              <input type="checkbox" id="sched-fb-${idx}" ${item.platforms.includes('Facebook')?'checked':''}
-                     onchange="const arr=_schedFiles[${idx}].platforms;const has=arr.includes('Facebook');if(this.checked&&!has)arr.push('Facebook');if(!this.checked&&has)arr.splice(arr.indexOf('Facebook'),1);"
-                     style="accent-color:#7C3AED;width:15px;height:15px;">
-              👥 Facebook
-            </label>
+        <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
+          ${thumbEl}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">${item.file.name}</div>
+            <span style="font-size:0.67rem;padding:2px 7px;background:${statusBg};border-radius:10px;color:${statusColor};">${statusLabel}</span>
           </div>
+          <button onclick="_batchRemove(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.25);cursor:pointer;font-size:1rem;padding:0 2px;font-family:var(--font-body);" title="Remove">✕</button>
         </div>
 
-        <!-- Date -->
-        <div>
-          <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Post Date</div>
-          <input type="date" id="sched-date-${idx}" value="${item.date || today}"
-                 min="${today}"
-                 onchange="_schedFiles[${idx}].date=this.value"
-                 style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:0.82rem;padding:8px 10px;font-family:var(--font-body);cursor:pointer;box-sizing:border-box;outline:none;">
+        ${captionSection}
+        <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">${platBtns}</div>
+
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+          ${!isScheduled ? `<button onclick="_batchGenerateOne(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:${hasCap?'rgba(34,197,94,0.08)':'rgba(124,58,237,0.12)'};border:0.5px solid ${hasCap?'rgba(34,197,94,0.25)':'rgba(124,58,237,0.3)'};border-radius:5px;color:${hasCap?'#86efac':'#a78bfa'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap?'↺ Re-generate':'✨ Write caption'}</button>` : ''}
+          <button onclick="_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${dateLabel}</button>
+          <input type="date" id="bq-datepick-${idx}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="_batchSetDate(${idx},this.value)">
+          ${hasCap && !isScheduled ? `<button onclick="_batchScheduleOne(${idx})" style="padding:4px 10px;background:#7C3AED;border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Schedule</button>` : ''}
+          ${!isScheduled ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.18);${hasCap?'':'margin-left:auto;'}">⠿ drag to date</span>` : ''}
         </div>
-
-        <!-- Time -->
-        <div>
-          <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Time</div>
-          <input type="time" id="sched-time-${idx}" value="${item.time || '09:00'}"
-                 onchange="_schedFiles[${idx}].time=this.value"
-                 style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--color-text);font-size:0.82rem;padding:8px 10px;font-family:var(--font-body);cursor:pointer;box-sizing:border-box;outline:none;">
-        </div>
-
-      </div><!-- /grid -->
-
-    </div><!-- /fields -->
-  </div><!-- /card body -->
-
-</div>`;
+      </div>`;
     }).join('');
 
-    // Render previews async after DOM update
-    _schedFiles.forEach((item, idx) => _renderSchedPreview(item.file, idx));
+    inner.innerHTML = `
+      <div style="padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--color-text);">Batch Queue</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:1px;">${total} file${total!==1?'s':''} · ${captioned} captioned · ${scheduled} scheduled</div>
+        </div>
+        <button onclick="_batchCloseQueue()" style="background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.1);border-radius:6px;width:26px;height:26px;color:rgba(255,255,255,0.4);cursor:pointer;font-family:var(--font-body);font-size:0.9rem;">✕</button>
+      </div>
+
+      <div style="padding:10px 14px;border-bottom:0.5px solid rgba(255,255,255,0.05);flex-shrink:0;">
+        <button onclick="_batchGenerateAll()" style="display:flex;align-items:center;gap:6px;width:100%;padding:8px 12px;background:rgba(124,58,237,0.12);border:0.5px solid rgba(124,58,237,0.3);border-radius:8px;color:#a78bfa;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">
+          ✨ Generate all captions with AI
+        </button>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:10px 12px;" id="bq-list">
+        ${cards || '<div style="text-align:center;padding:32px 0;color:rgba(255,255,255,0.2);font-size:0.8rem;">No files yet</div>'}
+      </div>
+
+      ${scheduled < total ? `
+      <div style="padding:10px 14px;border-top:0.5px solid rgba(255,255,255,0.07);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);">${total - scheduled} not yet scheduled</div>
+        <button onclick="_batchScheduleAllCaptioned()" style="padding:7px 14px;background:#22C55E;border:none;border-radius:7px;color:#fff;font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Schedule all captioned</button>
+      </div>` : `
+      <div style="padding:10px 14px;border-top:0.5px solid rgba(34,197,94,0.15);background:rgba(34,197,94,0.05);text-align:center;font-size:0.75rem;color:#86efac;flex-shrink:0;">✓ All ${total} posts scheduled!</div>
+      `}
+    `;
   }
 
-  function _renderSchedPreview(file, idx) {
-    const el = document.getElementById('sched-preview-' + idx);
-    if (!el) return;
-    const url = URL.createObjectURL(file);
-    if (file.type.startsWith('video/')) {
-      el.innerHTML = `<video src="${url}" muted playsinline style="max-width:100%;max-height:160px;object-fit:contain;border-radius:4px;" onloadedmetadata="this.currentTime=1"></video>`;
-    } else {
-      el.innerHTML = `<img src="${url}" style="max-width:100%;max-height:160px;object-fit:contain;border-radius:4px;">`;
-    }
+  function _batchCloseQueue() {
+    const queueCol = document.getElementById('sched-queue-col');
+    if (queueCol) queueCol.style.display = 'none';
+    _batchFiles.forEach(f => { try { URL.revokeObjectURL(f.objectUrl); } catch(e) {} });
+    _batchFiles = [];
+    _renderCalendar();
   }
 
-  async function _generateCaption(idx) {
-    const item   = _schedFiles[idx];
-    const desc   = (document.getElementById('sched-desc-' + idx)?.value || item.description || '').trim();
-    const tone   = document.getElementById('sched-tone-' + idx)?.value || item.tone || 'engaging';
-    const capEl  = document.getElementById('sched-caption-' + idx);
-    const btnEl  = document.getElementById('sched-ai-btn-' + idx);
-    const platform = item.platforms[0] || 'Instagram';
+  function _batchTogglePlatform(idx, platform) {
+    const item = _batchFiles[idx];
+    if (!item) return;
+    const i = item.platforms.indexOf(platform);
+    if (i > -1) { if (item.platforms.length > 1) item.platforms.splice(i, 1); }
+    else item.platforms.push(platform);
+    _renderBatchQueue();
+  }
 
-    if (!desc) { if (typeof showToast === 'function') showToast('Add a description first so AI knows what to write about.'); return; }
+  function _batchPickDate(idx) {
+    const input = document.getElementById('bq-datepick-' + idx);
+    if (!input) return;
+    input.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:auto;z-index:9999;width:1px;height:1px;';
+    input.click();
+    setTimeout(() => { if (input) input.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;'; }, 1000);
+  }
 
-    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '✨ Generating…'; }
+  function _batchSetDate(idx, date) {
+    if (_batchFiles[idx]) _batchFiles[idx].date = date;
+    _renderBatchQueue();
+    _renderCalendar();
+  }
 
+  function _batchRemove(idx) {
+    try { URL.revokeObjectURL(_batchFiles[idx]?.objectUrl); } catch(e) {}
+    _batchFiles.splice(idx, 1);
+    if (!_batchFiles.length) { _batchCloseQueue(); } else { _renderBatchQueue(); _renderCalendar(); }
+  }
+
+  async function _batchGenerateOne(idx) {
+    const item = _batchFiles[idx];
+    if (!item) return;
+    const descEl = document.getElementById('bq-desc-' + idx);
+    const desc = (descEl?.value || item.description || item.file.name.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ')).trim();
+    const btn = document.getElementById('bq-aibtn-' + idx);
+    if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
     try {
       const resp = await fetch(`${API}/api/studio/generate-caption`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
-        body: JSON.stringify({ description: desc, platform, tone, hashtag_count: 8 }),
+        body: JSON.stringify({ description: desc || 'Social media content', platform: item.platforms[0] || 'Instagram', tone: 'engaging', hashtag_count: 8 }),
       });
       const data = await resp.json();
       if (data.success && data.caption) {
-        _schedFiles[idx].caption = data.caption;
-        if (capEl) {
-          capEl.value = data.caption;
-          const cc = document.getElementById('sched-charcount-' + idx);
-          if (cc) cc.textContent = data.caption.length + ' / 2200';
-        }
-        if (typeof showToast === 'function') showToast('Caption generated! Feel free to edit it.');
+        _batchFiles[idx].caption = data.caption;
+        if (_batchFiles[idx].status === 'pending') _batchFiles[idx].status = 'captioned';
+        _renderBatchQueue();
       } else {
-        if (typeof showToast === 'function') showToast('AI caption failed: ' + (data.error || 'Unknown error'));
+        if (typeof showToast === 'function') showToast('Caption failed: ' + (data.error || 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = '✨ Write caption'; }
       }
     } catch (e) {
-      if (typeof showToast === 'function') showToast('Caption generation error: ' + e.message);
-    } finally {
-      if (btnEl) { btnEl.disabled = false; btnEl.textContent = '✨ Generate Caption'; }
+      if (typeof showToast === 'function') showToast('Caption error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Write caption'; }
     }
   }
 
-  async function _scheduleAll() {
-    if (!_schedFiles.length) return;
-    const errEl  = document.getElementById('sched-global-err');
-    const progWrap = document.getElementById('sched-progress-wrap');
-    const progBar  = document.getElementById('sched-progress-bar');
-    const progLbl  = document.getElementById('sched-progress-label');
-    const submitBtn = document.getElementById('sched-submit-btn');
-
-    // Sync latest textarea values before submitting
-    _schedFiles.forEach((item, idx) => {
-      const capEl  = document.getElementById('sched-caption-' + idx);
-      const dateEl = document.getElementById('sched-date-' + idx);
-      const timeEl = document.getElementById('sched-time-' + idx);
-      if (capEl)  item.caption  = capEl.value;
-      if (dateEl) item.date     = dateEl.value;
-      if (timeEl) item.time     = timeEl.value;
-    });
-
-    // Validate
-    const missing = _schedFiles.findIndex(f => !f.date);
-    if (missing > -1) {
-      if (errEl) { errEl.textContent = `Post ${missing + 1} (${_schedFiles[missing].file.name}) needs a schedule date.`; errEl.style.display = 'block'; }
-      return;
+  async function _batchGenerateAll() {
+    const pending = _batchFiles.filter(f => !f.caption);
+    if (!pending.length) { if (typeof showToast === 'function') showToast('All files already have captions!'); return; }
+    if (typeof showToast === 'function') showToast('Generating ' + pending.length + ' caption' + (pending.length !== 1 ? 's' : '') + '…');
+    for (let i = 0; i < _batchFiles.length; i++) {
+      if (_batchFiles[i].caption) continue;
+      await _batchGenerateOne(i);
     }
-    if (errEl) errEl.style.display = 'none';
+    if (typeof showToast === 'function') showToast('All captions generated! 🎉');
+  }
 
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Scheduling…'; }
-    if (progWrap)  progWrap.style.display = 'block';
-
-    let successCount = 0;
-    const errors = [];
-
-    for (let i = 0; i < _schedFiles.length; i++) {
-      const item = _schedFiles[i];
-      if (progLbl) progLbl.textContent = `Uploading ${i + 1} of ${_schedFiles.length}: ${item.file.name}`;
-      if (progBar) progBar.style.width = ((i / _schedFiles.length) * 100) + '%';
-
-      try {
-        const fd = new FormData();
-        fd.append('file', item.file, item.file.name);
-        fd.append('caption', item.caption || '');
-        fd.append('platforms', item.platforms.join(','));
-        fd.append('scheduled_date', item.date);
-        fd.append('scheduled_time', item.time || '09:00');
-
-        const resp = await fetch(`${API}/api/studio/quick-schedule`, {
-          method: 'POST',
-          headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
-          body: fd,
-        });
-        const data = await resp.json();
-        if (data.success) successCount++;
-        else errors.push(`${item.file.name}: ${data.error || 'failed'}`);
-      } catch (e) {
-        errors.push(`${item.file.name}: ${e.message}`);
+  async function _batchScheduleOne(idx) {
+    const item = _batchFiles[idx];
+    if (!item) return;
+    if (!item.date) { if (typeof showToast === 'function') showToast('Set a date for this post first.'); return; }
+    const card = document.getElementById('bq-card-' + idx);
+    const schedBtn = card ? card.querySelector('button[onclick*="batchScheduleOne"]') : null;
+    if (schedBtn) { schedBtn.disabled = true; schedBtn.textContent = 'Scheduling…'; }
+    try {
+      const fd = new FormData();
+      fd.append('file', item.file, item.file.name);
+      fd.append('caption', item.caption || '');
+      fd.append('platforms', item.platforms.join(','));
+      fd.append('scheduled_date', item.date);
+      fd.append('scheduled_time', item.time || '09:00');
+      const resp = await fetch(`${API}/api/studio/quick-schedule`, {
+        method: 'POST',
+        headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+        body: fd,
+      });
+      const data = await resp.json();
+      if (data.success) {
+        _batchFiles[idx].status = 'scheduled';
+        _renderBatchQueue();
+        _loadCalendar({ silent: true });
+        if (typeof showToast === 'function') showToast('Post scheduled! ✅');
+      } else {
+        if (typeof showToast === 'function') showToast('Schedule failed: ' + (data.error || 'Unknown'));
+        if (schedBtn) { schedBtn.disabled = false; schedBtn.textContent = 'Schedule'; }
       }
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('Error: ' + e.message);
+      if (schedBtn) { schedBtn.disabled = false; schedBtn.textContent = 'Schedule'; }
     }
+  }
 
-    if (progBar) progBar.style.width = '100%';
-    if (progLbl) progLbl.textContent = 'Done!';
-
-    if (successCount > 0) {
-      if (typeof showToast === 'function') showToast(`${successCount} post${successCount > 1 ? 's' : ''} scheduled successfully! 🎉`);
-      _schedFiles = [];
-      _renderSchedCards();
-      const footer = document.getElementById('sched-footer');
-      if (footer) footer.style.display = 'none';
-      if (progWrap) progWrap.style.display = 'none';
+  async function _batchScheduleAllCaptioned() {
+    const ready = _batchFiles.filter(f => f.caption && f.date && f.status !== 'scheduled');
+    if (!ready.length) { if (typeof showToast === 'function') showToast('Set dates on captioned posts first.'); return; }
+    if (typeof showToast === 'function') showToast('Scheduling ' + ready.length + ' post' + (ready.length !== 1 ? 's' : '') + '…');
+    for (let i = 0; i < _batchFiles.length; i++) {
+      const f = _batchFiles[i];
+      if (f.caption && f.date && f.status !== 'scheduled') await _batchScheduleOne(i);
     }
+  }
 
-    if (errors.length) {
-      if (errEl) { errEl.textContent = 'Some posts failed: ' + errors.join('; '); errEl.style.display = 'block'; }
+  function _batchDragStart(idx, e) {
+    _batchDragIdx = idx;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+  }
+
+  function _batchDragOverDay(date, e) {
+    if (_batchDragIdx === null) return;
+    e.preventDefault();
+    e.currentTarget.style.background = 'rgba(124,58,237,0.2)';
+    e.currentTarget.style.borderColor = '#7C3AED';
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function _batchDropOnDay(date, e) {
+    e.preventDefault();
+    e.currentTarget.style.background = '';
+    e.currentTarget.style.borderColor = '';
+    if (_batchDragIdx === null || _batchDragIdx < 0) return;
+    _batchSetDate(_batchDragIdx, date);
+    _batchDragIdx = null;
+  }
+
+  function _openBatchDayModal(date) {
+    // Clicking an empty day opens upload picker pre-set to that date
+    // If queue is open, just focus the queue and let user drag
+    const queueVisible = document.getElementById('sched-queue-col')?.style.display !== 'none';
+    if (queueVisible) return; // queue already open, user can drag
+    if (typeof showToast === 'function') showToast('Click "Upload Batch" to add posts, then drag to this date.');
+  }
+
+  // Month/Year picker
+  function _toggleMonthPicker(e) {
+    e.stopPropagation();
+    const picker = document.getElementById('cal-month-picker');
+    if (!picker) return;
+    if (picker.style.display === 'none') {
+      picker.style.display = 'block';
+      document.addEventListener('click', function hidePicker() {
+        picker.style.display = 'none';
+        document.removeEventListener('click', hidePicker);
+      }, { once: true });
+    } else {
+      picker.style.display = 'none';
     }
+  }
 
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '🗓 Schedule All Posts'; }
-    _loadUpcomingScheduled();
+  function _mpYearAdj(delta) {
+    _calYear += delta;
+    document.getElementById('cal-mp-year').textContent = _calYear;
+    _renderCalendar();
+    document.getElementById('cal-month-picker').style.display = 'block';
+  }
+
+  function _mpSelectMonth(month) {
+    _calMonth = month;
+    document.getElementById('cal-month-picker').style.display = 'none';
+    _renderCalendar();
   }
 
   // ── Content Calendar ─────────────────────────────────────────────────────────
@@ -14755,7 +14766,10 @@
 
       cells += `<div style="min-height:96px;background:${isToday ? 'rgba(124,58,237,0.07)' : 'rgba(255,255,255,0.015)'};
           border:1px solid ${isToday ? 'rgba(124,58,237,0.35)' : 'rgba(255,255,255,0.06)'};
-          border-radius:8px;padding:6px;overflow:hidden;">
+          border-radius:8px;padding:6px;overflow:hidden;cursor:pointer;"
+          ondragover="_batchDragOverDay('${dateKey}',event)"
+          ondrop="_batchDropOnDay('${dateKey}',event)"
+          onclick="if(!event.target.closest('[onclick]'))_openBatchDayModal('${dateKey}')">
         <div style="font-size:0.73rem;font-weight:${isToday ? '700' : '500'};
                     color:${isToday ? '#A78BFA' : 'rgba(255,255,255,0.35)'};margin-bottom:4px;">${d}</div>
         ${chips}${moreEl}
@@ -14781,7 +14795,19 @@
 
     el.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <span style="font-size:0.975rem;font-weight:600;color:var(--color-text);">${monthLabel}</span>
+        <button onclick="_toggleMonthPicker(event)" style="font-size:0.975rem;font-weight:600;color:var(--color-text);background:none;border:none;cursor:pointer;font-family:var(--font-body);padding:0;display:flex;align-items:center;gap:4px;">${monthLabel} <span style="font-size:0.65rem;color:rgba(255,255,255,0.3);">▾</span></button>
+        <div id="cal-month-picker" style="display:none;position:absolute;background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.6);z-index:500;min-width:220px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <button onclick="_mpYearAdj(-1)" style="background:rgba(255,255,255,0.06);border:none;border-radius:6px;padding:3px 8px;color:rgba(255,255,255,0.5);cursor:pointer;font-family:var(--font-body);">←</button>
+            <span id="cal-mp-year" style="font-size:0.85rem;font-weight:600;color:var(--color-text);">${_calYear}</span>
+            <button onclick="_mpYearAdj(1)" style="background:rgba(255,255,255,0.06);border:none;border-radius:6px;padding:3px 8px;color:rgba(255,255,255,0.5);cursor:pointer;font-family:var(--font-body);">→</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="cal-mp-months">
+            ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m,i)=>
+              '<button onclick="_mpSelectMonth('+i+')" style="padding:5px 4px;border-radius:6px;font-size:0.72rem;cursor:pointer;font-family:var(--font-body);background:'+(i===_calMonth?'#7C3AED':'rgba(255,255,255,0.04)')+';border:0.5px solid '+(i===_calMonth?'rgba(124,58,237,0.5)':'rgba(255,255,255,0.08)')+';color:'+(i===_calMonth?'#fff':'rgba(255,255,255,0.5)')+';">'+m+'</button>'
+            ).join('')}
+          </div>
+        </div>
         <div style="display:flex;align-items:center;gap:5px;">
           <button onclick="_calToday()" style="padding:4px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);">Today</button>
           <button onclick="_calPrevMonth()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.8rem;cursor:pointer;">←</button>
@@ -14873,31 +14899,35 @@
 
   // Alias so any legacy references still work
   function _loadUpcomingScheduled() { _loadCalendar(); }
-  // ── /Schedule Section ─────────────────────────────────────────────────────
-  // Thumbnail error fallback — called via onerror to avoid double-quote escaping issues
-  function _schedThumbFail(img, icon) {
-    const div = document.createElement('div');
-    div.style.cssText = 'width:52px;height:38px;background:rgba(255,255,255,0.05);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;';
-    div.textContent = icon || '🖼️';
-    img.parentNode.replaceChild(div, img);
-  }
+  // Expose batch schedule + calendar helpers to global scope
+  window._openBatchUpload           = _openBatchUpload;
+  window._handleBatchUpload         = _handleBatchUpload;
+  window._renderBatchQueue          = _renderBatchQueue;
+  window._batchCloseQueue           = _batchCloseQueue;
+  window._batchTogglePlatform       = _batchTogglePlatform;
+  window._batchPickDate             = _batchPickDate;
+  window._batchSetDate              = _batchSetDate;
+  window._batchRemove               = _batchRemove;
+  window._batchGenerateOne          = _batchGenerateOne;
+  window._batchGenerateAll          = _batchGenerateAll;
+  window._batchScheduleOne          = _batchScheduleOne;
+  window._batchScheduleAllCaptioned = _batchScheduleAllCaptioned;
+  window._batchDragStart            = _batchDragStart;
+  window._batchDragOverDay          = _batchDragOverDay;
+  window._batchDropOnDay            = _batchDropOnDay;
+  window._openBatchDayModal         = _openBatchDayModal;
+  window._toggleMonthPicker         = _toggleMonthPicker;
+  window._mpYearAdj                 = _mpYearAdj;
+  window._mpSelectMonth             = _mpSelectMonth;
+  window._loadUpcomingScheduled     = _loadUpcomingScheduled;
+  window._loadCalendar              = _loadCalendar;
+  window._renderCalendar            = _renderCalendar;
+  window._calPrevMonth              = _calPrevMonth;
+  window._calNextMonth              = _calNextMonth;
+  window._calToday                  = _calToday;
+  window._openCalPost               = _openCalPost;
+  window._closeCalPanel             = _closeCalPanel;
 
-  // Expose schedule helpers to global scope so inline HTML event handlers can reach them
-  window._schedThumbFail     = _schedThumbFail;
-  window._handleSchedDrop    = _handleSchedDrop;
-  window._removeSchedFile    = _removeSchedFile;
-  window._renderSchedCards   = _renderSchedCards;
-  window._renderSchedPreview = _renderSchedPreview;
-  window._generateCaption    = _generateCaption;
-  window._scheduleAll        = _scheduleAll;
-  window._loadUpcomingScheduled = _loadUpcomingScheduled;
-  window._loadCalendar    = _loadCalendar;
-  window._renderCalendar  = _renderCalendar;
-  window._calPrevMonth    = _calPrevMonth;
-  window._calNextMonth    = _calNextMonth;
-  window._calToday        = _calToday;
-  window._openCalPost     = _openCalPost;
-  window._closeCalPanel   = _closeCalPanel;
 
   })();
 </script>
