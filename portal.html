@@ -6714,7 +6714,7 @@
             ${growDeltaHTML(t.reach?.delta_pct)}
           </div>
           <div class="analytics-kpi-card">
-            <div class="analytics-kpi-card__label grow-kpi-card__icon"><i data-lucide="eye" style="width:13px;height:13px;"></i> Impressions</div>
+            <div class="analytics-kpi-card__label grow-kpi-card__icon"><i data-lucide="eye" style="width:13px;height:13px;"></i> ${t.impressions?.label || 'Impressions'}</div>
             <div class="analytics-kpi-card__value">${growNum(t.impressions?.value)}</div>
             ${growDeltaHTML(t.impressions?.delta_pct)}
           </div>
@@ -8187,7 +8187,10 @@
                     ${igHandle ? `${igConnection.statusLabel} as @${igHandle}` : igConnection.statusLabel}
                   </div>
                   <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${igConnection.analyticsLimited ? 'Instagram publishing is connected, but native analytics OAuth still needs to finish before Grow can pull impressions, reach, and saves.' : 'Instagram is fully connected. SocialEngine can schedule content directly to your feed and read profile analytics.'}</p>
-                  ${igConnection.analyticsLimited ? `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button onclick="retryNativeOAuth('instagram')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">If this step fails, Grow analytics will stay limited until native OAuth succeeds.</span></div>` : ''}
+                  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                    ${igConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('instagram')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">If this step fails, Grow analytics will stay limited until native OAuth succeeds.</span>` : ''}
+                    <button onclick="disconnectPlatform('instagram')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect</button>
+                  </div>
                 ` : `
                   <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(100,116,139,0.08);border:1px solid rgba(100,116,139,0.12);border-radius:8px;font-size:0.78rem;font-weight:600;color:var(--color-text-faint);margin-bottom:10px;">
                     <span style="width:6px;height:6px;border-radius:50%;background:rgba(100,116,139,0.5);"></span>
@@ -8227,7 +8230,10 @@
                     ${ttHandle ? `${ttConnection.statusLabel} as @${ttHandle}` : ttConnection.statusLabel}
                   </div>
                   <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${ttConnection.analyticsLimited ? 'TikTok publishing is connected, but native business OAuth still needs to finish before Grow can pull platform metrics.' : 'TikTok is fully connected. SocialEngine can publish videos directly to your TikTok account and read analytics.'}</p>
-                  ${ttConnection.analyticsLimited ? `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button onclick="retryNativeOAuth('tiktok')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Complete TikTok native OAuth to unlock impressions, reach, and saves in Grow.</span></div>` : ''}
+                  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                    ${ttConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('tiktok')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Complete TikTok native OAuth to unlock impressions, reach, and saves in Grow.</span>` : ''}
+                    <button onclick="disconnectPlatform('tiktok')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect</button>
+                  </div>
                 ` : `
                   <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(100,116,139,0.08);border:1px solid rgba(100,116,139,0.12);border-radius:8px;font-size:0.78rem;font-weight:600;color:var(--color-text-faint);margin-bottom:10px;">
                     <span style="width:6px;height:6px;border-radius:50%;background:rgba(100,116,139,0.5);"></span>
@@ -8266,7 +8272,10 @@
                     ${fbHandle ? `${fbConnection.statusLabel} — ${fbHandle}` : fbConnection.statusLabel}
                   </div>
                   <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${fbConnection.analyticsLimited ? 'Facebook publishing is connected, but Meta page OAuth still needs to finish before Grow can read page insights.' : 'Facebook is fully connected. SocialEngine can publish content directly to your Facebook Page and read page analytics.'}</p>
-                  ${fbConnection.analyticsLimited ? `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;"><button onclick="retryNativeOAuth('facebook')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Meta native OAuth stores the page ID + token Grow needs for analytics.</span></div>` : ''}
+                  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                    ${fbConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('facebook')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Meta native OAuth stores the page ID + token Grow needs for analytics.</span>` : ''}
+                    <button onclick="disconnectPlatform('facebook')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect</button>
+                  </div>
                 ` : `
                   <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(100,116,139,0.08);border:1px solid rgba(100,116,139,0.12);border-radius:8px;font-size:0.78rem;font-weight:600;color:var(--color-text-faint);margin-bottom:10px;">
                     <span style="width:6px;height:6px;border-radius:50%;background:rgba(100,116,139,0.5);"></span>
@@ -11781,10 +11790,33 @@
     else window.addEventListener('load', initLucide);
 
   // (IIFE continues — all portal code in same scope)
+  // Disconnect a platform — clears tokens in Airtable then refreshes settings
+  async function disconnectPlatform(platform) {
+    if (!confirm(`Disconnect ${platform}? You can reconnect at any time.`)) return;
+    try {
+      const r = await fetch(`${API}/api/social-disconnect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientEmail, clientHash, platform }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        // Refresh client data and re-render settings
+        clientData = await refreshClientData().catch(() => clientData);
+        renderSettingsPage(clientData);
+      } else {
+        alert(`Could not disconnect ${platform}: ${data.error || 'Unknown error'}`);
+      }
+    } catch (e) {
+      alert(`Disconnect failed: ${e.message}`);
+    }
+  }
+
   // Expose functions to window for inline onclick handlers
   window.connectInstagramOAuth = connectInstagramOAuth;
   window.connectTikTokOAuth = connectTikTokOAuth;
   window.connectFacebookOAuth = connectFacebookOAuth;
+  window.disconnectPlatform = disconnectPlatform;
   window.connectSocialsViaUploadPost = connectViaUploadPost;
   window.showCancelGuide = showCancelGuide;
   window.hfSetCategory = hfSetCategory;
