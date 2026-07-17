@@ -2694,9 +2694,8 @@
         <nav class="dash-sidebar__nav" aria-label="Dashboard navigation">
           <button class="dash-nav-item active" data-nav="dashboard"><i data-lucide="layout-dashboard"></i> Home</button>
           <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content</button>
-          <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="palette"></i> Studio</button>
+          <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="clapperboard"></i> Studio</button>
           <button class="dash-nav-item" data-nav="schedule"><i data-lucide="calendar"></i> Schedule</button>
-          <button class="dash-nav-item" data-nav="video-studio"><i data-lucide="video"></i> Create</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
           <button class="dash-nav-item" data-nav="inbox"><i data-lucide="inbox"></i> Engage</button>
           <button class="dash-nav-item" data-nav="analytics"><i data-lucide="bar-chart-3"></i> Analytics</button>
@@ -5588,15 +5587,15 @@
     const NAV_LABELS = {
       'dashboard': 'Home',
       'content': 'Content',
-      'creation-studio': 'Creation Studio',
+      'creation-studio': 'Studio',
       'analytics': 'Analytics',
       'brand-voice': 'Brand',
       'ai-coach': 'Coach',
       'competitor-intel': 'Intel',
-      'video-studio': 'Create',
+      'video-studio': 'Studio',
       'inbox': 'Engage',
       'ad-studio': 'Ads',
-      'ai-studio': 'AI Tools',
+      'ai-studio': 'All Tools',
       'settings': 'Settings'
     };
 
@@ -5641,12 +5640,12 @@
         document.querySelector('.dash-main')?.scrollTo(0, 0);
         if (nav === 'dashboard') { renderDashboard(clientData); }
         else if (nav === 'content') { renderContentPage(clientData); }
-        else if (nav === 'creation-studio') { renderCreationStudio(clientData); }
+        else if (nav === 'creation-studio') { window._studioClientData = clientData; renderVideoStudio(); }
         else if (nav === 'analytics') { renderAnalyticsPage(clientData); }
         else if (nav === 'brand-voice') { renderBrandVoicePage(clientData); }
         else if (nav === 'ai-coach') { renderAICoach(); }
         else if (nav === 'competitor-intel') { renderCompetitorIntel(); }
-        else if (nav === 'video-studio') { renderVideoStudio(); }
+        else if (nav === 'video-studio') { window._studioClientData = clientData; renderVideoStudio(); }
         else if (nav === 'inbox') { renderInbox(); }
         else if (nav === 'ad-studio') { renderAdStudio(); }
         else if (nav === 'ai-studio') { console.log('[SE] Nav click: ai-studio'); renderAIStudio(); }
@@ -5782,10 +5781,13 @@
           <div style="margin-bottom:32px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
               <div>
-                <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 6px;">Marketing Studio</h2>
+                <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 6px;">Studio</h2>
                 <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">AI-powered video generation with 9 templates, 6 models, and full product preservation lock.</p>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
+                <button onclick="renderCreationStudio(window._studioClientData || window.__clientData)" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:rgba(255,255,255,0.6);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.08)';this.style.color='#fff'" onmouseleave="this.style.background='rgba(255,255,255,0.04)';this.style.color='rgba(255,255,255,0.6)'">
+                  <i data-lucide="palette" style="width:14px;height:14px;"></i> Design Canvas <span style="font-size:0.6rem;padding:1px 5px;background:rgba(124,58,237,0.25);color:#C4B5FD;border-radius:3px;margin-left:2px;">Beta</span>
+                </button>
                 <div style="padding:8px 16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;display:flex;align-items:center;gap:8px;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                   <span id="ms-credits-display" style="font-size:0.82rem;font-weight:700;color:rgba(139,92,246,0.9);">— credits</span>
@@ -6760,9 +6762,16 @@
 
         <div class="grow-lower-row">
           <div class="analytics-card">
-            <div class="analytics-card__header"><h3 class="analytics-card__title">Top posts — by engagement</h3></div>
+            <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <h3 class="analytics-card__title">Top posts</h3>
+              <select id="grow-sort-select" onchange="growSortTopPosts(this.value)" style="padding:5px 10px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);outline:none;">
+                <option value="eng_rate">By engagement</option>
+                <option value="likes">By likes</option>
+                <option value="reach">By reach</option>
+              </select>
+            </div>
             <div class="analytics-card__body">
-              ${topHTML}
+              <div id="grow-top-posts-body">${topHTML}</div>
               ${lowHTML ? `<div style="border-top:1px solid var(--color-divider);margin:14px 0 10px;"></div><div class="grow-field-label" style="margin-bottom:6px;">Lowest performers</div>${lowHTML}` : ''}
             </div>
           </div>
@@ -6884,6 +6893,33 @@
         growModal('Growth strategy report', '<p style="color:var(--color-text-muted);font-size:0.85rem;">Couldn\'t generate the report right now. Please try again.</p>');
       }
     }
+
+    window.growSortTopPosts = function(metric) {
+      if (!growLastPayload) return;
+      // Save original server-sorted order on first sort
+      if (!growLastPayload._orig_top_posts) {
+        growLastPayload._orig_top_posts = [...(growLastPayload.top_posts || [])];
+      }
+      const base = growLastPayload._orig_top_posts;
+      const sorted = metric === 'eng_rate'
+        ? [...base] // restore server order (already sorted by engagement)
+        : [...base].sort((a, b) => (Number(b[metric]) || 0) - (Number(a[metric]) || 0));
+      growLastPayload.top_posts = sorted; // keep in sync so growAnalyzePost still works
+      const body = document.getElementById('grow-top-posts-body');
+      if (!body) return;
+      const engBadge = (r) => r == null ? '' : `<span class="${r >= 4 ? 'grow-eng-good' : 'grow-eng-mid'}">${r}% eng</span>`;
+      body.innerHTML = sorted.length ? sorted.map((post, i) => `
+        <div class="grow-post">
+          <div class="grow-post__rank">${i + 1}</div>
+          <div class="grow-post__body">
+            <div class="grow-post__title">${_growEsc(post.title)}</div>
+            <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes</div>
+          </div>
+          <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
+        </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    };
 
     async function growAnalyzePost(idx, kind) {
       if (!growLastPayload) return;
