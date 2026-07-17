@@ -7388,6 +7388,7 @@
     // ━━━ Brand Voice Page ━━━
     function renderBrandVoicePage(data) {
       const content = document.getElementById('dash-content');
+      const isCharityBrand = isCharityClient(data);
       const bv = data.brand_voice;
       const profile = data.profile;
       const bvIsActive = !!(bv && (bv.tone_adjectives || bv.writing_style));
@@ -7607,12 +7608,21 @@
             <div style="margin-bottom:18px;">
               <label style="display:block;font-size:0.75rem;font-weight:600;color:rgba(148,163,184,0.6);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Tone adjustments (optional — defaults to your brand voice)</label>
               <div style="display:flex;gap:8px;flex-wrap:wrap;" id="vw-tone-chips">
-                <button class="vw-tone-chip" data-tone="more playful" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">More playful</button>
-                <button class="vw-tone-chip" data-tone="more luxurious" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">More luxurious</button>
-                <button class="vw-tone-chip" data-tone="more urgent" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">More urgent</button>
-                <button class="vw-tone-chip" data-tone="more casual" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">More casual</button>
-                <button class="vw-tone-chip" data-tone="more edgy" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">More edgy</button>
-                <button class="vw-tone-chip" data-tone="more professional" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">More professional</button>
+                ${(isCharityBrand ? [
+                  { value: 'warm_compassionate', label: 'Warm & Compassionate', desc: 'Empathetic, human-centred, emotionally resonant' },
+                  { value: 'urgent_motivating', label: 'Urgent & Motivating', desc: 'Drives action, creates urgency, inspires giving' },
+                  { value: 'hopeful_inspiring', label: 'Hopeful & Inspiring', desc: 'Uplifting, positive change, possibility-focused' },
+                  { value: 'educational_informative', label: 'Educational & Informative', desc: 'Factual, clear, builds awareness and understanding' },
+                  { value: 'authentic_storytelling', label: 'Authentic & Storytelling', desc: 'Personal stories, real impact, testimonial-driven' },
+                  { value: 'professional_trustworthy', label: 'Professional & Trustworthy', desc: 'Credible, transparent, institutional confidence' },
+                ] : [
+                  { value: 'more playful', label: 'More playful' },
+                  { value: 'more luxurious', label: 'More luxurious' },
+                  { value: 'more urgent', label: 'More urgent' },
+                  { value: 'more casual', label: 'More casual' },
+                  { value: 'more edgy', label: 'More edgy' },
+                  { value: 'more professional', label: 'More professional' },
+                ]).map(t => `<button class="vw-tone-chip" data-tone="${t.value}" title="${t.desc || t.label}" style="padding:6px 14px;border-radius:100px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-family:var(--font-body);transition:all 0.15s;">${t.label}</button>`).join('')}
               </div>
             </div>
 
@@ -9575,7 +9585,39 @@
     function renderCompetitorIntel() {
       const content = document.getElementById('dash-content');
       if (!content) return;
-      const clientName = clientData?.client?.business_name || 'Your Brand';
+      const isCharity = isCharityClient(data || window.__clientData || clientData);
+      const clientType = String((data || window.__clientData || clientData)?.client?.client_type || 'shopify').toLowerCase();
+      const clientName = (data || window.__clientData || clientData)?.client?.business_name || 'Your Brand';
+
+      const CI_CONFIG = isCharity ? {
+        placeholder: 'https://similar-charity.org',
+        subtitle: `Analyse similar charities — see how ${clientName} stacks up on awareness, campaigns, and social impact`,
+        analyzeLabel: 'Analyse Charity',
+        urlLabel: 'Enter a similar charity or cause website URL',
+        errorMsg: 'Could not access this website. Please enter a valid charity or organisation URL.',
+        whatYouGet: [
+          { icon: 'bar-chart-2', title: 'Awareness Benchmarks', desc: 'Compare follower counts, reach, and engagement against similar charities' },
+          { icon: 'megaphone', title: 'Campaign Analysis', desc: 'How they structure fundraising drives and awareness campaigns' },
+          { icon: 'message-circle', title: 'Messaging & Tone', desc: 'Emotional appeal strategy, storytelling patterns, and CTA effectiveness' },
+          { icon: 'shield', title: 'SWOT Analysis', desc: 'Strengths, weaknesses, opportunities, and threats vs this charity' },
+          { icon: 'star', title: 'Content Strategy', desc: 'What post types drive the most shares, donations, and community engagement' },
+          { icon: 'target', title: 'Cause Differentiation', desc: 'Where you stand out and where you can increase impact vs similar causes' },
+        ],
+      } : {
+        placeholder: 'https://competitor-store.myshopify.com',
+        subtitle: `Analyze any Shopify store — get pricing, products, SWOT analysis, and AI content ideas to outperform them`,
+        analyzeLabel: 'Analyze',
+        urlLabel: 'Enter a competitor Shopify store URL',
+        errorMsg: 'This URL does not appear to be a Shopify store. Please enter a valid Shopify store URL.',
+        whatYouGet: [
+          { icon: 'bar-chart-2', title: 'Score Comparison', desc: 'Side-by-side score against your store with actionable benchmarks' },
+          { icon: 'dollar-sign', title: 'Pricing Analysis', desc: 'Compare low/avg/high pricing and identify your pricing advantage' },
+          { icon: 'package', title: 'Top Products', desc: 'See their best sellers with images, prices, and product types' },
+          { icon: 'crosshair', title: 'SWOT Analysis', desc: 'Strengths, weaknesses, opportunities, and threats — mapped out' },
+          { icon: 'star', title: 'Content Ideas', desc: 'AI-generated content strategies to outperform their social presence' },
+          { icon: 'trending-up', title: 'Gap Analysis', desc: 'Find what they are missing and where you can win' },
+        ],
+      };
 
       // Preview tier: show teaser with upgrade prompt
       if (isPreview()) {
@@ -9620,13 +9662,13 @@
         <div class="ci-page">
           <div class="ci-header">
             <h2 class="ci-header__title">Competitor Intelligence</h2>
-            <p class="ci-header__sub">Analyze any Shopify store — get pricing, products, SWOT analysis, and AI content ideas to outperform them</p>
+            <p class="ci-header__sub">${CI_CONFIG.subtitle}</p>
           </div>
           <div class="ci-input-row">
-            <input type="url" class="ci-url-input" id="ci-url" placeholder="https://competitor-store.myshopify.com" autocomplete="off">
+            <input type="url" class="ci-url-input" id="ci-url" placeholder="${CI_CONFIG.placeholder}" autocomplete="off">
             <button class="ci-analyze-btn" id="ci-analyze-btn">
               <i data-lucide="search" style="width:16px;height:16px;"></i>
-              Analyze
+              ${CI_CONFIG.analyzeLabel}
             </button>
           </div>
           <div class="ci-error" id="ci-error"></div>
@@ -9639,16 +9681,9 @@
 
           <!-- What You Get section -->
           <div id="ci-info-section" style="margin-top:32px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
-            ${[
-              { icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>', title: 'Score Comparison', desc: 'Side-by-side score against your store with actionable benchmarks' },
-              { icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', title: 'Pricing Analysis', desc: 'Compare low/avg/high pricing and identify your pricing advantage' },
-              { icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 8 6 8 6s1-2 3.5-2a2.5 2.5 0 0 1 0 5H10"/><path d="M6 9h6v11H6z"/><path d="M12 9h6l-1 11h-5"/></svg>', title: 'Top Products', desc: 'See their best sellers with images, prices, and product types' },
-              { icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>', title: 'SWOT Analysis', desc: 'Strengths, weaknesses, opportunities, and threats — mapped out' },
-              { icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>', title: 'Content Ideas', desc: 'AI-generated content strategies to outperform their social presence' },
-              { icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>', title: 'Gap Analysis', desc: 'Find what they are missing and where you can win' }
-            ].map(item => `
+            ${CI_CONFIG.whatYouGet.map(item => `
               <div style="padding:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
-                <div style="width:36px;height:36px;border-radius:10px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;margin-bottom:12px;">${item.icon}</div>
+                <div style="width:36px;height:36px;border-radius:10px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#7C3AED;"><i data-lucide="${item.icon}" style="width:20px;height:20px;stroke:currentColor;fill:none;"></i></div>
                 <div style="font-size:0.8rem;font-weight:600;color:#fff;margin-bottom:4px;">${item.title}</div>
                 <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);line-height:1.5;">${item.desc}</div>
               </div>
@@ -9695,6 +9730,7 @@
 
       function renderResults(data) {
         const r = data;
+        const resultIsCharity = r.analysis_type === 'charity' || isCharity;
         const compScore = r.competitor_score ?? 0;
         const clientScore = r.client_score ?? 0;
         const pricing = { competitor: r.competitor_pricing || {}, client: r.client_pricing || {} };
@@ -9797,6 +9833,7 @@
             </div>
           </div>` : ''}
 
+          ${!resultIsCharity ? `
           <div class="ci-section">
             <div class="ci-section__header">
               <div class="ci-section__header-icon" style="background:rgba(255,255,255,0.06);">
@@ -9815,7 +9852,7 @@
                 </tr>
               </tbody>
             </table>
-          </div>
+          </div>` : ''}
 
           <div class="ci-section">
             <div class="ci-section__header">
@@ -9826,6 +9863,32 @@
             </div>
             <div class="ci-swot">${swotSections}</div>
           </div>
+
+          ${resultIsCharity && r.messaging_analysis ? `
+          <div class="ci-section">
+            <div class="ci-section__header">
+              <div class="ci-section__header-icon" style="background:rgba(124,58,237,0.08);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <h3 class="ci-section__title">Messaging Analysis</h3>
+            </div>
+            <div class="ci-section__body">
+              <p class="ci-summary">${r.messaging_analysis}</p>
+            </div>
+          </div>` : ''}
+
+          ${resultIsCharity && r.cause_differentiation && r.cause_differentiation.length ? `
+          <div class="ci-section">
+            <div class="ci-section__header">
+              <div class="ci-section__header-icon" style="background:rgba(124,58,237,0.08);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </div>
+              <h3 class="ci-section__title">Cause Differentiation</h3>
+            </div>
+            <div class="ci-section__body">
+              <ul style="margin:0;padding-left:20px;">${r.cause_differentiation.map(d => `<li style="margin-bottom:8px;color:rgba(148,163,184,0.9);font-size:0.875rem;line-height:1.6;">${d}</li>`).join('')}</ul>
+            </div>
+          </div>` : ''}
 
           ${ideas.length ? `
           <div class="ci-section">
@@ -9858,7 +9921,7 @@
             </div>
           </div>` : ''}
 
-          ${products.length ? `
+          ${!resultIsCharity && products.length ? `
           <div class="ci-section">
             <div class="ci-section__header">
               <div class="ci-section__header-icon" style="background:rgba(255,255,255,0.06);">
@@ -9873,6 +9936,7 @@
           </div>` : ''}
         `;
         resultsEl.classList.add('visible');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
       }
 
       async function runAnalysis() {
@@ -9921,7 +9985,7 @@
               'x-client-email': clientEmail,
               'x-client-hash': clientHash
             },
-            body: JSON.stringify({ competitor_url: url }),
+            body: JSON.stringify({ competitor_url: url, client_type: clientType }),
             signal: controller.signal
           });
 
@@ -9946,10 +10010,10 @@
         } catch (err) {
           loadingEl.classList.remove('visible');
           const msg = err.name === 'AbortError'
-            ? 'Analysis timed out — the competitor store may be very large. Try again or try a different URL.'
-            : err.message.includes('not a Shopify')
-              ? 'This URL does not appear to be a Shopify store. Please enter a valid Shopify store URL.'
-              : (err.message || 'Analysis failed. Make sure the URL is a valid Shopify store.');
+            ? 'Analysis timed out — the store may be very large. Try again or try a different URL.'
+            : err.message.includes('not a Shopify') || err.message.includes('not_shopify')
+              ? CI_CONFIG.errorMsg
+              : (err.message || 'Analysis failed. Make sure the URL is valid.');
           errorEl.textContent = msg;
           errorEl.classList.add('visible');
         } finally {
@@ -14432,6 +14496,12 @@
 <!-- Calendar detail panel (slide-in from right) -->
 <div id="cal-panel" style="position:fixed;right:0;top:0;width:360px;height:100vh;background:#111827;border-left:1px solid rgba(255,255,255,0.08);padding:28px 24px;overflow-y:auto;z-index:1100;transform:translateX(100%);opacity:0;transition:transform 0.25s ease,opacity 0.25s ease;box-shadow:-20px 0 60px rgba(0,0,0,0.5);"></div>
 
+<!-- Date panel (slide-in from right) -->
+<div id="schedule-date-panel" style="position:fixed;top:0;right:-420px;width:380px;height:100vh;background:var(--color-surface-1,#1a1a2e);border-left:1px solid var(--color-border,rgba(255,255,255,0.08));z-index:1000;transition:right 0.28s cubic-bezier(0.4,0,0.2,1);overflow-y:auto;padding:0;" onclick="event.stopPropagation()">
+  <div id="schedule-date-panel-content" style="padding:24px;"></div>
+</div>
+<div id="schedule-date-overlay" onclick="closeDatePanel()" style="display:none;position:fixed;inset:0;z-index:999;"></div>
+
 <input type="file" id="sched-file-input" multiple accept="video/*,image/*" style="display:none" onchange="_handleBatchUpload(this.files)">
 `;
     _loadCalendar();
@@ -14834,15 +14904,17 @@
         ? `<div style="font-size:0.6rem;color:rgba(255,255,255,0.28);padding:1px 5px;">+${extra} more</div>`
         : '';
 
+      const hasPostsDot = dayPosts.length > 0;
       cells += `<div style="min-height:96px;background:${isToday ? 'rgba(124,58,237,0.07)' : 'rgba(255,255,255,0.015)'};
           border:1px solid ${isToday ? 'rgba(124,58,237,0.35)' : 'rgba(255,255,255,0.06)'};
-          border-radius:8px;padding:6px;overflow:hidden;cursor:pointer;"
+          border-radius:8px;padding:6px;overflow:hidden;cursor:pointer;position:relative;"
           ondragover="_batchDragOverDay('${dateKey}',event)"
           ondrop="_batchDropOnDay('${dateKey}',event)"
-          onclick="if(!event.target.closest('[onclick]'))_openBatchDayModal('${dateKey}')">
+          onclick="if(!event.target.closest('[onclick]')){openDatePanel('${dateKey}',window.__clientData||{content:_calPosts});_openBatchDayModal('${dateKey}');}">
         <div style="font-size:0.73rem;font-weight:${isToday ? '700' : '500'};
                     color:${isToday ? '#A78BFA' : 'rgba(255,255,255,0.35)'};margin-bottom:4px;">${d}</div>
         ${chips}${moreEl}
+        ${hasPostsDot ? `<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#7C3AED;"></span>` : ''}
       </div>`;
     }
 
@@ -14997,6 +15069,127 @@
   window._calToday                  = _calToday;
   window._openCalPost               = _openCalPost;
   window._closeCalPanel             = _closeCalPanel;
+
+  window.convertTo24h = function(timeStr) {
+    if (!timeStr) return '09:00';
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':');
+    if (modifier === 'PM' && hours !== '12') hours = String(parseInt(hours, 10) + 12);
+    if (modifier === 'AM' && hours === '12') hours = '00';
+    return `${String(hours).padStart(2, '0')}:${minutes || '00'}`;
+  };
+
+  window.closeDatePanel = function() {
+    const panel = document.getElementById('schedule-date-panel');
+    const overlay = document.getElementById('schedule-date-overlay');
+    if (panel) panel.style.right = '-420px';
+    if (overlay) overlay.style.display = 'none';
+  };
+
+  window.schedulePostToDate = function(dateStr, idx) {
+    const readyPosts = (window.__clientData?.content || []).filter(p => {
+      const status = (p.status || '').toLowerCase();
+      return (status === 'approved' || status === 'ready') && !(p.scheduled_date || p.published_date || p.date);
+    });
+    const post = readyPosts[idx];
+    if (!post) return;
+    alert(`Scheduling "${(post.caption || post.title || 'Post').substring(0, 40)}" for ${dateStr}. (Connect this to your CMS API to save.)`);
+  };
+
+  window.submitQuickSchedule = function(dateStr) {
+    const caption = document.getElementById('quick-schedule-caption')?.value?.trim();
+    const time = document.getElementById('quick-schedule-time')?.value || '09:00';
+    if (!caption) { alert('Please write a caption first.'); return; }
+    alert(`Post scheduled for ${dateStr} at ${time}.\n\nCaption: "${caption.substring(0, 80)}${caption.length > 80 ? '…' : ''}"\n\n(Connect this to your content API to save.)`);
+    window.closeDatePanel();
+  };
+
+  window.openDatePanel = function(dateStr, data) {
+    const panel = document.getElementById('schedule-date-panel');
+    const overlay = document.getElementById('schedule-date-overlay');
+    const content = document.getElementById('schedule-date-panel-content');
+    if (!panel || !content) return;
+
+    const posts = (data || window.__clientData)?.content || [];
+    const today = new Date().toISOString().split('T')[0];
+    const isPast = dateStr < today;
+    const isToday = dateStr === today;
+
+    const datePosts = posts.filter(p => {
+      const d = p.scheduled_date || p.published_date || p.date || p.post_date || '';
+      return d && d.startsWith(dateStr);
+    });
+
+    const readyPosts = !isPast ? posts.filter(p => {
+      const status = (p.status || '').toLowerCase();
+      return (status === 'approved' || status === 'ready') && !(p.scheduled_date || p.published_date || p.date);
+    }) : [];
+
+    const dayOfWeek = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+    const bestTimes = window._growBestTimes || [];
+    const dayBest = bestTimes.find(t => t.day && t.day.toLowerCase() === dayOfWeek.toLowerCase());
+    const recommendedTime = dayBest?.time || '9:00 AM';
+
+    const formatDate = (str) => new Date(str + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    let html = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+          <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">${isPast ? 'Past' : isToday ? 'Today' : 'Upcoming'}</div>
+          <div style="font-size:1.05rem;font-weight:700;color:var(--color-text);">${formatDate(dateStr)}</div>
+        </div>
+        <button onclick="closeDatePanel()" style="background:none;border:none;color:var(--color-text-muted);cursor:pointer;padding:4px;"><i data-lucide="x" style="width:20px;height:20px;"></i></button>
+      </div>`;
+
+    if (datePosts.length > 0) {
+      html += `<div style="font-size:0.78rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">${isPast ? 'Posted' : 'Scheduled'} (${datePosts.length})</div>`;
+      datePosts.forEach(p => {
+        const statusColor = p.status === 'Published' ? '#10b981' : p.status === 'Approved' ? '#7C3AED' : '#f59e0b';
+        html += `<div style="background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:0.72rem;font-weight:700;color:${statusColor};text-transform:uppercase;">${p.status || 'Draft'}</span>
+            <span style="font-size:0.7rem;color:var(--color-text-muted);">${p.platform || ''}</span>
+          </div>
+          <div style="font-size:0.82rem;color:var(--color-text);line-height:1.4;">${(p.caption || p.content || p.title || 'Untitled post').substring(0, 120)}${(p.caption || p.content || p.title || '').length > 120 ? '…' : ''}</div>
+          ${(p.likes != null || p.reach != null || p.eng_rate != null) ? `<div style="margin-top:8px;display:flex;gap:12px;">
+            ${p.reach != null ? `<span style="font-size:0.7rem;color:var(--color-text-muted);">${Number(p.reach).toLocaleString()} reach</span>` : ''}
+            ${p.likes != null ? `<span style="font-size:0.7rem;color:var(--color-text-muted);">${Number(p.likes).toLocaleString()} likes</span>` : ''}
+            ${p.eng_rate != null ? `<span style="font-size:0.7rem;color:var(--color-text-muted);">${p.eng_rate}% eng</span>` : ''}
+          </div>` : ''}
+        </div>`;
+      });
+    }
+
+    if (!isPast) {
+      if (readyPosts.length > 0) {
+        html += `<div style="font-size:0.78rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin:16px 0 10px;">Ready to Schedule</div>`;
+        readyPosts.slice(0, 5).forEach((p, idx) => {
+          html += `<div style="background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:10px;padding:10px 12px;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="font-size:0.8rem;color:var(--color-text);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${(p.caption || p.content || p.title || 'Untitled').substring(0, 60)}</div>
+            <button onclick="schedulePostToDate('${dateStr}',${idx})" style="flex-shrink:0;padding:4px 10px;font-size:0.7rem;font-weight:600;background:rgba(124,58,237,0.15);color:#C4B5FD;border:1px solid rgba(124,58,237,0.3);border-radius:6px;cursor:pointer;">Schedule</button>
+          </div>`;
+        });
+      }
+
+      html += `<div style="border-top:1px solid var(--color-border,rgba(255,255,255,0.08));margin-top:18px;padding-top:18px;">
+        <div style="font-size:0.78rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Quick Schedule</div>
+        <div style="font-size:0.72rem;color:var(--color-text-muted);margin-bottom:10px;">
+          <i data-lucide="sparkles" style="width:11px;height:11px;display:inline;vertical-align:middle;margin-right:3px;"></i>
+          AI recommends: <strong style="color:var(--color-text);">${recommendedTime}</strong> on ${dayOfWeek}
+        </div>
+        <textarea id="quick-schedule-caption" rows="3" placeholder="Write your caption..." style="width:100%;box-sizing:border-box;background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:8px;padding:10px;color:var(--color-text);font-size:0.82rem;font-family:var(--font-body);resize:vertical;outline:none;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <input type="time" id="quick-schedule-time" value="${window.convertTo24h(recommendedTime)}" style="background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:7px;padding:6px 8px;color:var(--color-text);font-size:0.78rem;outline:none;font-family:var(--font-body);">
+          <button onclick="submitQuickSchedule('${dateStr}')" style="flex:1;padding:8px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule Post</button>
+        </div>
+      </div>`;
+    }
+
+    content.innerHTML = html;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    panel.style.right = '0';
+    overlay.style.display = 'block';
+  };
 
 
   })();
