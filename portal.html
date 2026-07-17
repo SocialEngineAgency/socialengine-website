@@ -9604,6 +9604,25 @@
       const clientName = data?.client?.business_name || 'your charity';
       const hasJGId = !!(data?.client?.justgiving_charity_id);
 
+      // Pre-build ideas HTML to avoid triple-nested template literals
+      const _jgIdeas = [
+        { icon: 'video', title: 'Impact Reel', desc: 'Show what donations achieve — a patient story, treatment milestone, or research breakthrough in 30 seconds', platform: 'IG + TikTok' },
+        { icon: 'users', title: 'Peer-to-Peer Push', desc: 'Ask supporters to create their own JustGiving pages. Birthday fundraisers drive 3x more donations than charity-led campaigns', platform: 'Facebook + IG' },
+        { icon: 'calendar', title: 'Giving Tuesday Campaign', desc: 'Pre-schedule a 3-post countdown to Giving Tuesday with a matching gift challenge. UK charities average £6,200 on the day', platform: 'All platforms' },
+        { icon: 'radio', title: 'LIVE Fundraising Stream', desc: 'Facebook or Instagram LIVE with a fundraising goal visible on screen. Verbal CTAs every 5 mins + link in bio to JustGiving page', platform: 'Facebook LIVE' },
+      ].map(function(item) {
+        return '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
+          + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+          + '<div style="width:34px;height:34px;background:rgba(255,107,53,0.12);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+          + '<i data-lucide="' + item.icon + '" style="width:16px;height:16px;color:#FF6B35;"></i>'
+          + '</div><div>'
+          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);">' + item.title + '</div>'
+          + '<div style="font-size:0.65rem;color:#FF6B35;font-weight:600;">' + item.platform + '</div>'
+          + '</div></div>'
+          + '<div style="font-size:0.78rem;color:var(--color-text-muted);line-height:1.5;">' + item.desc + '</div>'
+          + '</div>';
+      }).join('');
+
       content.innerHTML = `
         <div class="section-header">
           <h2 class="section-title">Fundraise</h2>
@@ -9669,25 +9688,7 @@
             </div>
             <div class="analytics-card__body">
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
-                ${[
-                  { icon: 'video', title: 'Impact Reel', desc: 'Show what donations achieve — a patient story, treatment milestone, or research breakthrough in 30 seconds', platform: 'IG + TikTok' },
-                  { icon: 'users', title: 'Peer-to-Peer Push', desc: 'Ask supporters to create their own JustGiving pages. Birthday fundraisers drive 3x more donations than charity-led campaigns', platform: 'Facebook + IG' },
-                  { icon: 'calendar', title: 'Giving Tuesday Campaign', desc: 'Pre-schedule a 3-post countdown to Giving Tuesday with a matching gift challenge. UK charities average £6,200 on the day', platform: 'All platforms' },
-                  { icon: 'radio', title: 'LIVE Fundraising Stream', desc: 'Facebook or Instagram LIVE with a fundraising goal visible on screen. Verbal CTAs every 5 mins + link in bio to JustGiving page', platform: 'Facebook LIVE' },
-                ].map(item => \`
-                  <div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                      <div style="width:34px;height:34px;background:rgba(255,107,53,0.12);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <i data-lucide="\${item.icon}" style="width:16px;height:16px;color:#FF6B35;"></i>
-                      </div>
-                      <div>
-                        <div style="font-size:0.82rem;font-weight:700;color:var(--color-text);">\${item.title}</div>
-                        <div style="font-size:0.65rem;color:#FF6B35;font-weight:600;">\${item.platform}</div>
-                      </div>
-                    </div>
-                    <div style="font-size:0.78rem;color:var(--color-text-muted);line-height:1.5;">\${item.desc}</div>
-                  </div>
-                \`).join('')}
+                ${_jgIdeas}
               </div>
             </div>
           </div>
@@ -9722,28 +9723,21 @@
               list.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:16px 0;">No active campaigns found on JustGiving.</p>';
             } else {
               const fmt = n => '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-              list.innerHTML = campaigns.filter(c => (c.status || '').toLowerCase() === 'active').slice(0, 10).map(c => {
+              list.innerHTML = campaigns.filter(function(c) { return (c.status || '').toLowerCase() === 'active'; }).slice(0, 10).map(function(c) {
                 const pct = c.target > 0 ? Math.min(100, Math.round((c.total_raised / c.target) * 100)) : 0;
-                return \`
-                <div style="padding:14px 0;border-bottom:1px solid var(--color-border);">
-                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
-                    <div style="flex:1;">
-                      <div style="font-size:0.88rem;font-weight:600;color:var(--color-text);">\${c.title || 'Untitled Campaign'}</div>
-                      \${c.owner_name ? \`<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:2px;">by \${c.owner_name}</div>\` : ''}
-                    </div>
-                    <div style="text-align:right;flex-shrink:0;">
-                      <div style="font-size:0.95rem;font-weight:700;color:var(--color-text);">\${fmt(c.total_raised)}</div>
-                      \${c.target > 0 ? \`<div style="font-size:0.68rem;color:var(--color-text-muted);">of \${fmt(c.target)} goal</div>\` : ''}
-                    </div>
-                  </div>
-                  \${c.target > 0 ? \`
-                  <div style="height:5px;background:var(--color-surface-2);border-radius:3px;overflow:hidden;">
-                    <div style="height:100%;width:\${pct}%;background:linear-gradient(90deg,#FF6B35,#FF8C42);border-radius:3px;transition:width 0.6s;"></div>
-                  </div>
-                  <div style="font-size:0.68rem;color:var(--color-text-muted);margin-top:4px;">\${pct}% of goal reached</div>
-                  \` : ''}
-                  <a href="\${c.page_url}" target="_blank" style="display:inline-block;margin-top:8px;font-size:0.72rem;color:#FF6B35;font-weight:600;text-decoration:none;">View on JustGiving ↗</a>
-                </div>\`;
+                const ownerHtml = c.owner_name ? '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:2px;">by ' + c.owner_name + '</div>' : '';
+                const goalHtml = c.target > 0 ? '<div style="font-size:0.68rem;color:var(--color-text-muted);">of ' + fmt(c.target) + ' goal</div>' : '';
+                const progressHtml = c.target > 0
+                  ? '<div style="height:5px;background:var(--color-surface-2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#FF6B35,#FF8C42);border-radius:3px;transition:width 0.6s;"></div></div><div style="font-size:0.68rem;color:var(--color-text-muted);margin-top:4px;">' + pct + '% of goal reached</div>'
+                  : '';
+                return '<div style="padding:14px 0;border-bottom:1px solid var(--color-border);">'
+                  + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">'
+                  + '<div style="flex:1;"><div style="font-size:0.88rem;font-weight:600;color:var(--color-text);">' + (c.title || 'Untitled Campaign') + '</div>' + ownerHtml + '</div>'
+                  + '<div style="text-align:right;flex-shrink:0;"><div style="font-size:0.95rem;font-weight:700;color:var(--color-text);">' + fmt(c.total_raised) + '</div>' + goalHtml + '</div>'
+                  + '</div>'
+                  + progressHtml
+                  + '<a href="' + c.page_url + '" target="_blank" style="display:inline-block;margin-top:8px;font-size:0.72rem;color:#FF6B35;font-weight:600;text-decoration:none;">View on JustGiving ↗</a>'
+                  + '</div>';
               }).join('');
             }
           }
