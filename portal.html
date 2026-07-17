@@ -2694,8 +2694,8 @@
         <nav class="dash-sidebar__nav" aria-label="Dashboard navigation">
           <button class="dash-nav-item active" data-nav="dashboard"><i data-lucide="layout-dashboard"></i> Home</button>
           <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content</button>
-          <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="clapperboard"></i> Studio</button>
           <button class="dash-nav-item" data-nav="schedule"><i data-lucide="calendar"></i> Schedule</button>
+          <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="clapperboard"></i> Studio</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
           <button class="dash-nav-item" data-nav="inbox"><i data-lucide="inbox"></i> Engage</button>
           <button class="dash-nav-item" data-nav="analytics"><i data-lucide="bar-chart-3"></i> Analytics</button>
@@ -4746,7 +4746,7 @@
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);">
           <div class="dash-card" id="attributed-revenue-card">
-            <div class="dash-card__header"><h3 class="dash-card__title">Attributed Revenue</h3></div>
+            <div class="dash-card__header"><h3 class="dash-card__title">${isCharityClient(data) ? 'Attributed Donations' : 'Attributed Revenue'}</h3></div>
             <div style="padding:var(--space-5) var(--space-6);" id="attributed-revenue-body">
               <div style="display:flex;align-items:center;gap:8px;color:var(--color-text-muted);font-size:var(--text-sm);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Loading...</div>
             </div>
@@ -5612,6 +5612,11 @@
       // still get the shell (empty-state / any-content picker inside).
       btn.style.display = '';
       if (typeof lucide !== 'undefined') lucide.createIcons();
+      // Rename Brand → Voice for charity clients
+      if (isCharityClient(data)) {
+        const brandBtn = document.querySelector('[data-nav="brand-voice"]');
+        if (brandBtn) brandBtn.innerHTML = brandBtn.innerHTML.replace('Brand', 'Voice');
+      }
     }
     function updateBreadcrumb(nav) {
       const bc = document.getElementById('dash-breadcrumb');
@@ -5928,7 +5933,7 @@
           </div>
           <!-- Create Video CTA -->
           <div class="dash-card" style="margin-bottom:24px;overflow:hidden;">
-            <div style="padding:32px;text-align:center;">
+            <div style="padding:16px 24px;text-align:center;">
               <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
                 <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(124,58,237,0.15));border:1px solid rgba(139,92,246,0.25);display:flex;align-items:center;justify-content:center;">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
@@ -6615,13 +6620,13 @@
         const val = minV + (maxV - minV) * (g / 3);
         const yy = y(val);
         grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
-        grid += `<text x="${padL - 8}" y="${(yy + 3).toFixed(1)}" text-anchor="end" fill="var(--color-text-faint)" font-size="10" font-family="sans-serif">${Math.round(val).toLocaleString()}</text>`;
+        grid += `<text x="${padL - 8}" y="${(yy + 3).toFixed(1)}" text-anchor="end" fill="rgba(255,255,255,0.5)" font-size="10" font-family="sans-serif">${Math.round(val).toLocaleString()}</text>`;
       }
       // X labels (~4)
       let xlabels = '';
       const step = Math.max(1, Math.floor(n / 4));
       for (let i = 0; i < n; i += step) {
-        xlabels += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" fill="var(--color-text-faint)" font-size="10" font-family="sans-serif">${labels[i]}</text>`;
+        xlabels += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="10" font-family="sans-serif">${labels[i]}</text>`;
       }
       const lines = series.map(s => {
         const pts = s.data.map((v, i) => ({ x: x(i), y: y(v) }));
@@ -6686,7 +6691,7 @@
           <div class="grow-post__body">
             <div class="grow-post__title">${_growEsc(post.title)}</div>
             <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
-            <div class="grow-post__meta" style="margin-top:4px;">${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)} ${post.eng_rate != null ? '· ' : ''}${growNum(post.likes)} likes</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)} ${post.eng_rate != null ? '· ' : ''}${growNum(post.likes)} likes</div>
           </div>
           <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
         </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
@@ -6768,6 +6773,7 @@
                 <option value="eng_rate">By engagement</option>
                 <option value="likes">By likes</option>
                 <option value="reach">By reach</option>
+                <option value="views">By views</option>
               </select>
             </div>
             <div class="analytics-card__body">
@@ -6914,7 +6920,7 @@
           <div class="grow-post__body">
             <div class="grow-post__title">${_growEsc(post.title)}</div>
             <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
-            <div class="grow-post__meta" style="margin-top:4px;">${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes</div>
           </div>
           <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
         </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
