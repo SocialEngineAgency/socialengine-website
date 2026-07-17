@@ -2700,6 +2700,7 @@
           <button class="dash-nav-item" data-nav="inbox"><i data-lucide="inbox"></i> Engage</button>
           <button class="dash-nav-item" data-nav="analytics"><i data-lucide="bar-chart-3"></i> Analytics</button>
           <button class="dash-nav-item" data-nav="competitor-intel"><i data-lucide="search"></i> Intel</button>
+          <button class="dash-nav-item" data-nav="fundraise" id="nav-fundraise" style="display:none;"><i data-lucide="heart-handshake"></i> Fundraise</button>
           <button class="dash-nav-item" data-nav="ai-coach"><i data-lucide="sparkles"></i> Coach</button>
           <button class="dash-nav-item" data-nav="brand-voice"><i data-lucide="message-square"></i> Brand</button>
           <button class="dash-nav-item" data-nav="ai-studio"><i data-lucide="layout-grid"></i> All Tools</button>
@@ -4342,6 +4343,7 @@
 
           renderDashboard(data, true);
           updateCreationStudioNav(data);
+          updateFundraiseNav(data);
           prefetchStudioCatalogSilently().catch(() => {});
           startTierPolling();
           updateSidebarCredits();
@@ -4554,6 +4556,7 @@
         }
         renderDashboard(data, true);
         updateCreationStudioNav(data);
+        updateFundraiseNav(data);
         prefetchStudioCatalogSilently().catch(() => {});
         startTierPolling();
         updateSidebarCredits();
@@ -5577,7 +5580,8 @@
         'video-studio': 'AI-powered video creation for your brand',
         'creation-studio': 'Fabric canvas editor — layers, AI chat, Higgsfield backgrounds',
         'ad-studio': 'Create scroll-stopping ad creatives for any platform',
-        'settings': 'Account and platform settings'
+        'settings': 'Account and platform settings',
+        'fundraise': 'Manage and track your fundraising campaigns'
       };
       const sub = pageSubtitles[page] || '';
       el.innerHTML = `Good ${tod}, ${g.firstName}<div class="dash-topbar__subtitle">${sub}</div>`;
@@ -5596,7 +5600,8 @@
       'inbox': 'Engage',
       'ad-studio': 'Ads',
       'ai-studio': 'All Tools',
-      'settings': 'Settings'
+      'settings': 'Settings',
+      'fundraise': 'Fundraise'
     };
 
     function isCharityClient(data) {
@@ -5617,6 +5622,10 @@
         const brandBtn = document.querySelector('[data-nav="brand-voice"]');
         if (brandBtn) brandBtn.innerHTML = brandBtn.innerHTML.replace('Brand', 'Voice');
       }
+    }
+    function updateFundraiseNav(data) {
+      const fundraiseBtn = document.getElementById('nav-fundraise');
+      if (fundraiseBtn) fundraiseBtn.style.display = isCharityClient(data) ? '' : 'none';
     }
     function updateBreadcrumb(nav) {
       const bc = document.getElementById('dash-breadcrumb');
@@ -5650,6 +5659,7 @@
         else if (nav === 'brand-voice') { renderBrandVoicePage(clientData); }
         else if (nav === 'ai-coach') { renderAICoach(); }
         else if (nav === 'competitor-intel') { renderCompetitorIntel(); }
+        else if (nav === 'fundraise') { renderFundraise(clientData); }
         else if (nav === 'video-studio') { window._studioClientData = clientData; renderVideoStudio(); }
         else if (nav === 'inbox') { renderInbox(); }
         else if (nav === 'ad-studio') { renderAdStudio(); }
@@ -9586,6 +9596,184 @@
         // Settings modal button and save — wired in skeleton init above; skip re-binding here
       }
     }
+
+    // ━━━ Fundraise ━━━
+    function renderFundraise(data) {
+      const content = document.getElementById('dash-content');
+      if (!content) return;
+      const clientName = data?.client?.business_name || 'your charity';
+      const hasJGId = !!(data?.client?.justgiving_charity_id);
+
+      content.innerHTML = `
+        <div class="section-header">
+          <h2 class="section-title">Fundraise</h2>
+          <p class="section-subtitle">Manage and track your fundraising campaigns across JustGiving and social platforms</p>
+        </div>
+
+        ${!hasJGId ? `
+        <!-- Connect JustGiving -->
+        <div style="max-width:560px;margin:40px auto;text-align:center;padding:40px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:16px;">
+          <div style="width:56px;height:56px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+            <i data-lucide="heart-handshake" style="width:28px;height:28px;color:#fff;"></i>
+          </div>
+          <h3 style="font-size:1.15rem;font-weight:700;color:var(--color-text);margin-bottom:8px;">Connect JustGiving</h3>
+          <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:24px;line-height:1.6;">Enter your JustGiving Charity ID to see your campaigns, fundraiser performance, and total raised — all in one place.</p>
+          <div style="display:flex;gap:10px;max-width:380px;margin:0 auto;">
+            <input type="text" id="jg-charity-id-input" placeholder="e.g. 12345" style="flex:1;padding:10px 14px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:10px;color:var(--color-text);font-size:0.9rem;outline:none;font-family:var(--font-body);">
+            <button onclick="saveJGCharityId()" style="padding:10px 20px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;border-radius:10px;color:#fff;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Connect</button>
+          </div>
+          <p style="font-size:0.72rem;color:var(--color-text-muted);margin-top:12px;">Find your Charity ID on your JustGiving dashboard under Account Settings</p>
+        </div>
+        ` : `
+        <!-- Dashboard -->
+        <div id="fundraise-dashboard">
+          <!-- Summary cards -->
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+            <div class="analytics-card" style="padding:20px;">
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Total Raised</div>
+              <div id="jg-total-raised" style="font-size:1.8rem;font-weight:800;color:var(--color-text);">—</div>
+              <div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">across all campaigns</div>
+            </div>
+            <div class="analytics-card" style="padding:20px;">
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Active Campaigns</div>
+              <div id="jg-active-campaigns" style="font-size:1.8rem;font-weight:800;color:var(--color-text);">—</div>
+              <div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">currently running</div>
+            </div>
+            <div class="analytics-card" style="padding:20px;">
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Top Fundraiser</div>
+              <div id="jg-top-fundraiser" style="font-size:1rem;font-weight:700;color:var(--color-text);">—</div>
+              <div id="jg-top-fundraiser-amount" style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;"></div>
+            </div>
+            <div class="analytics-card" style="padding:20px;">
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gift Aid Boost</div>
+              <div id="jg-giftaid" style="font-size:1.8rem;font-weight:800;color:#10b981;">+25%</div>
+              <div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">automatically claimed</div>
+            </div>
+          </div>
+
+          <!-- Active Campaigns list -->
+          <div class="analytics-card" style="margin-bottom:24px;">
+            <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;">
+              <h3 class="analytics-card__title">Active Campaigns</h3>
+              <a href="https://www.justgiving.com" target="_blank" style="font-size:0.75rem;color:#7C3AED;text-decoration:none;font-weight:600;">Open JustGiving ↗</a>
+            </div>
+            <div class="analytics-card__body">
+              <div id="jg-campaigns-list"><div style="text-align:center;padding:32px;color:var(--color-text-muted);font-size:0.85rem;">Loading campaigns…</div></div>
+            </div>
+          </div>
+
+          <!-- Fundraising content ideas -->
+          <div class="analytics-card">
+            <div class="analytics-card__header">
+              <h3 class="analytics-card__title">Fundraising Content Ideas</h3>
+            </div>
+            <div class="analytics-card__body">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
+                ${[
+                  { icon: 'video', title: 'Impact Reel', desc: 'Show what donations achieve — a patient story, treatment milestone, or research breakthrough in 30 seconds', platform: 'IG + TikTok' },
+                  { icon: 'users', title: 'Peer-to-Peer Push', desc: 'Ask supporters to create their own JustGiving pages. Birthday fundraisers drive 3x more donations than charity-led campaigns', platform: 'Facebook + IG' },
+                  { icon: 'calendar', title: 'Giving Tuesday Campaign', desc: 'Pre-schedule a 3-post countdown to Giving Tuesday with a matching gift challenge. UK charities average £6,200 on the day', platform: 'All platforms' },
+                  { icon: 'radio', title: 'LIVE Fundraising Stream', desc: 'Facebook or Instagram LIVE with a fundraising goal visible on screen. Verbal CTAs every 5 mins + link in bio to JustGiving page', platform: 'Facebook LIVE' },
+                ].map(item => \`
+                  <div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                      <div style="width:34px;height:34px;background:rgba(255,107,53,0.12);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i data-lucide="\${item.icon}" style="width:16px;height:16px;color:#FF6B35;"></i>
+                      </div>
+                      <div>
+                        <div style="font-size:0.82rem;font-weight:700;color:var(--color-text);">\${item.title}</div>
+                        <div style="font-size:0.65rem;color:#FF6B35;font-weight:600;">\${item.platform}</div>
+                      </div>
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--color-text-muted);line-height:1.5;">\${item.desc}</div>
+                  </div>
+                \`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+        `}
+      `;
+
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      if (hasJGId) loadFundraiseData();
+    }
+
+    window.loadFundraiseData = async function() {
+      try {
+        const summaryRes = await apiFetch('/api/fundraise/summary');
+        if (summaryRes.ok) {
+          const s = await summaryRes.json();
+          const fmt = n => '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+          const el = id => document.getElementById(id);
+          if (el('jg-total-raised')) el('jg-total-raised').textContent = fmt(s.total_raised);
+          if (el('jg-active-campaigns')) el('jg-active-campaigns').textContent = s.active_campaigns || 0;
+          if (el('jg-top-fundraiser') && s.top_fundraiser) {
+            el('jg-top-fundraiser').textContent = s.top_fundraiser.name;
+            if (el('jg-top-fundraiser-amount')) el('jg-top-fundraiser-amount').textContent = fmt(s.top_fundraiser.amount) + ' raised';
+          }
+        }
+        const campRes = await apiFetch('/api/fundraise/campaigns');
+        if (campRes.ok) {
+          const { campaigns } = await campRes.json();
+          const list = document.getElementById('jg-campaigns-list');
+          if (list) {
+            if (!campaigns || campaigns.length === 0) {
+              list.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:16px 0;">No active campaigns found on JustGiving.</p>';
+            } else {
+              const fmt = n => '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+              list.innerHTML = campaigns.filter(c => (c.status || '').toLowerCase() === 'active').slice(0, 10).map(c => {
+                const pct = c.target > 0 ? Math.min(100, Math.round((c.total_raised / c.target) * 100)) : 0;
+                return \`
+                <div style="padding:14px 0;border-bottom:1px solid var(--color-border);">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
+                    <div style="flex:1;">
+                      <div style="font-size:0.88rem;font-weight:600;color:var(--color-text);">\${c.title || 'Untitled Campaign'}</div>
+                      \${c.owner_name ? \`<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:2px;">by \${c.owner_name}</div>\` : ''}
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;">
+                      <div style="font-size:0.95rem;font-weight:700;color:var(--color-text);">\${fmt(c.total_raised)}</div>
+                      \${c.target > 0 ? \`<div style="font-size:0.68rem;color:var(--color-text-muted);">of \${fmt(c.target)} goal</div>\` : ''}
+                    </div>
+                  </div>
+                  \${c.target > 0 ? \`
+                  <div style="height:5px;background:var(--color-surface-2);border-radius:3px;overflow:hidden;">
+                    <div style="height:100%;width:\${pct}%;background:linear-gradient(90deg,#FF6B35,#FF8C42);border-radius:3px;transition:width 0.6s;"></div>
+                  </div>
+                  <div style="font-size:0.68rem;color:var(--color-text-muted);margin-top:4px;">\${pct}% of goal reached</div>
+                  \` : ''}
+                  <a href="\${c.page_url}" target="_blank" style="display:inline-block;margin-top:8px;font-size:0.72rem;color:#FF6B35;font-weight:600;text-decoration:none;">View on JustGiving ↗</a>
+                </div>\`;
+              }).join('');
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Fundraise load error:', e);
+      }
+    };
+
+    window.saveJGCharityId = async function() {
+      const input = document.getElementById('jg-charity-id-input');
+      const id = input?.value?.trim();
+      if (!id) return;
+      try {
+        const res = await apiFetch('/api/fundraise/save-charity-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ justgiving_charity_id: id })
+        });
+        if (res.ok) {
+          if (!clientData.client) clientData.client = {};
+          clientData.client.justgiving_charity_id = id;
+          renderFundraise(clientData);
+        } else {
+          alert('Could not save. Please try again.');
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    };
 
     // ━━━ Competitor Intel ━━━
     function renderCompetitorIntel() {
