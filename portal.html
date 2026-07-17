@@ -2693,7 +2693,7 @@
         </a>
         <nav class="dash-sidebar__nav" aria-label="Dashboard navigation">
           <button class="dash-nav-item active" data-nav="dashboard"><i data-lucide="layout-dashboard"></i> Home</button>
-          <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content</button>
+          <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content Review</button>
           <button class="dash-nav-item" data-nav="schedule"><i data-lucide="calendar"></i> Schedule</button>
           <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="clapperboard"></i> Studio</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
@@ -5010,6 +5010,25 @@
       const captionPreview = fullText.replace(/#[\w]+/g, '').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim().substring(0,90);
       const hashtagPreview = hashtags.slice(0,3).join(' ');
 
+      // Pre-build schedule footer HTML (avoids triple-nested template literals)
+      const isSchedulable = status === 'Approved' || status === 'Scheduled';
+      const schedDate = post.scheduled_date || '';
+      const safePostId = (post.id || '').replace(/'/g, "\\'");
+      const safeSchedDate = schedDate.replace(/'/g, "\\'");
+      let scheduleFooterHtml = '';
+      if (isSchedulable && schedDate) {
+        scheduleFooterHtml = '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
+          + '<span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + status + '</span>'
+          + '<span style="font-size:0.68rem;color:var(--color-text-muted);">Scheduled: ' + schedDate
+          + ' <button onclick="event.stopPropagation();scheduleFromContent(\'' + safePostId + '\',\'' + safeSchedDate + '\')" style="background:none;border:none;color:#7C3AED;font-size:0.68rem;cursor:pointer;text-decoration:underline;">View in calendar</button></span>'
+          + '</div>';
+      } else if (isSchedulable) {
+        scheduleFooterHtml = '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">'
+          + '<span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + status + '</span>'
+          + '<button onclick="event.stopPropagation();scheduleFromContent(\'' + safePostId + '\',\'\')" style="padding:3px 9px;font-size:0.7rem;font-weight:600;background:rgba(124,58,237,0.12);color:#C4B5FD;border:1px solid rgba(124,58,237,0.25);border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">Schedule</button>'
+          + '</div>';
+      }
+
       return `
         <div class="studio-card" data-status="${status}" data-platform="${platform}">
           <div class="studio-card__media" onclick="openStudioModal(${index})">${mediaHTML}</div>
@@ -5053,9 +5072,7 @@
               <div style="width:12px;height:12px;border:1.5px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
               <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);">Regenerating...</span>
             </div>` : `
-            <div class="studio-card__footer" onclick="openStudioModal(${index})" style="cursor:pointer;margin-top:8px;">
-              <span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">${status === 'Scheduled' ? 'Scheduled' : status === 'Published' ? 'Published' : status === 'Approved' ? 'Approved' : 'View details'} →</span>
-            </div>`}
+            ${scheduleFooterHtml || '<div class="studio-card__footer" onclick="openStudioModal(' + index + ')" style="cursor:pointer;margin-top:8px;"><span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + (status === 'Published' ? 'Published' : 'View details') + ' →</span></div>'}`}
           </div>
         </div>
       `;
@@ -5096,6 +5113,16 @@
         </div>
       `;
     }
+
+    // ── Schedule from Content tab — navigate to schedule and open the date panel ──
+    window.scheduleFromContent = function(postId, existingDate) {
+      var targetDate = existingDate || new Date().toISOString().split('T')[0];
+      var schedBtn = document.querySelector('[data-nav="schedule"]');
+      if (schedBtn) schedBtn.click();
+      setTimeout(function() {
+        if (window.openDatePanel) window.openDatePanel(targetDate, window.__clientData);
+      }, 400);
+    };
 
     // Toggle video brief visibility
     window.toggleBrief = function(id) {
@@ -5590,7 +5617,7 @@
     // ━━━ Sidebar Nav ━━━
     const NAV_LABELS = {
       'dashboard': 'Home',
-      'content': 'Content',
+      'content': 'Content Review',
       'creation-studio': 'Studio',
       'analytics': 'Analytics',
       'brand-voice': 'Brand',
@@ -8635,9 +8662,12 @@
           <div>
             <p class="chat-page-header__title">AI Marketing Coach</p>
             <p class="chat-page-header__sub">Knows ${businessName} inside out — strategy, content, and growth</p>
-            <div style="display:inline-flex;align-items:center;gap:5px;margin-top:4px;padding:3px 8px;border-radius:20px;background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(59,130,246,0.12));border:1px solid rgba(124,58,237,0.15);">
-              <div style="width:5px;height:5px;border-radius:50%;background:#7c3aed;animation:pulse-live 2s infinite;"></div>
-              <span style="font-size:0.62rem;font-weight:600;color:rgba(124,58,237,0.8);letter-spacing:0.04em;">Powered by real-time intelligence</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+              <div style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:20px;background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(59,130,246,0.12));border:1px solid rgba(124,58,237,0.15);">
+                <div style="width:5px;height:5px;border-radius:50%;background:#7c3aed;animation:pulse-live 2s infinite;"></div>
+                <span style="font-size:0.62rem;font-weight:600;color:rgba(124,58,237,0.8);letter-spacing:0.04em;">Powered by real-time intelligence</span>
+              </div>
+              <span style="font-size:0.65rem;background:rgba(124,58,237,0.15);color:#C4B5FD;padding:2px 7px;border-radius:4px;font-weight:600;">Smart Learning ON</span>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:16px;margin-left:auto;">
@@ -9088,12 +9118,19 @@
         });
       });
 
-      // Clear history handler
+      // Clear history handler — clears both localStorage and server-side Airtable history
       const clearBtn = document.getElementById('chat-clear-btn');
       if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
+        clearBtn.addEventListener('click', async () => {
+          if (!confirm('Clear your full conversation history with the coach? This cannot be undone.')) return;
           chatHistory = [];
           try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch(e) {}
+          try {
+            await fetch(API + '/api/coach/clear-history', {
+              method: 'POST',
+              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            });
+          } catch(e) {}
           renderAICoach();
         });
       }
@@ -12777,8 +12814,40 @@
         : ((typeof _vcShopifyProducts !== 'undefined' && _vcShopifyProducts.length) ? _vcShopifyProducts : []);
       const productsToRender = adProductsForRender(products);
       const hasProducts = productsToRender.length > 0;
+
+      // Charity adaptation
+      const isCharityAds = isCharityClient(window.__clientData || clientData);
+      const charityCampaignsHtml = isCharityAds
+        ? '<div style="background:linear-gradient(135deg,rgba(255,107,53,0.08),rgba(124,58,237,0.08));border:1px solid rgba(255,107,53,0.2);border-radius:16px;padding:24px;margin-bottom:28px;">'
+          + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
+          + '<div style="width:40px;height:40px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border-radius:10px;display:flex;align-items:center;justify-content:center;">'
+          + '<i data-lucide="heart-handshake" style="width:20px;height:20px;color:#fff;"></i></div>'
+          + '<div><div style="font-size:1rem;font-weight:700;color:var(--color-text);">Charity Campaigns</div>'
+          + '<div style="font-size:0.75rem;color:var(--color-text-muted);">Meta fundraising ads and awareness campaigns for UK charities</div></div></div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">'
+          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
+          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);margin-bottom:6px;">Fundraising Ad</div>'
+          + '<div style="font-size:0.75rem;color:var(--color-text-muted);line-height:1.5;margin-bottom:12px;">Drive donations with Meta Fundraising ads — native donate button, JustGiving link, or both</div>'
+          + '<button onclick="alert(\'Fundraising ad builder coming soon!\')" style="width:100%;padding:7px;background:rgba(255,107,53,0.12);color:#FF6B35;border:1px solid rgba(255,107,53,0.25);border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;">Create Campaign</button></div>'
+          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
+          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);margin-bottom:6px;">Awareness Campaign</div>'
+          + '<div style="font-size:0.75rem;color:var(--color-text-muted);line-height:1.5;margin-bottom:12px;">Reach new audiences with cause awareness ads — drive follows, shares, and supporter sign-ups</div>'
+          + '<button onclick="alert(\'Awareness campaign builder coming soon!\')" style="width:100%;padding:7px;background:rgba(124,58,237,0.12);color:#C4B5FD;border:1px solid rgba(124,58,237,0.25);border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;">Create Campaign</button></div>'
+          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
+          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);margin-bottom:6px;">Giving Tuesday Boost</div>'
+          + '<div style="font-size:0.75rem;color:var(--color-text-muted);line-height:1.5;margin-bottom:12px;">Pre-build your Giving Tuesday ad campaign with AI-generated creative and fundraising CTAs</div>'
+          + '<button onclick="alert(\'Giving Tuesday builder coming soon!\')" style="width:100%;padding:7px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;">Plan Campaign</button></div>'
+          + '</div></div>'
+        : '';
+      // Rename nav button for charity clients
+      const adNavBtn = document.querySelector('[data-nav="ad-studio"]');
+      if (adNavBtn && isCharityAds) {
+        adNavBtn.innerHTML = adNavBtn.innerHTML.replace(/>Ads</, '>Campaigns<');
+      }
+
       content.innerHTML = `
         <div style="max-width:1100px;margin:0 auto;">
+          ${charityCampaignsHtml}
           <!-- Header -->
           <div style="margin-bottom:28px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
