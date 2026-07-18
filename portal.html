@@ -14765,10 +14765,10 @@
 <div id="cal-panel" style="position:fixed;right:0;top:0;width:360px;height:100vh;background:#111827;border-left:1px solid rgba(255,255,255,0.08);padding:28px 24px;overflow-y:auto;z-index:1100;transform:translateX(100%);opacity:0;transition:transform 0.25s ease,opacity 0.25s ease;box-shadow:-20px 0 60px rgba(0,0,0,0.5);"></div>
 
 <!-- Date panel (slide-in from right) -->
-<div id="schedule-date-panel" style="position:fixed;top:0;right:-420px;width:380px;height:100vh;background:var(--color-surface-1,#1a1a2e);border-left:1px solid var(--color-border,rgba(255,255,255,0.08));z-index:1000;transition:right 0.28s cubic-bezier(0.4,0,0.2,1);overflow-y:auto;padding:0;" onclick="event.stopPropagation()">
+<div id="schedule-date-panel" style="position:fixed;top:0;right:-420px;width:380px;height:100vh;background:var(--color-surface-1,#1a1a2e);border-left:1px solid var(--color-border,rgba(255,255,255,0.08));z-index:1200;transition:right 0.28s cubic-bezier(0.4,0,0.2,1);overflow-y:auto;padding:0;" onclick="event.stopPropagation()">
   <div id="schedule-date-panel-content" style="padding:24px;"></div>
 </div>
-<div id="schedule-date-overlay" onclick="closeDatePanel()" style="display:none;position:fixed;inset:0;z-index:999;"></div>
+<div id="schedule-date-overlay" onclick="closeDatePanel()" style="display:none;position:fixed;inset:0;z-index:1190;"></div>
 
 <input type="file" id="sched-file-input" multiple accept="video/*,image/*" style="display:none" onchange="_handleBatchUpload(this.files)">
 `;
@@ -15129,12 +15129,12 @@
       byDate[dateKey].push({ id: p.id, _source: 'content', ...f });
     }
 
-    // Published social posts from IG / FB — keyed by published timestamp date
+    // Published social posts from IG / FB — keyed by local calendar date
+    // (UTC slice put evening US posts on the next day)
     for (const p of _calHistoryPosts) {
-      const dateKey = (p.timestamp || '').slice(0, 10);
+      const dateKey = _calLocalDateKey(p.timestamp);
       if (!dateKey) continue;
       if (!byDate[dateKey]) byDate[dateKey] = [];
-      // Normalize to same shape chips expect
       byDate[dateKey].push({
         id:            p.id,
         status:        'Published',
@@ -15271,6 +15271,17 @@
   function _calToday() {
     const n = new Date(); _calYear = n.getFullYear(); _calMonth = n.getMonth(); _renderCalendar();
   }
+  /** YYYY-MM-DD in the viewer's local timezone */
+  function _calLocalDateKey(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return String(ts).slice(0, 10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  window._calLocalDateKey = _calLocalDateKey;
 
   function _openCalPost(postId) {
     // Social history posts (from IG/FB) take a different panel
@@ -15386,15 +15397,102 @@
           <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);line-height:1.65;max-height:200px;overflow-y:auto;white-space:pre-wrap;">${safeCaption}</div>
         </div>` : ''}
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
-        ${post.permalink ? `<a href="${post.permalink}" target="_blank" rel="noopener" style="display:block;text-align:center;padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;text-decoration:none;">View on ${platLabel} ↗</a>` : ''}
-        <button onclick="_repostSocialPost('${safeId}')" style="padding:9px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">♻ Repost this</button>
+        <button onclick="_repostSocialPost('${safeId}')" style="padding:9px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
+        <div style="display:flex;gap:7px;">
+          <button id="cal-remix-btn" onclick="_calPanelRemix('${safeId}')" style="flex:1;padding:8px 10px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;color:#C4B5FD;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Remix</button>
+          <button onclick="_calPanelWhy('${safeId}')" style="flex:1;padding:8px 10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:8px;color:#A5B4FC;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
+        </div>
+        ${post.permalink ? `<a href="${post.permalink}" target="_blank" rel="noopener" style="display:block;text-align:center;padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;text-decoration:none;">Open on ${platLabel}</a>` : ''}
+        <div id="cal-post-insight" style="display:none;"></div>
       </div>`;
 
     panel.style.transform = 'translateX(0)';
     panel.style.opacity   = '1';
   }
 
-  function _repostSocialPost(postId) {
+  async function _calPanelWhy(postId) {
+    const post = (_calHistoryPosts || []).find(p => p.id === postId);
+    const area = document.getElementById('cal-post-insight');
+    if (!post || !area) return;
+    area.style.display = 'block';
+    area.innerHTML = '<div style="font-size:0.76rem;color:rgba(255,255,255,0.4);padding:6px 0;">Analyzing what drove performance…</div>';
+    try {
+      const payload = {
+        title: (post.caption || '').slice(0, 80),
+        caption: post.caption || '',
+        platform: post.platform || 'instagram',
+        media_type: post.media_type || 'Post',
+        likes: post.likes || 0,
+        comments: post.comments || 0,
+        views: post.views || 0,
+        eng_rate: null,
+      };
+      const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+          'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        },
+        body: JSON.stringify({ mode: 'post', period: '30d', post: payload, metrics: { top_posts: [payload] } }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.analysis) throw new Error(d.error || 'No analysis');
+      area.innerHTML = `<div style="padding:10px 12px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:10px;">
+        <div style="font-size:0.68rem;font-weight:700;color:#A5B4FC;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Why it worked</div>
+        <div style="font-size:0.78rem;color:rgba(255,255,255,0.72);line-height:1.55;">${String(d.analysis).replace(/</g,'&lt;')}</div>
+      </div>`;
+    } catch (e) {
+      area.innerHTML = `<div style="font-size:0.76rem;color:rgba(248,113,113,0.85);">Couldn\u2019t analyze. <button onclick="_calPanelWhy('${postId.replace(/'/g, "\\'")}')" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:0.76rem;">Retry</button></div>`;
+    }
+  }
+
+  async function _calPanelRemix(postId) {
+    const post = (_calHistoryPosts || []).find(p => p.id === postId);
+    if (!post || !(post.caption || '').trim()) {
+      if (typeof showToast === 'function') showToast('No caption to remix', 'warning');
+      return;
+    }
+    const btn = document.getElementById('cal-remix-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Remixing…'; }
+    try {
+      const payload = {
+        title: (post.caption || '').slice(0, 80),
+        caption: post.caption || '',
+        platform: post.platform || 'instagram',
+        media_type: post.media_type || 'Post',
+        likes: post.likes || 0,
+        comments: post.comments || 0,
+        views: post.views || 0,
+      };
+      const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+          'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        },
+        body: JSON.stringify({ mode: 'remix', period: '30d', post: payload, metrics: {} }),
+      });
+      const d = await res.json();
+      if (!res.ok || !d.caption) throw new Error(d.error || 'Remix failed');
+      _closeCalPanel();
+      const todayStr = (window._calLocalDateKey || (() => new Date().toISOString().slice(0, 10)))(new Date());
+      if (window.openDatePanel) {
+        window.openDatePanel(todayStr, window.__clientData || { content: _calPosts });
+        setTimeout(function() {
+          const ta = document.getElementById('quick-schedule-caption');
+          if (ta) { ta.value = d.caption; ta.focus(); }
+          if (typeof showToast === 'function') showToast('Remixed caption ready — review & schedule');
+        }, 120);
+      }
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('Remix failed — try again', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Remix'; }
+    }
+  }
+
+    function _repostSocialPost(postId) {
     const post = _calHistoryPosts.find(p => p.id === postId);
     if (!post) return;
     _closeCalPanel();
@@ -15445,6 +15543,8 @@
   window._openCalPost               = _openCalPost;
   window._openSocialPostPanel       = _openSocialPostPanel;
   window._repostSocialPost          = _repostSocialPost;
+  window._calPanelWhy               = _calPanelWhy;
+  window._calPanelRemix             = _calPanelRemix;
   window._closeCalPanel             = _closeCalPanel;
 
   window.convertTo24h = function(timeStr) {
@@ -15487,18 +15587,63 @@
     const content = document.getElementById('schedule-date-panel-content');
     if (!panel || !content) return;
 
-    const today   = new Date().toISOString().split('T')[0];
-    const isPast  = dateStr < today;
-    const isToday = dateStr === today;
+    if (typeof _closeCalPanel === 'function') _closeCalPanel();
 
-    // ── Pull posts from BOTH sources ──────────────────────────────────────
-    const socialOnDay = (_calHistoryPosts || []).filter(p =>
-      (p.timestamp || '').startsWith(dateStr)
-    );
+    const todayLocal = (window._calLocalDateKey || ((ts) => String(ts || '').slice(0, 10)))(new Date());
+    const isPast  = dateStr < todayLocal;
+    const isToday = dateStr === todayLocal;
+
+    const socialRaw = (_calHistoryPosts || []).filter(p =>
+      (window._calLocalDateKey ? _calLocalDateKey(p.timestamp) : String(p.timestamp || '').slice(0, 10)) === dateStr
+    ).map(p => ({ ...p, _source: 'social' }));
+
     const contentOnDay = (_calPosts || []).filter(p => {
       const f = p.fields || p;
       return (f.scheduled_date || f.scheduledDate || '').startsWith(dateStr);
-    }).map(p => ({ ...( p.fields || p ), id: p.id, _source: 'content' }));
+    }).map(p => ({ ...(p.fields || p), id: p.id, _source: 'content' }));
+
+    // Dedupe IG+FB cross-posts (same caption + media type)
+    const normCap = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 72);
+    const socialOnDay = [];
+    const used = new Set();
+    for (const p of socialRaw) {
+      if (used.has(p.id)) continue;
+      const twin = socialRaw.find(o =>
+        o.id !== p.id &&
+        !used.has(o.id) &&
+        normCap(o.caption) &&
+        normCap(o.caption) === normCap(p.caption) &&
+        String(o.media_type || '') === String(p.media_type || '')
+      );
+      if (twin) {
+        used.add(p.id); used.add(twin.id);
+        const aIsIg = String(p.platform || '').toLowerCase().includes('instagram');
+        const ig = aIsIg ? p : twin;
+        const fb = aIsIg ? twin : p;
+        socialOnDay.push({
+          ...p,
+          id: p.id,
+          _twinId: twin.id,
+          _platforms: ['instagram', 'facebook'],
+          likes: Math.max(Number(ig.likes) || 0, Number(fb.likes) || 0),
+          comments: Math.max(Number(ig.comments) || 0, Number(fb.comments) || 0),
+          views: Math.max(Number(ig.views) || 0, Number(fb.views) || 0),
+          thumbnail_url: (() => {
+            const a = p.thumbnail_url || '';
+            const b = twin.thumbnail_url || '';
+            const tiny = (u) => !u || /p130x130|p160x160|s130x130|stp=dst-jpg_s/i.test(u);
+            if (a && !tiny(a)) return a;
+            if (b && !tiny(b)) return b;
+            return a || b || null;
+          })(),
+          permalink: ig.permalink || fb.permalink,
+          _source: 'social',
+        });
+      } else {
+        used.add(p.id);
+        socialOnDay.push(p);
+      }
+    }
 
     const readyToSchedule = isPast ? [] : (_calPosts || []).filter(p => {
       const f = p.fields || p;
@@ -15507,6 +15652,12 @@
     }).map(p => ({ ...(p.fields || p), id: p.id }));
 
     const allOnDay = [...socialOnDay, ...contentOnDay];
+    window._datePanelPosts = allOnDay;
+    window._datePanelDate = dateStr;
+
+    const platList = (p) => p._platforms || [p.platform];
+    const igCount = socialOnDay.filter(p => platList(p).some(x => String(x).toLowerCase().includes('instagram'))).length;
+    const fbCount = socialOnDay.filter(p => platList(p).some(x => String(x).toLowerCase().includes('facebook'))).length;
 
     const dayOfWeek = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
     const bestTimes = window._growBestTimes || [];
@@ -15514,116 +15665,273 @@
     const formatDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
 
     function platBadge(p) {
-      const pl = (p.platform || p.platforms || '').toLowerCase();
-      if (pl.includes('instagram') || pl === 'ig') return { icon:'📸', label:'Instagram', color:'#E1306C' };
-      if (pl.includes('facebook')  || pl === 'fb') return { icon:'👥', label:'Facebook',  color:'#1877F2' };
-      if (pl.includes('tiktok'))                   return { icon:'🎵', label:'TikTok',    color:'#010101' };
-      return { icon:'📝', label:'Content', color:'#7C3AED' };
-    }
-
-    function copyCaption(idx) {
-      const post = allOnDay[idx];
-      const text = post?.caption || post?.full_post_text || '';
-      if (text) navigator.clipboard?.writeText(text).catch(()=>{});
-      const btn = document.getElementById('copy-btn-' + idx);
-      if (btn) { btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500); }
-    }
-    window._datePanelCopy = copyCaption;
-
-    function repostPost(idx) {
-      const post = allOnDay[idx];
-      if (!post) return;
-      const caption = post.caption || post.full_post_text || '';
-      const safeId = (post.id || '').replace(/'/g, "\\'");
-      if (post._source === 'social') {
-        window.closeDatePanel();
-        window._repostSocialPost && window._repostSocialPost(post.id);
-      } else {
-        window.closeDatePanel();
-        const ta = document.getElementById('quick-schedule-caption');
-        if (ta) ta.value = caption;
+      if (p._platforms && p._platforms.length > 1) {
+        return { icon: 'IG+FB', label: 'IG + Facebook', color: '#A78BFA' };
       }
+      const pl = (p.platform || p.platforms || '').toLowerCase();
+      if (pl.includes('instagram') || pl === 'ig') return { icon:'IG', label:'Instagram', color:'#E1306C' };
+      if (pl.includes('facebook')  || pl === 'fb') return { icon:'FB', label:'Facebook',  color:'#1877F2' };
+      if (pl.includes('tiktok'))                   return { icon:'TT', label:'TikTok',    color:'#94A3B8' };
+      return { icon:'SE', label:'Content', color:'#7C3AED' };
     }
-    window._datePanelRepost = repostPost;
 
-    function viewPost(idx) {
-      const post = allOnDay[idx];
+    window._datePanelAuthHeaders = function() {
+      return {
+        'Content-Type': 'application/json',
+        'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+        'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+      };
+    };
+
+    window._datePanelPostPayload = function(post) {
+      return {
+        title: (post.caption || post.full_post_text || '').slice(0, 80),
+        caption: post.caption || post.full_post_text || '',
+        platform: (post._platforms || [post.platform]).filter(Boolean).join('+') || 'instagram',
+        media_type: post.media_type || 'Post',
+        likes: post.likes || 0,
+        comments: post.comments || 0,
+        views: post.views || 0,
+        date: window._datePanelDate || '',
+        eng_rate: null,
+      };
+    };
+
+    window._datePanelRepost = function(idx) {
+      const post = (window._datePanelPosts || [])[idx];
       if (!post) return;
       if (post._source === 'social') {
+        const rawId = post.id;
         window.closeDatePanel();
-        window._openSocialPostPanel && window._openSocialPostPanel(post);
+        window._repostSocialPost && window._repostSocialPost(rawId);
+      } else {
+        const caption = post.caption || post.full_post_text || '';
+        const ta = document.getElementById('quick-schedule-caption');
+        if (ta) { ta.value = caption; ta.focus(); }
+        if (typeof showToast === 'function') showToast('Caption loaded — review & schedule');
+      }
+    };
+
+    window._datePanelView = function(idx) {
+      const post = (window._datePanelPosts || [])[idx];
+      if (!post) return;
+      if (post._source === 'social') {
+        const raw = (_calHistoryPosts || []).find(h => h.id === post.id)
+          || (_calHistoryPosts || []).find(h => h.id === post._twinId)
+          || post;
+        window.closeDatePanel();
+        window._openSocialPostPanel && window._openSocialPostPanel(raw);
       } else {
         window.closeDatePanel();
         window._openCalPost && window._openCalPost(post.id);
       }
-    }
-    window._datePanelView = viewPost;
+    };
 
-    // ── Build HTML ────────────────────────────────────────────────────────
+    window._datePanelWhy = async function(idx) {
+      const post = (window._datePanelPosts || [])[idx];
+      const area = document.getElementById('day-post-insight-' + idx);
+      if (!post || !area) return;
+      area.style.display = 'block';
+      area.innerHTML = '<div style="font-size:0.76rem;color:rgba(255,255,255,0.4);padding:6px 0;">Analyzing what drove performance…</div>';
+      try {
+        const payload = window._datePanelPostPayload(post);
+        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+          method: 'POST',
+          headers: window._datePanelAuthHeaders(),
+          body: JSON.stringify({
+            mode: 'post',
+            period: '30d',
+            post: payload,
+            metrics: {
+              top_posts: [payload],
+              totals: { reach: { value: payload.views || null } },
+              day: window._datePanelDate,
+            },
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.analysis) throw new Error(d.error || 'No analysis');
+        area.innerHTML = `<div style="padding:10px 12px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:10px;">
+          <div style="font-size:0.68rem;font-weight:700;color:#A5B4FC;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Why it worked</div>
+          <div style="font-size:0.78rem;color:rgba(255,255,255,0.72);line-height:1.55;">${String(d.analysis).replace(/</g,'&lt;')}</div>
+        </div>`;
+      } catch (e) {
+        area.innerHTML = `<div style="font-size:0.76rem;color:rgba(248,113,113,0.85);">Couldn\u2019t analyze. <button onclick="_datePanelWhy(${idx})" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:0.76rem;">Retry</button></div>`;
+      }
+    };
+
+    window._datePanelRemix = async function(idx) {
+      const post = (window._datePanelPosts || [])[idx];
+      if (!post) return;
+      const caption = post.caption || post.full_post_text || '';
+      if (!caption.trim()) {
+        if (typeof showToast === 'function') showToast('No caption to remix', 'warning');
+        return;
+      }
+      const btn = document.getElementById('remix-btn-' + idx);
+      if (btn) { btn.disabled = true; btn.textContent = 'Remixing…'; }
+      try {
+        const payload = window._datePanelPostPayload(post);
+        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+          method: 'POST',
+          headers: window._datePanelAuthHeaders(),
+          body: JSON.stringify({ mode: 'remix', period: '30d', post: payload, metrics: {} }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.caption) throw new Error(d.error || 'Remix failed');
+        window.closeDatePanel();
+        const todayStr = (window._calLocalDateKey || (() => new Date().toISOString().slice(0, 10)))(new Date());
+        window.openDatePanel(todayStr, window.__clientData || { content: _calPosts });
+        setTimeout(() => {
+          const ta = document.getElementById('quick-schedule-caption');
+          if (ta) { ta.value = d.caption; ta.focus(); }
+          if (typeof showToast === 'function') showToast('Remixed caption ready — review & schedule');
+        }, 120);
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Remix failed — try again', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Remix'; }
+      }
+    };
+
+    window._datePanelAnalyze = async function() {
+      const area = document.getElementById('day-analyze-area');
+      const posts = (window._datePanelPosts || []).filter(p => p._source === 'social');
+      if (!area || !posts.length) return;
+      area.innerHTML = '<div style="font-size:0.78rem;color:rgba(255,255,255,0.4);padding:10px 0;">Analyzing this day\u2026</div>';
+      try {
+        const metrics = {
+          day: window._datePanelDate,
+          top_posts: posts.map(p => ({
+            title: (p.caption || '').slice(0, 80),
+            platform: (p._platforms || [p.platform]).join('+'),
+            media_type: p.media_type,
+            likes: p.likes || 0,
+            comments: p.comments || 0,
+            views: p.views || 0,
+            eng_rate: null,
+          })),
+          totals: {
+            reach: { value: posts.reduce((s, p) => s + (Number(p.views) || 0), 0) },
+            engagement_rate: { value: null },
+          },
+        };
+        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+            'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+          },
+          body: JSON.stringify({ mode: 'insights', period: '7d', metrics }),
+        });
+        const d = await res.json();
+        if (!res.ok || !d.insights?.length) throw new Error(d.error || 'No insights');
+        area.innerHTML = d.insights.map(i =>
+          `<div style="padding:10px 12px;margin-bottom:8px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.18);border-radius:10px;">
+            <div style="font-size:0.78rem;font-weight:700;color:#C4B5FD;margin-bottom:4px;">${String(i.title || '').replace(/</g,'&lt;')}</div>
+            <div style="font-size:0.76rem;color:rgba(255,255,255,0.65);line-height:1.5;">${String(i.body || '').replace(/</g,'&lt;')}</div>
+          </div>`
+        ).join('');
+      } catch (e) {
+        area.innerHTML = `<div style="font-size:0.78rem;color:rgba(248,113,113,0.85);padding:8px 0;">Couldn\u2019t analyze right now. <button onclick="_datePanelAnalyze()" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:0.78rem;">Retry</button></div>`;
+      }
+    };
+
+    window._datePanelRepostAll = function() {
+      const posts = (window._datePanelPosts || []).filter(p => p._source === 'social' && (p.caption || p.full_post_text));
+      if (!posts.length) {
+        if (typeof showToast === 'function') showToast('No published posts to repost this day', 'warning');
+        return;
+      }
+      const best = [...posts].sort((a, b) =>
+        ((Number(b.views) || 0) + (Number(b.likes) || 0) * 10) - ((Number(a.views) || 0) + (Number(a.likes) || 0) * 10)
+      )[0];
+      const preview = (best.caption || '').slice(0, 90);
+      const ok = confirm(
+        `Repost the top post from ${formatDate(window._datePanelDate)} to your connected channels?\n\n` +
+        `"${preview}${(best.caption || '').length > 90 ? '\u2026' : ''}"\n\n` +
+        `You\u2019ll confirm caption & schedule next.`
+      );
+      if (!ok) return;
+      window.closeDatePanel();
+      const todayStr = (window._calLocalDateKey || (() => new Date().toISOString().slice(0, 10)))(new Date());
+      window.openDatePanel(todayStr, window.__clientData || { content: _calPosts });
+      setTimeout(() => {
+        const ta = document.getElementById('quick-schedule-caption');
+        if (ta && best.caption) { ta.value = best.caption; ta.focus(); }
+        if (typeof showToast === 'function') showToast('Caption loaded \u2014 review & schedule');
+      }, 120);
+    };
+
     let html = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.07);">
         <div>
           <div style="font-size:0.68rem;font-weight:700;color:${isPast ? 'rgba(255,255,255,0.3)' : isToday ? '#A78BFA' : '#34D399'};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${isPast ? 'Past' : isToday ? 'Today' : 'Upcoming'}</div>
           <div style="font-size:1rem;font-weight:700;color:var(--color-text);">${formatDate(dateStr)}</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:3px;">${allOnDay.length} post${allOnDay.length !== 1 ? 's' : ''}${socialOnDay.length ? ` \u00b7 ${igCount} IG \u00b7 ${fbCount} FB` : ''}</div>
         </div>
-        <button onclick="closeDatePanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:8px;width:30px;height:30px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">✕</button>
+        <button onclick="closeDatePanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:8px;width:30px;height:30px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">\u2715</button>
       </div>`;
 
-    // ── Posts for this day ────────────────────────────────────────────────
-    if (allOnDay.length > 0) {
-      html += `<div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;">${isPast ? 'Published' : 'Scheduled'} · ${allOnDay.length} post${allOnDay.length !== 1 ? 's' : ''}</div>`;
+    if (socialOnDay.length > 0) {
+      html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        <button onclick="_datePanelRepostAll()" style="width:100%;padding:10px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:10px;color:#fff;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost to all channels</button>
+        <button onclick="_datePanelAnalyze()" style="width:100%;padding:10px 14px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.28);border-radius:10px;color:#A5B4FC;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Analyze day</button>
+        <div id="day-analyze-area"></div>
+      </div>`;
+    }
 
+    if (allOnDay.length > 0) {
+      html += `<div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;">${isPast ? 'Published' : 'On this day'} \u00b7 ${allOnDay.length}</div>`;
       allOnDay.forEach((p, idx) => {
         const badge  = platBadge(p);
         const caption = p.caption || p.full_post_text || '';
         const thumb  = p.thumbnail_url || p.image_url || '';
         const isSocial = p._source === 'social';
-
         const metrics = [];
-        if (p.likes    > 0) metrics.push(`❤️ ${Number(p.likes).toLocaleString()}`);
-        if (p.comments > 0) metrics.push(`💬 ${Number(p.comments).toLocaleString()}`);
-        if (p.views    > 0) metrics.push(`▶ ${Number(p.views).toLocaleString()}`);
-        if (p.shares   > 0) metrics.push(`↗ ${Number(p.shares).toLocaleString()}`);
+        if (p.likes    > 0) metrics.push('\u2764 ' + Number(p.likes).toLocaleString());
+        if (p.comments > 0) metrics.push('\ud83d\udcac ' + Number(p.comments).toLocaleString());
+        if (p.views    > 0) metrics.push('\u25b6 ' + Number(p.views).toLocaleString());
+        if (p.shares   > 0) metrics.push('\u2197 ' + Number(p.shares).toLocaleString());
 
         html += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;overflow:hidden;">
-          ${thumb ? `<img src="${thumb}" style="width:100%;height:110px;object-fit:cover;display:block;" onerror="this.style.display='none'">` : ''}
+          ${thumb ? `<img src="${thumb}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;" onclick="_datePanelView(${idx})" onerror="this.style.display='none'">` : ''}
           <div style="padding:12px 13px;">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
-              <span style="font-size:0.78rem;">${badge.icon}</span>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap;">
+              <span style="font-size:0.62rem;font-weight:800;color:${badge.color};letter-spacing:0.04em;">${badge.icon}</span>
               <span style="font-size:0.67rem;font-weight:700;color:${badge.color};text-transform:uppercase;letter-spacing:0.05em;">${badge.label}</span>
-              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);margin-left:2px;">· ${p.media_type}</span>` : ''}
+              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">\u00b7 ${p.media_type}</span>` : ''}
               ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : ''}
             </div>
-            ${caption ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : ''}
-            ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : ''}
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button onclick="_datePanelView(${idx})" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.7);font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">👁 View</button>
-              <button id="copy-btn-${idx}" onclick="_datePanelCopy(${idx})" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.7);font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">📋 Copy</button>
-              <button onclick="_datePanelRepost(${idx})" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.25);border-radius:7px;color:#C4B5FD;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">♻ Repost</button>
-              ${isSocial && p.permalink ? `<a href="${p.permalink}" target="_blank" rel="noopener" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.45);font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-decoration:none;text-align:center;">🔗 Open</a>` : ''}
+            ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : ''}
+            ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : (isSocial ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.25);margin-bottom:10px;">No engagement yet</div>` : '')}
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              <button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
+              <div style="display:flex;gap:6px;">
+                <button id="remix-btn-${idx}" onclick="_datePanelRemix(${idx})" style="flex:1;padding:7px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:7px;color:#C4B5FD;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Remix</button>
+                <button onclick="_datePanelWhy(${idx})" style="flex:1;padding:7px 8px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:7px;color:#A5B4FC;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button onclick="_datePanelView(${idx})" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">View</button>
+                ${isSocial && p.permalink ? `<a href="${p.permalink}" target="_blank" rel="noopener" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.45);font-size:0.7rem;font-weight:600;text-decoration:none;text-align:center;font-family:var(--font-body);">Open</a>` : ''}
+              </div>
+              <div id="day-post-insight-${idx}" style="display:none;"></div>
             </div>
           </div>
         </div>`;
       });
-
-      // Analyze button (only for past dates with social posts)
-      if (isPast && socialOnDay.length > 0) {
-        html += `<button onclick="document.querySelector('[data-nav=grow]')?.click();closeDatePanel();" style="width:100%;margin-top:4px;margin-bottom:14px;padding:9px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:9px;color:#A5B4FC;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">📊 Analyze performance in Analytics</button>`;
-      }
     } else {
-      html += `<div style="text-align:center;padding:32px 16px;">
-        <div style="font-size:2rem;margin-bottom:10px;">📅</div>
-        <div style="font-size:0.84rem;color:rgba(255,255,255,0.35);margin-bottom:4px;">Nothing posted this day</div>
-        ${isPast ? `<div style="font-size:0.74rem;color:rgba(255,255,255,0.2);">Scroll back to a day with posts to repost content</div>` : ''}
+      html += `<div style="text-align:center;padding:28px 16px;margin-bottom:8px;">
+        <div style="font-size:0.88rem;font-weight:600;color:rgba(255,255,255,0.55);margin-bottom:6px;">Nothing on this day</div>
+        <div style="font-size:0.74rem;color:rgba(255,255,255,0.28);line-height:1.5;">${isPast ? 'No published posts found for this date.' : 'Schedule something below, or upload a batch to this day.'}</div>
       </div>`;
     }
 
-    // ── Ready to Schedule (future dates) ─────────────────────────────────
     if (!isPast && readyToSchedule.length > 0) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;padding-top:14px;">
         <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:9px;">Ready to Schedule (${readyToSchedule.length})</div>`;
       readyToSchedule.slice(0, 4).forEach((p, idx) => {
-        const safeCaption = (p.caption || p.full_post_text || p.title || 'Untitled').substring(0, 55);
+        const safeCaption = (p.caption || p.full_post_text || p.title || 'Untitled').substring(0, 55).replace(/</g,'&lt;');
         html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.12);border-radius:8px;margin-bottom:6px;">
           <div style="flex:1;font-size:0.78rem;color:rgba(255,255,255,0.65);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${safeCaption}</div>
           <button onclick="schedulePostToDate('${dateStr}',${idx})" style="flex-shrink:0;padding:4px 10px;font-size:0.68rem;font-weight:700;background:rgba(34,197,94,0.12);color:#86EFAC;border:1px solid rgba(34,197,94,0.2);border-radius:6px;cursor:pointer;font-family:var(--font-body);">Schedule</button>
@@ -15632,11 +15940,10 @@
       html += `</div>`;
     }
 
-    // ── Quick Schedule (future + today) ───────────────────────────────────
     if (!isPast) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:14px;padding-top:14px;">
-        <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;">Quick Schedule</div>
-        <div style="font-size:0.71rem;color:rgba(255,255,255,0.3);margin-bottom:8px;">✨ AI recommends <strong style="color:rgba(255,255,255,0.6);">${rec}</strong> on ${dayOfWeek}</div>
+        <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;">Schedule for this day</div>
+        <div style="font-size:0.71rem;color:rgba(255,255,255,0.3);margin-bottom:8px;">Best time tip: <strong style="color:rgba(255,255,255,0.6);">${rec}</strong> on ${dayOfWeek}</div>
         <textarea id="quick-schedule-caption" rows="3" placeholder="Write your caption..." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;color:var(--color-text);font-size:0.81rem;font-family:var(--font-body);resize:vertical;outline:none;"></textarea>
         <div style="display:flex;gap:7px;margin-top:7px;align-items:center;">
           <input type="time" id="quick-schedule-time" value="${window.convertTo24h(rec)}" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:6px 8px;color:var(--color-text);font-size:0.78rem;outline:none;font-family:var(--font-body);">
@@ -15646,10 +15953,11 @@
     }
 
     content.innerHTML = html;
-    if (typeof lucide !== 'undefined') lucide.createIcons();
     panel.style.right = '0';
-    overlay.style.display = 'block';
+    panel.style.zIndex = '1200';
+    if (overlay) { overlay.style.display = 'block'; overlay.style.zIndex = '1190'; }
   };
+
 
 
   })();
