@@ -9868,9 +9868,15 @@
               const res = await fetch(`${API}/api/inbox/reply`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
-                body: JSON.stringify({ itemId: item.id, itemType: item.type, reply, recipient_id: item.recipient_id || '' })
+                body: JSON.stringify({
+                  itemId: item.id,
+                  itemType: item.type,
+                  platform: item.platform || '',
+                  reply,
+                  recipient_id: item.recipient_id || '',
+                })
               });
-              const result = await res.json();
+              const result = await res.json().catch(() => ({}));
               if (result.success) {
                 btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Sent';
                 btn.style.background = '#7C3AED';
@@ -9889,11 +9895,14 @@
                 btn.innerHTML = 'Failed — retry';
                 btn.style.background = 'rgba(239,68,68,0.8)';
                 btn.disabled = false;
+                const errMsg = result.details || result.error || `Reply failed (${res.status})`;
+                if (typeof showToast === 'function') showToast(errMsg, 'error');
                 setTimeout(() => { btn.innerHTML = origHTML; btn.style.background = 'linear-gradient(135deg,#7C3AED,#6D28D9)'; }, 2000);
               }
             } catch (e) {
               btn.innerHTML = 'Error — retry';
               btn.disabled = false;
+              if (typeof showToast === 'function') showToast('Connection error sending reply', 'error');
               setTimeout(() => { btn.innerHTML = origHTML; }, 2000);
             }
           });
