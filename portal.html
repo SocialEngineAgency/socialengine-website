@@ -9374,6 +9374,13 @@
               </button>
             </div>
           </div>
+          <div id="inbox-reconnect-banner" style="display:none;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 20px;padding:14px 16px;border-radius:12px;border:1px solid rgba(251,146,60,0.35);background:rgba(251,146,60,0.08);">
+            <div style="flex:1;min-width:220px;">
+              <div style="font-size:0.88rem;font-weight:700;color:#FDBA74;margin-bottom:4px;">Meta permissions needed for Engage</div>
+              <div style="font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">Comment names, sending replies, and Instagram DMs require extra Meta scopes. Reconnect once and approve all permissions (comments + messaging).</div>
+            </div>
+            <button type="button" id="inbox-reconnect-meta-btn" style="padding:10px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#0A1628;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Reconnect Meta</button>
+          </div>
           <div id="inbox-body">
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;">
               ${[1,2,3].map(() => `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;animation:pulse 1.5s ease-in-out infinite;"><div style="width:40%;height:12px;background:rgba(255,255,255,0.06);border-radius:4px;margin-bottom:10px;"></div><div style="width:60%;height:20px;background:rgba(255,255,255,0.04);border-radius:4px;"></div></div>`).join('')}
@@ -9448,6 +9455,13 @@
           }
         };
       }
+      const _reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
+      if (_reconnectBtn) {
+        _reconnectBtn.onclick = () => {
+          if (typeof connectInstagramOAuth === 'function') connectInstagramOAuth({ engage: true });
+          else if (typeof window.connectInstagramOAuth === 'function') window.connectInstagramOAuth({ engage: true });
+        };
+      }
       // Wire toggle and mode buttons in the always-present modal
       const _toggle = document.getElementById('inbox-auto-toggle');
       if (_toggle) {
@@ -9516,11 +9530,13 @@
           updateEngageBadge(data.unreplied || 0);
           await loadCannedResponses();
           renderInboxItems(data);
-          if (data._debug?.dm_permission_error && typeof showToast === 'function') {
-            if (!window.__seDmPermToast) {
-              window.__seDmPermToast = true;
-              showToast(data._debug.dm_fix || 'DMs need Meta messaging permission — reconnect Instagram/Facebook in Settings.', 'warning');
-            }
+          // Permission banner: missing comment names / reply / DMs all need Meta reconnect
+          const needReconnect = !!(data._debug?.engage_reconnect_needed || data._debug?.dm_permission_error || data._debug?.ig_username_permission_error);
+          const banner = document.getElementById('inbox-reconnect-banner');
+          if (banner) banner.style.display = needReconnect ? 'flex' : 'none';
+          if (needReconnect && typeof showToast === 'function' && !window.__seDmPermToast) {
+            window.__seDmPermToast = true;
+            showToast(data._debug.dm_fix || 'Reconnect Meta to unlock comment names, replies, and DMs.', 'warning');
           }
           if (!inboxPollInterval && data.connected) {
             inboxPollInterval = setInterval(() => {
@@ -9912,8 +9928,12 @@
                 btn.innerHTML = 'Failed — retry';
                 btn.style.background = 'rgba(239,68,68,0.8)';
                 btn.disabled = false;
-                const errMsg = result.details || result.error || `Reply failed (${res.status})`;
+                const errMsg = result.error || result.details || `Reply failed (${res.status})`;
                 if (typeof showToast === 'function') showToast(errMsg, 'error');
+                if (result.reconnect_needed) {
+                  const banner = document.getElementById('inbox-reconnect-banner');
+                  if (banner) banner.style.display = 'flex';
+                }
                 setTimeout(() => { btn.innerHTML = origHTML; btn.style.background = 'linear-gradient(135deg,#7C3AED,#6D28D9)'; }, 2000);
               }
             } catch (e) {
@@ -12693,12 +12713,14 @@
       }
     }
 
-    function connectInstagramOAuth() {
+    function connectInstagramOAuth(opts = {}) {
       // Use native Meta OAuth if META_APP_ID is configured on the server,
       // otherwise fall back to Upload-Post.
-      const email = encodeURIComponent(window.__clientEmail || '');
-      const hash  = encodeURIComponent(window.__clientHash  || '');
-      const nativeUrl = `${API}/api/auth/instagram?client_email=${email}&client_hash=${hash}`;
+      // engage=1 forces comment/DM scopes (bypasses incomplete Business Login configs).
+      const email = encodeURIComponent(window.__clientEmail || clientEmail || '');
+      const hash  = encodeURIComponent(window.__clientHash  || clientHash || '');
+      const engage = opts.engage ? '&engage=1' : '';
+      const nativeUrl = `${API}/api/auth/instagram?client_email=${email}&client_hash=${hash}${engage}`;
       const popup = window.open(nativeUrl, 'ig_connect', 'width=600,height=700,left=300,top=100');
       if (!popup) { connectViaUploadPost('instagram'); return; }
       const timer = setInterval(() => {
@@ -12706,7 +12728,9 @@
           clearInterval(timer);
           // Reload client data to pick up newly saved credentials
           if (typeof loadClientData === 'function') loadClientData();
-          showToast('Instagram connection updated');
+          if (typeof loadInboxData === 'function') loadInboxData();
+          else if (typeof pollEngageBadge === 'function') pollEngageBadge({ forceRender: true });
+          showToast(opts.engage ? 'Meta reconnected — refresh Engage to load DMs & names' : 'Instagram connection updated');
         }
       }, 1000);
       window.addEventListener('message', function onMsg(e) {
@@ -12715,7 +12739,8 @@
           window.removeEventListener('message', onMsg);
           popup.close();
           if (typeof loadClientData === 'function') loadClientData();
-          showToast('Instagram connected! ✅');
+          if (typeof loadInboxData === 'function') loadInboxData();
+          showToast(opts.engage ? 'Engage permissions granted — refreshing inbox…' : 'Instagram connected! ✅');
         }
       });
     }
@@ -12724,19 +12749,21 @@
       connectViaUploadPost('tiktok');
     }
 
-    function connectFacebookOAuth() {
+    function connectFacebookOAuth(opts = {}) {
       // Use native Meta OAuth if META_APP_ID is configured on the server,
       // otherwise fall back to Upload-Post.
-      const email = encodeURIComponent(window.__clientEmail || '');
-      const hash  = encodeURIComponent(window.__clientHash  || '');
-      const nativeUrl = `${API}/api/auth/facebook?client_email=${email}&client_hash=${hash}`;
+      const email = encodeURIComponent(window.__clientEmail || clientEmail || '');
+      const hash  = encodeURIComponent(window.__clientHash  || clientHash || '');
+      const engage = opts.engage ? '&engage=1' : '';
+      const nativeUrl = `${API}/api/auth/facebook?client_email=${email}&client_hash=${hash}${engage}`;
       const popup = window.open(nativeUrl, 'fb_connect', 'width=600,height=700,left=300,top=100');
       if (!popup) { connectViaUploadPost('facebook'); return; }
       const timer = setInterval(() => {
         if (popup.closed) {
           clearInterval(timer);
           if (typeof loadClientData === 'function') loadClientData();
-          showToast('Facebook connection updated');
+          if (typeof loadInboxData === 'function') loadInboxData();
+          showToast(opts.engage ? 'Meta reconnected — refresh Engage' : 'Facebook connection updated');
         }
       }, 1000);
       window.addEventListener('message', function onMsg(e) {
