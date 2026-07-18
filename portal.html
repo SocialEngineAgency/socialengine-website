@@ -6728,7 +6728,7 @@
           <div class="grow-post__body">
             <div class="grow-post__title">${_growEsc(post.title)}</div>
             <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
-            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes${post.comments > 0 ? ' · ' + growNum(post.comments) + ' comments' : ''}</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes${post.comments > 0 ? ' · ' + growNum(post.comments) + ' comments' : ''}${post.shares > 0 ? ' · ' + growNum(post.shares) + ' shares' : ''}</div>
           </div>
           <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
         </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
@@ -6954,7 +6954,7 @@
           <div class="grow-post__body">
             <div class="grow-post__title">${_growEsc(post.title)}</div>
             <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
-            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes${post.comments > 0 ? ' · ' + growNum(post.comments) + ' comments' : ''}</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes${post.comments > 0 ? ' · ' + growNum(post.comments) + ' comments' : ''}${post.shares > 0 ? ' · ' + growNum(post.shares) + ' shares' : ''}</div>
           </div>
           <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
         </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
