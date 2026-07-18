@@ -6728,7 +6728,7 @@
           <div class="grow-post__body">
             <div class="grow-post__title">${_growEsc(post.title)}</div>
             <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
-            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)} ${post.eng_rate != null ? '· ' : ''}${growNum(post.likes)} likes</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes${post.comments > 0 ? ' · ' + growNum(post.comments) + ' comments' : ''}</div>
           </div>
           <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
         </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
@@ -6943,25 +6943,36 @@
       if (!growLastPayload._orig_top_posts) {
         growLastPayload._orig_top_posts = [...(growLastPayload.top_posts || [])];
       }
-      const base = growLastPayload._orig_top_posts;
-      const sorted = metric === 'eng_rate'
-        ? [...base] // restore server order (already sorted by engagement)
-        : [...base].sort((a, b) => (Number(b[metric]) || 0) - (Number(a[metric]) || 0));
-      growLastPayload.top_posts = sorted; // keep in sync so growAnalyzePost still works
       const body = document.getElementById('grow-top-posts-body');
       if (!body) return;
-      const engBadge = (r) => r == null ? '' : `<span class="${r >= 4 ? 'grow-eng-good' : 'grow-eng-mid'}">${r}% eng</span>`;
-      body.innerHTML = sorted.length ? sorted.map((post, i) => `
+      const engBadge = (r) => r == null ? '' : '<span class="' + (r >= 4 ? 'grow-eng-good' : 'grow-eng-mid') + '">' + r + '% eng</span>';
+      const renderPosts = (posts) => {
+        growLastPayload.top_posts = posts; // keep in sync so growAnalyzePost still works
+        body.innerHTML = posts.length ? posts.map((post, i) => `
         <div class="grow-post">
           <div class="grow-post__rank">${i + 1}</div>
           <div class="grow-post__body">
             <div class="grow-post__title">${_growEsc(post.title)}</div>
             <div class="grow-post__meta"><span class="grow-badge ${post.platform}">${post.platform.toUpperCase()}</span> ${post.date} · ${post.media_type}</div>
-            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes</div>
+            <div class="grow-post__meta" style="margin-top:4px;">${post.views != null ? growNum(post.views) + ' views · ' : ''}${post.reach != null ? growNum(post.reach) + ' reach · ' : ''}${engBadge(post.eng_rate)}${post.eng_rate != null ? ' · ' : ''}${growNum(post.likes)} likes${post.comments > 0 ? ' · ' + growNum(post.comments) + ' comments' : ''}</div>
           </div>
           <button class="grow-mini-btn" onclick="growAnalyzePost(${i},'analyze')">Analyze <i data-lucide="arrow-up-right" style="width:12px;height:12px;"></i></button>
         </div>`).join('') : '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">No posts in this period yet.</p>';
-      if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      };
+      if (metric === 'views') {
+        const viewPosts = growLastPayload.top_posts_by_views;
+        const hasViews = viewPosts && viewPosts.some(p => p.views != null && p.views > 0);
+        if (!hasViews) {
+          body.innerHTML = '<p style="font-size:0.82rem;color:var(--color-text-muted);padding:12px 0;">View data is only available for Reels and videos. No video posts found in this period.</p>';
+          return;
+        }
+        renderPosts([...viewPosts].sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0)));
+        return;
+      }
+      const base = growLastPayload._orig_top_posts;
+      const sorted = [...base].sort((a, b) => (Number(b[metric]) || 0) - (Number(a[metric]) || 0));
+      renderPosts(sorted);
     };
 
     async function growAnalyzePost(idx, kind) {
