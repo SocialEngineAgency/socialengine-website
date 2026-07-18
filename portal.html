@@ -9828,17 +9828,24 @@
                 headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
                 body: JSON.stringify({ message: item.text, username: item.username, type: item.type, postCaption: item.post_caption })
               });
-              const result = await res.json();
+              const result = await res.json().catch(() => ({}));
               if (result.suggested_reply) {
                 const ta = document.getElementById(`inbox-text-${idx}`);
                 ta.value = result.suggested_reply;
                 ta.dataset.aiGenerated = result.suggested_reply; // Store for learning loop tracking
               } else {
-                document.getElementById(`inbox-text-${idx}`).value = '';
-                document.getElementById(`inbox-text-${idx}`).placeholder = 'AI reply generation failed — type your reply manually';
+                const ta = document.getElementById(`inbox-text-${idx}`);
+                if (ta) {
+                  ta.value = '';
+                  ta.placeholder = 'AI reply generation failed — type your reply manually';
+                }
+                const errMsg = result.error || result.detail || `AI reply failed (${res.status})`;
+                if (typeof showToast === 'function') showToast(errMsg, 'error');
               }
             } catch (e) {
-              document.getElementById(`inbox-text-${idx}`).placeholder = 'Connection error — type your reply manually';
+              const ta = document.getElementById(`inbox-text-${idx}`);
+              if (ta) ta.placeholder = 'Connection error — type your reply manually';
+              if (typeof showToast === 'function') showToast('Connection error generating reply', 'error');
             } finally {
               btn.innerHTML = '<i data-lucide="sparkles" style="width:12px;height:12px;"></i> Regenerate';
               btn.disabled = false;
