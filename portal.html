@@ -15481,83 +15481,166 @@
     window.closeDatePanel();
   };
 
-  window.openDatePanel = function(dateStr, data) {
-    const panel = document.getElementById('schedule-date-panel');
+  window.openDatePanel = function(dateStr, _unused) {
+    const panel   = document.getElementById('schedule-date-panel');
     const overlay = document.getElementById('schedule-date-overlay');
     const content = document.getElementById('schedule-date-panel-content');
     if (!panel || !content) return;
 
-    const posts = (data || window.__clientData)?.content || [];
-    const today = new Date().toISOString().split('T')[0];
-    const isPast = dateStr < today;
+    const today   = new Date().toISOString().split('T')[0];
+    const isPast  = dateStr < today;
     const isToday = dateStr === today;
 
-    const datePosts = posts.filter(p => {
-      const d = p.scheduled_date || p.published_date || p.date || p.post_date || '';
-      return d && d.startsWith(dateStr);
-    });
+    // ── Pull posts from BOTH sources ──────────────────────────────────────
+    const socialOnDay = (_calHistoryPosts || []).filter(p =>
+      (p.timestamp || '').startsWith(dateStr)
+    );
+    const contentOnDay = (_calPosts || []).filter(p => {
+      const f = p.fields || p;
+      return (f.scheduled_date || f.scheduledDate || '').startsWith(dateStr);
+    }).map(p => ({ ...( p.fields || p ), id: p.id, _source: 'content' }));
 
-    const readyPosts = !isPast ? posts.filter(p => {
-      const status = (p.status || '').toLowerCase();
-      return (status === 'approved' || status === 'ready') && !(p.scheduled_date || p.published_date || p.date);
-    }) : [];
+    const readyToSchedule = isPast ? [] : (_calPosts || []).filter(p => {
+      const f = p.fields || p;
+      const s = (f.status || '').toLowerCase();
+      return (s === 'approved' || s === 'ready') && !(f.scheduled_date || f.scheduledDate);
+    }).map(p => ({ ...(p.fields || p), id: p.id }));
+
+    const allOnDay = [...socialOnDay, ...contentOnDay];
 
     const dayOfWeek = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
     const bestTimes = window._growBestTimes || [];
-    const dayBest = bestTimes.find(t => t.day && t.day.toLowerCase() === dayOfWeek.toLowerCase());
-    const recommendedTime = dayBest?.time || '9:00 AM';
+    const rec = (bestTimes.find(t => t.day?.toLowerCase() === dayOfWeek.toLowerCase())?.time) || '9:00 AM';
+    const formatDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
 
-    const formatDate = (str) => new Date(str + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
-    let html = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <div>
-          <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">${isPast ? 'Past' : isToday ? 'Today' : 'Upcoming'}</div>
-          <div style="font-size:1.05rem;font-weight:700;color:var(--color-text);">${formatDate(dateStr)}</div>
-        </div>
-        <button onclick="closeDatePanel()" style="background:none;border:none;color:var(--color-text-muted);cursor:pointer;padding:4px;"><i data-lucide="x" style="width:20px;height:20px;"></i></button>
-      </div>`;
-
-    if (datePosts.length > 0) {
-      html += `<div style="font-size:0.78rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">${isPast ? 'Posted' : 'Scheduled'} (${datePosts.length})</div>`;
-      datePosts.forEach(p => {
-        const statusColor = p.status === 'Published' ? '#10b981' : p.status === 'Approved' ? '#7C3AED' : '#f59e0b';
-        html += `<div style="background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-            <span style="font-size:0.72rem;font-weight:700;color:${statusColor};text-transform:uppercase;">${p.status || 'Draft'}</span>
-            <span style="font-size:0.7rem;color:var(--color-text-muted);">${p.platform || ''}</span>
-          </div>
-          <div style="font-size:0.82rem;color:var(--color-text);line-height:1.4;">${(p.caption || p.content || p.title || 'Untitled post').substring(0, 120)}${(p.caption || p.content || p.title || '').length > 120 ? '…' : ''}</div>
-          ${(p.likes != null || p.reach != null || p.eng_rate != null) ? `<div style="margin-top:8px;display:flex;gap:12px;">
-            ${p.reach != null ? `<span style="font-size:0.7rem;color:var(--color-text-muted);">${Number(p.reach).toLocaleString()} reach</span>` : ''}
-            ${p.likes != null ? `<span style="font-size:0.7rem;color:var(--color-text-muted);">${Number(p.likes).toLocaleString()} likes</span>` : ''}
-            ${p.eng_rate != null ? `<span style="font-size:0.7rem;color:var(--color-text-muted);">${p.eng_rate}% eng</span>` : ''}
-          </div>` : ''}
-        </div>`;
-      });
+    function platBadge(p) {
+      const pl = (p.platform || p.platforms || '').toLowerCase();
+      if (pl.includes('instagram') || pl === 'ig') return { icon:'📸', label:'Instagram', color:'#E1306C' };
+      if (pl.includes('facebook')  || pl === 'fb') return { icon:'👥', label:'Facebook',  color:'#1877F2' };
+      if (pl.includes('tiktok'))                   return { icon:'🎵', label:'TikTok',    color:'#010101' };
+      return { icon:'📝', label:'Content', color:'#7C3AED' };
     }
 
-    if (!isPast) {
-      if (readyPosts.length > 0) {
-        html += `<div style="font-size:0.78rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin:16px 0 10px;">Ready to Schedule</div>`;
-        readyPosts.slice(0, 5).forEach((p, idx) => {
-          html += `<div style="background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:10px;padding:10px 12px;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <div style="font-size:0.8rem;color:var(--color-text);flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${(p.caption || p.content || p.title || 'Untitled').substring(0, 60)}</div>
-            <button onclick="schedulePostToDate('${dateStr}',${idx})" style="flex-shrink:0;padding:4px 10px;font-size:0.7rem;font-weight:600;background:rgba(124,58,237,0.15);color:#C4B5FD;border:1px solid rgba(124,58,237,0.3);border-radius:6px;cursor:pointer;">Schedule</button>
-          </div>`;
-        });
-      }
+    function copyCaption(idx) {
+      const post = allOnDay[idx];
+      const text = post?.caption || post?.full_post_text || '';
+      if (text) navigator.clipboard?.writeText(text).catch(()=>{});
+      const btn = document.getElementById('copy-btn-' + idx);
+      if (btn) { btn.textContent = '✓ Copied'; setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500); }
+    }
+    window._datePanelCopy = copyCaption;
 
-      html += `<div style="border-top:1px solid var(--color-border,rgba(255,255,255,0.08));margin-top:18px;padding-top:18px;">
-        <div style="font-size:0.78rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Quick Schedule</div>
-        <div style="font-size:0.72rem;color:var(--color-text-muted);margin-bottom:10px;">
-          <i data-lucide="sparkles" style="width:11px;height:11px;display:inline;vertical-align:middle;margin-right:3px;"></i>
-          AI recommends: <strong style="color:var(--color-text);">${recommendedTime}</strong> on ${dayOfWeek}
+    function repostPost(idx) {
+      const post = allOnDay[idx];
+      if (!post) return;
+      const caption = post.caption || post.full_post_text || '';
+      const safeId = (post.id || '').replace(/'/g, "\\'");
+      if (post._source === 'social') {
+        window.closeDatePanel();
+        window._repostSocialPost && window._repostSocialPost(post.id);
+      } else {
+        window.closeDatePanel();
+        const ta = document.getElementById('quick-schedule-caption');
+        if (ta) ta.value = caption;
+      }
+    }
+    window._datePanelRepost = repostPost;
+
+    function viewPost(idx) {
+      const post = allOnDay[idx];
+      if (!post) return;
+      if (post._source === 'social') {
+        window.closeDatePanel();
+        window._openSocialPostPanel && window._openSocialPostPanel(post);
+      } else {
+        window.closeDatePanel();
+        window._openCalPost && window._openCalPost(post.id);
+      }
+    }
+    window._datePanelView = viewPost;
+
+    // ── Build HTML ────────────────────────────────────────────────────────
+    let html = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.07);">
+        <div>
+          <div style="font-size:0.68rem;font-weight:700;color:${isPast ? 'rgba(255,255,255,0.3)' : isToday ? '#A78BFA' : '#34D399'};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${isPast ? 'Past' : isToday ? 'Today' : 'Upcoming'}</div>
+          <div style="font-size:1rem;font-weight:700;color:var(--color-text);">${formatDate(dateStr)}</div>
         </div>
-        <textarea id="quick-schedule-caption" rows="3" placeholder="Write your caption..." style="width:100%;box-sizing:border-box;background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:8px;padding:10px;color:var(--color-text);font-size:0.82rem;font-family:var(--font-body);resize:vertical;outline:none;"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-          <input type="time" id="quick-schedule-time" value="${window.convertTo24h(recommendedTime)}" style="background:var(--color-surface-2,rgba(255,255,255,0.04));border:1px solid var(--color-border,rgba(255,255,255,0.08));border-radius:7px;padding:6px 8px;color:var(--color-text);font-size:0.78rem;outline:none;font-family:var(--font-body);">
-          <button onclick="submitQuickSchedule('${dateStr}')" style="flex:1;padding:8px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule Post</button>
+        <button onclick="closeDatePanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:8px;width:30px;height:30px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">✕</button>
+      </div>`;
+
+    // ── Posts for this day ────────────────────────────────────────────────
+    if (allOnDay.length > 0) {
+      html += `<div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;">${isPast ? 'Published' : 'Scheduled'} · ${allOnDay.length} post${allOnDay.length !== 1 ? 's' : ''}</div>`;
+
+      allOnDay.forEach((p, idx) => {
+        const badge  = platBadge(p);
+        const caption = p.caption || p.full_post_text || '';
+        const thumb  = p.thumbnail_url || p.image_url || '';
+        const isSocial = p._source === 'social';
+
+        const metrics = [];
+        if (p.likes    > 0) metrics.push(`❤️ ${Number(p.likes).toLocaleString()}`);
+        if (p.comments > 0) metrics.push(`💬 ${Number(p.comments).toLocaleString()}`);
+        if (p.views    > 0) metrics.push(`▶ ${Number(p.views).toLocaleString()}`);
+        if (p.shares   > 0) metrics.push(`↗ ${Number(p.shares).toLocaleString()}`);
+
+        html += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;overflow:hidden;">
+          ${thumb ? `<img src="${thumb}" style="width:100%;height:110px;object-fit:cover;display:block;" onerror="this.style.display='none'">` : ''}
+          <div style="padding:12px 13px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;">
+              <span style="font-size:0.78rem;">${badge.icon}</span>
+              <span style="font-size:0.67rem;font-weight:700;color:${badge.color};text-transform:uppercase;letter-spacing:0.05em;">${badge.label}</span>
+              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);margin-left:2px;">· ${p.media_type}</span>` : ''}
+              ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : ''}
+            </div>
+            ${caption ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : ''}
+            ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : ''}
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button onclick="_datePanelView(${idx})" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.7);font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">👁 View</button>
+              <button id="copy-btn-${idx}" onclick="_datePanelCopy(${idx})" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.7);font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">📋 Copy</button>
+              <button onclick="_datePanelRepost(${idx})" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.25);border-radius:7px;color:#C4B5FD;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">♻ Repost</button>
+              ${isSocial && p.permalink ? `<a href="${p.permalink}" target="_blank" rel="noopener" style="flex:1;min-width:70px;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.45);font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-decoration:none;text-align:center;">🔗 Open</a>` : ''}
+            </div>
+          </div>
+        </div>`;
+      });
+
+      // Analyze button (only for past dates with social posts)
+      if (isPast && socialOnDay.length > 0) {
+        html += `<button onclick="document.querySelector('[data-nav=grow]')?.click();closeDatePanel();" style="width:100%;margin-top:4px;margin-bottom:14px;padding:9px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:9px;color:#A5B4FC;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">📊 Analyze performance in Analytics</button>`;
+      }
+    } else {
+      html += `<div style="text-align:center;padding:32px 16px;">
+        <div style="font-size:2rem;margin-bottom:10px;">📅</div>
+        <div style="font-size:0.84rem;color:rgba(255,255,255,0.35);margin-bottom:4px;">Nothing posted this day</div>
+        ${isPast ? `<div style="font-size:0.74rem;color:rgba(255,255,255,0.2);">Scroll back to a day with posts to repost content</div>` : ''}
+      </div>`;
+    }
+
+    // ── Ready to Schedule (future dates) ─────────────────────────────────
+    if (!isPast && readyToSchedule.length > 0) {
+      html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;padding-top:14px;">
+        <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:9px;">Ready to Schedule (${readyToSchedule.length})</div>`;
+      readyToSchedule.slice(0, 4).forEach((p, idx) => {
+        const safeCaption = (p.caption || p.full_post_text || p.title || 'Untitled').substring(0, 55);
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.12);border-radius:8px;margin-bottom:6px;">
+          <div style="flex:1;font-size:0.78rem;color:rgba(255,255,255,0.65);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${safeCaption}</div>
+          <button onclick="schedulePostToDate('${dateStr}',${idx})" style="flex-shrink:0;padding:4px 10px;font-size:0.68rem;font-weight:700;background:rgba(34,197,94,0.12);color:#86EFAC;border:1px solid rgba(34,197,94,0.2);border-radius:6px;cursor:pointer;font-family:var(--font-body);">Schedule</button>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // ── Quick Schedule (future + today) ───────────────────────────────────
+    if (!isPast) {
+      html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:14px;padding-top:14px;">
+        <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;">Quick Schedule</div>
+        <div style="font-size:0.71rem;color:rgba(255,255,255,0.3);margin-bottom:8px;">✨ AI recommends <strong style="color:rgba(255,255,255,0.6);">${rec}</strong> on ${dayOfWeek}</div>
+        <textarea id="quick-schedule-caption" rows="3" placeholder="Write your caption..." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;color:var(--color-text);font-size:0.81rem;font-family:var(--font-body);resize:vertical;outline:none;"></textarea>
+        <div style="display:flex;gap:7px;margin-top:7px;align-items:center;">
+          <input type="time" id="quick-schedule-time" value="${window.convertTo24h(rec)}" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:6px 8px;color:var(--color-text);font-size:0.78rem;outline:none;font-family:var(--font-body);">
+          <button onclick="submitQuickSchedule('${dateStr}')" style="flex:1;padding:8px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.77rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule Post</button>
         </div>
       </div>`;
     }
