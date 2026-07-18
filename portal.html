@@ -15076,9 +15076,10 @@
   }
 
   // ── Content Calendar ─────────────────────────────────────────────────────────
-  let _calYear  = new Date().getFullYear();
-  let _calMonth = new Date().getMonth(); // 0-indexed
-  let _calPosts = [];
+  let _calYear         = new Date().getFullYear();
+  let _calMonth        = new Date().getMonth(); // 0-indexed
+  let _calPosts        = []; // scheduled / upcoming content from Airtable
+  let _calHistoryPosts = []; // published social posts from IG + FB
 
   async function _loadCalendar(opts) {
     opts = opts || {};
@@ -15086,14 +15087,19 @@
     if (!el) return;
     if (!opts.silent) el.innerHTML = '<div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div>';
     try {
-      const resp = await fetch(`${API}/api/client-data`, {
-        headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' }
-      });
-      const data = await resp.json();
-      _calPosts = (data.content || []).filter(r => {
+      const hdrs = { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' };
+      const [cdResp, histResp] = await Promise.all([
+        fetch(`${API}/api/client-data`,      { headers: hdrs }),
+        fetch(`${API}/api/calendar-history`, { headers: hdrs }),
+      ]);
+      const cdData   = cdResp.ok   ? await cdResp.json()   : {};
+      const histData = histResp.ok ? await histResp.json() : { posts: [] };
+
+      _calPosts = (cdData.content || []).filter(r => {
         const f = r.fields || r;
         return !!(f.scheduled_date || f.scheduledDate);
       });
+      _calHistoryPosts = histData.posts || [];
     } catch (e) {
       el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${e.message}</div>`;
       return;
@@ -15111,17 +15117,42 @@
     const firstDow = new Date(_calYear, _calMonth, 1).getDay();
     const daysInMonth = new Date(_calYear, _calMonth + 1, 0).getDate();
 
-    // Build date → posts lookup
+    // Build date → posts lookup (scheduled content + published social history)
     const byDate = {};
+
+    // Scheduled / upcoming content from Airtable
     for (const p of _calPosts) {
       const f = p.fields || p;
       const dateKey = (f.scheduled_date || f.scheduledDate || '').slice(0, 10);
       if (!dateKey) continue;
       if (!byDate[dateKey]) byDate[dateKey] = [];
-      byDate[dateKey].push({ id: p.id, ...f });
+      byDate[dateKey].push({ id: p.id, _source: 'content', ...f });
     }
 
-    function chipColors(status) {
+    // Published social posts from IG / FB — keyed by published timestamp date
+    for (const p of _calHistoryPosts) {
+      const dateKey = (p.timestamp || '').slice(0, 10);
+      if (!dateKey) continue;
+      if (!byDate[dateKey]) byDate[dateKey] = [];
+      // Normalize to same shape chips expect
+      byDate[dateKey].push({
+        id:            p.id,
+        status:        'Published',
+        platform:      p.platform,
+        full_post_text: p.caption,
+        caption:       p.caption,
+        thumbnail_url: p.thumbnail_url,
+        likes:         p.likes,
+        comments:      p.comments,
+        views:         p.views,
+        permalink:     p.permalink,
+        media_type:    p.media_type,
+        _source:       'social',
+      });
+    }
+
+    function chipColors(status, source) {
+      if (source === 'social') return { bg: 'rgba(6,182,212,0.10)', border: '#0891B2', text: '#67E8F9' }; // teal = live social post
       const s = (status || '').toLowerCase();
       if (s === 'approved')  return { bg: 'rgba(34,197,94,0.12)',  border: '#22C55E', text: '#86EFAC' };
       if (s === 'scheduled') return { bg: 'rgba(124,58,237,0.18)', border: '#7C3AED', text: '#C4B5FD' };
@@ -15133,9 +15164,9 @@
 
     function platIcon(platform) {
       const p = (platform || '').toLowerCase();
-      if (p.includes('instagram')) return '📸';
-      if (p.includes('facebook'))  return '👥';
-      if (p.includes('tiktok'))    return '🎵';
+      if (p === 'ig' || p.includes('instagram')) return '📸';
+      if (p === 'fb' || p.includes('facebook'))  return '👥';
+      if (p.includes('tiktok'))                  return '🎵';
       return '📝';
     }
 
@@ -15154,7 +15185,7 @@
       const extra = dayPosts.length - 3;
 
       const chips = shown.map(p => {
-        const c = chipColors(p.status);
+        const c = chipColors(p.status, p._source);
         const icon = platIcon(p.platform || p.platforms);
         const text = (p.full_post_text || p.caption || '').slice(0, 26);
         const safeId = (p.id || '').replace(/['"]/g, '');
@@ -15242,6 +15273,10 @@
   }
 
   function _openCalPost(postId) {
+    // Social history posts (from IG/FB) take a different panel
+    const hp = _calHistoryPosts.find(p => p.id === postId);
+    if (hp) { _openSocialPostPanel(hp); return; }
+
     const p = _calPosts.find(p => p.id === postId);
     if (!p) return;
     const f = p.fields || p;
@@ -15302,6 +15337,78 @@
     panel.style.opacity   = '1';
   }
 
+  // ── Social history post detail panel ──────────────────────────────────────
+  function _openSocialPostPanel(post) {
+    const panel = document.getElementById('cal-panel');
+    if (!panel) return;
+
+    const platLabel = (post.platform || '').toLowerCase().includes('facebook') ? 'Facebook' : 'Instagram';
+    const platColor = platLabel === 'Instagram' ? '#E1306C' : '#1877F2';
+    const platIcon2 = platLabel === 'Instagram' ? '📸' : '👥';
+
+    const dateLabel = post.timestamp
+      ? new Date(post.timestamp).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' })
+      : '—';
+
+    const thumbHTML = post.thumbnail_url
+      ? `<img src="${post.thumbnail_url}" style="width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:16px;" onerror="this.style.display='none'">`
+      : post.media_type === 'Reel'
+      ? `<div style="width:100%;height:80px;background:rgba(255,255,255,0.04);border-radius:10px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;font-size:1.8rem;">🎬</div>`
+      : '';
+
+    const metricsHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+        ${post.likes   != null ? `<div style="text-align:center;"><div style="font-size:1rem;font-weight:700;color:var(--color-text);">${Number(post.likes).toLocaleString()}</div><div style="font-size:0.65rem;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.05em;">Likes</div></div>` : ''}
+        ${post.comments != null ? `<div style="text-align:center;"><div style="font-size:1rem;font-weight:700;color:var(--color-text);">${Number(post.comments).toLocaleString()}</div><div style="font-size:0.65rem;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.05em;">Comments</div></div>` : ''}
+        ${post.shares   != null && post.shares > 0 ? `<div style="text-align:center;"><div style="font-size:1rem;font-weight:700;color:var(--color-text);">${Number(post.shares).toLocaleString()}</div><div style="font-size:0.65rem;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.05em;">Shares</div></div>` : ''}
+        ${post.views    != null ? `<div style="text-align:center;"><div style="font-size:1rem;font-weight:700;color:var(--color-text);">${Number(post.views).toLocaleString()}</div><div style="font-size:0.65rem;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.05em;">Views</div></div>` : ''}
+      </div>`;
+
+    const safeCaption = (post.caption || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const safeId = (post.id || '').replace(/'/g, "\\'");
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.1rem;">${platIcon2}</span>
+          <div>
+            <div style="font-size:0.7rem;font-weight:700;color:${platColor};text-transform:uppercase;letter-spacing:0.06em;">${platLabel} · ${post.media_type || 'Post'}</div>
+            <div style="font-size:0.8rem;color:var(--color-text-muted);">${dateLabel}</div>
+          </div>
+        </div>
+        <button onclick="_closeCalPanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:7px;width:28px;height:28px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">✕</button>
+      </div>
+      ${thumbHTML}
+      ${metricsHTML}
+      ${safeCaption ? `
+        <div style="margin-bottom:16px;">
+          <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Caption</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.65);line-height:1.65;max-height:200px;overflow-y:auto;white-space:pre-wrap;">${safeCaption}</div>
+        </div>` : ''}
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+        ${post.permalink ? `<a href="${post.permalink}" target="_blank" rel="noopener" style="display:block;text-align:center;padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;text-decoration:none;">View on ${platLabel} ↗</a>` : ''}
+        <button onclick="_repostSocialPost('${safeId}')" style="padding:9px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">♻ Repost this</button>
+      </div>`;
+
+    panel.style.transform = 'translateX(0)';
+    panel.style.opacity   = '1';
+  }
+
+  function _repostSocialPost(postId) {
+    const post = _calHistoryPosts.find(p => p.id === postId);
+    if (!post) return;
+    _closeCalPanel();
+    // Open today's date panel with caption pre-filled
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (window.openDatePanel) {
+      window.openDatePanel(todayStr, window.__clientData || { content: _calPosts });
+      setTimeout(function() {
+        const ta = document.getElementById('quick-schedule-caption');
+        if (ta && post.caption) ta.value = post.caption;
+      }, 80);
+    }
+  }
+
   function _closeCalPanel() {
     const panel = document.getElementById('cal-panel');
     if (panel) { panel.style.transform = 'translateX(100%)'; panel.style.opacity = '0'; }
@@ -15336,6 +15443,8 @@
   window._calNextMonth              = _calNextMonth;
   window._calToday                  = _calToday;
   window._openCalPost               = _openCalPost;
+  window._openSocialPostPanel       = _openSocialPostPanel;
+  window._repostSocialPost          = _repostSocialPost;
   window._closeCalPanel             = _closeCalPanel;
 
   window.convertTo24h = function(timeStr) {
