@@ -9376,8 +9376,8 @@
           </div>
           <div id="inbox-reconnect-banner" style="display:none;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 20px;padding:14px 16px;border-radius:12px;border:1px solid rgba(251,146,60,0.35);background:rgba(251,146,60,0.08);">
             <div style="flex:1;min-width:220px;">
-              <div style="font-size:0.88rem;font-weight:700;color:#FDBA74;margin-bottom:4px;">Meta permissions needed for Engage</div>
-              <div style="font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">Comment names, sending replies, and Instagram DMs require extra Meta scopes. Reconnect once and approve all permissions (comments + messaging).</div>
+              <div id="inbox-banner-title" style="font-size:0.88rem;font-weight:700;color:#FDBA74;margin-bottom:4px;">Meta permissions needed for Engage</div>
+              <div id="inbox-banner-body" style="font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">Comment names, sending replies, and Instagram DMs require extra Meta scopes. Reconnect once and approve all permissions (comments + messaging).</div>
             </div>
             <button type="button" id="inbox-reconnect-meta-btn" style="padding:10px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#0A1628;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Reconnect Meta</button>
           </div>
@@ -9530,13 +9530,32 @@
           updateEngageBadge(data.unreplied || 0);
           await loadCannedResponses();
           renderInboxItems(data);
-          // Permission banner: missing comment names / reply / DMs all need Meta reconnect
-          const needReconnect = !!(data._debug?.engage_reconnect_needed || data._debug?.dm_permission_error || data._debug?.ig_username_permission_error);
+          // Banner: reconnect only when scopes missing; otherwise show app-capability note for DMs
+          const dbg = data._debug || {};
+          const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
+          const needAppSetup = !needReconnect && !!dbg.dm_app_capability_error;
           const banner = document.getElementById('inbox-reconnect-banner');
-          if (banner) banner.style.display = needReconnect ? 'flex' : 'none';
-          if (needReconnect && typeof showToast === 'function' && !window.__seDmPermToast) {
+          const bannerTitle = document.getElementById('inbox-banner-title');
+          const bannerBody = document.getElementById('inbox-banner-body');
+          const reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
+          if (banner) {
+            if (needReconnect) {
+              banner.style.display = 'flex';
+              if (bannerTitle) bannerTitle.textContent = 'Meta permissions needed for Engage';
+              if (bannerBody) bannerBody.textContent = 'Approve comment + messaging permissions on reconnect so replies and DMs work.';
+              if (reconnectBtn) reconnectBtn.style.display = '';
+            } else if (needAppSetup) {
+              banner.style.display = 'flex';
+              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs need Messaging on the Meta app';
+              if (bannerBody) bannerBody.textContent = dbg.dm_fix || 'Your Meta connection is fine — enable Instagram Messaging / Messenger on the SocialEngine app in Meta Developer Console. Facebook commenter names are often hidden by Meta privacy and may stay as “Facebook user”.';
+              if (reconnectBtn) reconnectBtn.style.display = 'none';
+            } else {
+              banner.style.display = 'none';
+            }
+          }
+          if ((needReconnect || needAppSetup) && typeof showToast === 'function' && !window.__seDmPermToast) {
             window.__seDmPermToast = true;
-            showToast(data._debug.dm_fix || 'Reconnect Meta to unlock comment names, replies, and DMs.', 'warning');
+            if (needReconnect) showToast(dbg.dm_fix || 'Reconnect Meta to unlock Engage permissions.', 'warning');
           }
           if (!inboxPollInterval && data.connected) {
             inboxPollInterval = setInterval(() => {
