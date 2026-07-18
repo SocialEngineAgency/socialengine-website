@@ -2697,7 +2697,7 @@
           <button class="dash-nav-item" data-nav="schedule"><i data-lucide="calendar"></i> Schedule</button>
           <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="clapperboard"></i> Studio</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
-          <button class="dash-nav-item" data-nav="inbox"><i data-lucide="inbox"></i> Engage</button>
+          <button class="dash-nav-item" data-nav="inbox" style="position:relative;"><i data-lucide="inbox"></i> Engage</button>
           <button class="dash-nav-item" data-nav="analytics"><i data-lucide="bar-chart-3"></i> Analytics</button>
           <button class="dash-nav-item" data-nav="competitor-intel"><i data-lucide="search"></i> Intel</button>
           <button class="dash-nav-item" data-nav="fundraise" id="nav-fundraise" style="display:none;"><i data-lucide="heart-handshake"></i> Fundraise</button>
@@ -5533,6 +5533,64 @@
 
     // ━━━ Active Nav Tracking ━━━
     let activeNav = 'dashboard';
+
+    // ━━━ Engage badge + background poll ━━━
+    let _engageBadgePoll = null;
+    let _cannedResponses = [];
+
+    function updateEngageBadge(count) {
+      const navBtn = document.querySelector('[data-nav="inbox"]');
+      if (!navBtn) return;
+      navBtn.querySelector('.engage-badge')?.remove();
+      const n = Number(count) || 0;
+      if (n <= 0) return;
+      const badge = document.createElement('span');
+      badge.className = 'engage-badge';
+      badge.textContent = n > 99 ? '99+' : String(n);
+      badge.style.cssText = 'margin-left:auto;min-width:18px;height:18px;padding:0 5px;background:#EF4444;color:#fff;border-radius:9px;font-size:0.62rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;letter-spacing:0;';
+      navBtn.appendChild(badge);
+    }
+
+    async function pollEngageBadge(opts = {}) {
+      const email = window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '');
+      const hash = window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '');
+      if (!email || !hash) return;
+      try {
+        const res = await fetch(`${API}/api/inbox`, {
+          headers: { 'x-client-email': email, 'x-client-hash': hash },
+        });
+        if (res.status === 401 || res.status === 403) { updateEngageBadge(0); return; }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.connected) { updateEngageBadge(0); return; }
+        updateEngageBadge(data.unreplied || 0);
+        if (opts.forceRender || (activeNav === 'inbox' && typeof window._reloadInboxIfActive === 'function')) {
+          window._reloadInboxIfActive(data);
+        }
+      } catch (_) {}
+    }
+
+    function startEngageBadgePoll() {
+      if (_engageBadgePoll) return;
+      pollEngageBadge();
+      _engageBadgePoll = setInterval(() => pollEngageBadge(), 5 * 60 * 1000);
+    }
+
+    async function loadCannedResponses() {
+      try {
+        const res = await fetch(`${API}/api/inbox/canned-responses`, {
+          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        });
+        if (!res.ok) { _cannedResponses = []; return; }
+        const d = await res.json();
+        _cannedResponses = Array.isArray(d.canned) ? d.canned : [];
+      } catch (_) { _cannedResponses = []; }
+    }
+
+    window.updateEngageBadge = updateEngageBadge;
+    window.pollEngageBadge = pollEngageBadge;
+    window.startEngageBadgePoll = startEngageBadgePoll;
+
     let _navGeneration = 0; // Increments on each nav change, used to prevent stale async overwrites
     function rerenderCurrentPage() {
       if (activeNav === 'dashboard') renderDashboard(clientData);
@@ -5653,6 +5711,7 @@
     function updateFundraiseNav(data) {
       const fundraiseBtn = document.getElementById('nav-fundraise');
       if (fundraiseBtn) fundraiseBtn.style.display = isCharityClient(data) ? '' : 'none';
+      if (typeof startEngageBadgePoll === 'function') startEngageBadgePoll();
     }
     function updateBreadcrumb(nav) {
       const bc = document.getElementById('dash-breadcrumb');
@@ -9416,24 +9475,36 @@
       // Fetch inbox data
       loadInboxData();
 
-      async function loadInboxData() {
+      async function loadInboxData(prefetched) {
         try {
-          const res = await fetch(`${API}/api/inbox`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
-          });
-          const data = await res.json();
-
-          if (res.status === 403) {
-            renderInboxUpgrade();
-            return;
+          let data = prefetched;
+          if (!data) {
+            const res = await fetch(`${API}/api/inbox`, {
+              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            });
+            data = await res.json();
+            if (res.status === 403) {
+              updateEngageBadge(0);
+              renderInboxUpgrade();
+              return;
+            }
           }
 
           if (!data.connected) {
+            updateEngageBadge(0);
             renderInboxConnect();
             return;
           }
 
+          updateEngageBadge(data.unreplied || 0);
+          await loadCannedResponses();
           renderInboxItems(data);
+          if (data._debug?.dm_permission_error && typeof showToast === 'function') {
+            if (!window.__seDmPermToast) {
+              window.__seDmPermToast = true;
+              showToast('Comments loaded. DMs need messaging permission on Meta — reconnect Meta if DMs stay empty.', 'warning');
+            }
+          }
           if (!inboxPollInterval && data.connected) {
             inboxPollInterval = setInterval(() => {
               if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
@@ -9444,6 +9515,9 @@
           renderInboxConnect();
         }
       }
+      window._reloadInboxIfActive = function(data) {
+        if (activeNav === 'inbox' && data) loadInboxData(data);
+      };
 
       function renderInboxUpgrade() {
         document.getElementById('inbox-body').innerHTML = `
@@ -9574,7 +9648,9 @@
         const timeAgo = getTimeAgo(item.timestamp);
         const platformIcon = item.platform === 'instagram'
           ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>'
-          : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>';
+          : item.platform === 'facebook'
+          ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1877F2" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>'
+          : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"><path d="M9 12a4 4 0 1 0 4 0V4a5 5 0 0 0 5 5"/></svg>';
         const typeLabel = isComment ? 'Comment' : 'DM';
         const typeBg = isComment ? 'rgba(139,92,246,0.1)' : 'rgba(124,58,237,0.1)';
         const typeColor = isComment ? 'rgba(139,92,246,0.8)' : 'rgba(124,58,237,0.8)';
@@ -9597,19 +9673,26 @@
                 ${item.has_reply && item.replies?.length ? `<div style="font-size:0.78rem;color:rgba(124,58,237,0.7);display:flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg> Replied</div>` : ''}
                 <!-- Reply area (hidden by default) -->
                 <div class="inbox-reply-area" id="inbox-reply-${idx}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05);">
-                  <div style="display:flex;gap:8px;margin-bottom:10px;">
+                  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
                     <button class="inbox-generate-btn" data-idx="${idx}" style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:6px;border:1px solid rgba(139,92,246,0.2);background:rgba(139,92,246,0.06);color:rgba(139,92,246,0.8);font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">
                       <i data-lucide="sparkles" style="width:12px;height:12px;"></i> Generate AI Reply
                     </button>
                   </div>
-                  <textarea class="inbox-reply-text" id="inbox-text-${idx}" placeholder="Type your reply or generate one with AI..." style="width:100%;min-height:60px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.84rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.3)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
-                  <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end;">
-                    <button class="inbox-cancel-btn" data-idx="${idx}" style="padding:7px 16px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Cancel</button>
-                    <button class="inbox-send-btn" data-idx="${idx}" style="padding:7px 18px;border-radius:7px;border:none;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#0A1628;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:5px;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Reply
-                    </button>
+                  <div style="margin-bottom:8px;">
+                    <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">Quick Replies</div>
+                    <div class="inbox-canned-row" data-idx="${idx}" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
                   </div>
-                </div>
+                  <textarea class="inbox-reply-text" id="inbox-text-${idx}" placeholder="Type your reply or generate one with AI..." style="width:100%;min-height:60px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.84rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.3)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                    <button type="button" class="inbox-save-canned-btn" data-idx="${idx}" style="background:none;border:none;color:rgba(167,139,250,0.75);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);padding:0;">+ Save as canned response</button>
+                    <div style="display:flex;gap:8px;margin-left:auto;">
+                      <button class="inbox-cancel-btn" data-idx="${idx}" style="padding:7px 16px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Cancel</button>
+                      <button class="inbox-send-btn" data-idx="${idx}" style="padding:7px 18px;border-radius:7px;border:none;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#0A1628;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:5px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Reply
+                      </button>
+                    </div>
+                  </div>
+                </div></div>
               </div>
             </div>
           </div>
@@ -9682,6 +9765,55 @@
           });
         });
 
+        function paintCannedChips() {
+          document.querySelectorAll('.inbox-canned-row').forEach(row => {
+            const idx = row.dataset.idx;
+            if (!_cannedResponses.length) {
+              row.innerHTML = '<span style="font-size:0.72rem;color:rgba(255,255,255,0.28);">No saved replies yet</span>';
+              return;
+            }
+            row.innerHTML = _cannedResponses.map(c =>
+              `<button type="button" class="inbox-canned-chip" data-idx="${idx}" data-cid="${c.id}" style="padding:4px 10px;border-radius:14px;border:1px solid rgba(124,58,237,0.25);background:rgba(124,58,237,0.08);color:#C4B5FD;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">${escapeHtml(c.label || (c.text || '').slice(0, 28))}</button>`
+            ).join('');
+          });
+          document.querySelectorAll('.inbox-canned-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const c = _cannedResponses.find(x => x.id === chip.dataset.cid);
+              const ta = document.getElementById(`inbox-text-${chip.dataset.idx}`);
+              if (c && ta) { ta.value = c.text; ta.focus(); }
+            });
+          });
+        }
+        paintCannedChips();
+
+        document.querySelectorAll('.inbox-save-canned-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const idx = btn.dataset.idx;
+            const textVal = document.getElementById(`inbox-text-${idx}`)?.value?.trim();
+            if (!textVal) { if (typeof showToast === 'function') showToast('Write a reply first', 'warning'); return; }
+            btn.textContent = 'Saving…';
+            try {
+              const res = await fetch(`${API}/api/inbox/canned-responses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                body: JSON.stringify({ label: textVal.slice(0, 30), text: textVal }),
+              });
+              const d = await res.json();
+              if (!res.ok) throw new Error(d.error || 'Save failed');
+              _cannedResponses = d.canned || [];
+              paintCannedChips();
+              btn.textContent = 'Saved';
+              if (typeof showToast === 'function') showToast('Canned response saved');
+              setTimeout(() => { btn.textContent = '+ Save as canned response'; }, 1200);
+            } catch (err) {
+              btn.textContent = '+ Save as canned response';
+              if (typeof showToast === 'function') showToast(err.message || 'Could not save canned reply', 'error');
+            }
+          });
+        });
+
         // Generate AI reply
         document.querySelectorAll('.inbox-generate-btn').forEach(btn => {
           btn.addEventListener('click', async () => {
@@ -9745,7 +9877,7 @@
                     body: JSON.stringify({ originalReply: aiOriginal, editedReply: reply, messageContext: { type: item.type, username: item.username } })
                   }).catch(() => {}); // Non-blocking
                 }
-                setTimeout(() => { document.getElementById(`inbox-reply-${idx}`).style.display = 'none'; loadInboxData(); }, 1500);
+                setTimeout(() => { document.getElementById(`inbox-reply-${idx}`).style.display = 'none'; loadInboxData(); if (typeof pollEngageBadge === 'function') pollEngageBadge(); }, 1500);
               } else {
                 btn.innerHTML = 'Failed — retry';
                 btn.style.background = 'rgba(239,68,68,0.8)';
