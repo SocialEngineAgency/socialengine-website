@@ -15178,7 +15178,7 @@
           border-radius:8px;padding:6px;overflow:hidden;cursor:pointer;position:relative;"
           ondragover="_batchDragOverDay('${dateKey}',event)"
           ondrop="_batchDropOnDay('${dateKey}',event)"
-          onclick="if(!event.target.closest('[onclick]')){openDatePanel('${dateKey}',window.__clientData||{content:_calPosts});_openBatchDayModal('${dateKey}');}">
+          onclick="openDatePanel('${dateKey}',window.__clientData||{content:_calPosts})">
         <div style="font-size:0.73rem;font-weight:${isToday ? '700' : '500'};
                     color:${isToday ? '#A78BFA' : 'rgba(255,255,255,0.35)'};margin-bottom:4px;">${d}</div>
         ${chips}${moreEl}
