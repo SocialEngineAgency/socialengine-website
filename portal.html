@@ -5664,7 +5664,7 @@
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
         'creation-studio': 'Fabric canvas editor — layers, AI chat, Higgsfield backgrounds',
-        'ad-studio': 'Create scroll-stopping ad creatives for any platform',
+        'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'settings': 'Account and platform settings',
         'fundraise': 'Manage and track your fundraising campaigns'
       };
@@ -5691,9 +5691,16 @@
 
     function isCharityClient(data) {
       const c = data?.client || {};
+      const name = String(c.business_name || '');
       return String(c.client_type || '').toLowerCase() === 'charity'
-        || String(c.charity_mission || '').trim().length > 0;
+        || String(c.charity_mission || '').trim().length > 0
+        || /charity|cancer|hospice|foundation|non[\s-]?profit|fundraising/i.test(name);
     }
+
+    // Ads MVP session (organic → ad handoff + create wizard state)
+    window.__SE_AD_SESSION = window.__SE_AD_SESSION || null;
+    let _adsView = 'home'; // 'home' | 'create'
+    let _adsOverview = null;
 
     function updateCreationStudioNav(data) {
       const btn = document.getElementById('nav-creation-studio');
@@ -5748,7 +5755,10 @@
         else if (nav === 'fundraise') { renderFundraise(clientData); }
         else if (nav === 'video-studio') { window._studioClientData = clientData; renderVideoStudio(); }
         else if (nav === 'inbox') { renderInbox(); }
-        else if (nav === 'ad-studio') { renderAdStudio(); }
+        else if (nav === 'ad-studio') {
+          if (!(window.__SE_AD_SESSION && (window.__SE_AD_SESSION.forceCreate || window.__SE_AD_SESSION.fromOrganic))) _adsView = 'home';
+          renderAdStudio();
+        }
         else if (nav === 'ai-studio') { console.log('[SE] Nav click: ai-studio'); renderAIStudio(); }
         else if (nav === 'settings') { renderSettingsPage(clientData); }
         else if (nav === 'schedule') { renderScheduleSection(); }
@@ -9968,19 +9978,19 @@
       }
     }
 
-    // ━━━ Fundraise ━━━
+    // === Fundraise MVP — JustGiving + Meta command center ===
     function renderFundraise(data) {
       const content = document.getElementById('dash-content');
       if (!content) return;
-      const clientName = data?.client?.business_name || 'your charity';
-      const hasJGId = !!(data?.client?.justgiving_charity_id);
+      const clientName = (data && data.client && data.client.business_name) || 'your charity';
+      const hasJGId = !!(data && data.client && data.client.justgiving_charity_id);
+      const metaConnected = !!(data && data.client && (data.client.meta_page_token || data.client.meta_page_id || data.client.facebook_connected));
 
-      // Pre-build ideas HTML to avoid triple-nested template literals
       const _jgIdeas = [
         { icon: 'video', title: 'Impact Reel', desc: 'Show what donations achieve — a patient story, treatment milestone, or research breakthrough in 30 seconds', platform: 'IG + TikTok' },
         { icon: 'users', title: 'Peer-to-Peer Push', desc: 'Ask supporters to create their own JustGiving pages. Birthday fundraisers drive 3x more donations than charity-led campaigns', platform: 'Facebook + IG' },
-        { icon: 'calendar', title: 'Giving Tuesday Campaign', desc: 'Pre-schedule a 3-post countdown to Giving Tuesday with a matching gift challenge. UK charities average £6,200 on the day', platform: 'All platforms' },
-        { icon: 'radio', title: 'LIVE Fundraising Stream', desc: 'Facebook or Instagram LIVE with a fundraising goal visible on screen. Verbal CTAs every 5 mins + link in bio to JustGiving page', platform: 'Facebook LIVE' },
+        { icon: 'calendar', title: 'Giving Tuesday Campaign', desc: 'Pre-schedule a 3-post countdown to Giving Tuesday with a matching gift challenge.', platform: 'All platforms' },
+        { icon: 'radio', title: 'LIVE Fundraising Stream', desc: 'Facebook or Instagram LIVE with a fundraising goal visible on screen. Verbal CTAs every 5 mins + link in bio.', platform: 'Facebook LIVE' },
       ].map(function(item) {
         return '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
           + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
@@ -9997,62 +10007,63 @@
       content.innerHTML = `
         <div class="section-header">
           <h2 class="section-title">Fundraise</h2>
-          <p class="section-subtitle">Manage and track your fundraising campaigns across JustGiving and social platforms</p>
+          <p class="section-subtitle">Fundraising through brand voice, calendar, and donor conversations — JustGiving + Meta in one place</p>
         </div>
 
-        ${!hasJGId ? `
-        <!-- Connect JustGiving -->
-        <div style="max-width:560px;margin:40px auto;text-align:center;padding:40px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:16px;">
-          <div style="width:56px;height:56px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
-            <i data-lucide="heart-handshake" style="width:28px;height:28px;color:#fff;"></i>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:20px;">
+          <div class="analytics-card" style="padding:16px;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">JustGiving</div>
+            <div style="font-size:0.9rem;font-weight:700;color:${hasJGId ? '#10b981' : '#FBBF24'};">${hasJGId ? 'Connected' : 'Not connected'}</div>
+            ${!hasJGId ? '<div style="margin-top:10px;display:flex;gap:8px;"><input type="text" id="jg-charity-id-input" placeholder="Charity ID" style="flex:1;padding:8px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.8rem;"><button onclick="saveJGCharityId()" style="padding:8px 12px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;border-radius:8px;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer;">Connect</button></div>' : '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">ID saved for ' + (clientName.replace(/</g,'&lt;')) + '</div>'}
           </div>
-          <h3 style="font-size:1.15rem;font-weight:700;color:var(--color-text);margin-bottom:8px;">Connect JustGiving</h3>
-          <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:24px;line-height:1.6;">Enter your JustGiving Charity ID to see your campaigns, fundraiser performance, and total raised — all in one place.</p>
-          <div style="display:flex;gap:10px;max-width:380px;margin:0 auto;">
-            <input type="text" id="jg-charity-id-input" placeholder="e.g. 12345" style="flex:1;padding:10px 14px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:10px;color:var(--color-text);font-size:0.9rem;outline:none;font-family:var(--font-body);">
-            <button onclick="saveJGCharityId()" style="padding:10px 20px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border:none;border-radius:10px;color:#fff;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Connect</button>
+          <div class="analytics-card" style="padding:16px;">
+            <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Meta Page fundraisers</div>
+            <div style="font-size:0.9rem;font-weight:700;color:${metaConnected ? '#10b981' : '#FBBF24'};">${metaConnected ? 'Page connected' : 'Connect Meta in Settings'}</div>
+            ${!metaConnected ? '<button onclick="switchNav(\'settings\')" style="margin-top:10px;padding:7px 12px;border-radius:8px;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#FBBF24;font-size:0.75rem;font-weight:700;cursor:pointer;">Reconnect Meta</button>' : '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">Loads via manage_fundraisers</div>'}
           </div>
-          <p style="font-size:0.72rem;color:var(--color-text-muted);margin-top:12px;">Find your Charity ID on your JustGiving dashboard under Account Settings</p>
         </div>
-        ` : `
-        <!-- Dashboard -->
+
         <div id="fundraise-dashboard">
-          <!-- Summary cards -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px;">
             <div class="analytics-card" style="padding:20px;">
-              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Total Raised</div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Total Raised (JG)</div>
               <div id="jg-total-raised" style="font-size:1.8rem;font-weight:800;color:var(--color-text);">—</div>
-              <div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">across all campaigns</div>
             </div>
             <div class="analytics-card" style="padding:20px;">
-              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Active Campaigns</div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Active (JG)</div>
               <div id="jg-active-campaigns" style="font-size:1.8rem;font-weight:800;color:var(--color-text);">—</div>
-              <div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">currently running</div>
+            </div>
+            <div class="analytics-card" style="padding:20px;">
+              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Meta fundraisers</div>
+              <div id="meta-fundraiser-count" style="font-size:1.8rem;font-weight:800;color:var(--color-text);">—</div>
             </div>
             <div class="analytics-card" style="padding:20px;">
               <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Top Fundraiser</div>
               <div id="jg-top-fundraiser" style="font-size:1rem;font-weight:700;color:var(--color-text);">—</div>
               <div id="jg-top-fundraiser-amount" style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;"></div>
             </div>
-            <div class="analytics-card" style="padding:20px;">
-              <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gift Aid Boost</div>
-              <div id="jg-giftaid" style="font-size:1.8rem;font-weight:800;color:#10b981;">+25%</div>
-              <div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">automatically claimed</div>
-            </div>
           </div>
 
-          <!-- Active Campaigns list -->
           <div class="analytics-card" style="margin-bottom:24px;">
             <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;">
-              <h3 class="analytics-card__title">Active Campaigns</h3>
+              <h3 class="analytics-card__title">JustGiving campaigns</h3>
               <a href="https://www.justgiving.com" target="_blank" style="font-size:0.75rem;color:#7C3AED;text-decoration:none;font-weight:600;">Open JustGiving ↗</a>
             </div>
             <div class="analytics-card__body">
-              <div id="jg-campaigns-list"><div style="text-align:center;padding:32px;color:var(--color-text-muted);font-size:0.85rem;">Loading campaigns…</div></div>
+              <div id="jg-campaigns-list"><div style="text-align:center;padding:24px;color:var(--color-text-muted);font-size:0.85rem;">${hasJGId ? 'Loading campaigns…' : 'Connect JustGiving above to load campaigns.'}</div></div>
             </div>
           </div>
 
-          <!-- Fundraising content ideas -->
+          <div class="analytics-card" style="margin-bottom:24px;">
+            <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;">
+              <h3 class="analytics-card__title">Meta fundraisers</h3>
+              <a href="https://www.facebook.com/fundraisers/" target="_blank" style="font-size:0.75rem;color:#7C3AED;text-decoration:none;font-weight:600;">Open Meta ↗</a>
+            </div>
+            <div class="analytics-card__body">
+              <div id="meta-fundraisers-list"><div style="text-align:center;padding:24px;color:var(--color-text-muted);font-size:0.85rem;">Loading Meta fundraisers…</div></div>
+            </div>
+          </div>
+
           <div class="analytics-card">
             <div class="analytics-card__header">
               <h3 class="analytics-card__title">Fundraising Content Ideas</h3>
@@ -10064,11 +10075,49 @@
             </div>
           </div>
         </div>
-        `}
       `;
 
       if (typeof lucide !== 'undefined') lucide.createIcons();
-      if (hasJGId) loadFundraiseData();
+      loadFundraiseData();
+    }
+
+    window.fundraiseCreateContent = function(title, url) {
+      const focus = String(title || 'Fundraiser').slice(0, 120);
+      window.__SE_AD_SESSION = null;
+      if (typeof switchNav === 'function') switchNav('creation-studio');
+      setTimeout(function() {
+        const product = document.getElementById('vs-product') || document.querySelector('[name="product"]');
+        const dir = document.getElementById('vs-creative-dir');
+        if (product) product.value = focus;
+        if (dir) dir.value = 'Create compassionate fundraising content for: ' + focus + (url ? ('\\nLink: ' + url) : '') + '\\nTone: human, kind, never salesy. No medical advice.';
+        if (typeof showToast === 'function') showToast('Studio opened for fundraiser content');
+      }, 200);
+    };
+
+    window.fundraiseCreateAdDraft = function(title, url) {
+      if (typeof adsOpenCreate === 'function') {
+        adsOpenCreate({
+          forceCreate: true,
+          fromOrganic: false,
+          campaignFocus: String(title || 'Fundraiser campaign').slice(0, 120),
+          productTitle: String(title || 'Fundraiser').slice(0, 80),
+          permalink: url || '',
+          objective: 'donations',
+          caption: 'Compassionate fundraising campaign: ' + (title || ''),
+        });
+      } else if (typeof switchNav === 'function') {
+        switchNav('ad-studio');
+      }
+    };
+
+    function fundraiseRowActions(title, url, source) {
+      const t = String(title || 'Campaign').replace(/'/g, "\\'");
+      const u = String(url || '').replace(/'/g, "\\'");
+      return '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">'
+        + (url ? '<a href="' + String(url).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="font-size:0.72rem;color:#FF6B35;font-weight:600;text-decoration:none;">Open ' + source + ' ↗</a>' : '')
+        + '<button onclick="fundraiseCreateContent(\'' + t + '\',\'' + u + '\')" style="padding:5px 10px;border-radius:7px;border:1px solid rgba(124,58,237,0.3);background:rgba(124,58,237,0.1);color:#C4B5FD;font-size:0.7rem;font-weight:600;cursor:pointer;">Create content</button>'
+        + '<button onclick="fundraiseCreateAdDraft(\'' + t + '\',\'' + u + '\')" style="padding:5px 10px;border-radius:7px;border:1px solid rgba(236,72,153,0.3);background:rgba(236,72,153,0.1);color:#F9A8D4;font-size:0.7rem;font-weight:600;cursor:pointer;">Create ad draft</button>'
+        + '</div>';
     }
 
     window.loadFundraiseData = async function() {
@@ -10085,42 +10134,81 @@
             if (el('jg-top-fundraiser-amount')) el('jg-top-fundraiser-amount').textContent = fmt(s.top_fundraiser.amount) + ' raised';
           }
         }
+      } catch (e) { console.warn('JG summary', e); }
+
+      try {
         const campRes = await apiFetch('/api/fundraise/campaigns');
-        if (campRes.ok) {
+        const list = document.getElementById('jg-campaigns-list');
+        if (campRes.ok && list) {
           const { campaigns } = await campRes.json();
-          const list = document.getElementById('jg-campaigns-list');
-          if (list) {
-            if (!campaigns || campaigns.length === 0) {
-              list.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:16px 0;">No active campaigns found on JustGiving.</p>';
-            } else {
-              const fmt = n => '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-              list.innerHTML = campaigns.filter(function(c) { return (c.status || '').toLowerCase() === 'active'; }).slice(0, 10).map(function(c) {
-                const pct = c.target > 0 ? Math.min(100, Math.round((c.total_raised / c.target) * 100)) : 0;
-                const ownerHtml = c.owner_name ? '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:2px;">by ' + c.owner_name + '</div>' : '';
-                const goalHtml = c.target > 0 ? '<div style="font-size:0.68rem;color:var(--color-text-muted);">of ' + fmt(c.target) + ' goal</div>' : '';
-                const progressHtml = c.target > 0
-                  ? '<div style="height:5px;background:var(--color-surface-2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#FF6B35,#FF8C42);border-radius:3px;transition:width 0.6s;"></div></div><div style="font-size:0.68rem;color:var(--color-text-muted);margin-top:4px;">' + pct + '% of goal reached</div>'
-                  : '';
-                return '<div style="padding:14px 0;border-bottom:1px solid var(--color-border);">'
-                  + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">'
-                  + '<div style="flex:1;"><div style="font-size:0.88rem;font-weight:600;color:var(--color-text);">' + (c.title || 'Untitled Campaign') + '</div>' + ownerHtml + '</div>'
-                  + '<div style="text-align:right;flex-shrink:0;"><div style="font-size:0.95rem;font-weight:700;color:var(--color-text);">' + fmt(c.total_raised) + '</div>' + goalHtml + '</div>'
-                  + '</div>'
-                  + progressHtml
-                  + '<a href="' + c.page_url + '" target="_blank" style="display:inline-block;margin-top:8px;font-size:0.72rem;color:#FF6B35;font-weight:600;text-decoration:none;">View on JustGiving ↗</a>'
-                  + '</div>';
-              }).join('');
-            }
+          if (!campaigns || campaigns.length === 0) {
+            list.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:16px 0;">No active campaigns found on JustGiving.</p>';
+          } else {
+            const fmt = n => '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            list.innerHTML = campaigns.filter(function(c) { return (c.status || '').toLowerCase() === 'active'; }).slice(0, 10).map(function(c) {
+              const pct = c.target > 0 ? Math.min(100, Math.round((c.total_raised / c.target) * 100)) : 0;
+              const ownerHtml = c.owner_name ? '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:2px;">by ' + c.owner_name + '</div>' : '';
+              const goalHtml = c.target > 0 ? '<div style="font-size:0.68rem;color:var(--color-text-muted);">of ' + fmt(c.target) + ' goal</div>' : '';
+              const progressHtml = c.target > 0
+                ? '<div style="height:5px;background:var(--color-surface-2);border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#FF6B35,#FF8C42);border-radius:3px;"></div></div><div style="font-size:0.68rem;color:var(--color-text-muted);margin-top:4px;">' + pct + '% of goal</div>'
+                : '';
+              return '<div style="padding:14px 0;border-bottom:1px solid var(--color-border);">'
+                + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">'
+                + '<div style="flex:1;"><div style="font-size:0.88rem;font-weight:600;color:var(--color-text);">' + (c.title || 'Untitled Campaign') + '</div>' + ownerHtml + '</div>'
+                + '<div style="text-align:right;flex-shrink:0;"><div style="font-size:0.95rem;font-weight:700;color:var(--color-text);">' + fmt(c.total_raised) + '</div>' + goalHtml + '</div>'
+                + '</div>'
+                + progressHtml
+                + fundraiseRowActions(c.title || 'Campaign', c.page_url || '', 'JustGiving')
+                + '</div>';
+            }).join('');
+          }
+        } else if (list && !campRes.ok) {
+          /* keep connect message */
+        }
+      } catch (e) { console.error('Fundraise JG load error:', e); }
+
+      try {
+        const metaRes = await apiFetch('/api/fundraise/meta');
+        const metaList = document.getElementById('meta-fundraisers-list');
+        const countEl = document.getElementById('meta-fundraiser-count');
+        const d = await metaRes.json().catch(function() { return {}; });
+        const fundraisers = d.fundraisers || [];
+        if (countEl) countEl.textContent = String(fundraisers.length);
+        if (metaList) {
+          if (!d.meta_connected) {
+            metaList.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:8px 0;">Connect your Facebook Page in Settings to load Meta fundraisers.</p>';
+          } else if (d.error) {
+            metaList.innerHTML = '<p style="color:#F87171;font-size:0.85rem;padding:8px 0;">' + String(d.error).replace(/</g,'&lt;') + (d.needs_permission ? ' — reconnect with manage_fundraisers.' : '') + '</p>';
+          } else if (!fundraisers.length) {
+            metaList.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:8px 0;">No Meta fundraisers found for this Page yet.</p>';
+          } else {
+            const fmt = function(n, cur) {
+              const c = cur || 'USD';
+              try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(Number(n || 0)); }
+              catch (e) { return String(n || 0); }
+            };
+            metaList.innerHTML = fundraisers.slice(0, 15).map(function(f) {
+              const goal = f.goal > 0 ? '<div style="font-size:0.68rem;color:var(--color-text-muted);">of ' + fmt(f.goal, f.currency) + ' goal</div>' : '';
+              return '<div style="padding:14px 0;border-bottom:1px solid var(--color-border);">'
+                + '<div style="display:flex;justify-content:space-between;gap:12px;">'
+                + '<div style="font-size:0.88rem;font-weight:600;color:var(--color-text);">' + (f.title || 'Fundraiser') + '</div>'
+                + '<div style="font-size:0.95rem;font-weight:700;color:var(--color-text);">' + fmt(f.amount_raised, f.currency) + '</div></div>'
+                + goal
+                + fundraiseRowActions(f.title || 'Fundraiser', f.url || '', 'Meta')
+                + '</div>';
+            }).join('');
           }
         }
       } catch (e) {
-        console.error('Fundraise load error:', e);
+        console.error('Fundraise Meta load error:', e);
+        const metaList = document.getElementById('meta-fundraisers-list');
+        if (metaList) metaList.innerHTML = '<p style="color:#F87171;font-size:0.85rem;">Could not load Meta fundraisers.</p>';
       }
     };
 
     window.saveJGCharityId = async function() {
       const input = document.getElementById('jg-charity-id-input');
-      const id = input?.value?.trim();
+      const id = input && input.value ? input.value.trim() : '';
       if (!id) return;
       try {
         const res = await apiFetch('/api/fundraise/save-charity-id', {
@@ -13122,10 +13210,371 @@
       }
     };
 
+    // === Ads MVP — command home + Meta Draft launch ===
+    let _adSelectedObjective = 'traffic';
+    let _adSelectedCta = 'Shop Now';
+    let _adLastCopy = null;
+
+    function adsEsc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    window.adsOpenCreate = function(opts) {
+      _adsView = 'create';
+      if (opts && typeof opts === 'object') {
+        window.__SE_AD_SESSION = Object.assign({}, window.__SE_AD_SESSION || {}, opts, { forceCreate: true });
+      } else if (!window.__SE_AD_SESSION) {
+        window.__SE_AD_SESSION = { forceCreate: true };
+      } else {
+        window.__SE_AD_SESSION.forceCreate = true;
+      }
+      renderAdStudio();
+    };
+
+    window.adsBackHome = function() {
+      _adsView = 'home';
+      if (window.__SE_AD_SESSION) {
+        window.__SE_AD_SESSION.forceCreate = false;
+        window.__SE_AD_SESSION.fromOrganic = false;
+      }
+      renderAdStudio();
+    };
+
+    window.adsSelectObjective = function(id, btn) {
+      _adSelectedObjective = id;
+      document.querySelectorAll('[data-ad-objective]').forEach(function(el) {
+        el.style.borderColor = 'rgba(255,255,255,0.08)';
+        el.style.background = 'rgba(255,255,255,0.02)';
+        el.style.color = 'rgba(255,255,255,0.55)';
+      });
+      if (btn) {
+        btn.style.borderColor = 'rgba(139,92,246,0.45)';
+        btn.style.background = 'rgba(139,92,246,0.12)';
+        btn.style.color = '#C4B5FD';
+      }
+    };
+    async function renderAdsCommandHome(content, isCharity) {
+      content.innerHTML = '<div style="max-width:1100px;margin:0 auto;padding:8px 0 40px;">'
+        + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:24px;">'
+        + '<div><h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 6px;">'
+        + (isCharity ? 'Campaigns' : 'Ads') + '</h2>'
+        + '<p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;max-width:520px;">Learns from organic winners and your brand voice — then creates Meta drafts you can activate when ready.</p></div>'
+        + '<button onclick="adsOpenCreate()" style="padding:10px 18px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:10px;color:#fff;font-size:0.85rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">+ Create campaign</button>'
+        + '</div>'
+        + '<div id="ads-kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">'
+        + '<div class="dash-card" style="padding:16px;"><div style="font-size:0.68rem;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;">Loading…</div></div>'
+        + '</div>'
+        + '<div id="ads-connect-banner"></div>'
+        + '<div class="dash-card" style="padding:0;overflow:hidden;">'
+        + '<div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:center;">'
+        + '<div style="font-size:0.9rem;font-weight:700;color:#fff;">Campaigns &amp; drafts</div>'
+        + '<div style="font-size:0.72rem;color:var(--color-text-muted);">Local + Meta · drafts are PAUSED</div></div>'
+        + '<div id="ads-campaign-list" style="padding:8px 20px 20px;"><div style="padding:28px;text-align:center;color:var(--color-text-muted);font-size:0.85rem;">Loading campaigns…</div></div>'
+        + '</div></div>';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      try {
+        const res = await apiFetch('/api/ads/overview');
+        const d = await res.json().catch(function() { return {}; });
+        if (!res.ok) throw new Error(d.error || 'Failed to load ads overview');
+        _adsOverview = d;
+        const kpis = d.kpis || {};
+        const kpiRow = document.getElementById('ads-kpi-row');
+        if (kpiRow) {
+          const cells = [
+            { label: kpis.primary_label || (isCharity ? 'Cost / donation' : 'ROAS'), val: kpis.primary != null ? kpis.primary : '—' },
+            { label: kpis.secondary_label || (isCharity ? 'Awareness reach' : 'CPA'), val: kpis.secondary != null ? kpis.secondary : '—' },
+            { label: 'Spend', val: kpis.spend != null ? kpis.spend : '—' },
+            { label: 'Drafts / campaigns', val: String((d.campaigns || []).length) },
+          ];
+          kpiRow.innerHTML = cells.map(function(c) {
+            return '<div class="dash-card" style="padding:16px;">'
+              + '<div style="font-size:0.68rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">' + adsEsc(c.label) + '</div>'
+              + '<div style="font-size:1.35rem;font-weight:800;color:#fff;">' + adsEsc(c.val) + '</div>'
+              + '<div style="font-size:0.68rem;color:rgba(255,255,255,0.28);margin-top:4px;">Fills as Meta insights sync</div></div>';
+          }).join('');
+        }
+        const banner = document.getElementById('ads-connect-banner');
+        if (banner) {
+          let html = '';
+          if (d.reconnect_hint || !d.meta_connected) {
+            html += '<div style="margin-bottom:16px;padding:14px 16px;border-radius:12px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.08);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">'
+              + '<div style="font-size:0.8rem;color:rgba(255,255,255,0.75);">Connect Meta with ads permissions to create draft campaigns.</div>'
+              + '<button onclick="switchNav(\'settings\')" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#FBBF24;font-size:0.75rem;font-weight:700;cursor:pointer;">Reconnect Meta</button></div>';
+          } else if (d.needs_ad_account) {
+            html += '<div style="margin-bottom:16px;padding:14px 16px;border-radius:12px;border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.08);">'
+              + '<div style="font-size:0.8rem;color:rgba(255,255,255,0.75);margin-bottom:10px;">Select a Meta ad account to launch drafts.</div>'
+              + '<div id="ads-account-picker" style="display:flex;flex-wrap:wrap;gap:8px;"><button onclick="adsLoadAccounts()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(139,92,246,0.35);background:rgba(139,92,246,0.12);color:#C4B5FD;font-size:0.75rem;font-weight:700;cursor:pointer;">Load ad accounts</button></div></div>';
+          } else if (d.ad_account_name || d.ad_account_id) {
+            html += '<div style="margin-bottom:16px;font-size:0.75rem;color:var(--color-text-muted);">Ad account: <strong style="color:rgba(255,255,255,0.8);">' + adsEsc(d.ad_account_name || d.ad_account_id) + '</strong>'
+              + ' · <button onclick="adsLoadAccounts()" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:0.75rem;text-decoration:underline;padding:0;">Change</button></div>';
+          }
+          if (d.remote_error) {
+            html += '<div style="margin-bottom:16px;font-size:0.75rem;color:#F87171;">Meta sync: ' + adsEsc(d.remote_error) + '</div>';
+          }
+          banner.innerHTML = html;
+        }
+        const list = document.getElementById('ads-campaign-list');
+        const camps = d.campaigns || [];
+        if (list) {
+          if (!camps.length) {
+            list.innerHTML = '<div style="padding:36px 16px;text-align:center;">'
+              + '<div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:8px;">No campaigns yet</div>'
+              + '<p style="font-size:0.82rem;color:var(--color-text-muted);margin:0 0 18px;max-width:360px;margin-left:auto;margin-right:auto;">Create brand-voice creative and launch a <strong style="color:rgba(255,255,255,0.7);">PAUSED Meta draft</strong>.</p>'
+              + '<button onclick="adsOpenCreate()" style="padding:10px 18px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:10px;color:#fff;font-size:0.85rem;font-weight:700;cursor:pointer;">Create your first draft</button></div>';
+          } else {
+            list.innerHTML = camps.slice(0, 40).map(function(c) {
+              const status = String(c.status || 'DRAFT').toUpperCase();
+              const src = c.source === 'meta' ? 'Meta' : 'SE Draft';
+              const obj = c.objective || '—';
+              const when = c.updated_at || c.created_at || '';
+              const whenLabel = when ? new Date(when).toLocaleDateString() : '';
+              return '<div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">'
+                + '<div><div style="font-size:0.9rem;font-weight:650;color:#fff;">' + adsEsc(c.name || 'Untitled') + '</div>'
+                + '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:4px;">' + adsEsc(src) + ' · ' + adsEsc(obj) + (whenLabel ? ' · ' + whenLabel : '') + '</div></div>'
+                + '<div style="display:flex;align-items:center;gap:8px;">'
+                + '<span style="font-size:0.68rem;font-weight:700;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.65);">' + adsEsc(status) + '</span>'
+                + (c.meta_campaign_id || (c.source === 'meta' && c.id) ? '<a href="https://www.facebook.com/adsmanager/manage/campaigns" target="_blank" rel="noopener" style="font-size:0.72rem;color:#A78BFA;font-weight:600;text-decoration:none;">Open Meta ↗</a>' : '')
+                + '</div></div>';
+            }).join('');
+          }
+        }
+      } catch (e) {
+        const list = document.getElementById('ads-campaign-list');
+        if (list) list.innerHTML = '<div style="padding:24px;color:#F87171;font-size:0.85rem;">' + adsEsc(e.message || 'Could not load ads') + '</div>';
+      }
+    }
+    window.adsLoadAccounts = async function() {
+      const host = document.getElementById('ads-account-picker') || document.getElementById('ads-connect-banner');
+      if (host && host.id === 'ads-account-picker') host.innerHTML = '<span style="font-size:0.75rem;color:var(--color-text-muted);">Loading…</span>';
+      try {
+        const res = await apiFetch('/api/ads/accounts');
+        const d = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+          if (d.reconnect_needed && typeof showToast === 'function') showToast('Reconnect Meta with ads_management');
+          throw new Error(d.error || 'Failed to list accounts');
+        }
+        const accounts = d.accounts || [];
+        const picker = document.getElementById('ads-account-picker');
+        const target = picker || document.getElementById('ads-connect-banner');
+        if (!accounts.length) {
+          if (target) target.innerHTML = '<div style="font-size:0.8rem;color:#F87171;">No ad accounts found. Create one in Meta Business Suite, then reconnect.</div>';
+          return;
+        }
+        const html = accounts.map(function(a) {
+          const safeId = String(a.id || '').replace(/'/g, '');
+          const safeName = String(a.name || a.id || '').replace(/'/g, '');
+          return '<button onclick="adsSelectAccount(\'' + safeId + '\',\'' + safeName + '\')" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.75rem;cursor:pointer;">'
+            + adsEsc(a.name) + (a.currency ? ' · ' + adsEsc(a.currency) : '') + '</button>';
+        }).join('');
+        if (picker) picker.innerHTML = html;
+        else if (target) target.innerHTML = '<div style="margin-bottom:16px;padding:14px;border-radius:12px;border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.08);"><div style="font-size:0.8rem;margin-bottom:10px;color:rgba(255,255,255,0.75);">Choose ad account</div><div style="display:flex;flex-wrap:wrap;gap:8px;">' + html + '</div></div>';
+      } catch (e) {
+        if (typeof showToast === 'function') showToast(e.message || 'Account load failed');
+      }
+    };
+
+    window.adsSelectAccount = async function(id, name) {
+      try {
+        const res = await apiFetch('/api/ads/select-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ad_account_id: id, ad_account_name: name })
+        });
+        const d = await res.json().catch(function() { return {}; });
+        if (!res.ok) throw new Error(d.error || 'Could not save account');
+        if (clientData && clientData.client) {
+          clientData.client.meta_ad_account_id = d.ad_account_id;
+          clientData.client.meta_ad_account_name = d.ad_account_name;
+        }
+        if (typeof showToast === 'function') showToast('Ad account saved');
+        renderAdStudio();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast(e.message || 'Save failed');
+      }
+    };
+
+    function applyAdSessionIfAny() {
+      const s = window.__SE_AD_SESSION;
+      if (!s || (!s.fromOrganic && !s.campaignFocus && !s.productTitle && !s.primaryText && !s.forceCreate)) return;
+      const focus = document.getElementById('ad-campaign-focus-input');
+      const prompt = document.getElementById('ad-custom-prompt');
+      const seed = [s.campaignFocus || s.productTitle || '', s.caption || s.primaryText || ''].filter(Boolean).join('\n\n');
+      if (focus && (s.campaignFocus || s.fromOrganic || window._adClientHasNoProducts)) {
+        focus.value = s.campaignFocus || s.productTitle || (s.caption || '').slice(0, 120);
+        if (typeof adCampaignFocusTyped === 'function') adCampaignFocusTyped();
+      }
+      if (prompt && seed) {
+        prompt.value = 'Promote this winning organic post as an ad. Keep brand voice.\n\n' + seed.slice(0, 1200);
+      }
+      if (s.fromOrganic && (window._adClientHasNoProducts || !s.productId)) {
+        if (typeof adSetSelectedProduct === 'function') {
+          adSetSelectedProduct({
+            id: 'campaign-topic',
+            title: s.campaignFocus || s.productTitle || 'Organic winner',
+            image: s.image || '',
+            price: '',
+            product_url: s.permalink || ''
+          });
+        }
+      }
+      if (s.objective) {
+        _adSelectedObjective = s.objective;
+        const btn = document.querySelector('[data-ad-objective="' + s.objective + '"]');
+        if (btn) adsSelectObjective(s.objective, btn);
+      }
+      const nameEl = document.getElementById('ad-campaign-name');
+      if (nameEl && (s.campaignFocus || s.productTitle)) nameEl.value = (s.campaignFocus || s.productTitle || '').slice(0, 80);
+      if (typeof showToast === 'function' && s.fromOrganic) showToast('Organic post loaded — generate creative, then Create Meta Draft');
+    }
+
+    window.promotePostToAd = function(post) {
+      const p = post || {};
+      const caption = String(p.caption || p.message || '').trim();
+      window.__SE_AD_SESSION = {
+        forceCreate: true,
+        fromOrganic: true,
+        campaignFocus: (caption.slice(0, 80) || p.title || 'Winning post').trim(),
+        caption: caption,
+        primaryText: caption.slice(0, 300),
+        image: p.media_url || p.thumbnail_url || p.image || '',
+        permalink: p.permalink || p.url || '',
+        productTitle: (caption.slice(0, 60) || 'Organic winner').trim(),
+        objective: isCharityClient(window.__clientData || clientData) ? 'donations' : 'traffic',
+      };
+      _adsView = 'create';
+      if (typeof switchNav === 'function') switchNav('ad-studio');
+      else renderAdStudio();
+    };
+
+    window.adsCreateMetaDraft = async function() {
+      const btn = document.getElementById('ads-draft-btn');
+      const status = document.getElementById('ads-draft-status');
+      if (btn) { btn.disabled = true; btn.textContent = 'Creating Meta draft…'; }
+      if (status) status.textContent = '';
+      const headline = (document.getElementById('ad-out-headline') && document.getElementById('ad-out-headline').value) || (_adLastCopy && _adLastCopy.headline) || '';
+      const primary = (document.getElementById('ad-out-primary') && document.getElementById('ad-out-primary').value) || (_adLastCopy && _adLastCopy.primary_text) || '';
+      const budgetEl = document.getElementById('ad-daily-budget');
+      const daily = budgetEl ? Number(budgetEl.value || 10) : 10;
+      const nameEl = document.getElementById('ad-campaign-name');
+      const focusEl = document.getElementById('ad-campaign-focus-input');
+      const product = _adSelectedProduct || {};
+      const body = {
+        name: (nameEl && nameEl.value) || product.title || (focusEl && focusEl.value) || 'SocialEngine Ad Draft',
+        objective: _adSelectedObjective || 'traffic',
+        daily_budget: daily,
+        primary_text: primary,
+        headline: headline,
+        cta: _adSelectedCta || 'Learn More',
+        product_title: product.title || '',
+        campaign_focus: (focusEl && focusEl.value) || '',
+        landing_url: product.product_url || (window.__SE_AD_SESSION && window.__SE_AD_SESSION.permalink) || '',
+        format: _adSelectedFormat || '',
+        platform: _adSelectedPlatform || 'meta',
+      };
+      try {
+        const res = await apiFetch('/api/ads/draft', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const d = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+          if (d.needs_ad_account && d.accounts) {
+            if (status) status.innerHTML = 'Select an ad account first.';
+            const banner = document.getElementById('ads-create-account-banner');
+            if (banner) {
+              banner.style.display = 'block';
+              banner.innerHTML = '<div style="font-size:0.8rem;margin-bottom:8px;color:rgba(255,255,255,0.7);">Choose Meta ad account</div><div style="display:flex;flex-wrap:wrap;gap:8px;">'
+                + d.accounts.map(function(a) {
+                  const safeId = String(a.id || '').replace(/'/g, '');
+                  const safeName = String(a.name || a.id || '').replace(/'/g, '');
+                  return '<button onclick="adsSelectAccount(\'' + safeId + '\',\'' + safeName + '\')" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(139,92,246,0.35);background:rgba(139,92,246,0.1);color:#C4B5FD;font-size:0.72rem;cursor:pointer;">' + adsEsc(a.name || a.id) + '</button>';
+                }).join('') + '</div>';
+            }
+          }
+          if (d.reconnect_needed && typeof showToast === 'function') showToast('Reconnect Meta with ads permissions');
+          throw new Error(d.error || 'Draft failed');
+        }
+        if (status) {
+          status.innerHTML = 'Draft created (PAUSED). <a href="' + adsEsc(d.ads_manager_url || 'https://www.facebook.com/adsmanager') + '" target="_blank" rel="noopener" style="color:#A78BFA;">Open Ads Manager ↗</a>';
+        }
+        if (typeof showToast === 'function') showToast('Meta draft campaign created (PAUSED)');
+        if (window.__SE_AD_SESSION) window.__SE_AD_SESSION.fromOrganic = false;
+      } catch (e) {
+        if (status) status.textContent = e.message || 'Draft failed';
+        if (typeof showToast === 'function') showToast(e.message || 'Draft failed');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Create Meta Draft (PAUSED)'; }
+      }
+    };
+
+    function adsObjectiveStripHtml() {
+      const isCharity = isCharityClient(window.__clientData || clientData);
+      if (isCharity && (_adSelectedObjective === 'sales' || _adSelectedObjective === 'traffic')) _adSelectedObjective = 'donations';
+      const objectives = isCharity
+        ? [{ id: 'donations', label: 'Donations / traffic' }, { id: 'awareness', label: 'Awareness' }, { id: 'engagement', label: 'Engagement' }]
+        : [{ id: 'sales', label: 'Sales' }, { id: 'traffic', label: 'Traffic' }, { id: 'awareness', label: 'Awareness' }, { id: 'leads', label: 'Leads' }];
+      const objChips = objectives.map(function(o) {
+        const active = (_adSelectedObjective === o.id);
+        return '<button type="button" data-ad-objective="' + o.id + '" onclick="adsSelectObjective(\'' + o.id + '\', this)" style="padding:7px 12px;border-radius:8px;font-size:0.72rem;font-weight:600;cursor:pointer;border:1px solid ' + (active ? 'rgba(139,92,246,0.45)' : 'rgba(255,255,255,0.1)') + ';background:' + (active ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)') + ';color:' + (active ? '#C4B5FD' : 'rgba(255,255,255,0.55)') + ';">' + o.label + '</button>';
+      }).join('');
+      return '<div class="dash-card" style="margin-bottom:20px;padding:18px 20px;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
+        + '<div><div style="font-size:0.88rem;font-weight:700;color:#fff;">1. Objective &amp; budget</div>'
+        + '<div style="font-size:0.72rem;color:var(--color-text-muted);margin-top:2px;">Choose what this Meta draft should optimize for</div></div>'
+        + '<button type="button" onclick="adsBackHome()" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.65);font-size:0.72rem;font-weight:600;cursor:pointer;">← All campaigns</button></div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' + objChips + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+        + '<div><label style="display:block;font-size:0.68rem;color:var(--color-text-muted);margin-bottom:6px;">Campaign name</label>'
+        + '<input id="ad-campaign-name" type="text" placeholder="Campaign name" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#fff;font-size:0.8rem;box-sizing:border-box;font-family:var(--font-body);"></div>'
+        + '<div><label style="display:block;font-size:0.68rem;color:var(--color-text-muted);margin-bottom:6px;">Daily budget (for later activation)</label>'
+        + '<input id="ad-daily-budget" type="number" min="1" step="1" value="10" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#fff;font-size:0.8rem;box-sizing:border-box;font-family:var(--font-body);"></div></div>'
+        + '<div id="ads-create-account-banner" style="display:none;margin-top:12px;"></div></div>';
+    }
+
+    function adsDraftLaunchPanelHtml() {
+      return '<div id="ads-draft-panel" style="margin-top:20px;padding:18px;border-radius:12px;border:1px solid rgba(139,92,246,0.25);background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(236,72,153,0.05));">'
+        + '<div style="font-size:0.9rem;font-weight:700;color:#fff;margin-bottom:6px;">Launch as Meta Draft</div>'
+        + '<p style="font-size:0.75rem;color:var(--color-text-muted);margin:0 0 14px;line-height:1.5;">Creates a <strong style="color:rgba(255,255,255,0.7);">PAUSED</strong> campaign in Meta — no spend until you activate in Ads Manager.</p>'
+        + '<button id="ads-draft-btn" onclick="adsCreateMetaDraft()" style="width:100%;padding:11px;border:none;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;font-size:0.85rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Create Meta Draft (PAUSED)</button>'
+        + '<div id="ads-draft-status" style="margin-top:10px;font-size:0.75rem;color:var(--color-text-muted);"></div></div>';
+    }
+
+    function adsVariantCardsHtml(copy) {
+      const headlines = (copy.headline_options && copy.headline_options.length)
+        ? copy.headline_options.slice(0, 3)
+        : [copy.headline || 'Variant A'];
+      while (headlines.length < 3) headlines.push((copy.headline || 'Headline') + ' v' + (headlines.length + 1));
+      return '<div style="margin-top:16px;">'
+        + '<div style="font-size:0.78rem;font-weight:700;color:#fff;margin-bottom:8px;">Reviewable variants</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">'
+        + headlines.slice(0, 3).map(function(h, i) {
+          return '<button type="button" onclick="document.getElementById(\'ad-out-headline\').value=this.getAttribute(\'data-h\');" data-h="' + adsEsc(h) + '" style="text-align:left;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);cursor:pointer;">'
+            + '<div style="font-size:0.65rem;font-weight:700;color:#A78BFA;margin-bottom:6px;">Variant ' + String.fromCharCode(65 + i) + '</div>'
+            + '<div style="font-size:0.78rem;color:rgba(255,255,255,0.8);line-height:1.4;">' + adsEsc(h) + '</div></button>';
+        }).join('')
+        + '</div></div>';
+    }
+
+
     function renderAdStudio() {
       const content = document.getElementById('dash-content');
       if (!content) return;
       try {
+      const isCharityAds = isCharityClient(window.__clientData || clientData);
+      const adNavBtn = document.querySelector('[data-nav="ad-studio"]');
+      if (adNavBtn && isCharityAds && !/>Campaigns</.test(adNavBtn.innerHTML)) {
+        adNavBtn.innerHTML = adNavBtn.innerHTML.replace(/>Ads</, '>Campaigns<');
+      }
+      if (window.__SE_AD_SESSION && (window.__SE_AD_SESSION.forceCreate || window.__SE_AD_SESSION.fromOrganic)) {
+        _adsView = 'create';
+      }
+      if (_adsView !== 'create') {
+        renderAdsCommandHome(content, isCharityAds);
+        return;
+      }
       // Load products independently if not already loaded
       const _adAPI = window._seAPI || 'https://socialengine-api-production-18e0.up.railway.app';
       const _adEmail = window._seEmail || '';
@@ -13156,40 +13605,12 @@
       const productsToRender = adProductsForRender(products);
       const hasProducts = productsToRender.length > 0;
 
-      // Charity adaptation
-      const isCharityAds = isCharityClient(window.__clientData || clientData);
-      const charityCampaignsHtml = isCharityAds
-        ? '<div style="background:linear-gradient(135deg,rgba(255,107,53,0.08),rgba(124,58,237,0.08));border:1px solid rgba(255,107,53,0.2);border-radius:16px;padding:24px;margin-bottom:28px;">'
-          + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
-          + '<div style="width:40px;height:40px;background:linear-gradient(135deg,#FF6B35,#FF8C42);border-radius:10px;display:flex;align-items:center;justify-content:center;">'
-          + '<i data-lucide="heart-handshake" style="width:20px;height:20px;color:#fff;"></i></div>'
-          + '<div><div style="font-size:1rem;font-weight:700;color:var(--color-text);">Charity Campaigns</div>'
-          + '<div style="font-size:0.75rem;color:var(--color-text-muted);">Meta fundraising ads and awareness campaigns for UK charities</div></div></div>'
-          + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">'
-          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
-          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);margin-bottom:6px;">Fundraising Ad</div>'
-          + '<div style="font-size:0.75rem;color:var(--color-text-muted);line-height:1.5;margin-bottom:12px;">Drive donations with Meta Fundraising ads — native donate button, JustGiving link, or both</div>'
-          + '<button onclick="alert(\'Fundraising ad builder coming soon!\')" style="width:100%;padding:7px;background:rgba(255,107,53,0.12);color:#FF6B35;border:1px solid rgba(255,107,53,0.25);border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;">Create Campaign</button></div>'
-          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
-          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);margin-bottom:6px;">Awareness Campaign</div>'
-          + '<div style="font-size:0.75rem;color:var(--color-text-muted);line-height:1.5;margin-bottom:12px;">Reach new audiences with cause awareness ads — drive follows, shares, and supporter sign-ups</div>'
-          + '<button onclick="alert(\'Awareness campaign builder coming soon!\')" style="width:100%;padding:7px;background:rgba(124,58,237,0.12);color:#C4B5FD;border:1px solid rgba(124,58,237,0.25);border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;">Create Campaign</button></div>'
-          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:16px;">'
-          + '<div style="font-size:0.82rem;font-weight:700;color:var(--color-text);margin-bottom:6px;">Giving Tuesday Boost</div>'
-          + '<div style="font-size:0.75rem;color:var(--color-text-muted);line-height:1.5;margin-bottom:12px;">Pre-build your Giving Tuesday ad campaign with AI-generated creative and fundraising CTAs</div>'
-          + '<button onclick="alert(\'Giving Tuesday builder coming soon!\')" style="width:100%;padding:7px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;">Plan Campaign</button></div>'
-          + '</div></div>'
-        : '';
-      // Rename nav button for charity clients
-      const adNavBtn = document.querySelector('[data-nav="ad-studio"]');
-      if (adNavBtn && isCharityAds) {
-        adNavBtn.innerHTML = adNavBtn.innerHTML.replace(/>Ads</, '>Campaigns<');
-      }
+      const objectiveStripHtml = adsObjectiveStripHtml();
 
       content.innerHTML = `
         <div style="max-width:1100px;margin:0 auto;">
-          ${charityCampaignsHtml}
-          <!-- Header -->
+          ${objectiveStripHtml}
+          <!-- Header -->          <!-- Header -->
           <div style="margin-bottom:28px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
               <div>
@@ -13197,10 +13618,10 @@
                   <span style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(236,72,153,0.15));border-radius:10px;border:1px solid rgba(139,92,246,0.2);">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(236,72,153,0.8)" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
                   </span>
-                  Ad Creative Studio
+                  Create campaign
                   <span style="font-size:0.6rem;font-weight:600;padding:3px 8px;background:linear-gradient(135deg,rgba(236,72,153,0.15),rgba(139,92,246,0.15));border:1px solid rgba(236,72,153,0.25);border-radius:6px;color:rgba(236,72,153,0.8);vertical-align:middle;">PREMIUM</span>
                 </h2>
-                <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">Generate scroll-stopping ad creatives with AI-written copy in your brand voice. Export ready-to-run on any platform.</p>
+                <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">2. Creative — generate brand-voice variants, then launch a PAUSED Meta draft.</p>
               </div>
             </div>
           </div>
@@ -13318,6 +13739,7 @@
       adSyncSelectedProductCard();
       adRenderSelectedSummary();
       adRenderUrlStatus();
+      setTimeout(function() { applyAdSessionIfAny(); }, 80);
       } catch(adErr) {
         console.warn('Ad Studio render error:', adErr);
         content.innerHTML = '<div style="padding:40px;text-align:center;"><h2 style="color:#fff;font-family:var(--font-display);margin-bottom:12px;">Ad Creative Studio</h2><p style="color:rgba(255,255,255,0.4);">Something went wrong. Please refresh the page.</p></div>';
@@ -13479,6 +13901,18 @@
     function generateAdCopyLocal(product, format, tone, platform) {
       const title = product.title || 'Product';
       const price = product.price || '';
+      const isCharity = (typeof isCharityClient === 'function') && isCharityClient(window.__clientData || clientData);
+      if (isCharity) {
+        return {
+          headline: 'Support ' + title,
+          headline_options: ['Support ' + title, 'Together for ' + title, 'Your kindness fuels hope'],
+          primary_text: 'Every share and gift helps. Join us in supporting ' + title + ' — compassionate action, real impact.',
+          cta: 'Donate',
+          cta_options: ['Donate', 'Learn More', 'Support', 'Give Today'],
+          description: 'Help make a difference with ' + title,
+          hashtags: '#Charity #Fundraiser #MakeADifference #Community'
+        };
+      }
 
       const headlines = {
         'urgency': ['Last chance — ' + title + ' is selling fast', 'Almost gone. Don\'t miss ' + title, '⚡ Limited stock: ' + title],
@@ -13566,6 +14000,16 @@
 
       output.style.display = 'block';
       output.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      _adLastCopy = copy || null;
+      let draftHost = document.getElementById('ads-output-extras');
+      if (!draftHost) {
+        draftHost = document.createElement('div');
+        draftHost.id = 'ads-output-extras';
+        const card = output.querySelector('.dash-card > div') || output;
+        card.appendChild(draftHost);
+      }
+      draftHost.innerHTML = adsVariantCardsHtml(copy || {}) + adsDraftLaunchPanelHtml();
+
     }
 
     // Poll video status and swap spinner → video player when done
@@ -13617,6 +14061,8 @@
       const output = document.getElementById('ad-output-area');
       const grid = document.getElementById('ad-output-grid');
       if (!output || !grid) return;
+      _adLastCopy = copy || null;
+      if (copy && copy.cta) _adSelectedCta = copy.cta;
 
       // Determine preview aspect ratio
       const ratioMap = { '1:1': '1/1', '4:5': '4/5', '9:16': '9/16', '1.91:1': '1.91/1', '2:3': '2/3' };
@@ -13629,7 +14075,7 @@
             ${_adSelectedProduct.image ? '<img src="' + _adSelectedProduct.image + '" alt="Ad preview">' : '<div style="width:100%;height:100%;background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(236,72,153,0.1));display:flex;align-items:center;justify-content:center;"><span style="font-size:3rem;opacity:0.2;">📦</span></div>'}
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;">
-            <button onclick="adDownloadCreative()" style="flex:1;padding:8px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:8px;color:#7C3AED;font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">⬇️ Download ${format.dims}</button>
+            <button onclick="adDownloadCreative()" style="flex:1;padding:8px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:8px;color:#7C3AED;font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">⬇️ Copy ad pack + image</button>
           </div>
           <p style="font-size:0.65rem;color:rgba(255,255,255,0.2);margin:8px 0 0;text-align:center;font-family:var(--font-body);">Format: ${format.name} (${format.dims})</p>
         </div>
@@ -13666,6 +14112,18 @@
 
       output.style.display = 'block';
       output.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Attach variants + Meta draft launch below creative grid
+      let draftHost = document.getElementById('ads-output-extras');
+      if (!draftHost) {
+        draftHost = document.createElement('div');
+        draftHost.id = 'ads-output-extras';
+        const card = output.querySelector('.dash-card > div') || output;
+        card.appendChild(draftHost);
+      }
+      draftHost.innerHTML = adsVariantCardsHtml(copy || {}) + adsDraftLaunchPanelHtml();
+      const nameEl = document.getElementById('ad-campaign-name');
+      if (nameEl && !nameEl.value && _adSelectedProduct) nameEl.value = (_adSelectedProduct.title || '').slice(0, 80);
+
     }
 
     window.adCopyAll = function() {
@@ -13682,15 +14140,43 @@
     };
 
     window.adDownloadCreative = function() {
-      if (!_adSelectedProduct?.image) return showToast('No image to download');
-      const a = document.createElement('a');
-      a.href = _adSelectedProduct.image;
-      a.download = 'ad-creative-' + (_adSelectedProduct.title || 'product').replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30) + '.jpg';
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      showToast('Downloading creative...');
+      const headline = document.getElementById('ad-out-headline')?.value || (_adLastCopy && _adLastCopy.headline) || '';
+      const primary = document.getElementById('ad-out-primary')?.value || (_adLastCopy && _adLastCopy.primary_text) || '';
+      const desc = document.getElementById('ad-out-desc')?.value || (_adLastCopy && _adLastCopy.description) || '';
+      const hashtags = document.getElementById('ad-out-hashtags')?.value || (_adLastCopy && _adLastCopy.hashtags) || '';
+      const pack = [
+        'SOCIALENGINE AD PACK',
+        'Product/Focus: ' + ((_adSelectedProduct && _adSelectedProduct.title) || ''),
+        'Objective: ' + (_adSelectedObjective || ''),
+        '',
+        'HEADLINE:', headline,
+        '',
+        'PRIMARY TEXT:', primary,
+        '',
+        'DESCRIPTION:', desc,
+        '',
+        'CTA: ' + (_adSelectedCta || ''),
+        '',
+        'HASHTAGS:', hashtags,
+        '',
+        'IMAGE URL: ' + ((_adSelectedProduct && _adSelectedProduct.image) || '(none)'),
+        '',
+        'Next: Create Meta Draft (PAUSED) in SocialEngine, then activate in Ads Manager.',
+      ].join('\n');
+      navigator.clipboard.writeText(pack).then(function() {
+        showToast('Ad pack copied — headline, copy, CTA, image URL');
+      }).catch(function() {
+        showToast('Could not copy ad pack');
+      });
+      if (_adSelectedProduct && _adSelectedProduct.image) {
+        const a = document.createElement('a');
+        a.href = _adSelectedProduct.image;
+        a.download = 'ad-creative-' + (_adSelectedProduct.title || 'product').replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30) + '.jpg';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     };
 
         // ━━━ Scene Preset for Marketing Studio ━━━
@@ -15730,6 +16216,7 @@
         <button onclick="_repostSocialPost('${safeId}')" style="padding:9px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
         <div style="display:flex;gap:7px;">
           <button id="cal-remix-btn" onclick="_calPanelRemix('${safeId}')" style="flex:1;padding:8px 10px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;color:#C4B5FD;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Remix</button>
+          <button onclick="_calPanelPromote('${safeId}')" style="flex:1;padding:8px 10px;background:rgba(236,72,153,0.12);border:1px solid rgba(236,72,153,0.28);border-radius:8px;color:#F9A8D4;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Promote</button>
           <button onclick="_calPanelWhy('${safeId}')" style="flex:1;padding:8px 10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:8px;color:#A5B4FC;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
         </div>
         ${post.permalink ? `<a href="${post.permalink}" target="_blank" rel="noopener" style="display:block;text-align:center;padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;text-decoration:none;">Open on ${platLabel}</a>` : ''}
@@ -15901,6 +16388,24 @@
   window._openSocialPostPanel       = _openSocialPostPanel;
   window._repostSocialPost          = _repostSocialPost;
   window._calPanelWhy               = _calPanelWhy;
+
+  function _calPanelPromote(postId) {
+    const post = (_calHistoryPosts || []).find(p => p.id === postId) || (_calPosts || []).find(p => p.id === postId);
+    if (!post) { if (typeof showToast === 'function') showToast('Post not found'); return; }
+    if (typeof window.promotePostToAd === 'function') window.promotePostToAd(post);
+    else if (typeof showToast === 'function') showToast('Ads promote not ready');
+  }
+  window._datePanelPromote = function(idx) {
+    const post = (window._datePanelPosts || [])[idx];
+    if (!post) { if (typeof showToast === 'function') showToast('Post not found'); return; }
+    const raw = (_calHistoryPosts || []).find(h => h.id === post.id)
+      || (_calHistoryPosts || []).find(h => h.id === post._twinId)
+      || post;
+    if (typeof window.promotePostToAd === 'function') window.promotePostToAd(raw);
+    if (typeof _closeCalPanel === 'function') _closeCalPanel();
+  };
+  window._calPanelPromote = _calPanelPromote;
+
   window._calPanelRemix             = _calPanelRemix;
   window._launchStudioRemix         = _launchStudioRemix;
   window._remixReferenceUrl         = _remixReferenceUrl;
@@ -16269,6 +16774,7 @@
               <button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
               <div style="display:flex;gap:6px;">
                 <button id="remix-btn-${idx}" onclick="_datePanelRemix(${idx})" style="flex:1;padding:7px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:7px;color:#C4B5FD;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Remix</button>
+                <button onclick="_datePanelPromote(${idx})" style="flex:1;padding:7px 8px;background:rgba(236,72,153,0.12);border:1px solid rgba(236,72,153,0.28);border-radius:7px;color:#F9A8D4;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Promote</button>
                 <button onclick="_datePanelWhy(${idx})" style="flex:1;padding:7px 8px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:7px;color:#A5B4FC;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
               </div>
               <div style="display:flex;gap:6px;">
