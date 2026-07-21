@@ -5765,6 +5765,23 @@
       });
     });
 
+    // Programmatic nav used by Fundraise/Ads handoffs (click listeners alone aren't enough)
+    window.switchNav = function(nav) {
+      const el = document.querySelector('[data-nav="' + nav + '"]');
+      if (el) el.click();
+      else if (nav === 'creation-studio' || nav === 'video-studio') {
+        activeNav = 'creation-studio';
+        window._studioClientData = clientData;
+        if (typeof renderVideoStudio === 'function') renderVideoStudio();
+      } else if (nav === 'ad-studio' && typeof renderAdStudio === 'function') {
+        activeNav = 'ad-studio';
+        renderAdStudio();
+      } else if (nav === 'settings' && typeof renderSettingsPage === 'function') {
+        activeNav = 'settings';
+        renderSettingsPage(clientData);
+      }
+    };
+
     // ━━━ Mobile Sidebar ━━━
     const dashMobileToggle = document.getElementById('dash-mobile-toggle');
     const dashSidebar = document.getElementById('dash-sidebar');
@@ -6153,6 +6170,7 @@
       })();
       // Calendar Remix → Studio regenerate handoff
       setTimeout(() => { if (typeof applyRemixSessionIfAny === 'function') applyRemixSessionIfAny(); }, 60);
+      setTimeout(() => { if (typeof applyFundraiseContentSessionIfAny === 'function') applyFundraiseContentSessionIfAny(); }, 80);
     }
 
     // ━━━ Remix → Studio session (Calendar) ━━━
@@ -10087,16 +10105,36 @@
 
     window.fundraiseCreateContent = function(title, url) {
       const focus = String(title || 'Fundraiser').slice(0, 120);
-      window.__SE_AD_SESSION = null;
+      window.__SE_FUNDRAISE_CONTENT_SESSION = {
+        title: focus,
+        url: url || '',
+        prompt: [
+          'Create compassionate fundraising content for: ' + focus,
+          url ? ('Link: ' + url) : '',
+          'Tone: human, kind, never salesy. No medical advice.',
+          'Prefer Donate / Learn more / Support CTAs.',
+        ].filter(Boolean).join('\n'),
+      };
       if (typeof switchNav === 'function') switchNav('creation-studio');
-      setTimeout(function() {
-        const product = document.getElementById('vs-product') || document.querySelector('[name="product"]');
-        const dir = document.getElementById('vs-creative-dir');
-        if (product) product.value = focus;
-        if (dir) dir.value = 'Create compassionate fundraising content for: ' + focus + (url ? ('\\nLink: ' + url) : '') + '\\nTone: human, kind, never salesy. No medical advice.';
-        if (typeof showToast === 'function') showToast('Studio opened for fundraiser content');
-      }, 200);
+      else if (typeof renderVideoStudio === 'function') renderVideoStudio();
+      setTimeout(function() { applyFundraiseContentSessionIfAny(); }, 120);
+      setTimeout(function() { applyFundraiseContentSessionIfAny(); }, 450);
     };
+
+    function applyFundraiseContentSessionIfAny() {
+      const s = window.__SE_FUNDRAISE_CONTENT_SESSION;
+      if (!s) return false;
+      const product = document.getElementById('vs-product-name');
+      const dir = document.getElementById('vs-creative-dir');
+      if (!product && !dir) return false;
+      if (product) product.value = s.title || 'Fundraiser';
+      if (dir) dir.value = s.prompt || '';
+      window.__SE_FUNDRAISE_CONTENT_SESSION = null;
+      if (typeof showToast === 'function') showToast('Studio ready — review creative direction, then generate');
+      try { dir && dir.focus(); } catch (e) {}
+      return true;
+    }
+    window.applyFundraiseContentSessionIfAny = applyFundraiseContentSessionIfAny;
 
     window.fundraiseCreateAdDraft = function(title, url) {
       if (typeof adsOpenCreate === 'function') {
