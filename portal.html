@@ -10220,9 +10220,14 @@
           if (!d.meta_connected) {
             metaList.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:8px 0;">Connect your Facebook Page in Settings to load Meta fundraisers.</p>';
           } else if (d.error) {
-            metaList.innerHTML = '<p style="color:#F87171;font-size:0.85rem;padding:8px 0;">' + String(d.error).replace(/</g,'&lt;') + (d.needs_permission ? ' — reconnect with manage_fundraisers.' : '') + '</p>';
+            var errHtml = '<p style="color:#F87171;font-size:0.85rem;padding:8px 0;margin:0 0 8px;">' + String(d.error).replace(/</g,'&lt;') + '</p>';
+            if (d.needs_permission) {
+              errHtml += '<p style="color:var(--color-text-muted);font-size:0.78rem;padding:0 0 8px;margin:0;">Meta needs the <code>manage_fundraisers</code> permission. Reconnect Facebook in Settings (approve the new permission when prompted).</p>'
+                + '<button onclick="switchNav(\'settings\')" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#FBBF24;font-size:0.75rem;font-weight:700;cursor:pointer;">Reconnect Meta in Settings</button>';
+            }
+            metaList.innerHTML = errHtml;
           } else if (!fundraisers.length) {
-            metaList.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:8px 0;">No Meta fundraisers found for this Page yet.</p>';
+            metaList.innerHTML = '<p style="color:var(--color-text-muted);font-size:0.85rem;padding:8px 0;">No Meta fundraisers found yet for this connected account.</p>';
           } else {
             const fmt = function(n, cur) {
               const c = cur || 'USD';
