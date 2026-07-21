@@ -5666,7 +5666,7 @@
         'creation-studio': 'Fabric canvas editor — layers, AI chat, Higgsfield backgrounds',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'settings': 'Account and platform settings',
-        'fundraise': 'Manage and track your fundraising campaigns'
+        'fundraise': 'JustGiving + Meta fundraisers in one place'
       };
       const sub = pageSubtitles[page] || '';
       el.innerHTML = `Good ${tod}, ${g.firstName}<div class="dash-topbar__subtitle">${sub}</div>`;
@@ -10007,9 +10007,10 @@
       }).join('');
 
       content.innerHTML = `
-        <div class="section-header">
-          <h2 class="section-title">Fundraise</h2>
-          <p class="section-subtitle">Fundraising through brand voice, calendar, and donor conversations — JustGiving + Meta in one place</p>
+        <div style="max-width:1100px;margin:0;text-align:left;">
+        <div style="margin-bottom:24px;text-align:left;">
+          <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;letter-spacing:-0.02em;margin:0 0 6px;text-align:left;">Fundraise</h2>
+          <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0;max-width:520px;line-height:1.5;text-align:left;">JustGiving + Meta campaigns together — create content or ad drafts from any fundraiser.</p>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:20px;">
@@ -10076,6 +10077,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
       `;
 
