@@ -8224,9 +8224,11 @@
       const igConnection = getNativeConnectionState('instagram', c, data.upload_post_connection);
       const ttConnection = getNativeConnectionState('tiktok', c, data.upload_post_connection);
       const fbConnection = getNativeConnectionState('facebook', c, data.upload_post_connection);
-      const isIGConnected = igConnection.publishConnected;
-      const isTTConnected = ttConnection.publishConnected;
-      const isFBConnected = fbConnection.publishConnected;
+      // Settings "connected" = native Meta/TikTok tokens OR Upload-Post publishing.
+      // Native-only ("Analytics only") was incorrectly falling through to Connect.
+      const isIGConnected = !!(igConnection.publishConnected || igConnection.nativeConnected);
+      const isTTConnected = !!(ttConnection.publishConnected || ttConnection.nativeConnected);
+      const isFBConnected = !!(fbConnection.publishConnected || fbConnection.nativeConnected);
       const _handleFor = (platform) => {
         const match = upAccounts.find(a => String(a?.platform || '').toLowerCase() === platform);
         return match && match.name ? String(match.name) : '';
@@ -8485,10 +8487,10 @@
                     <span style="width:6px;height:6px;border-radius:50%;${getConnectionTone(igConnection).dot}"></span>
                     ${igHandle ? `${igConnection.statusLabel} as @${igHandle}` : igConnection.statusLabel}
                   </div>
-                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${igConnection.analyticsLimited ? 'Instagram publishing is connected, but native analytics OAuth still needs to finish before Grow can pull impressions, reach, and saves.' : 'Instagram is fully connected. SocialEngine can schedule content directly to your feed and read profile analytics.'}</p>
+                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${igConnection.analyticsLimited ? 'Instagram publishing is connected, but native analytics OAuth still needs to finish before Grow can pull impressions, reach, and saves.' : igConnection.analyticsOnly ? 'Meta Instagram is connected. Disconnect, then Connect again when recording App Review permission videos.' : 'Instagram is fully connected. SocialEngine can schedule content directly to your feed and read profile analytics.'}</p>
                   <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                     ${igConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('instagram')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">If this step fails, Grow analytics will stay limited until native OAuth succeeds.</span>` : ''}
-                    <button onclick="disconnectPlatform('instagram')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect</button>
+                    <button onclick="disconnectPlatform('instagram')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect Instagram</button>
                   </div>
                 ` : `
                   <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(100,116,139,0.08);border:1px solid rgba(100,116,139,0.12);border-radius:8px;font-size:0.78rem;font-weight:600;color:var(--color-text-faint);margin-bottom:10px;">
@@ -8528,10 +8530,10 @@
                     <span style="width:6px;height:6px;border-radius:50%;${getConnectionTone(ttConnection).dot}"></span>
                     ${ttHandle ? `${ttConnection.statusLabel} as @${ttHandle}` : ttConnection.statusLabel}
                   </div>
-                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${ttConnection.analyticsLimited ? 'TikTok publishing is connected, but native business OAuth still needs to finish before Grow can pull platform metrics.' : 'TikTok is fully connected. SocialEngine can publish videos directly to your TikTok account and read analytics.'}</p>
+                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${ttConnection.analyticsLimited ? 'TikTok publishing is connected, but native business OAuth still needs to finish before Grow can pull platform metrics.' : ttConnection.analyticsOnly ? 'TikTok is connected for analytics. Disconnect, then Connect again when re-authorizing permissions.' : 'TikTok is fully connected. SocialEngine can publish videos directly to your TikTok account and read analytics.'}</p>
                   <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                     ${ttConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('tiktok')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Complete TikTok native OAuth to unlock impressions, reach, and saves in Grow.</span>` : ''}
-                    <button onclick="disconnectPlatform('tiktok')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect</button>
+                    <button onclick="disconnectPlatform('tiktok')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect TikTok</button>
                   </div>
                 ` : `
                   <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(100,116,139,0.08);border:1px solid rgba(100,116,139,0.12);border-radius:8px;font-size:0.78rem;font-weight:600;color:var(--color-text-faint);margin-bottom:10px;">
@@ -8570,10 +8572,10 @@
                     <span style="width:6px;height:6px;border-radius:50%;${getConnectionTone(fbConnection).dot}"></span>
                     ${fbHandle ? `${fbConnection.statusLabel} — ${fbHandle}` : fbConnection.statusLabel}
                   </div>
-                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${fbConnection.analyticsLimited ? 'Facebook publishing is connected, but Meta page OAuth still needs to finish before Grow can read page insights.' : 'Facebook is fully connected. SocialEngine can publish content directly to your Facebook Page and read page analytics.'}</p>
+                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${fbConnection.analyticsLimited ? 'Facebook publishing is connected, but Meta page OAuth still needs to finish before Grow can read page insights.' : fbConnection.analyticsOnly ? 'Meta Facebook Page is connected. Disconnect, then Connect again when recording App Review permission videos.' : 'Facebook is fully connected. SocialEngine can publish content directly to your Facebook Page and read page analytics.'}</p>
                   <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                     ${fbConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('facebook')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Meta native OAuth stores the page ID + token Grow needs for analytics.</span>` : ''}
-                    <button onclick="disconnectPlatform('facebook')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect</button>
+                    <button onclick="disconnectPlatform('facebook')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect Facebook</button>
                   </div>
                 ` : `
                   <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(100,116,139,0.08);border:1px solid rgba(100,116,139,0.12);border-radius:8px;font-size:0.78rem;font-weight:600;color:var(--color-text-faint);margin-bottom:10px;">
@@ -12541,7 +12543,8 @@
   // (IIFE continues — all portal code in same scope)
   // Disconnect a platform — clears tokens in Airtable then refreshes settings
   async function disconnectPlatform(platform) {
-    if (!confirm(`Disconnect ${platform}? You can reconnect at any time.`)) return;
+    const label = platform === 'instagram' ? 'Instagram' : platform === 'facebook' ? 'Facebook' : platform === 'tiktok' ? 'TikTok' : platform;
+    if (!confirm(`Disconnect ${label}? You can reconnect anytime to re-authorize Meta permissions for App Review videos.`)) return;
     try {
       const r = await fetch(`${API}/api/social-disconnect`, {
         method: 'POST',
