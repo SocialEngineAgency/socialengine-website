@@ -9726,6 +9726,8 @@
 
       function renderInboxItem(item, idx) {
         const isComment = item.type === 'comment';
+        const isMention = item.type === 'mention';
+        const isDm = item.type === 'dm';
         const needsReply = !item.has_reply && !item.is_from_us;
         const timeAgo = getTimeAgo(item.timestamp);
         const platformIcon = item.platform === 'instagram'
@@ -9733,9 +9735,11 @@
           : item.platform === 'facebook'
           ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1877F2" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>'
           : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"><path d="M9 12a4 4 0 1 0 4 0V4a5 5 0 0 0 5 5"/></svg>';
-        const typeLabel = isComment ? 'Comment' : 'DM';
-        const typeBg = isComment ? 'rgba(139,92,246,0.1)' : 'rgba(124,58,237,0.1)';
-        const typeColor = isComment ? 'rgba(139,92,246,0.8)' : 'rgba(124,58,237,0.8)';
+        const typeLabel = isComment ? 'Comment' : isMention ? 'Mention' : isDm ? 'DM' : String(item.type || 'Item');
+        const typeBg = isComment ? 'rgba(139,92,246,0.1)' : isMention ? 'rgba(14,165,233,0.12)' : 'rgba(124,58,237,0.1)';
+        const typeColor = isComment ? 'rgba(139,92,246,0.8)' : isMention ? 'rgba(56,189,248,0.9)' : 'rgba(124,58,237,0.8)';
+        const fullText = String(item.text || '');
+        const textLooksLong = fullText.length > 140 || fullText.split(/\n/).length > 2;
 
         return `
           <div class="inbox-item" data-type="${item.type}" data-replied="${item.has_reply || item.is_from_us}" data-idx="${idx}" style="background:linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5));border:1px solid ${needsReply ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.05)'};border-radius:12px;padding:16px 20px;cursor:pointer;transition:all 0.15s;position:relative;" onmouseover="this.style.borderColor='rgba(124,58,237,0.2)';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65))';" onmouseout="this.style.borderColor='${needsReply ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.05)'}';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5))';">
@@ -9750,8 +9754,9 @@
                   ${needsReply ? '<span style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:rgba(251,146,60,0.1);color:rgba(251,146,60,0.8);">Awaiting Reply</span>' : ''}
                   <span style="font-size:0.72rem;color:var(--color-text-faint);margin-left:auto;white-space:nowrap;">${timeAgo}</span>
                 </div>
-                <p style="font-size:0.84rem;color:var(--color-text);line-height:1.5;margin:0 0 8px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${escapeHtml(item.text)}</p>
-                ${isComment && item.post_caption ? `<div style="font-size:0.72rem;color:var(--color-text-faint);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2px solid rgba(139,92,246,0.3);margin-bottom:8px;">On post: "${escapeHtml(item.post_caption)}..."</div>` : ''}
+                <p class="inbox-item-text" id="inbox-text-body-${idx}" data-expanded="0" style="font-size:0.84rem;color:var(--color-text);line-height:1.5;margin:0 0 4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:pre-wrap;">${escapeHtml(fullText)}</p>
+                ${textLooksLong ? `<button type="button" class="inbox-expand-text-btn" data-idx="${idx}" style="background:none;border:none;padding:0 0 8px;margin:0;color:rgba(167,139,250,0.85);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Show more</button>` : ''}
+                ${isComment && item.post_caption ? `<div style="font-size:0.72rem;color:var(--color-text-faint);padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2px solid rgba(139,92,246,0.3);margin-bottom:8px;">On post: "${escapeHtml(item.post_caption)}"</div>` : ''}
                 ${item.has_reply && item.replies?.length ? `<div style="font-size:0.78rem;color:rgba(124,58,237,0.7);display:flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg> Replied</div>` : ''}
                 <!-- Reply area (hidden by default) -->
                 <div class="inbox-reply-area" id="inbox-reply-${idx}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05);">
@@ -9821,12 +9826,47 @@
           });
         });
 
+        // Show more / less for long comment & mention text
+        document.querySelectorAll('.inbox-expand-text-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const idx = btn.dataset.idx;
+            const body = document.getElementById(`inbox-text-body-${idx}`);
+            if (!body) return;
+            const open = body.dataset.expanded === '1';
+            if (open) {
+              body.dataset.expanded = '0';
+              body.style.display = '-webkit-box';
+              body.style.webkitLineClamp = '2';
+              body.style.overflow = 'hidden';
+              btn.textContent = 'Show more';
+            } else {
+              body.dataset.expanded = '1';
+              body.style.display = 'block';
+              body.style.webkitLineClamp = 'unset';
+              body.style.overflow = 'visible';
+              btn.textContent = 'Show less';
+            }
+          });
+        });
+
         // Click to expand reply area
         document.querySelectorAll('.inbox-item').forEach(item => {
           item.addEventListener('click', (e) => {
-            if (e.target.closest('.inbox-reply-area') || e.target.closest('button')) return;
+            if (e.target.closest('.inbox-reply-area') || e.target.closest('button') || e.target.closest('.inbox-expand-text-btn')) return;
             const idx = item.dataset.idx;
             const replyArea = document.getElementById(`inbox-reply-${idx}`);
+            // Also expand clipped text when opening the item
+            const body = document.getElementById(`inbox-text-body-${idx}`);
+            const expandBtn = item.querySelector('.inbox-expand-text-btn');
+            if (body && body.dataset.expanded !== '1') {
+              body.dataset.expanded = '1';
+              body.style.display = 'block';
+              body.style.webkitLineClamp = 'unset';
+              body.style.overflow = 'visible';
+              if (expandBtn) expandBtn.textContent = 'Show less';
+            }
             if (replyArea) {
               const isOpen = replyArea.style.display !== 'none';
               // Close all others
