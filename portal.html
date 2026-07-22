@@ -9563,7 +9563,8 @@
           // Banner: reconnect only when scopes missing; otherwise show app-capability note for DMs
           const dbg = data._debug || {};
           const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
-          const needAppSetup = !needReconnect && !!dbg.dm_app_capability_error;
+          const needAdvanced = !needReconnect && !!dbg.dm_needs_advanced_access;
+          const needAppSetup = !needReconnect && !needAdvanced && !!dbg.dm_app_capability_error;
           const banner = document.getElementById('inbox-reconnect-banner');
           const bannerTitle = document.getElementById('inbox-banner-title');
           const bannerBody = document.getElementById('inbox-banner-body');
@@ -9574,6 +9575,11 @@
               if (bannerTitle) bannerTitle.textContent = 'Meta permissions needed for Engage';
               if (bannerBody) bannerBody.textContent = 'Approve comment + messaging permissions on reconnect so replies and DMs work.';
               if (reconnectBtn) reconnectBtn.style.display = '';
+            } else if (needAdvanced) {
+              banner.style.display = 'flex';
+              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs need Advanced Access';
+              if (bannerBody) bannerBody.textContent = dbg.dm_fix || 'OPA’s IG inbox is too large for Standard Access. Request Advanced Access for instagram_manage_messages, or record the DM screencast on a low-volume test Instagram with only App Tester conversations.';
+              if (reconnectBtn) reconnectBtn.style.display = 'none';
             } else if (needAppSetup) {
               banner.style.display = 'flex';
               if (bannerTitle) bannerTitle.textContent = 'Instagram DMs need Messaging on the Meta app';
