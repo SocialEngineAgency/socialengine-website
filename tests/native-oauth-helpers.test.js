@@ -59,6 +59,27 @@ test('facebook requires both native page id and token for full analytics status'
   assert.equal(state.statusLabel, 'Connected');
 });
 
+test('meta native-only connection shows Connected, not Analytics only', () => {
+  const ig = getPlatformConnectionState(
+    'instagram',
+    { instagram_user_id: '17841402339474187', social_connected_platforms: [] },
+    { accounts: [] }
+  );
+  assert.equal(ig.nativeConnected, true);
+  assert.equal(ig.fullyConnected, true);
+  assert.equal(ig.analyticsOnly, false);
+  assert.equal(ig.statusLabel, 'Connected');
+
+  const fb = getPlatformConnectionState(
+    'facebook',
+    { meta_page_id: '104376865746581', meta_page_token: 'page-token', social_connected_platforms: [] },
+    { accounts: [] }
+  );
+  assert.equal(fb.fullyConnected, true);
+  assert.equal(fb.analyticsOnly, false);
+  assert.equal(fb.statusLabel, 'Connected');
+});
+
 test('failure messaging explains that Grow analytics will be limited', () => {
   const message = getNativeOAuthFailureMessage('tiktok');
 

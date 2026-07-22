@@ -87,11 +87,22 @@
   function getPlatformConnectionState(platform, clientRecord, uploadPostSnapshot) {
     const target = normalizePlatform(platform);
     const meta = getPlatformMeta(target);
-    const publishConnected = isPublishingConnected(target, clientRecord, uploadPostSnapshot);
     const nativeConnected = isNativeConnected(target, clientRecord);
-    const fullyConnected = publishConnected && nativeConnected;
+    // Instagram/Facebook: native Meta Login is the real connection (publish,
+    // analytics, Engage). Upload-Post platform lists are no longer required.
+    // TikTok still uses Upload-Post publish + optional native analytics.
+    const isMetaNativePrimary = target === 'instagram' || target === 'facebook';
+    const uploadPostPublish = isPublishingConnected(target, clientRecord, uploadPostSnapshot);
+    const publishConnected = isMetaNativePrimary
+      ? (nativeConnected || uploadPostPublish)
+      : uploadPostPublish;
+    const fullyConnected = isMetaNativePrimary
+      ? nativeConnected
+      : (publishConnected && nativeConnected);
+    // Upload-Post publish without native Meta/TikTok tokens → prompt to finish OAuth
     const analyticsLimited = publishConnected && !nativeConnected;
-    const analyticsOnly = nativeConnected && !publishConnected;
+    // Legacy TikTok-era label only. Meta native-only is fully Connected.
+    const analyticsOnly = !isMetaNativePrimary && nativeConnected && !uploadPostPublish;
 
     let statusLabel = meta.disconnectedStatusLabel;
     if (fullyConnected) {
@@ -100,6 +111,8 @@
       statusLabel = meta.limitedStatusLabel;
     } else if (analyticsOnly) {
       statusLabel = 'Analytics only';
+    } else if (publishConnected) {
+      statusLabel = meta.limitedStatusLabel;
     }
 
     return {
