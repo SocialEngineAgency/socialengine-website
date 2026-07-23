@@ -5564,7 +5564,9 @@
         const data = await res.json();
         if (!data.connected) { updateEngageBadge(0); return; }
         updateEngageBadge(data.unreplied || 0);
-        if (opts.forceRender || (activeNav === 'inbox' && typeof window._reloadInboxIfActive === 'function')) {
+        // Only force-refresh the open Engage list when explicitly requested.
+        // Auto-reloading here was collapsing open reply threads after send.
+        if (opts.forceRender && activeNav === 'inbox' && typeof window._reloadInboxIfActive === 'function') {
           window._reloadInboxIfActive(data);
         }
       } catch (_) {}
@@ -5611,6 +5613,7 @@
     // Silently re-fetches client data; if tier flips Free→paid, re-renders current page instantly
     let tierPollInterval = null;
     let inboxPollInterval = null;
+    window._openInboxItemId = null; // keep Engage thread open across soft refreshes
     function startTierPolling() {
       if (tierPollInterval) return;
       tierPollInterval = setInterval(async () => {
@@ -9596,6 +9599,8 @@
           if (!inboxPollInterval && data.connected) {
             inboxPollInterval = setInterval(() => {
               if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
+              // Don't wipe an open conversation; user closes manually
+              if (window._openInboxItemId) return;
               loadInboxData().catch(() => {});
             }, 120000);
           }
@@ -9734,10 +9739,11 @@
         if (Array.isArray(item.thread) && item.thread.length) return item.thread;
         // Comments: root + nested replies → thread
         if (item.type === 'comment') {
+          const rootTs = item.created_time || item.timestamp || null;
           const root = {
             id: item.id,
             text: item.text || '',
-            timestamp: item.timestamp || null,
+            timestamp: rootTs,
             from_us: !!item.is_from_us,
             username: item.is_from_us ? 'You' : (item.username || 'user'),
           };
@@ -9745,8 +9751,8 @@
             id: r.id,
             text: r.text || '',
             timestamp: r.timestamp || null,
-            from_us: false,
-            username: r.username || 'user',
+            from_us: !!r.from_us,
+            username: r.from_us ? 'You' : (r.username || 'user'),
           }));
           return [root, ...replies];
         }
@@ -9781,6 +9787,7 @@
         const isMention = item.type === 'mention';
         const isDm = item.type === 'dm';
         const needsReply = !item.has_reply && !item.is_from_us;
+        const theyReplied = !!item.they_replied;
         const timeAgo = getTimeAgo(item.timestamp);
         const platformIcon = item.platform === 'instagram'
           ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>'
@@ -9797,12 +9804,23 @@
         if (!item.thread) item.thread = buildInboxThread(item);
         const threadCount = (item.thread || []).length;
         const threadHint = threadCount > 1
-          ? `<div style="font-size:0.7rem;color:rgba(167,139,250,0.75);margin:2px 0 6px;">${threadCount} messages in thread · open to continue</div>`
+          ? `<div style="font-size:0.7rem;color:${theyReplied ? 'rgba(52,211,153,0.9)' : 'rgba(167,139,250,0.75)'};margin:2px 0 6px;">${threadCount} messages in thread · open to continue</div>`
           : '';
+        const statusBadge = theyReplied
+          ? '<span class="inbox-awaiting-badge" style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:rgba(52,211,153,0.12);color:rgba(52,211,153,0.95);">They replied</span>'
+          : needsReply
+          ? '<span class="inbox-awaiting-badge" style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:rgba(251,146,60,0.1);color:rgba(251,146,60,0.8);">Awaiting Reply</span>'
+          : '';
+        const accentDot = theyReplied
+          ? '<div style="position:absolute;top:8px;right:12px;width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 8px rgba(52,211,153,0.65);"></div>'
+          : needsReply
+          ? '<div style="position:absolute;top:8px;right:12px;width:7px;height:7px;border-radius:50%;background:#FB923C;box-shadow:0 0 6px rgba(251,146,60,0.5);"></div>'
+          : '';
+        const borderCol = theyReplied ? 'rgba(52,211,153,0.22)' : needsReply ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.05)';
 
         return `
-          <div class="inbox-item" data-type="${item.type}" data-replied="${item.has_reply || item.is_from_us}" data-idx="${idx}" style="background:linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5));border:1px solid ${needsReply ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.05)'};border-radius:12px;padding:16px 20px;cursor:pointer;transition:all 0.15s;position:relative;" onmouseover="this.style.borderColor='rgba(124,58,237,0.2)';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65))';" onmouseout="this.style.borderColor='${needsReply ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.05)'}';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5))';">
-            ${needsReply ? '<div style="position:absolute;top:8px;right:12px;width:7px;height:7px;border-radius:50%;background:#FB923C;box-shadow:0 0 6px rgba(251,146,60,0.5);"></div>' : ''}
+          <div class="inbox-item" data-item-id="${escapeHtml(String(item.id || ''))}" data-type="${item.type}" data-replied="${item.has_reply || item.is_from_us}" data-idx="${idx}" style="background:linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5));border:1px solid ${borderCol};border-radius:12px;padding:16px 20px;cursor:pointer;transition:all 0.15s;position:relative;" onmouseover="this.style.borderColor='rgba(124,58,237,0.2)';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65))';" onmouseout="this.style.borderColor='${borderCol}';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5))';">
+            ${accentDot}
             <div style="display:flex;align-items:flex-start;gap:12px;">
               <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;">${(item.username || '?')[0]}</div>
               <div style="flex:1;min-width:0;">
@@ -9810,7 +9828,7 @@
                   <span style="font-size:0.875rem;font-weight:700;color:#fff;">${item.platform === 'facebook' ? escapeHtml(item.username || 'Facebook user') : '@' + escapeHtml(item.username || 'unknown')}</span>
                   <span style="display:inline-flex;align-items:center;gap:4px;">${platformIcon}</span>
                   <span style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:${typeBg};color:${typeColor};">${typeLabel}</span>
-                  ${needsReply ? '<span class="inbox-awaiting-badge" style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:rgba(251,146,60,0.1);color:rgba(251,146,60,0.8);">Awaiting Reply</span>' : ''}
+                  ${statusBadge}
                   <span style="font-size:0.72rem;color:var(--color-text-faint);margin-left:auto;white-space:nowrap;">${timeAgo}</span>
                 </div>
                 <div class="inbox-preview-block" id="inbox-preview-${idx}">
@@ -9917,11 +9935,12 @@
           });
         });
 
-        // Click to expand thread + composer
+        // Click to expand thread + composer — stays open until Cancel or another card
         document.querySelectorAll('.inbox-item').forEach(itemEl => {
           itemEl.addEventListener('click', (e) => {
             if (e.target.closest('.inbox-reply-area') || e.target.closest('button') || e.target.closest('.inbox-expand-text-btn')) return;
             const idx = itemEl.dataset.idx;
+            const itemId = itemEl.dataset.itemId || '';
             const replyArea = document.getElementById(`inbox-reply-${idx}`);
             const preview = document.getElementById(`inbox-preview-${idx}`);
             if (replyArea) {
@@ -9931,9 +9950,12 @@
               if (!isOpen) {
                 replyArea.style.display = 'block';
                 if (preview) preview.style.display = 'none';
+                window._openInboxItemId = itemId || null;
                 const threadEl = document.getElementById(`inbox-thread-${idx}`);
                 if (threadEl) threadEl.scrollTop = threadEl.scrollHeight;
                 setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+              } else {
+                window._openInboxItemId = null;
               }
             }
           });
@@ -9946,8 +9968,25 @@
             document.getElementById(`inbox-reply-${idx}`).style.display = 'none';
             const preview = document.getElementById(`inbox-preview-${idx}`);
             if (preview) preview.style.display = '';
+            window._openInboxItemId = null;
           });
         });
+
+        // Restore previously open thread after a soft inbox refresh
+        if (window._openInboxItemId) {
+          const openEl = document.querySelector(`.inbox-item[data-item-id="${CSS.escape(String(window._openInboxItemId))}"]`);
+          if (openEl) {
+            const idx = openEl.dataset.idx;
+            const replyArea = document.getElementById(`inbox-reply-${idx}`);
+            const preview = document.getElementById(`inbox-preview-${idx}`);
+            if (replyArea) {
+              replyArea.style.display = 'block';
+              if (preview) preview.style.display = 'none';
+              const threadEl = document.getElementById(`inbox-thread-${idx}`);
+              if (threadEl) threadEl.scrollTop = threadEl.scrollHeight;
+            }
+          }
+        }
 
         function paintCannedChips() {
           document.querySelectorAll('.inbox-canned-row').forEach(row => {
@@ -10085,6 +10124,7 @@
                 });
                 item.has_reply = true;
                 item.is_from_us = true;
+                item.they_replied = false;
                 item.text = reply;
                 const threadEl = document.getElementById(`inbox-thread-${idx}`);
                 if (threadEl) {
