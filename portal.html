@@ -9397,6 +9397,7 @@
             <div>
               <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;letter-spacing:-0.02em;margin:0 0 4px;">Engagement Inbox</h2>
               <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0;">DMs, comments, and mentions — all in one place</p>
+              <p id="inbox-sync-status" style="font-size:0.72rem;color:rgba(148,163,184,0.55);margin:6px 0 0;">Checking for new messages…</p>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <button id="inbox-refresh-btn" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.7);font-size:0.8rem;font-weight:500;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='#fff';" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='rgba(148,163,184,0.7)';">
@@ -9471,15 +9472,110 @@
           if (m) { m.style.display = 'flex'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
         });
       }
+      async function loadInboxData(prefetched, opts = {}) {
+        const forceRefresh = !!opts.forceRefresh;
+        try {
+          let data = prefetched;
+          if (!data) {
+            const qs = forceRefresh ? '?refresh=1' : '';
+            const res = await fetch(`${API}/api/inbox${qs}`, {
+              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            });
+            data = await res.json().catch(() => ({}));
+            if (res.status === 403) {
+              updateEngageBadge(0);
+              renderInboxUpgrade();
+              return;
+            }
+            if (!res.ok) {
+              if (typeof showToast === 'function') showToast(data.error || 'Could not refresh inbox', 'error');
+              return;
+            }
+          }
+
+          if (!data.connected) {
+            updateEngageBadge(0);
+            renderInboxConnect();
+            return;
+          }
+
+          updateEngageBadge(data.unreplied || 0);
+          // Preserve open composer draft across auto-poll re-renders
+          if (window._openInboxItemId) {
+            const openEl = document.querySelector(`.inbox-item[data-item-id="${CSS.escape(String(window._openInboxItemId))}"]`);
+            const ta = openEl ? document.getElementById(`inbox-text-${openEl.dataset.idx}`) : null;
+            if (ta && ta.value) window.__inboxDraftById = { ...(window.__inboxDraftById || {}), [window._openInboxItemId]: ta.value };
+          }
+          // Don't block first paint on canned responses
+          loadCannedResponses().catch(() => {});
+          renderInboxItems(data);
+          window.__inboxLastFetchAt = Date.now();
+          const syncEl = document.getElementById('inbox-sync-status');
+          if (syncEl) {
+            const ms = data._debug?.inbox_ms;
+            const cache = data._debug?.cache_hit ? ' · cached' : '';
+            syncEl.textContent = ms != null
+              ? `Auto-updating · synced in ${Math.round(ms / 100) / 10}s${cache}`
+              : 'Auto-updating';
+          }
+          // Banner: reconnect only when scopes missing; otherwise show app-capability note for DMs
+          const dbg = data._debug || {};
+          const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
+          const needAdvanced = !needReconnect && !!(dbg.dm_needs_advanced_access || dbg.dm_standard_access_empty);
+          const needAppSetup = !needReconnect && !needAdvanced && !!dbg.dm_app_capability_error;
+          const banner = document.getElementById('inbox-reconnect-banner');
+          const bannerTitle = document.getElementById('inbox-banner-title');
+          const bannerBody = document.getElementById('inbox-banner-body');
+          const reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
+          if (banner) {
+            if (needReconnect) {
+              banner.style.display = 'flex';
+              if (bannerTitle) bannerTitle.textContent = 'Meta permissions needed for Engage';
+              if (bannerBody) bannerBody.textContent = 'Approve comment + messaging permissions on reconnect so replies and DMs work.';
+              if (reconnectBtn) reconnectBtn.style.display = '';
+            } else if (needAdvanced) {
+              banner.style.display = 'flex';
+              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs: Standard Access limit';
+              if (bannerBody) bannerBody.textContent = dbg.dm_info || 'Under Standard Access, Engage only shows DMs from Meta App Admins/Developers/Testers. Customer DMs appear after Advanced Access for instagram_manage_messages. For the screencast: add a Tester → they DM this IG → refresh Engage.';
+              if (reconnectBtn) reconnectBtn.style.display = 'none';
+            } else if (needAppSetup) {
+              banner.style.display = 'flex';
+              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs need Messaging on the Meta app';
+              if (bannerBody) bannerBody.textContent = dbg.dm_info || 'Your Meta connection is fine — enable Instagram Messaging / Messenger on the SocialEngine app in Meta Developer Console. Facebook commenter names are often hidden by Meta privacy and may stay as “Facebook user”.';
+              if (reconnectBtn) reconnectBtn.style.display = 'none';
+            } else {
+              banner.style.display = 'none';
+            }
+          }
+          if ((needReconnect || needAppSetup) && typeof showToast === 'function' && !window.__seDmPermToast) {
+            window.__seDmPermToast = true;
+            if (needReconnect) showToast(dbg.dm_info || 'Reconnect Meta to unlock Engage permissions.', 'warning');
+          }
+          // Auto-scrape every 25s while Engage is open
+          if (inboxPollInterval) { clearInterval(inboxPollInterval); inboxPollInterval = null; }
+          if (data.connected) {
+            inboxPollInterval = setInterval(() => {
+              if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
+              loadInboxData(null, { forceRefresh: true }).catch(() => {});
+            }, 25000);
+          }
+        } catch (e) {
+          console.error('Engage load failed', e);
+          if (typeof showToast === 'function') showToast('Engage refresh failed — try again', 'error');
+        }
+      }
+      window.loadInboxData = loadInboxData;
+
       const _refreshBtn = document.getElementById('inbox-refresh-btn');
       if (_refreshBtn) {
         _refreshBtn.onclick = async () => {
-          const icon = _refreshBtn.querySelector('i');
+          const icon = _refreshBtn.querySelector('i') || _refreshBtn.querySelector('svg');
           if (icon) icon.style.animation = 'spin 0.8s linear infinite';
           _refreshBtn.disabled = true;
           _refreshBtn.style.opacity = '0.7';
           try {
-            await loadInboxData();
+            await loadInboxData(null, { forceRefresh: true });
+            if (typeof showToast === 'function') showToast('Inbox refreshed', 'success');
           } finally {
             _refreshBtn.disabled = false;
             _refreshBtn.style.opacity = '1';
@@ -9488,6 +9584,7 @@
           }
         };
       }
+
       const _reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
       if (_reconnectBtn) {
         _reconnectBtn.onclick = () => {
@@ -9539,75 +9636,6 @@
       // Fetch inbox data
       loadInboxData();
 
-      async function loadInboxData(prefetched) {
-        try {
-          let data = prefetched;
-          if (!data) {
-            const res = await fetch(`${API}/api/inbox`, {
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
-            });
-            data = await res.json();
-            if (res.status === 403) {
-              updateEngageBadge(0);
-              renderInboxUpgrade();
-              return;
-            }
-          }
-
-          if (!data.connected) {
-            updateEngageBadge(0);
-            renderInboxConnect();
-            return;
-          }
-
-          updateEngageBadge(data.unreplied || 0);
-          await loadCannedResponses();
-          renderInboxItems(data);
-          // Banner: reconnect only when scopes missing; otherwise show app-capability note for DMs
-          const dbg = data._debug || {};
-          const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
-          const needAdvanced = !needReconnect && !!(dbg.dm_needs_advanced_access || dbg.dm_standard_access_empty);
-          const needAppSetup = !needReconnect && !needAdvanced && !!dbg.dm_app_capability_error;
-          const banner = document.getElementById('inbox-reconnect-banner');
-          const bannerTitle = document.getElementById('inbox-banner-title');
-          const bannerBody = document.getElementById('inbox-banner-body');
-          const reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
-          if (banner) {
-            if (needReconnect) {
-              banner.style.display = 'flex';
-              if (bannerTitle) bannerTitle.textContent = 'Meta permissions needed for Engage';
-              if (bannerBody) bannerBody.textContent = 'Approve comment + messaging permissions on reconnect so replies and DMs work.';
-              if (reconnectBtn) reconnectBtn.style.display = '';
-            } else if (needAdvanced) {
-              banner.style.display = 'flex';
-              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs: Standard Access limit';
-              if (bannerBody) bannerBody.textContent = dbg.dm_fix || 'Under Standard Access, Engage only shows DMs from Meta App Admins/Developers/Testers. Customer DMs appear after Advanced Access for instagram_manage_messages. For the screencast: add a Tester → they DM this IG → refresh Engage.';
-              if (reconnectBtn) reconnectBtn.style.display = 'none';
-            } else if (needAppSetup) {
-              banner.style.display = 'flex';
-              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs need Messaging on the Meta app';
-              if (bannerBody) bannerBody.textContent = dbg.dm_fix || 'Your Meta connection is fine — enable Instagram Messaging / Messenger on the SocialEngine app in Meta Developer Console. Facebook commenter names are often hidden by Meta privacy and may stay as “Facebook user”.';
-              if (reconnectBtn) reconnectBtn.style.display = 'none';
-            } else {
-              banner.style.display = 'none';
-            }
-          }
-          if ((needReconnect || needAppSetup) && typeof showToast === 'function' && !window.__seDmPermToast) {
-            window.__seDmPermToast = true;
-            if (needReconnect) showToast(dbg.dm_fix || 'Reconnect Meta to unlock Engage permissions.', 'warning');
-          }
-          if (!inboxPollInterval && data.connected) {
-            inboxPollInterval = setInterval(() => {
-              if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
-              // Don't wipe an open conversation; user closes manually
-              if (window._openInboxItemId) return;
-              loadInboxData().catch(() => {});
-            }, 120000);
-          }
-        } catch (e) {
-          renderInboxConnect();
-        }
-      }
       window._reloadInboxIfActive = function(data) {
         if (activeNav === 'inbox' && data) loadInboxData(data);
       };
@@ -9982,6 +10010,9 @@
             if (replyArea) {
               replyArea.style.display = 'block';
               if (preview) preview.style.display = 'none';
+              const draft = (window.__inboxDraftById || {})[window._openInboxItemId];
+              const ta = document.getElementById(`inbox-text-${idx}`);
+              if (ta && draft) ta.value = draft;
               const threadEl = document.getElementById(`inbox-thread-${idx}`);
               if (threadEl) threadEl.scrollTop = threadEl.scrollHeight;
             }
