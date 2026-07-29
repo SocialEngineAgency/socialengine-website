@@ -13,6 +13,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="./creation-studio.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="./claude-studio.js" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -5916,8 +5918,8 @@
                 <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">AI-powered video generation with 9 templates, 6 models, and full product preservation lock.</p>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
-                <button onclick="renderCreationStudio(window._studioClientData || window.__clientData)" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:rgba(255,255,255,0.6);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.background='rgba(255,255,255,0.08)';this.style.color='#fff'" onmouseleave="this.style.background='rgba(255,255,255,0.04)';this.style.color='rgba(255,255,255,0.6)'">
-                  <i data-lucide="palette" style="width:14px;height:14px;"></i> Design Canvas <span style="font-size:0.6rem;padding:1px 5px;background:rgba(124,58,237,0.25);color:#C4B5FD;border-radius:3px;margin-left:2px;">Beta</span>
+                <button onclick="(typeof renderClaudeStudio==='function'?renderClaudeStudio:renderCreationStudio)(window._studioClientData || window.__clientData)" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.35);border-radius:10px;color:#C4B5FD;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.background='rgba(124,58,237,0.2)'" onmouseleave="this.style.background='rgba(124,58,237,0.12)'">
+                  <i data-lucide="wand-2" style="width:14px;height:14px;"></i> Claude Design <span style="font-size:0.6rem;padding:1px 5px;background:rgba(124,58,237,0.25);color:#E9D5FF;border-radius:3px;margin-left:2px;">New</span>
                 </button>
                 <div style="padding:8px 16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;display:flex;align-items:center;gap:8px;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
