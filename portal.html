@@ -5918,7 +5918,7 @@
                 <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">AI-powered video generation with 9 templates, 6 models, and full product preservation lock.</p>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
-                <button onclick="(typeof renderClaudeStudio==='function'?renderClaudeStudio:renderCreationStudio)(window._studioClientData || window.__clientData)" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.35);border-radius:10px;color:#C4B5FD;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.background='rgba(124,58,237,0.2)'" onmouseleave="this.style.background='rgba(124,58,237,0.12)'">
+                <button onclick="(typeof openClaudeDesignStudio==='function'?openClaudeDesignStudio:(typeof renderClaudeStudio==='function'?renderClaudeStudio:renderCreationStudio))(window._studioClientData || window.__clientData)" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.35);border-radius:10px;color:#C4B5FD;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.background='rgba(124,58,237,0.2)'" onmouseleave="this.style.background='rgba(124,58,237,0.12)'">
                   <i data-lucide="wand-2" style="width:14px;height:14px;"></i> Claude Design <span style="font-size:0.6rem;padding:1px 5px;background:rgba(124,58,237,0.25);color:#E9D5FF;border-radius:3px;margin-left:2px;">New</span>
                 </button>
                 <div style="padding:8px 16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;display:flex;align-items:center;gap:8px;">
@@ -6287,6 +6287,13 @@
     window.clearStudioRemixSession = clearStudioRemixSession;
     window.applyRemixSessionIfAny = applyRemixSessionIfAny;
     window.openStudioFromRemix = openStudioFromRemix;
+    window.renderVideoStudio = renderVideoStudio;
+    // Keep VS upload URL readable by Claude Design (separate script)
+    Object.defineProperty(window, 'vsUploadedImageUrl', {
+      configurable: true,
+      get() { return typeof vsUploadedImageUrl !== 'undefined' ? vsUploadedImageUrl : null; },
+      set(v) { try { vsUploadedImageUrl = v; } catch (_) {} },
+    });
 
     // ━━━ Video Studio Helpers ━━━
     let vsSelectedTemplate = null;
@@ -15590,6 +15597,7 @@
     try { _exposeOnWindow('copyVoiceOutput',          typeof copyVoiceOutput          !== 'undefined' ? copyVoiceOutput          : undefined); } catch(_){}
     try { _exposeOnWindow('generateVoiceContent',     typeof generateVoiceContent     !== 'undefined' ? generateVoiceContent     : undefined); } catch(_){}
     try { _exposeOnWindow('handleVSUpload',           typeof handleVSUpload           !== 'undefined' ? handleVSUpload           : undefined); } catch(_){}
+    try { _exposeOnWindow('renderVideoStudio',        typeof renderVideoStudio        !== 'undefined' ? renderVideoStudio        : undefined); } catch(_){}
     try { _exposeOnWindow('refreshBrandIntelligence', typeof refreshBrandIntelligence !== 'undefined' ? refreshBrandIntelligence : undefined); } catch(_){}
     try { _exposeOnWindow('regenerateVoiceContent',   typeof regenerateVoiceContent   !== 'undefined' ? regenerateVoiceContent   : undefined); } catch(_){}
     try { _exposeOnWindow('reschedulePost',           typeof reschedulePost           !== 'undefined' ? reschedulePost           : undefined); } catch(_){}
