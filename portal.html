@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-  <script src="./creation-studio.js" defer></script>
+  <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="./claude-studio.js" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -5668,7 +5668,7 @@
         'ai-coach': 'Your AI marketing strategist',
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
-        'creation-studio': 'Fabric canvas editor — layers, AI chat, Higgsfield backgrounds',
+        'creation-studio': 'Video + Post — catalog reference to queue',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'settings': 'Account and platform settings',
         'fundraise': 'JustGiving + Meta fundraisers in one place'
@@ -5915,12 +5915,13 @@
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
               <div>
                 <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 6px;">Studio</h2>
-                <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">AI-powered video generation with 9 templates, 6 models, and full product preservation lock.</p>
+                <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">Video + Post from your catalog — then straight to the queue.</p>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
-                <button onclick="(typeof openClaudeDesignStudio==='function'?openClaudeDesignStudio:(typeof renderClaudeStudio==='function'?renderClaudeStudio:renderCreationStudio))(window._studioClientData || window.__clientData)" style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.35);border-radius:10px;color:#C4B5FD;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.background='rgba(124,58,237,0.2)'" onmouseleave="this.style.background='rgba(124,58,237,0.12)'">
-                  <i data-lucide="wand-2" style="width:14px;height:14px;"></i> Claude Design <span style="font-size:0.6rem;padding:1px 5px;background:rgba(124,58,237,0.25);color:#E9D5FF;border-radius:3px;margin-left:2px;">New</span>
-                </button>
+                <div style="display:inline-flex;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;gap:2px;">
+                  <button type="button" onclick="renderVideoStudio()" style="padding:7px 12px;border:none;border-radius:8px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Video</button>
+                  <button type="button" onclick="(typeof openClaudeDesignStudio==='function'?openClaudeDesignStudio:renderClaudeStudio)()" style="padding:7px 12px;border:none;border-radius:8px;background:transparent;color:rgba(255,255,255,0.5);font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post</button>
+                </div>
                 <div style="padding:8px 16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;display:flex;align-items:center;gap:8px;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                   <span id="ms-credits-display" style="font-size:0.82rem;font-weight:700;color:rgba(139,92,246,0.9);">— credits</span>
@@ -5953,7 +5954,11 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" id="vs-generate-form">
                 <!-- Left: Image Upload + Preview -->
                 <div>
-                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Product Image</label>
+                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Reference</label>
+                  <div style="display:flex;gap:8px;margin-bottom:10px;">
+                    <button type="button" onclick="openVSProductPicker()" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.12);color:#C4B5FD;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Pick Shopify product</button>
+                    <button type="button" onclick="document.getElementById('vs-file-input').click()" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.65);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload</button>
+                  </div>
                   <div id="vs-upload-area" style="border:2px dashed rgba(255,255,255,0.1);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.2s;background:rgba(255,255,255,0.02);" onclick="document.getElementById('vs-file-input').click();" ondragover="event.preventDefault();this.style.borderColor='rgba(124,58,237,0.4)';this.style.background='rgba(124,58,237,0.04)';" ondrop="event.preventDefault();this.style.borderColor='rgba(255,255,255,0.1)';this.style.background='rgba(255,255,255,0.02)';handleVSUpload(event.dataTransfer.files[0]);" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.background='rgba(255,255,255,0.02)';">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     <div style="font-size:0.82rem;color:rgba(255,255,255,0.4);font-weight:500;">Drop product image or click to upload</div>
@@ -6174,7 +6179,13 @@
         } catch(e) {}
       })();
       // Calendar Remix → Studio regenerate handoff
-      setTimeout(() => { if (typeof applyRemixSessionIfAny === 'function') applyRemixSessionIfAny(); }, 60);
+      setTimeout(() => {
+        if (typeof applyRemixSessionIfAny === 'function') applyRemixSessionIfAny();
+        try {
+          if (!vsUploadedImageUrl && window._studioReference && window._studioReference.url) restoreVSReferenceIfAny();
+        } catch (_) {}
+        try { window.openVSProductPicker = openVSProductPicker; } catch (_) {}
+      }, 60);
       setTimeout(() => { if (typeof applyFundraiseContentSessionIfAny === 'function') applyFundraiseContentSessionIfAny(); }, 80);
     }
 
@@ -6330,6 +6341,101 @@
       document.getElementById('vs-upload-area').style.display = '';
       document.getElementById('vs-preview').style.display = 'none';
       vsUploadedImageUrl = null;
+      if (window._studioReference && window._studioReference.source === 'upload') {
+        window._studioReference = null;
+      }
+    }
+
+    function setVSReferenceFromUrl(url, title, source, productId) {
+      if (!url) return;
+      vsUploadedImageUrl = url;
+      window._studioReference = {
+        url: String(url),
+        type: 'image',
+        title: String(title || 'Reference'),
+        source: source || 'upload',
+        product_id: productId ? String(productId) : undefined,
+      };
+      const area = document.getElementById('vs-upload-area');
+      const preview = document.getElementById('vs-preview');
+      const img = document.getElementById('vs-preview-img');
+      if (area) area.style.display = 'none';
+      if (preview) preview.style.display = 'block';
+      if (img) img.src = url;
+      const nameEl = document.getElementById('vs-product-name');
+      if (nameEl && title && !nameEl.value.trim()) nameEl.value = title;
+    }
+
+    function openVSProductPicker() {
+      let modal = document.getElementById('vs-product-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'vs-product-modal';
+        modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.65);align-items:center;justify-content:center;padding:24px;';
+        modal.innerHTML = `<div style="width:min(820px,100%);max-height:min(80vh,720px);background:#0F172A;border:1px solid rgba(255,255,255,0.1);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;">Pick Shopify product</div>
+            <button type="button" id="vs-product-close" style="background:none;border:none;color:rgba(255,255,255,0.45);font-size:1.2rem;cursor:pointer;">×</button>
+          </div>
+          <div style="padding:12px 14px;"><input id="vs-product-search" type="search" placeholder="Search products…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;"></div>
+          <div id="vs-product-grid" style="flex:1;overflow:auto;padding:0 14px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>
+        </div>`;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+        modal.querySelector('#vs-product-close')?.addEventListener('click', () => { modal.style.display = 'none'; });
+        let t = null;
+        modal.querySelector('#vs-product-search')?.addEventListener('input', (e) => {
+          clearTimeout(t);
+          t = setTimeout(() => loadVSProductGrid(e.target.value.trim()), 280);
+        });
+      }
+      modal.style.display = 'flex';
+      loadVSProductGrid('');
+    }
+
+    async function loadVSProductGrid(q) {
+      const grid = document.getElementById('vs-product-grid');
+      if (!grid) return;
+      grid.innerHTML = '<div style="padding:24px;color:rgba(255,255,255,0.35);font-size:0.8rem;grid-column:1/-1;">Loading…</div>';
+      try {
+        const params = new URLSearchParams({ limit: '24', page: '1' });
+        if (q) params.set('search', q);
+        const res = await fetch(`${API}/api/studio/products?${params}`, {
+          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        });
+        const data = await res.json().catch(() => ({}));
+        const products = Array.isArray(data.products) ? data.products : [];
+        if (!products.length) {
+          grid.innerHTML = '<div style="padding:24px;color:rgba(255,255,255,0.35);font-size:0.8rem;grid-column:1/-1;">No products found.</div>';
+          return;
+        }
+        const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+        grid.innerHTML = products.map(p => {
+          const img = p.primary_image || '';
+          const title = p.title || 'Product';
+          return `<button type="button" class="vs-pick-card" data-url="${esc(img)}" data-title="${esc(title)}" data-id="${esc(p.id||'')}" style="text-align:left;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);cursor:pointer;overflow:hidden;">
+            <div style="aspect-ratio:1;background:#111;">${img ? `<img src="${esc(img)}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">` : ''}</div>
+            <div style="padding:8px 9px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.8);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(title)}</div>
+          </button>`;
+        }).join('');
+        grid.querySelectorAll('.vs-pick-card').forEach(el => {
+          el.addEventListener('click', () => {
+            const url = el.getAttribute('data-url');
+            if (!url) { showToast('Product has no image', 'warning'); return; }
+            setVSReferenceFromUrl(url, el.getAttribute('data-title'), 'shopify', el.getAttribute('data-id'));
+            document.getElementById('vs-product-modal').style.display = 'none';
+            showToast('Product selected', 'success');
+          });
+        });
+      } catch (e) {
+        grid.innerHTML = `<div style="padding:24px;color:#F87171;font-size:0.8rem;grid-column:1/-1;">${(e && e.message) || 'Failed'}</div>`;
+      }
+    }
+
+    function restoreVSReferenceIfAny() {
+      const ref = window._studioReference;
+      if (!ref || !ref.url) return;
+      setVSReferenceFromUrl(ref.url, ref.title, ref.source || 'upload', ref.product_id);
     }
 
     async function uploadVSImage(file) {
@@ -6343,7 +6449,7 @@
         });
         const data = await res.json();
         if (data.url) {
-          vsUploadedImageUrl = data.url;
+          setVSReferenceFromUrl(data.url, 'Studio upload', 'upload');
           showToast('Image uploaded — ready to generate');
         } else {
           showToast('Upload failed — using direct upload instead');
@@ -6569,35 +6675,18 @@
     }, { threshold: 0.1 });
     featureCards.forEach(card => cardObserver.observe(card));
 
-    // ━━━ Creation Studio (Fabric.js — creation-studio.js) ━━━
-    // Auth sync before Fabric module render; module owns window.renderCreationStudio
-    // after creation-studio.js loads. This wrapper preserves portal login vars.
+    // ━━━ Creation Studio (Fabric retired) ━━━
+    // Studio is Video + Post only. Keep auth sync helpers; never open Fabric canvas.
     function renderCreationStudio(data) {
-      window.__clientData = data;
+      window.__clientData = data || window.__clientData || clientData;
       window.__clientEmail = clientEmail || window._seEmail || data?.email || data?.fields?.Email || '';
       window.__clientHash = clientHash || window._seHash || data?.hash || data?.fields?.Hash || '';
       window.clientEmail = window.__clientEmail;
       window.clientHash = window.__clientHash;
-      console.log('[auth] client data loaded', {
-        email: clientEmail || window.__clientEmail,
-        hasHash: !!(clientHash || window.__clientHash),
-      });
       window.API = typeof API !== 'undefined' ? API : window._seAPI;
-      const run = () => {
-        if (typeof window.__renderCreationStudioImpl === 'function') {
-          window.__renderCreationStudioImpl(data);
-          return true;
-        }
-        return false;
-      };
-      if (run()) return;
-      const content = document.getElementById('dash-content');
-      if (content) content.innerHTML = '<div style="padding:48px;text-align:center;color:rgba(255,255,255,0.55);">Loading Creation Studio…</div>';
-      let n = 0;
-      const t = setInterval(() => {
-        n++;
-        if (run() || n > 50) clearInterval(t);
-      }, 100);
+      window._studioClientData = window.__clientData;
+      if (typeof showToast === 'function') showToast('Studio is Video + Post now — canvas editor retired', 'info');
+      if (typeof renderVideoStudio === 'function') renderVideoStudio();
     }
 
     // ━━━ Content Studio Page ━━━
@@ -15597,6 +15686,7 @@
     try { _exposeOnWindow('copyVoiceOutput',          typeof copyVoiceOutput          !== 'undefined' ? copyVoiceOutput          : undefined); } catch(_){}
     try { _exposeOnWindow('generateVoiceContent',     typeof generateVoiceContent     !== 'undefined' ? generateVoiceContent     : undefined); } catch(_){}
     try { _exposeOnWindow('handleVSUpload',           typeof handleVSUpload           !== 'undefined' ? handleVSUpload           : undefined); } catch(_){}
+    try { _exposeOnWindow('openVSProductPicker',     typeof openVSProductPicker     !== 'undefined' ? openVSProductPicker     : undefined); } catch(_){}
     try { _exposeOnWindow('renderVideoStudio',        typeof renderVideoStudio        !== 'undefined' ? renderVideoStudio        : undefined); } catch(_){}
     try { _exposeOnWindow('refreshBrandIntelligence', typeof refreshBrandIntelligence !== 'undefined' ? refreshBrandIntelligence : undefined); } catch(_){}
     try { _exposeOnWindow('regenerateVoiceContent',   typeof regenerateVoiceContent   !== 'undefined' ? regenerateVoiceContent   : undefined); } catch(_){}

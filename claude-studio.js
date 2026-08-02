@@ -1,5 +1,5 @@
 /**
- * Claude Design Studio — Phase 1.5
+ * Studio · Post — Phase 1.5
  * Reference picker (Products / Library / Uploads) → on-brand square → PNG → queue
  */
 (function () {
@@ -346,10 +346,13 @@
         <div style="width:300px;min-width:300px;border-right:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;background:rgba(10,16,28,0.6);">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <div>
-              <div style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;color:#fff;">Claude Design</div>
-              <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:2px;">Phase 1.5 · Instagram Square</div>
+              <div style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;color:#fff;">Post</div>
+              <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:2px;">Static square · brand + catalog</div>
             </div>
-            <button type="button" id="cs-back-video" style="padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.5);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">← Video</button>
+            <div style="display:inline-flex;padding:2px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;gap:2px;">
+              <button type="button" id="cs-back-video" style="padding:6px 10px;border:none;border-radius:7px;background:transparent;color:rgba(255,255,255,0.45);font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Video</button>
+              <button type="button" style="padding:6px 10px;border:none;border-radius:7px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.7rem;font-weight:700;cursor:default;font-family:var(--font-body);">Post</button>
+            </div>
           </div>
 
           <div>
@@ -389,7 +392,7 @@
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
               <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Claude Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Choose a product or upload, describe the post, generate an on-brand square, then queue it.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
