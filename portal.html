@@ -15900,8 +15900,9 @@
   // ━━━ SCHEDULE SECTION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   // ── Batch Queue State ─────────────────────────────────────────────────────
-  let _batchFiles   = []; // { file, objectUrl, caption, platforms, date, time, status, description }
+  let _batchFiles   = []; // { file, objectUrl, caption, platforms, date, time, status, description, expanded }
   let _batchDragIdx = null;
+  let _batchExpandedIdx = null;
 
   function renderScheduleSection() {
     const content = document.getElementById('dash-content');
@@ -15925,7 +15926,7 @@
   </div>
 
   <!-- Right: Batch queue panel (hidden until files uploaded) -->
-  <div id="sched-queue-col" style="width:340px;border-left:1px solid rgba(255,255,255,0.07);display:none;flex-direction:column;overflow:hidden;flex-shrink:0;">
+  <div id="sched-queue-col" style="width:380px;border-left:1px solid rgba(255,255,255,0.07);display:none;flex-direction:column;overflow:hidden;flex-shrink:0;">
     <div id="sched-queue-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden;"></div>
   </div>
 
@@ -15963,6 +15964,7 @@
         time: '09:00',
         status: 'pending',
         description: '',
+        expanded: false,
       }));
     if (!newFiles.length) {
       if (typeof showToast === 'function') showToast('No supported files. Use MP4, MOV, JPG, or PNG.');
@@ -15973,6 +15975,79 @@
     if (queueCol) queueCol.style.display = 'flex';
     _renderCalendar();
     _renderBatchQueue();
+  }
+
+  function _bqEsc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function _bqAutoSize(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    const h = Math.min(Math.max(el.scrollHeight, 72), 320);
+    el.style.height = h + 'px';
+  }
+
+  function _batchToggleExpand(idx) {
+    const item = _batchFiles[idx];
+    if (!item) return;
+    item.expanded = !item.expanded;
+    _batchExpandedIdx = item.expanded ? idx : null;
+    _renderBatchQueue();
+  }
+
+  function _batchUpdateCaption(idx, value) {
+    if (!_batchFiles[idx]) return;
+    _batchFiles[idx].caption = value;
+    if (value && value.trim() && _batchFiles[idx].status === 'pending') {
+      _batchFiles[idx].status = 'captioned';
+    }
+  }
+
+  function _batchPreviewMedia(idx) {
+    const item = _batchFiles[idx];
+    if (!item) return;
+    const isVideo = item.file.type.startsWith('video/');
+    let overlay = document.getElementById('bq-media-lightbox');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'bq-media-lightbox';
+      overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,0.82);align-items:center;justify-content:center;padding:24px;';
+      overlay.innerHTML = `<div id="bq-media-lightbox-inner" style="position:relative;max-width:min(920px,96vw);max-height:90vh;"></div>`;
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) _batchClosePreview();
+      });
+      document.body.appendChild(overlay);
+    }
+    const inner = document.getElementById('bq-media-lightbox-inner');
+    const src = _bqEsc(item.objectUrl);
+    const name = _bqEsc(item.file.name);
+    inner.innerHTML = isVideo
+      ? `<video src="${src}" controls autoplay playsinline style="max-width:100%;max-height:85vh;border-radius:12px;background:#000;display:block;"></video>
+         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+           <div style="font-size:0.78rem;color:rgba(255,255,255,0.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
+           <button type="button" onclick="_batchClosePreview()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Close</button>
+         </div>`
+      : `<img src="${src}" alt="${name}" style="max-width:100%;max-height:85vh;border-radius:12px;display:block;">
+         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+           <div style="font-size:0.78rem;color:rgba(255,255,255,0.55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</div>
+           <button type="button" onclick="_batchClosePreview()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Close</button>
+         </div>`;
+    overlay.style.display = 'flex';
+  }
+
+  function _batchClosePreview() {
+    const overlay = document.getElementById('bq-media-lightbox');
+    if (!overlay) return;
+    const vid = overlay.querySelector('video');
+    if (vid) { try { vid.pause(); } catch (_) {} }
+    overlay.style.display = 'none';
+    const inner = document.getElementById('bq-media-lightbox-inner');
+    if (inner) inner.innerHTML = '';
   }
 
   function _renderBatchQueue() {
@@ -15988,10 +16063,18 @@
       const hasCap      = !!item.caption;
       const hasDate     = !!item.date;
       const isVideo     = item.file.type.startsWith('video/');
+      const expanded    = !!item.expanded || (_batchExpandedIdx === idx) || (hasCap && total === 1 && !isScheduled);
 
       const thumbEl = isVideo
-        ? `<div style="width:46px;height:46px;border-radius:7px;background:rgba(124,58,237,0.12);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🎬</div>`
-        : `<img src="${item.objectUrl}" style="width:46px;height:46px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`;
+        ? `<button type="button" onclick="event.stopPropagation();_batchPreviewMedia(${idx})" title="Preview video" style="position:relative;width:56px;height:56px;padding:0;border:none;border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;background:#111;">
+            <video src="${_bqEsc(item.objectUrl)}" muted preload="metadata" playsinline style="width:100%;height:100%;object-fit:cover;pointer-events:none;"></video>
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.28);">
+              <span style="width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.65rem;padding-left:2px;">▶</span>
+            </span>
+          </button>`
+        : `<button type="button" onclick="event.stopPropagation();_batchPreviewMedia(${idx})" title="Preview image" style="width:56px;height:56px;padding:0;border:none;border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;background:#111;">
+            <img src="${_bqEsc(item.objectUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
+          </button>`;
 
       const statusColor = isScheduled ? '#22C55E' : hasCap ? '#7C3AED' : '#475569';
       const statusLabel = isScheduled ? '✓ Scheduled' : hasCap ? 'Captioned' : 'Pending';
@@ -15999,38 +16082,62 @@
 
       const platBtns = ['Instagram','Facebook','TikTok'].map(p => {
         const on = item.platforms.includes(p);
-        return `<button onclick="_batchTogglePlatform(${idx},'${p}')" style="padding:3px 7px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:0.5px solid ${on?'rgba(124,58,237,0.4)':'rgba(255,255,255,0.1)'};color:${on?'#C4B5FD':'rgba(255,255,255,0.3)'};background:${on?'rgba(124,58,237,0.12)':'rgba(255,255,255,0.02)'};font-family:var(--font-body);">${p}</button>`;
+        return `<button onclick="event.stopPropagation();_batchTogglePlatform(${idx},'${p}')" style="padding:3px 7px;border-radius:4px;font-size:0.68rem;cursor:pointer;border:0.5px solid ${on?'rgba(124,58,237,0.4)':'rgba(255,255,255,0.1)'};color:${on?'#C4B5FD':'rgba(255,255,255,0.3)'};background:${on?'rgba(124,58,237,0.12)':'rgba(255,255,255,0.02)'};font-family:var(--font-body);">${p}</button>`;
       }).join('');
 
       const dateLabel = hasDate
         ? new Date(item.date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' })
         : 'Set date';
 
-      const captionSection = hasCap
-        ? `<div style="font-size:0.72rem;color:rgba(255,255,255,0.55);line-height:1.5;max-height:52px;overflow:hidden;margin-bottom:8px;">${item.caption.slice(0,140)}${item.caption.length>140?'…':''}</div>`
-        : `<textarea id="bq-desc-${idx}" placeholder="Describe this post for AI…" oninput="_batchFiles[${idx}].description=this.value" style="width:100%;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.5);font-size:0.72rem;padding:7px 9px;resize:none;height:42px;font-family:var(--font-body);outline:none;margin-bottom:8px;box-sizing:border-box;">${item.description}</textarea>`;
+      let captionSection = '';
+      if (hasCap) {
+        if (expanded) {
+          captionSection = `
+            <div style="margin-bottom:8px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
+                <div style="font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;">Caption</div>
+                <button type="button" onclick="event.stopPropagation();_batchToggleExpand(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Collapse</button>
+              </div>
+              <textarea id="bq-cap-${idx}" rows="5"
+                oninput="_batchUpdateCaption(${idx},this.value);_bqAutoSize(this)"
+                onmousedown="event.stopPropagation()"
+                ondragstart="event.preventDefault();event.stopPropagation()"
+                style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.12);border-radius:8px;color:rgba(255,255,255,0.82);font-size:0.76rem;line-height:1.5;padding:9px 10px;resize:vertical;min-height:96px;max-height:320px;font-family:var(--font-body);outline:none;">${_bqEsc(item.caption)}</textarea>
+            </div>`;
+        } else {
+          const preview = item.caption.length > 120 ? item.caption.slice(0, 120) + '…' : item.caption;
+          captionSection = `
+            <button type="button" onclick="event.stopPropagation();_batchToggleExpand(${idx})" style="display:block;width:100%;text-align:left;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 10px;margin-bottom:8px;cursor:pointer;">
+              <div style="font-size:0.72rem;color:rgba(255,255,255,0.55);line-height:1.5;">${_bqEsc(preview)}</div>
+              <div style="margin-top:6px;font-size:0.68rem;font-weight:700;color:#A78BFA;">Edit full caption →</div>
+            </button>`;
+        }
+      } else {
+        captionSection = `<textarea id="bq-desc-${idx}" placeholder="Describe this post for AI…" oninput="_batchFiles[${idx}].description=this.value" onmousedown="event.stopPropagation()" style="width:100%;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.5);font-size:0.72rem;padding:7px 9px;resize:vertical;min-height:42px;font-family:var(--font-body);outline:none;margin-bottom:8px;box-sizing:border-box;">${_bqEsc(item.description)}</textarea>`;
+      }
 
-      return `<div draggable="true" ondragstart="_batchDragStart(${idx},event)" id="bq-card-${idx}"
-        style="background:${isScheduled?'rgba(34,197,94,0.04)':'rgba(255,255,255,0.025)'};border:0.5px solid ${isScheduled?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;">
+      return `<div draggable="${expanded ? 'false' : 'true'}" ondragstart="_batchDragStart(${idx},event)" id="bq-card-${idx}"
+        style="background:${isScheduled?'rgba(34,197,94,0.04)':'rgba(255,255,255,0.025)'};border:0.5px solid ${expanded?'rgba(124,58,237,0.35)':(isScheduled?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)')};border-radius:10px;padding:10px;margin-bottom:8px;cursor:${expanded?'default':'grab'};">
 
         <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
           ${thumbEl}
           <div style="flex:1;min-width:0;">
-            <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">${item.file.name}</div>
+            <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">${_bqEsc(item.file.name)}</div>
             <span style="font-size:0.67rem;padding:2px 7px;background:${statusBg};border-radius:10px;color:${statusColor};">${statusLabel}</span>
+            ${isVideo ? `<button type="button" onclick="event.stopPropagation();_batchPreviewMedia(${idx})" style="margin-left:6px;background:none;border:none;color:rgba(167,139,250,0.9);font-size:0.65rem;font-weight:600;cursor:pointer;font-family:var(--font-body);padding:0;">Preview</button>` : ''}
           </div>
-          <button onclick="_batchRemove(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.25);cursor:pointer;font-size:1rem;padding:0 2px;font-family:var(--font-body);" title="Remove">✕</button>
+          <button onclick="event.stopPropagation();_batchRemove(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.25);cursor:pointer;font-size:1rem;padding:0 2px;font-family:var(--font-body);" title="Remove">✕</button>
         </div>
 
         ${captionSection}
         <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">${platBtns}</div>
 
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-          ${!isScheduled ? `<button onclick="_batchGenerateOne(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:${hasCap?'rgba(34,197,94,0.08)':'rgba(124,58,237,0.12)'};border:0.5px solid ${hasCap?'rgba(34,197,94,0.25)':'rgba(124,58,237,0.3)'};border-radius:5px;color:${hasCap?'#86efac':'#a78bfa'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap?'↺ Re-generate':'✨ Write caption'}</button>` : ''}
-          <button onclick="_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${dateLabel}</button>
+          ${!isScheduled ? `<button onclick="event.stopPropagation();_batchGenerateOne(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:${hasCap?'rgba(34,197,94,0.08)':'rgba(124,58,237,0.12)'};border:0.5px solid ${hasCap?'rgba(34,197,94,0.25)':'rgba(124,58,237,0.3)'};border-radius:5px;color:${hasCap?'#86efac':'#a78bfa'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap?'↺ Re-generate':'✨ Write caption'}</button>` : ''}
+          <button onclick="event.stopPropagation();_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${dateLabel}</button>
           <input type="date" id="bq-datepick-${idx}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="_batchSetDate(${idx},this.value)">
-          ${hasCap && !isScheduled ? `<button onclick="_batchScheduleOne(${idx})" style="padding:4px 10px;background:#7C3AED;border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Schedule</button>` : ''}
-          ${!isScheduled ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.18);${hasCap?'':'margin-left:auto;'}">⠿ drag to date</span>` : ''}
+          ${hasCap && !isScheduled ? `<button onclick="event.stopPropagation();_batchScheduleOne(${idx})" style="padding:4px 10px;background:#7C3AED;border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Schedule</button>` : ''}
+          ${!isScheduled && !expanded ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.18);${hasCap?'':'margin-left:auto;'}">⠿ drag to date</span>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -16062,13 +16169,22 @@
       <div style="padding:10px 14px;border-top:0.5px solid rgba(34,197,94,0.15);background:rgba(34,197,94,0.05);text-align:center;font-size:0.75rem;color:#86efac;flex-shrink:0;">✓ All ${total} posts scheduled!</div>
       `}
     `;
+
+    // Auto-size expanded caption fields
+    _batchFiles.forEach((item, idx) => {
+      if (!item.caption) return;
+      const ta = document.getElementById('bq-cap-' + idx);
+      if (ta) _bqAutoSize(ta);
+    });
   }
 
   function _batchCloseQueue() {
+    try { _batchClosePreview(); } catch (_) {}
     const queueCol = document.getElementById('sched-queue-col');
     if (queueCol) queueCol.style.display = 'none';
     _batchFiles.forEach(f => { try { URL.revokeObjectURL(f.objectUrl); } catch(e) {} });
     _batchFiles = [];
+    _batchExpandedIdx = null;
     _renderCalendar();
   }
 
@@ -16118,6 +16234,8 @@
       if (data.success && data.caption) {
         _batchFiles[idx].caption = data.caption;
         if (_batchFiles[idx].status === 'pending') _batchFiles[idx].status = 'captioned';
+        _batchFiles[idx].expanded = true;
+        _batchExpandedIdx = idx;
         _renderBatchQueue();
       } else {
         if (typeof showToast === 'function') showToast('Caption failed: ' + (data.error || 'Unknown error'));
@@ -16143,6 +16261,8 @@
   async function _batchScheduleOne(idx) {
     const item = _batchFiles[idx];
     if (!item) return;
+    const liveCap = document.getElementById('bq-cap-' + idx);
+    if (liveCap) item.caption = liveCap.value;
     if (!item.date) { if (typeof showToast === 'function') showToast('Set a date for this post first.'); return; }
     const card = document.getElementById('bq-card-' + idx);
     const schedBtn = card ? card.querySelector('button[onclick*="batchScheduleOne"]') : null;
@@ -16723,6 +16843,11 @@
   window._batchRemove               = _batchRemove;
   window._batchGenerateOne          = _batchGenerateOne;
   window._batchGenerateAll          = _batchGenerateAll;
+  window._batchToggleExpand         = _batchToggleExpand;
+  window._batchUpdateCaption        = _batchUpdateCaption;
+  window._batchPreviewMedia         = _batchPreviewMedia;
+  window._batchClosePreview         = _batchClosePreview;
+  window._bqAutoSize                = _bqAutoSize;
   window._batchScheduleOne          = _batchScheduleOne;
   window._batchScheduleAllCaptioned = _batchScheduleAllCaptioned;
   window._batchDragStart            = _batchDragStart;
