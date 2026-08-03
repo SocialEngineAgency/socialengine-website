@@ -3857,6 +3857,7 @@
                 <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);">Ready to schedule for publishing</div>
               </div>
             </div>` : `<div style="padding:8px 0;font-size:0.8rem;color:rgba(255,255,255,0.4);">${status === 'Scheduled' ? 'Scheduled for publishing' : status === 'Published' ? 'Published' : status}</div>`}
+            ${status !== 'Published' ? `<button onclick="closeStudioModal();_deleteCalPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>` : ''}
           </div>`}
 
           <div class="studio-modal__nav">
@@ -16971,12 +16972,57 @@
         <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Caption</div>
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.62);line-height:1.65;max-height:220px;overflow-y:auto;white-space:pre-wrap;">${safeCap || '<span style="color:rgba(255,255,255,0.3);">No caption</span>'}</div>
       </div>
-      ${returnDate ? `<button onclick="_backToDatePanel()" style="width:100%;margin-top:20px;padding:10px 12px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;color:#E9D5FF;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">← Back to ${returnDate}</button>` : ''}
+      <button onclick="_deleteCalPost('${String(postId).replace(/'/g, "\\'")}')" style="width:100%;margin-top:16px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>
+      ${returnDate ? `<button onclick="_backToDatePanel()" style="width:100%;margin-top:10px;padding:10px 12px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;color:#E9D5FF;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">← Back to ${returnDate}</button>` : ''}
     `;
 
     panel.style.transform = 'translateX(0)';
     panel.style.opacity   = '1';
   }
+
+  window._deleteCalPost = async function(postId, opts) {
+    opts = opts || {};
+    if (!postId || String(postId).startsWith('batch-') || String(postId).startsWith('local-')) {
+      if (typeof showToast === 'function') showToast('Nothing to delete yet', 'warning');
+      return;
+    }
+    if (!confirm('Delete this post from your queue? This can’t be undone.')) return;
+    try {
+      const resp = await fetch(`${API}/api/delete-post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.success) throw new Error(data.error || 'Delete failed');
+      _calPosts = (_calPosts || []).filter(p => p.id !== postId);
+      if (typeof studioPostsList !== 'undefined' && Array.isArray(studioPostsList)) {
+        studioPostsList = studioPostsList.filter(p => p.id !== postId);
+      }
+      if (window.__clientData?.content) {
+        window.__clientData.content = window.__clientData.content.filter(p => p.id !== postId);
+      }
+      _closeCalPanel();
+      if (typeof _renderCalendar === 'function') _renderCalendar();
+      const day = opts.returnDate || window._calPanelReturnDate || window._datePanelDate;
+      if (day && typeof openDatePanel === 'function') openDatePanel(day);
+      if (typeof showToast === 'function') showToast('Post deleted', 'success');
+      // Refresh content queue if visible
+      try {
+        if (typeof renderStudioContent === 'function' && typeof studioPostsList !== 'undefined') {
+          const area = document.getElementById('studio-content-area');
+          if (area) area.innerHTML = renderStudioContent(studioPostsList);
+        }
+      } catch (_) {}
+    } catch (e) {
+      if (typeof showToast === 'function') showToast(e.message || 'Delete failed', 'error');
+      else alert(e.message || 'Delete failed');
+    }
+  };
 
   // ── Social history post detail panel ──────────────────────────────────────
   function _openSocialPostPanel(post) {
@@ -17697,6 +17743,7 @@
               </div>` : `<button onclick="_datePanelView(${idx})" style="width:100%;padding:9px 12px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;color:#E9D5FF;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Open post</button>`}
               <div style="display:flex;gap:6px;">
                 <button onclick="_datePanelView(${idx})" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">View</button>
+                ${!isSocial ? `<button onclick="_deleteCalPost('${String(p.id || '').replace(/'/g, "\\'")}',{returnDate:'${dateStr}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>` : ''}
                 ${isSocial && p.permalink ? `<a href="${p.permalink}" target="_blank" rel="noopener" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.45);font-size:0.7rem;font-weight:600;text-decoration:none;text-align:center;font-family:var(--font-body);">Open</a>` : ''}
               </div>
               <div id="day-post-insight-${idx}" style="display:none;"></div>
