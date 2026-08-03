@@ -17072,6 +17072,33 @@
     panel.style.opacity   = '1';
   }
 
+  window._retryPublishPost = async function(postId, returnDate) {
+    if (!postId) return;
+    if (typeof showToast === 'function') showToast('Retrying publish…');
+    try {
+      const resp = await fetch(`${API}/api/retry-publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (data.published || data.success) {
+        if (typeof showToast === 'function') showToast(data.warning ? `Published with warning: ${data.warning}` : 'Published ✅', 'success');
+      } else {
+        if (typeof showToast === 'function') showToast(data.error || 'Publish failed again', 'error');
+      }
+      if (typeof _loadCalendar === 'function') await _loadCalendar({ silent: true });
+      const day = returnDate || window._datePanelDate;
+      if (day && typeof openDatePanel === 'function') openDatePanel(day);
+    } catch (e) {
+      if (typeof showToast === 'function') showToast(e.message || 'Retry failed', 'error');
+    }
+  };
+
   window._deleteCalPost = async function(postId, opts) {
     opts = opts || {};
     if (!postId || String(postId).startsWith('batch-') || String(postId).startsWith('local-')) {
@@ -17429,7 +17456,9 @@
 
     if (typeof _closeCalPanel === 'function') _closeCalPanel();
 
-    const todayLocal = (window._calLocalDateKey || ((ts) => String(ts || '').slice(0, 10)))(new Date());
+    const todayLocal = (typeof _clientTodayDateKey === 'function')
+      ? _clientTodayDateKey()
+      : (window._calLocalDateKey || ((ts) => String(ts || '').slice(0, 10)))(new Date());
     const isPast  = dateStr < todayLocal;
     const isToday = dateStr === todayLocal;
 
@@ -17816,6 +17845,10 @@
         const whenLabel = (!isSocial && (typeof formatSchedDateTime === 'function'))
           ? formatSchedDateTime(p.scheduled_date || dateStr, timeResolved)
           : timeResolved;
+        const pubErr = !isSocial && /publish_error/i.test(String(p.status || ''))
+          ? String(p.theme || '').replace(/^publish_error:\s*/i, '').trim()
+          : '';
+        const canRetry = !isSocial && /^(publish_error|approved|scheduled)$/i.test(String(p.status || ''));
         html += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;overflow:hidden;">
           ${mediaBlock}
           <div style="padding:12px 13px;">
@@ -17827,6 +17860,7 @@
               ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(124,58,237,0.12);color:#C4B5FD;border-radius:4px;border:1px solid rgba(124,58,237,0.25);">${String(p.status || 'Scheduled')}</span>`}
             </div>
             ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : (isSocial ? '' : `<div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">${isVidCard ? 'Video' : 'Post'} scheduled${p.scheduled_time ? ' · ' + p.scheduled_time : ''}${caption ? '' : ' · no caption'}</div>`)}
+            ${pubErr ? `<div style="font-size:0.72rem;color:#FCA5A5;line-height:1.4;margin-bottom:8px;padding:8px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;">${pubErr.replace(/</g,'&lt;')}</div>` : ''}
             ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : (isSocial ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.25);margin-bottom:10px;">No engagement yet</div>` : '')}
             <div style="display:flex;flex-direction:column;gap:7px;">
               ${isSocial ? `<button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
@@ -17835,6 +17869,7 @@
                 <button onclick="_datePanelPromote(${idx})" style="flex:1;padding:7px 8px;background:rgba(236,72,153,0.12);border:1px solid rgba(236,72,153,0.28);border-radius:7px;color:#F9A8D4;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Promote</button>
                 <button onclick="_datePanelWhy(${idx})" style="flex:1;padding:7px 8px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:7px;color:#A5B4FC;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
               </div>` : `<button onclick="_datePanelView(${idx})" style="width:100%;padding:9px 12px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;color:#E9D5FF;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Open post</button>`}
+              ${canRetry ? `<button onclick="_retryPublishPost('${String(p.id || '').replace(/'/g, "\\'")}', '${dateStr}')" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Retry publish</button>` : ''}
               <div style="display:flex;gap:6px;">
                 <button onclick="_datePanelView(${idx})" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">View</button>
                 ${!isSocial ? `<button onclick="_deleteCalPost('${String(p.id || '').replace(/'/g, "\\'")}',{returnDate:'${dateStr}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>` : ''}
