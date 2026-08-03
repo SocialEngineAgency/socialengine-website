@@ -15996,6 +15996,8 @@
     const item = _batchFiles[idx];
     if (!item) return;
     item.expanded = !item.expanded;
+    if (item.expanded) item.compact = false;
+    else if (item.date && item.status !== 'scheduled') item.compact = true;
     _batchExpandedIdx = item.expanded ? idx : null;
     _renderBatchQueue();
   }
@@ -16063,7 +16065,8 @@
       const hasCap      = !!item.caption;
       const hasDate     = !!item.date;
       const isVideo     = item.file.type.startsWith('video/');
-      const expanded    = !!item.expanded || (_batchExpandedIdx === idx) || (hasCap && total === 1 && !isScheduled);
+      // Auto-expand only when newly captioned and not yet dated/compact
+      const expanded    = !!item.expanded || (_batchExpandedIdx === idx) || (hasCap && total === 1 && !isScheduled && !item.date && !item.compact);
 
       const thumbEl = isVideo
         ? `<button type="button" onclick="event.stopPropagation();_batchPreviewMedia(${idx})" title="Preview video" style="position:relative;width:56px;height:56px;padding:0;border:none;border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;background:#111;">
@@ -16116,7 +16119,27 @@
         captionSection = `<textarea id="bq-desc-${idx}" placeholder="Describe this post for AI…" oninput="_batchFiles[${idx}].description=this.value" onmousedown="event.stopPropagation()" style="width:100%;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.5);font-size:0.72rem;padding:7px 9px;resize:vertical;min-height:42px;font-family:var(--font-body);outline:none;margin-bottom:8px;box-sizing:border-box;">${_bqEsc(item.description)}</textarea>`;
       }
 
-      return `<div draggable="${expanded ? 'false' : 'true'}" ondragstart="_batchDragStart(${idx},event)" id="bq-card-${idx}"
+      const isCompact = !!item.compact && hasDate && !expanded && !isScheduled;
+
+      if (isCompact) {
+        return `<div draggable="true" ondragstart="_batchDragStart(${idx},event)" ondragend="_batchDragEnd()" id="bq-card-${idx}"
+          style="background:rgba(124,58,237,0.08);border:0.5px solid rgba(124,58,237,0.3);border-radius:9px;padding:8px 10px;margin-bottom:8px;cursor:grab;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${isVideo
+              ? `<video src="${_bqEsc(item.objectUrl)}" muted preload="metadata" playsinline style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#111;"></video>`
+              : `<img src="${_bqEsc(item.objectUrl)}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;">`}
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.72rem;font-weight:700;color:#E9D5FF;">${dateLabel}</div>
+              <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_bqEsc((item.caption||item.file.name||'').slice(0,42))}</div>
+            </div>
+            <button type="button" onclick="event.stopPropagation();_batchToggleExpand(${idx})" style="padding:4px 7px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.5);font-size:0.65rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Edit</button>
+            <button type="button" onclick="event.stopPropagation();_batchScheduleOne(${idx})" style="padding:5px 10px;border-radius:6px;border:none;background:#7C3AED;color:#fff;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>
+            <button type="button" onclick="event.stopPropagation();_batchRemove(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.25);cursor:pointer;font-size:0.9rem;padding:0 2px;" title="Remove">✕</button>
+          </div>
+        </div>`;
+      }
+
+      return `<div draggable="${expanded ? 'false' : 'true'}" ondragstart="_batchDragStart(${idx},event)" ondragend="_batchDragEnd()" id="bq-card-${idx}"
         style="background:${isScheduled?'rgba(34,197,94,0.04)':'rgba(255,255,255,0.025)'};border:0.5px solid ${expanded?'rgba(124,58,237,0.35)':(isScheduled?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)')};border-radius:10px;padding:10px;margin-bottom:8px;cursor:${expanded?'default':'grab'};">
 
         <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
@@ -16206,7 +16229,12 @@
   }
 
   function _batchSetDate(idx, date) {
-    if (_batchFiles[idx]) _batchFiles[idx].date = date;
+    if (_batchFiles[idx]) {
+      _batchFiles[idx].date = date;
+      _batchFiles[idx].compact = true;
+      _batchFiles[idx].expanded = false;
+    }
+    _batchClearDayHighlights();
     _renderBatchQueue();
     _renderCalendar();
   }
@@ -16305,27 +16333,112 @@
     }
   }
 
+  function _batchClearDayHighlights() {
+    document.querySelectorAll('[data-bq-drop-day].bq-day-hover').forEach((el) => {
+      el.classList.remove('bq-day-hover');
+    });
+    // Legacy inline styles from older drag code
+    document.querySelectorAll('[data-bq-drop-day]').forEach((el) => {
+      if (el.dataset.bqBaseBg != null) el.style.background = el.dataset.bqBaseBg;
+      if (el.dataset.bqBaseBorder != null) el.style.borderColor = el.dataset.bqBaseBorder;
+      else {
+        el.style.background = '';
+        el.style.borderColor = '';
+      }
+    });
+  }
+
+  function _batchRemoveDragGhost() {
+    document.querySelectorAll('#bq-drag-ghost, .bq-drag-ghost').forEach((g) => g.remove());
+  }
+
   function _batchDragStart(idx, e) {
+    const item = _batchFiles[idx];
+    if (!item) return;
     _batchDragIdx = idx;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(idx));
+    try { e.dataTransfer.setData('application/x-bq-idx', String(idx)); } catch (_) {}
+
+    _batchRemoveDragGhost();
+    const ghost = document.createElement('div');
+    ghost.id = 'bq-drag-ghost';
+    ghost.className = 'bq-drag-ghost';
+    const isVideo = item.file.type.startsWith('video/');
+    const label = (item.caption || item.file.name || 'Post').replace(/\s+/g, ' ').trim().slice(0, 28);
+    ghost.innerHTML = `
+      <div style="font-size:0.65rem;font-weight:700;color:#A78BFA;margin-bottom:4px;">Drop to schedule</div>
+      <div style="font-size:0.62rem;color:rgba(255,255,255,0.75);line-height:1.25;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${isVideo ? '🎬 ' : '🖼 '}${label}</div>`;
+    ghost.style.cssText = 'position:fixed;top:-1000px;left:-1000px;width:88px;height:88px;box-sizing:border-box;padding:7px;border-radius:8px;background:rgba(124,58,237,0.22);border:1.5px solid #7C3AED;box-shadow:0 10px 28px rgba(0,0,0,0.45);pointer-events:none;z-index:100000;font-family:var(--font-body),system-ui,sans-serif;';
+    document.body.appendChild(ghost);
+    try { e.dataTransfer.setDragImage(ghost, 44, 44); } catch (_) {}
+
+    const card = document.getElementById('bq-card-' + idx);
+    if (card) card.style.opacity = '0.45';
+  }
+
+  function _batchDragEnd() {
+    _batchClearDayHighlights();
+    _batchRemoveDragGhost();
+    if (_batchDragIdx != null && _batchFiles[_batchDragIdx]) {
+      const card = document.getElementById('bq-card-' + _batchDragIdx);
+      if (card) card.style.opacity = '';
+    }
+    _batchDragIdx = null;
+    // Rebuild day cells so no sticky purple borders remain
+    try { _renderCalendar(); } catch (_) {}
   }
 
   function _batchDragOverDay(date, e) {
     if (_batchDragIdx === null) return;
     e.preventDefault();
-    e.currentTarget.style.background = 'rgba(124,58,237,0.2)';
-    e.currentTarget.style.borderColor = '#7C3AED';
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
+    const cell = e.currentTarget;
+    if (!cell.classList.contains('bq-day-hover')) {
+      _batchClearDayHighlights();
+      if (!cell.dataset.bqBaseBg) cell.dataset.bqBaseBg = cell.style.background || '';
+      if (!cell.dataset.bqBaseBorder) cell.dataset.bqBaseBorder = cell.style.borderColor || '';
+      cell.classList.add('bq-day-hover');
+      cell.style.background = 'rgba(124,58,237,0.2)';
+      cell.style.borderColor = '#7C3AED';
+    }
+  }
+
+  function _batchDragLeaveDay(e) {
+    const cell = e.currentTarget;
+    const related = e.relatedTarget;
+    if (related && cell.contains(related)) return;
+    cell.classList.remove('bq-day-hover');
+    if (cell.dataset.bqBaseBg != null) cell.style.background = cell.dataset.bqBaseBg;
+    if (cell.dataset.bqBaseBorder != null) cell.style.borderColor = cell.dataset.bqBaseBorder;
   }
 
   function _batchDropOnDay(date, e) {
     e.preventDefault();
-    e.currentTarget.style.background = '';
-    e.currentTarget.style.borderColor = '';
-    if (_batchDragIdx === null || _batchDragIdx < 0) return;
-    _batchSetDate(_batchDragIdx, date);
+    e.stopPropagation();
+    _batchClearDayHighlights();
+    _batchRemoveDragGhost();
+    let idx = _batchDragIdx;
+    if (idx == null || idx < 0) {
+      const raw = e.dataTransfer.getData('application/x-bq-idx') || e.dataTransfer.getData('text/plain');
+      idx = parseInt(raw, 10);
+    }
     _batchDragIdx = null;
+    if (!Number.isFinite(idx) || !_batchFiles[idx]) return;
+    const card = document.getElementById('bq-card-' + idx);
+    if (card) card.style.opacity = '';
+    // Assign date + collapse so queue reflows upward
+    _batchFiles[idx].date = date;
+    _batchFiles[idx].expanded = false;
+    _batchFiles[idx].compact = true;
+    _batchExpandedIdx = null;
+    _renderBatchQueue();
+    _renderCalendar();
+    if (typeof showToast === 'function') {
+      const nice = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      showToast('Set for ' + nice + ' — hit Schedule when ready', 'success');
+    }
   }
 
   function _openBatchDayModal(date) {
@@ -16474,6 +16587,20 @@
       const shown = dayPosts.slice(0, 3);
       const extra = dayPosts.length - 3;
 
+      const batchOnDay = (_batchFiles || []).filter(f => f.date === dateKey && f.status !== 'scheduled');
+      const batchChips = batchOnDay.map((f, bi) => {
+        const realIdx = _batchFiles.indexOf(f);
+        const text = (f.caption || f.file.name || 'Batch').replace(/</g,'').slice(0, 22);
+        return `<div onclick="event.stopPropagation();_batchToggleExpand(${realIdx})"
+          title="From Batch Queue — click to edit"
+          style="display:flex;align-items:center;gap:3px;padding:2px 5px;margin-bottom:2px;
+                 background:rgba(124,58,237,0.18);border-left:2px solid #A78BFA;border-radius:0 4px 4px 0;
+                 cursor:pointer;border:0.5px dashed rgba(167,139,250,0.45);border-left:2px solid #A78BFA;">
+          <span style="font-size:0.6rem;flex-shrink:0;">⬆</span>
+          <span style="font-size:0.62rem;color:#E9D5FF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">${text}</span>
+        </div>`;
+      }).join('');
+
       const chips = shown.map(p => {
         const c = chipColors(p.status, p._source);
         const icon = platIcon(p.platform || p.platforms);
@@ -16493,16 +16620,17 @@
         ? `<div style="font-size:0.6rem;color:rgba(255,255,255,0.28);padding:1px 5px;">+${extra} more</div>`
         : '';
 
-      const hasPostsDot = dayPosts.length > 0;
-      cells += `<div style="min-height:96px;background:${isToday ? 'rgba(124,58,237,0.07)' : 'rgba(255,255,255,0.015)'};
+      const hasPostsDot = dayPosts.length > 0 || batchOnDay.length > 0;
+      cells += `<div data-bq-drop-day="${dateKey}" style="min-height:96px;background:${isToday ? 'rgba(124,58,237,0.07)' : 'rgba(255,255,255,0.015)'};
           border:1px solid ${isToday ? 'rgba(124,58,237,0.35)' : 'rgba(255,255,255,0.06)'};
-          border-radius:8px;padding:6px;overflow:hidden;cursor:pointer;position:relative;"
+          border-radius:8px;padding:6px;overflow:hidden;cursor:pointer;position:relative;transition:background 0.12s,border-color 0.12s;"
           ondragover="_batchDragOverDay('${dateKey}',event)"
+          ondragleave="_batchDragLeaveDay(event)"
           ondrop="_batchDropOnDay('${dateKey}',event)"
           onclick="openDatePanel('${dateKey}',window.__clientData||{content:_calPosts})">
         <div style="font-size:0.73rem;font-weight:${isToday ? '700' : '500'};
                     color:${isToday ? '#A78BFA' : 'rgba(255,255,255,0.35)'};margin-bottom:4px;">${d}</div>
-        ${chips}${moreEl}
+        ${batchChips}${chips}${moreEl}
         ${hasPostsDot ? `<span style="position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#7C3AED;"></span>` : ''}
       </div>`;
     }
@@ -16851,8 +16979,11 @@
   window._batchScheduleOne          = _batchScheduleOne;
   window._batchScheduleAllCaptioned = _batchScheduleAllCaptioned;
   window._batchDragStart            = _batchDragStart;
+  window._batchDragEnd              = _batchDragEnd;
   window._batchDragOverDay          = _batchDragOverDay;
+  window._batchDragLeaveDay         = _batchDragLeaveDay;
   window._batchDropOnDay            = _batchDropOnDay;
+  window._batchClearDayHighlights   = _batchClearDayHighlights;
   window._openBatchDayModal         = _openBatchDayModal;
   window._toggleMonthPicker         = _toggleMonthPicker;
   window._mpYearAdj                 = _mpYearAdj;
