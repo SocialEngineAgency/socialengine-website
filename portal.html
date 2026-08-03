@@ -15918,7 +15918,9 @@
     if (currency === 'USD' || country.includes('united states') || country === 'us') return 'America/New_York';
     if (currency === 'AUD') return 'Australia/Sydney';
     if (currency === 'CAD') return 'America/Toronto';
-    if (name.includes('opa') || name.includes('bunny')) return 'Europe/London';
+    if (name.includes('opa')) return 'Europe/London';
+    // Bunny Boiler — California (PST/PDT)
+    if (name.includes('bunny')) return 'America/Los_Angeles';
     return 'Europe/London';
   }
 
