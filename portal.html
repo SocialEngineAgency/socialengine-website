@@ -15999,6 +15999,31 @@
     } catch (_) { return tz; }
   }
 
+  /** YYYY-MM-DD in a specific IANA timezone (defaults to client TZ). */
+  function _dateKeyInTimezone(ts, timeZone) {
+    const tz = timeZone || _clientTimezone();
+    const d = ts instanceof Date ? ts : new Date(ts || Date.now());
+    if (Number.isNaN(d.getTime())) return String(ts || '').slice(0, 10);
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(d);
+    } catch (_) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+  }
+  function _clientTodayDateKey() {
+    return _dateKeyInTimezone(new Date(), _clientTimezone());
+  }
+  window._dateKeyInTimezone = _dateKeyInTimezone;
+  window._clientTodayDateKey = _clientTodayDateKey;
+
   function renderScheduleSection() {
     const content = document.getElementById('dash-content');
     if (!content) return;
@@ -16384,10 +16409,16 @@
     _batchCloseSchedulePicker();
     const tz = _clientTimezone();
     const tzLabel = _tzShortLabel(tz);
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    const dateVal = item.date || todayStr;
+    // Default to *client* today — browser local can still be yesterday (e.g. CA vs UK)
+    const clientToday = _clientTodayDateKey();
+    const dateVal = item.date || clientToday;
     const timeVal = item.time || '09:00';
+    let clientTodayNice = clientToday;
+    try {
+      clientTodayNice = new Date(clientToday + 'T12:00:00').toLocaleDateString('en-GB', {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+      });
+    } catch (_) {}
 
     const pop = document.createElement('div');
     pop.id = 'bq-schedule-popover';
@@ -16399,10 +16430,11 @@
           <button type="button" onclick="_batchCloseSchedulePicker()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:1.1rem;cursor:pointer;">✕</button>
         </div>
         <label style="display:block;font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Date</label>
-        <input id="bq-pop-date" type="date" value="${dateVal}" style="width:100%;box-sizing:border-box;margin-bottom:12px;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;">
+        <input id="bq-pop-date" type="date" value="${dateVal}" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;">
+        <button type="button" onclick="document.getElementById('bq-pop-date').value='${clientToday}'" style="margin-bottom:12px;padding:5px 10px;border-radius:6px;border:0.5px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.12);color:#C4B5FD;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Today for client · ${clientTodayNice}</button>
         <label style="display:block;font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Time</label>
         <input id="bq-pop-time" type="time" value="${timeVal}" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;">
-        <div style="font-size:0.72rem;color:rgba(167,139,250,0.9);margin-bottom:16px;line-height:1.4;">Client timezone: <strong>${tz}</strong> (${tzLabel}). Posts go out at this local time.</div>
+        <div style="font-size:0.72rem;color:rgba(167,139,250,0.9);margin-bottom:16px;line-height:1.4;">Posts use <strong>${tz}</strong> (${tzLabel}). Ignore the calendar’s built-in “Today” if your laptop is in another timezone — use the button above.</div>
         <div style="display:flex;gap:8px;">
           <button type="button" onclick="_batchCloseSchedulePicker()" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.6);font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Cancel</button>
           <button type="button" onclick="_batchApplySchedulePicker(${idx})" style="flex:1;padding:10px;border-radius:8px;border:none;background:#7C3AED;color:#fff;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save</button>
@@ -16410,12 +16442,6 @@
       </div>`;
     pop.addEventListener('click', (e) => { if (e.target === pop) _batchCloseSchedulePicker(); });
     document.body.appendChild(pop);
-    setTimeout(() => {
-      const d = document.getElementById('bq-pop-date');
-      if (d && typeof d.showPicker === 'function') {
-        try { d.showPicker(); } catch (_) {}
-      }
-    }, 50);
   }
 
   function _batchApplySchedulePicker(idx) {
@@ -16760,9 +16786,11 @@
 
     const monthLabel = new Date(_calYear, _calMonth, 1)
       .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const todayStr = (typeof _calLocalDateKey === 'function')
-      ? _calLocalDateKey(new Date())
-      : (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
+    const todayStr = (typeof _clientTodayDateKey === 'function')
+      ? _clientTodayDateKey()
+      : ((typeof _calLocalDateKey === 'function')
+        ? _calLocalDateKey(new Date())
+        : (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })());
     const firstDow = new Date(_calYear, _calMonth, 1).getDay();
     const daysInMonth = new Date(_calYear, _calMonth + 1, 0).getDate();
 
@@ -16933,11 +16961,19 @@
     _calMonth++; if (_calMonth > 11) { _calMonth = 0; _calYear++; } _renderCalendar();
   }
   function _calToday() {
-    const n = new Date(); _calYear = n.getFullYear(); _calMonth = n.getMonth(); _renderCalendar();
+    const key = (typeof _clientTodayDateKey === 'function') ? _clientTodayDateKey() : '';
+    if (key && /^\d{4}-\d{2}-\d{2}$/.test(key)) {
+      _calYear = parseInt(key.slice(0, 4), 10);
+      _calMonth = parseInt(key.slice(5, 7), 10) - 1;
+    } else {
+      const n = new Date(); _calYear = n.getFullYear(); _calMonth = n.getMonth();
+    }
+    _renderCalendar();
   }
-  /** YYYY-MM-DD in the viewer's local timezone */
+  /** YYYY-MM-DD in the *client* timezone (OPA = UK), not the laptop clock */
   function _calLocalDateKey(ts) {
-    if (!ts) return '';
+    if (!ts && ts !== 0) return '';
+    if (typeof _dateKeyInTimezone === 'function') return _dateKeyInTimezone(ts, _clientTimezone());
     const d = new Date(ts);
     if (Number.isNaN(d.getTime())) return String(ts).slice(0, 10);
     const y = d.getFullYear();
