@@ -16391,15 +16391,37 @@
       fd.append('scheduled_time', item.time || '09:00');
       const resp = await fetch(`${API}/api/studio/quick-schedule`, {
         method: 'POST',
-        headers: { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+        headers: { 'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail!=='undefined'?clientEmail:'') || '', 'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash!=='undefined'?clientHash:'') || '' },
         body: fd,
       });
       const data = await resp.json();
       if (data.success) {
         _batchFiles[idx].status = 'scheduled';
+        // Optimistic calendar entry so the day panel shows it immediately
+        if (data.recordId || item.date) {
+          _calPosts = _calPosts || [];
+          _calPosts.push({
+            id: data.recordId || ('local-' + Date.now()),
+            fields: {
+              scheduled_date: item.date,
+              scheduled_time: item.time || '09:00',
+              full_post_text: item.caption || '',
+              status: 'Approved',
+              platform: (item.platforms || []).join(','),
+              content_type: item.file.type.startsWith('video/') ? 'video' : 'image',
+              video_url: item.file.type.startsWith('video/') ? (data.cdnUrl || '') : '',
+              image_url: !item.file.type.startsWith('video/') ? (data.cdnUrl || '') : '',
+            },
+          });
+        }
         _renderBatchQueue();
+        _renderCalendar();
         _loadCalendar({ silent: true });
         if (typeof showToast === 'function') showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) ✅`);
+        // Refresh open day panel if viewing this date
+        try {
+          if (window._datePanelDate === item.date && typeof openDatePanel === 'function') openDatePanel(item.date);
+        } catch (_) {}
       } else {
         if (typeof showToast === 'function') showToast('Schedule failed: ' + (data.error || 'Unknown'));
         if (schedBtn) { schedBtn.disabled = false; schedBtn.textContent = 'Schedule'; }
@@ -16579,7 +16601,10 @@
     if (!el) return;
     if (!opts.silent) el.innerHTML = '<div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div>';
     try {
-      const hdrs = { 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' };
+      const hdrs = {
+        'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+        'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+      };
       const [cdResp, histResp] = await Promise.all([
         fetch(`${API}/api/client-data`,      { headers: hdrs }),
         fetch(`${API}/api/calendar-history`, { headers: hdrs }),
@@ -16605,7 +16630,9 @@
 
     const monthLabel = new Date(_calYear, _calMonth, 1)
       .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = (typeof _calLocalDateKey === 'function')
+      ? _calLocalDateKey(new Date())
+      : (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })();
     const firstDow = new Date(_calYear, _calMonth, 1).getDay();
     const daysInMonth = new Date(_calYear, _calMonth + 1, 0).getDate();
 
@@ -16676,7 +16703,7 @@
       const shown = dayPosts.slice(0, 3);
       const extra = dayPosts.length - 3;
 
-      const batchOnDay = (_batchFiles || []).filter(f => f.date === dateKey && f.status !== 'scheduled');
+      const batchOnDay = (_batchFiles || []).filter(f => f.date === dateKey);
       const batchChips = batchOnDay.map((f, bi) => {
         const realIdx = _batchFiles.indexOf(f);
         const text = (f.caption || f.file.name || 'Batch').replace(/</g,'').slice(0, 22);
@@ -17168,6 +17195,26 @@
       return (f.scheduled_date || f.scheduledDate || '').startsWith(dateStr);
     }).map(p => ({ ...(p.fields || p), id: p.id, _source: 'content' }));
 
+    // Batch Queue items assigned to this day (pending or just scheduled)
+    const batchOnDay = (typeof _batchFiles !== 'undefined' ? _batchFiles : []).map((f, idx) => ({ f, idx }))
+      .filter(({ f }) => f && f.date === dateStr)
+      .map(({ f, idx }) => ({
+        id: 'batch-' + idx,
+        _batchIdx: idx,
+        _source: 'batch',
+        full_post_text: f.caption || '',
+        caption: f.caption || '',
+        platform: (f.platforms || []).join(', ') || 'Instagram',
+        platforms: f.platforms || ['Instagram'],
+        scheduled_date: f.date,
+        scheduled_time: f.time || '09:00',
+        status: f.status === 'scheduled' ? 'Scheduled' : (f.caption ? 'Ready' : 'Pending'),
+        content_type: (f.file && f.file.type && f.file.type.startsWith('video/')) ? 'video' : 'image',
+        video_url: (f.file && f.file.type && f.file.type.startsWith('video/')) ? f.objectUrl : '',
+        image_url: (f.file && f.file.type && !f.file.type.startsWith('video/')) ? f.objectUrl : '',
+        _fileName: f.file ? f.file.name : 'Batch upload',
+      }));
+
     // Dedupe IG+FB cross-posts (same caption + media type)
     const normCap = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 72);
     const socialOnDay = [];
@@ -17217,7 +17264,15 @@
       return (s === 'approved' || s === 'ready') && !(f.scheduled_date || f.scheduledDate);
     }).map(p => ({ ...(p.fields || p), id: p.id }));
 
-    const allOnDay = [...socialOnDay, ...contentOnDay];
+    // Prefer Airtable content; still show batch items not yet reflected in _calPosts
+    const contentKeys = new Set(contentOnDay.map(p => String(p.id)));
+    const batchExtra = batchOnDay.filter(b => {
+      // Hide batch row once a matching Airtable caption exists for this day
+      const cap = String(b.caption || '').trim().slice(0, 40);
+      if (!cap) return true;
+      return !contentOnDay.some(c => String(c.full_post_text || c.caption || '').trim().slice(0, 40) === cap);
+    });
+    const allOnDay = [...socialOnDay, ...contentOnDay, ...batchExtra];
     window._datePanelPosts = allOnDay;
     window._datePanelDate = dateStr;
 
@@ -17453,13 +17508,40 @@
       allOnDay.forEach((p, idx) => {
         const badge  = platBadge(p);
         const caption = p.caption || p.full_post_text || '';
-        const thumb  = p.thumbnail_url || p.image_url || '';
+        const thumb  = p.thumbnail_url || p.image_url || p.video_url || '';
         const isSocial = p._source === 'social';
+        const isBatch = p._source === 'batch';
         const metrics = [];
-        if (p.likes    > 0) metrics.push('\u2764 ' + Number(p.likes).toLocaleString());
-        if (p.comments > 0) metrics.push('\ud83d\udcac ' + Number(p.comments).toLocaleString());
-        if (p.views    > 0) metrics.push('\u25b6 ' + Number(p.views).toLocaleString());
-        if (p.shares   > 0) metrics.push('\u2197 ' + Number(p.shares).toLocaleString());
+        if (p.likes    > 0) metrics.push('❤ ' + Number(p.likes).toLocaleString());
+        if (p.comments > 0) metrics.push('💬 ' + Number(p.comments).toLocaleString());
+        if (p.views    > 0) metrics.push('▶ ' + Number(p.views).toLocaleString());
+        if (p.shares   > 0) metrics.push('↗ ' + Number(p.shares).toLocaleString());
+
+        if (isBatch) {
+          const timeLabel = p.scheduled_time || '09:00';
+          const st = String(p.status || 'Ready');
+          const stColor = st === 'Scheduled' ? '#86EFAC' : '#C4B5FD';
+          const media = p.video_url
+            ? `<video src="${String(p.video_url).replace(/"/g,'&quot;')}" muted preload="metadata" playsinline style="width:100%;height:110px;object-fit:cover;display:block;background:#000;"></video>`
+            : (thumb ? `<img src="${String(thumb).replace(/"/g,'&quot;')}" style="width:100%;height:110px;object-fit:cover;display:block;" onerror="this.style.display='none'">` : '');
+          html += `<div style="background:rgba(124,58,237,0.08);border:1px dashed rgba(167,139,250,0.45);border-radius:12px;margin-bottom:10px;overflow:hidden;">
+            ${media}
+            <div style="padding:12px 13px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap;">
+                <span style="font-size:0.62rem;font-weight:800;color:#C4B5FD;letter-spacing:0.04em;">BATCH</span>
+                <span style="font-size:0.67rem;font-weight:700;color:${stColor};text-transform:uppercase;letter-spacing:0.05em;">${st}</span>
+                <span style="margin-left:auto;font-size:0.68rem;color:rgba(255,255,255,0.45);">${timeLabel}</span>
+              </div>
+              <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(p._fileName || 'Upload').replace(/</g,'&lt;')}</div>
+              ${caption ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : '<div style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-bottom:10px;">No caption yet</div>'}
+              <div style="display:flex;gap:6px;">
+                <button onclick="closeDatePanel();_batchToggleExpand(${p._batchIdx})" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Edit in queue</button>
+                ${st !== 'Scheduled' ? `<button onclick="_batchScheduleOne(${p._batchIdx});setTimeout(()=>openDatePanel('${dateStr}'),800);" style="flex:1;padding:8px;background:#7C3AED;border:none;border-radius:8px;color:#fff;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>` : `<span style="flex:1;padding:8px;text-align:center;font-size:0.72rem;color:#86EFAC;font-weight:600;">In calendar ✓</span>`}
+              </div>
+            </div>
+          </div>`;
+          return;
+        }
 
         html += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;overflow:hidden;">
           ${thumb ? `<img src="${thumb}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;" onclick="_datePanelView(${idx})" onerror="this.style.display='none'">` : ''}
@@ -17467,18 +17549,19 @@
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap;">
               <span style="font-size:0.62rem;font-weight:800;color:${badge.color};letter-spacing:0.04em;">${badge.icon}</span>
               <span style="font-size:0.67rem;font-weight:700;color:${badge.color};text-transform:uppercase;letter-spacing:0.05em;">${badge.label}</span>
-              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">\u00b7 ${p.media_type}</span>` : ''}
-              ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : ''}
+              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">· ${p.media_type}</span>` : ''}
+              ${p.scheduled_time ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.35);">· ${p.scheduled_time}</span>` : ''}
+              ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(124,58,237,0.12);color:#C4B5FD;border-radius:4px;border:1px solid rgba(124,58,237,0.25);">${String(p.status || 'Scheduled')}</span>`}
             </div>
             ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : ''}
             ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : (isSocial ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.25);margin-bottom:10px;">No engagement yet</div>` : '')}
             <div style="display:flex;flex-direction:column;gap:7px;">
-              <button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
+              ${isSocial ? `<button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
               <div style="display:flex;gap:6px;">
                 <button id="remix-btn-${idx}" onclick="_datePanelRemix(${idx})" style="flex:1;padding:7px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:7px;color:#C4B5FD;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Remix</button>
                 <button onclick="_datePanelPromote(${idx})" style="flex:1;padding:7px 8px;background:rgba(236,72,153,0.12);border:1px solid rgba(236,72,153,0.28);border-radius:7px;color:#F9A8D4;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Promote</button>
                 <button onclick="_datePanelWhy(${idx})" style="flex:1;padding:7px 8px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:7px;color:#A5B4FC;font-size:0.71rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
-              </div>
+              </div>` : `<button onclick="_datePanelView(${idx})" style="width:100%;padding:9px 12px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;color:#E9D5FF;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Open post</button>`}
               <div style="display:flex;gap:6px;">
                 <button onclick="_datePanelView(${idx})" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">View</button>
                 ${isSocial && p.permalink ? `<a href="${p.permalink}" target="_blank" rel="noopener" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.45);font-size:0.7rem;font-weight:600;text-decoration:none;text-align:center;font-family:var(--font-body);">Open</a>` : ''}
