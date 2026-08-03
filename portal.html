@@ -15900,9 +15900,34 @@
   // ━━━ SCHEDULE SECTION ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   // ── Batch Queue State ─────────────────────────────────────────────────────
-  let _batchFiles   = []; // { file, objectUrl, caption, platforms, date, time, status, description, expanded }
+  let _batchFiles   = []; // { file, objectUrl, caption, platforms, date, time, status, description, expanded, compact }
   let _batchDragIdx = null;
   let _batchExpandedIdx = null;
+
+  function _clientTimezone() {
+    const c = (window.__clientData || window.clientData || {}).client
+      || (window.__clientData || {}).fields
+      || {};
+    const fields = c.fields || c;
+    const explicit = String(fields.timezone || fields.time_zone || fields.tz || '').trim();
+    if (explicit) return explicit;
+    const country = String(fields.country || fields.market || fields.region || '').toLowerCase();
+    const currency = String(fields.currency || fields.shopify_currency || fields.shop_currency || '').toUpperCase();
+    const name = String(fields.business_name || c.business_name || '').toLowerCase();
+    if (country.includes('uk') || country.includes('united kingdom') || country === 'gb' || currency === 'GBP') return 'Europe/London';
+    if (currency === 'USD' || country.includes('united states') || country === 'us') return 'America/New_York';
+    if (currency === 'AUD') return 'Australia/Sydney';
+    if (currency === 'CAD') return 'America/Toronto';
+    if (name.includes('opa') || name.includes('bunny')) return 'Europe/London';
+    return 'Europe/London';
+  }
+
+  function _tzShortLabel(tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'short' }).formatToParts(new Date());
+      return parts.find(p => p.type === 'timeZoneName')?.value || tz;
+    } catch (_) { return tz; }
+  }
 
   function renderScheduleSection() {
     const content = document.getElementById('dash-content');
@@ -16122,6 +16147,7 @@
       const isCompact = !!item.compact && hasDate && !expanded && !isScheduled;
 
       if (isCompact) {
+        const timeLabel = item.time || '09:00';
         return `<div draggable="true" ondragstart="_batchDragStart(${idx},event)" ondragend="_batchDragEnd()" id="bq-card-${idx}"
           style="background:rgba(124,58,237,0.08);border:0.5px solid rgba(124,58,237,0.3);border-radius:9px;padding:8px 10px;margin-bottom:8px;cursor:grab;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -16129,9 +16155,11 @@
               ? `<video src="${_bqEsc(item.objectUrl)}" muted preload="metadata" playsinline style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#111;"></video>`
               : `<img src="${_bqEsc(item.objectUrl)}" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;">`}
             <div style="flex:1;min-width:0;">
-              <div style="font-size:0.72rem;font-weight:700;color:#E9D5FF;">${dateLabel}</div>
+              <div style="font-size:0.72rem;font-weight:700;color:#E9D5FF;cursor:pointer;" onclick="event.stopPropagation();_batchPickDate(${idx})">${dateLabel} · ${timeLabel}</div>
+              <div style="font-size:0.62rem;color:rgba(255,255,255,0.35);">${_bqEsc(_tzShortLabel(_clientTimezone()))}</div>
               <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_bqEsc((item.caption||item.file.name||'').slice(0,42))}</div>
             </div>
+            <button type="button" onclick="event.stopPropagation();_batchPickDate(${idx})" style="padding:4px 7px;border-radius:6px;border:0.5px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.12);color:#C4B5FD;font-size:0.65rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Time</button>
             <button type="button" onclick="event.stopPropagation();_batchToggleExpand(${idx})" style="padding:4px 7px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.5);font-size:0.65rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Edit</button>
             <button type="button" onclick="event.stopPropagation();_batchScheduleOne(${idx})" style="padding:5px 10px;border-radius:6px;border:none;background:#7C3AED;color:#fff;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>
             <button type="button" onclick="event.stopPropagation();_batchRemove(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.25);cursor:pointer;font-size:0.9rem;padding:0 2px;" title="Remove">✕</button>
@@ -16156,12 +16184,12 @@
         <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">${platBtns}</div>
 
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+          ${!isScheduled ? `<span draggable="true" ondragstart="_batchDragStart(${idx},event)" ondragend="_batchDragEnd()" title="Drag to a calendar day" style="padding:4px 7px;border-radius:5px;border:0.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.45);font-size:0.68rem;cursor:grab;user-select:none;font-family:var(--font-body);">⠿ Drag</span>` : ''}
           ${!isScheduled ? `<button onclick="event.stopPropagation();_batchGenerateOne(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:${hasCap?'rgba(34,197,94,0.08)':'rgba(124,58,237,0.12)'};border:0.5px solid ${hasCap?'rgba(34,197,94,0.25)':'rgba(124,58,237,0.3)'};border-radius:5px;color:${hasCap?'#86efac':'#a78bfa'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap?'↺ Re-generate':'✨ Write caption'}</button>` : ''}
-          <button onclick="event.stopPropagation();_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${dateLabel}</button>
-          <input type="date" id="bq-datepick-${idx}" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="_batchSetDate(${idx},this.value)">
+          <button type="button" onclick="event.stopPropagation();_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${hasDate ? (dateLabel + ' · ' + (item.time || '09:00')) : 'Set date & time'}</button>
           ${hasCap && !isScheduled ? `<button onclick="event.stopPropagation();_batchScheduleOne(${idx})" style="padding:4px 10px;background:#7C3AED;border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Schedule</button>` : ''}
-          ${!isScheduled && !expanded ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.18);${hasCap?'':'margin-left:auto;'}">⠿ drag to date</span>` : ''}
         </div>
+        ${!isScheduled ? `<div style="margin-top:6px;font-size:0.62rem;color:rgba(255,255,255,0.28);">Times use ${_bqEsc(_tzShortLabel(_clientTimezone()))} (${_bqEsc(_clientTimezone())})</div>` : ''}
       </div>`;
     }).join('');
 
@@ -16220,17 +16248,74 @@
     _renderBatchQueue();
   }
 
-  function _batchPickDate(idx) {
-    const input = document.getElementById('bq-datepick-' + idx);
-    if (!input) return;
-    input.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:auto;z-index:9999;width:1px;height:1px;';
-    input.click();
-    setTimeout(() => { if (input) input.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;'; }, 1000);
+  function _batchCloseSchedulePicker() {
+    const el = document.getElementById('bq-schedule-popover');
+    if (el) el.remove();
   }
 
-  function _batchSetDate(idx, date) {
+  function _batchPickDate(idx) {
+    const item = _batchFiles[idx];
+    if (!item) return;
+    _batchCloseSchedulePicker();
+    const tz = _clientTimezone();
+    const tzLabel = _tzShortLabel(tz);
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const dateVal = item.date || todayStr;
+    const timeVal = item.time || '09:00';
+
+    const pop = document.createElement('div');
+    pop.id = 'bq-schedule-popover';
+    pop.style.cssText = 'position:fixed;inset:0;z-index:10060;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+    pop.innerHTML = `
+      <div style="width:min(360px,100%);background:#111827;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:18px;box-shadow:0 24px 60px rgba(0,0,0,0.55);" onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-size:0.95rem;font-weight:700;color:#fff;">Set date & time</div>
+          <button type="button" onclick="_batchCloseSchedulePicker()" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:1.1rem;cursor:pointer;">✕</button>
+        </div>
+        <label style="display:block;font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Date</label>
+        <input id="bq-pop-date" type="date" value="${dateVal}" style="width:100%;box-sizing:border-box;margin-bottom:12px;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;">
+        <label style="display:block;font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Time</label>
+        <input id="bq-pop-time" type="time" value="${timeVal}" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;">
+        <div style="font-size:0.72rem;color:rgba(167,139,250,0.9);margin-bottom:16px;line-height:1.4;">Client timezone: <strong>${tz}</strong> (${tzLabel}). Posts go out at this local time.</div>
+        <div style="display:flex;gap:8px;">
+          <button type="button" onclick="_batchCloseSchedulePicker()" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.6);font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Cancel</button>
+          <button type="button" onclick="_batchApplySchedulePicker(${idx})" style="flex:1;padding:10px;border-radius:8px;border:none;background:#7C3AED;color:#fff;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save</button>
+        </div>
+      </div>`;
+    pop.addEventListener('click', (e) => { if (e.target === pop) _batchCloseSchedulePicker(); });
+    document.body.appendChild(pop);
+    setTimeout(() => {
+      const d = document.getElementById('bq-pop-date');
+      if (d && typeof d.showPicker === 'function') {
+        try { d.showPicker(); } catch (_) {}
+      }
+    }, 50);
+  }
+
+  function _batchApplySchedulePicker(idx) {
+    const dateEl = document.getElementById('bq-pop-date');
+    const timeEl = document.getElementById('bq-pop-time');
+    const date = dateEl?.value || '';
+    const time = timeEl?.value || '09:00';
+    if (!date) {
+      if (typeof showToast === 'function') showToast('Pick a date first', 'warning');
+      return;
+    }
+    _batchSetDate(idx, date, time);
+    _batchCloseSchedulePicker();
+    const tz = _clientTimezone();
+    if (typeof showToast === 'function') {
+      const nice = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      showToast(`Set for ${nice} at ${time} (${_tzShortLabel(tz)})`, 'success');
+    }
+  }
+
+  function _batchSetDate(idx, date, time) {
     if (_batchFiles[idx]) {
       _batchFiles[idx].date = date;
+      if (time) _batchFiles[idx].time = time;
+      if (!_batchFiles[idx].time) _batchFiles[idx].time = '09:00';
       _batchFiles[idx].compact = true;
       _batchFiles[idx].expanded = false;
     }
@@ -16312,7 +16397,7 @@
         _batchFiles[idx].status = 'scheduled';
         _renderBatchQueue();
         _loadCalendar({ silent: true });
-        if (typeof showToast === 'function') showToast('Post scheduled! ✅');
+        if (typeof showToast === 'function') showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) ✅`);
       } else {
         if (typeof showToast === 'function') showToast('Schedule failed: ' + (data.error || 'Unknown'));
         if (schedBtn) { schedBtn.disabled = false; schedBtn.textContent = 'Schedule'; }
@@ -16430,6 +16515,7 @@
     if (card) card.style.opacity = '';
     // Assign date + collapse so queue reflows upward
     _batchFiles[idx].date = date;
+    if (!_batchFiles[idx].time) _batchFiles[idx].time = '09:00';
     _batchFiles[idx].expanded = false;
     _batchFiles[idx].compact = true;
     _batchExpandedIdx = null;
@@ -16437,7 +16523,8 @@
     _renderCalendar();
     if (typeof showToast === 'function') {
       const nice = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      showToast('Set for ' + nice + ' — hit Schedule when ready', 'success');
+      const t = _batchFiles[idx].time || '09:00';
+      showToast(`Set for ${nice} at ${t} (${_tzShortLabel(_clientTimezone())}) — hit Schedule when ready`, 'success');
     }
   }
 
@@ -16968,6 +17055,9 @@
   window._batchTogglePlatform       = _batchTogglePlatform;
   window._batchPickDate             = _batchPickDate;
   window._batchSetDate              = _batchSetDate;
+  window._batchCloseSchedulePicker  = _batchCloseSchedulePicker;
+  window._batchApplySchedulePicker  = _batchApplySchedulePicker;
+  window._clientTimezone            = _clientTimezone;
   window._batchRemove               = _batchRemove;
   window._batchGenerateOne          = _batchGenerateOne;
   window._batchGenerateAll          = _batchGenerateAll;
