@@ -16417,7 +16417,11 @@
         _renderBatchQueue();
         _renderCalendar();
         _loadCalendar({ silent: true });
-        if (typeof showToast === 'function') showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) ✅`);
+        if (typeof showToast === 'function') {
+          if (data.published) showToast(`Published to socials ✅ (${item.date} ${item.time || '09:00'})`, 'success');
+          else if (data.publish_error) showToast(`Saved to calendar — publish retry soon: ${data.publish_error}`, 'warning');
+          else showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) — goes live at that time`, 'success');
+        }
         // Refresh open day panel if viewing this date
         try {
           if (window._datePanelDate === item.date && typeof openDatePanel === 'function') openDatePanel(item.date);
@@ -17186,9 +17190,14 @@
     const isPast  = dateStr < todayLocal;
     const isToday = dateStr === todayLocal;
 
-    const socialRaw = (_calHistoryPosts || []).filter(p =>
-      (window._calLocalDateKey ? _calLocalDateKey(p.timestamp) : String(p.timestamp || '').slice(0, 10)) === dateStr
-    ).map(p => ({ ...p, _source: 'social' }));
+    const socialRaw = (_calHistoryPosts || []).filter(p => {
+      const day = (window._calLocalDateKey ? _calLocalDateKey(p.timestamp) : String(p.timestamp || '').slice(0, 10));
+      if (day !== dateStr) return false;
+      // Drop empty history stubs (no caption + no media) — they pollute the day panel
+      const hasCap = !!(p.caption || p.full_post_text);
+      const hasMedia = !!(p.thumbnail_url || p.image_url || p.media_url || p.permalink);
+      return hasCap || hasMedia;
+    }).map(p => ({ ...p, _source: 'social' }));
 
     const contentOnDay = (_calPosts || []).filter(p => {
       const f = p.fields || p;
@@ -17272,7 +17281,8 @@
       if (!cap) return true;
       return !contentOnDay.some(c => String(c.full_post_text || c.caption || '').trim().slice(0, 40) === cap);
     });
-    const allOnDay = [...socialOnDay, ...contentOnDay, ...batchExtra];
+    // Content + batch first (what you just scheduled), then live social history
+    const allOnDay = [...contentOnDay, ...batchExtra, ...socialOnDay];
     window._datePanelPosts = allOnDay;
     window._datePanelDate = dateStr;
 
@@ -17553,7 +17563,7 @@
               ${p.scheduled_time ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.35);">· ${p.scheduled_time}</span>` : ''}
               ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(124,58,237,0.12);color:#C4B5FD;border-radius:4px;border:1px solid rgba(124,58,237,0.25);">${String(p.status || 'Scheduled')}</span>`}
             </div>
-            ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : ''}
+            ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : (isSocial ? '' : `<div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">Scheduled content · ${String(p.content_type || 'post')} · ${String(p.scheduled_time || '')}</div>`)}
             ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : (isSocial ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.25);margin-bottom:10px;">No engagement yet</div>` : '')}
             <div style="display:flex;flex-direction:column;gap:7px;">
               ${isSocial ? `<button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
