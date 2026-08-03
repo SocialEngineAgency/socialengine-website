@@ -3621,7 +3621,10 @@
       if (direct) return direct;
       const label = String(post.post_label || '');
       const m = label.match(/@\s*(\d{1,2}:\d{2})/);
-      return m ? m[1] : '';
+      if (m) return m[1];
+      const theme = String(post.theme || '');
+      const tm = theme.match(/sched:(\d{1,2}:\d{2})/i);
+      return tm ? tm[1] : '';
     }
     window.resolveScheduledTime = resolveScheduledTime;
 
@@ -16448,11 +16451,13 @@
     if (schedBtn) { schedBtn.disabled = true; schedBtn.textContent = 'Scheduling…'; }
     try {
       const fd = new FormData();
-      fd.append('file', item.file, item.file.name);
+      // Text fields FIRST — putting the video before caption used to lose the
+      // caption when naive multipart parsers split on binary boundary collisions.
       fd.append('caption', item.caption || '');
       fd.append('platforms', item.platforms.join(','));
       fd.append('scheduled_date', item.date);
       fd.append('scheduled_time', item.time || '09:00');
+      fd.append('file', item.file, item.file.name);
       const resp = await fetch(`${API}/api/studio/quick-schedule`, {
         method: 'POST',
         headers: { 'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail!=='undefined'?clientEmail:'') || '', 'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash!=='undefined'?clientHash:'') || '' },
