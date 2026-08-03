@@ -3589,6 +3589,63 @@
     }
     window.resolveImageUrl = resolveImageUrl;
 
+    /** Atlas/OSS URLs block browser referers — route through API proxy for playback. */
+    function resolvePlayableVideoUrl(url) {
+      if (!url || typeof url !== 'string') return '';
+      const u = url.trim();
+      if (!/^https?:\/\//i.test(u)) return u.startsWith('blob:') ? u : '';
+      if (u.includes('/api/video-proxy') || u.includes('/api/media/')) return u;
+      if (/aliyuncs\.com|atlascloud\.ai|higgsfield\.ai|cloudfront\.net|storage\.googleapis\.com/i.test(u)) {
+        const base = (typeof API !== 'undefined' && API) ? API : (window.API || '');
+        return base + '/api/video-proxy?url=' + encodeURIComponent(u);
+      }
+      return u;
+    }
+    window.resolvePlayableVideoUrl = resolvePlayableVideoUrl;
+
+    function contentFormatKey(post) {
+      const ct = String(post?.content_type || '').toLowerCase();
+      const pl = String(post?.post_label || '').toLowerCase();
+      const hasVid = !!(post?.video_url && (/^https?:\/\//i.test(String(post.video_url)) || String(post.video_url).startsWith('blob:')));
+      if (ct.includes('reel') || pl.includes('reel')) return 'reel';
+      if (hasVid || ct.includes('video')) return 'video';
+      if (ct.includes('carousel')) return 'carousel';
+      if (ct.includes('story')) return 'story';
+      return 'static';
+    }
+    window.contentFormatKey = contentFormatKey;
+
+    function resolveScheduledTime(post) {
+      if (!post) return '';
+      const direct = String(post.scheduled_time || '').trim();
+      if (direct) return direct;
+      const label = String(post.post_label || '');
+      const m = label.match(/@\s*(\d{1,2}:\d{2})/);
+      return m ? m[1] : '';
+    }
+    window.resolveScheduledTime = resolveScheduledTime;
+
+    function formatSchedDateTime(dateStr, timeStr) {
+      if (!dateStr) return '';
+      const d = String(dateStr).slice(0, 10);
+      let dateLabel = '';
+      try {
+        dateLabel = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      } catch (_) { dateLabel = d; }
+      const t = String(timeStr || '').trim();
+      if (!t) return dateLabel;
+      const m = t.match(/^(\d{1,2}):(\d{2})/);
+      if (m) {
+        let h = parseInt(m[1], 10);
+        const min = m[2];
+        const ap = h >= 12 ? 'PM' : 'AM';
+        h = h % 12; if (h === 0) h = 12;
+        return dateLabel + ' · ' + h + ':' + min + ' ' + ap;
+      }
+      return dateLabel + ' · ' + t;
+    }
+    window.formatSchedDateTime = formatSchedDateTime;
+
     window.openStudioModal = function(postIndex) {
       studioCurrentIndex = postIndex;
       const modal = document.getElementById('studio-modal');
@@ -3628,21 +3685,21 @@
       const isRegenerating = status === 'Regenerating';
       const fullText = post.full_post_text || post.caption || '';
       const hookLine = post.hook_line || '';
-      const isReel = (post.content_type || '').includes('reel') || (post.post_label || '').includes('reel');
+      const formatKey = contentFormatKey(post);
+      const isReel = formatKey === 'reel' || formatKey === 'video';
       const imageUrl = resolveImageUrl(post);
       const hasImage = !!imageUrl;
-      const videoUrl = post.video_url || '';
-      const hasVideo = videoUrl && videoUrl.startsWith('http');
+      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
+      const hasVideo = !!videoUrl;
       const hasVideoBrief = hookLine.includes('🎬');
       const regenCount = parseInt(post.regen_count || 0);
       const regenLeft = Math.max(0, 3 - regenCount);
-      const date = post.scheduled_date ? new Date(post.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      const date = formatSchedDateTime(post.scheduled_date, resolveScheduledTime(post));
       const rescheduleHTML = post.scheduled_date ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span style="font-size:0.75rem;color:rgba(255,255,255,0.5);">Scheduled: ${date}</span><input type="date" id="reschedule-date-${post.id}" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.7rem;font-family:var(--font-body);cursor:pointer;outline:none;margin-left:auto;" onchange="reschedulePost('${post.id}',this.value)"><span style="font-size:0.6rem;color:rgba(255,255,255,0.3);">Change</span></div>` : '';
-      const formatKey = isReel ? 'reel' : (post.content_type || '').includes('carousel') ? 'carousel' : 'static';
       const formatBadge = FORMAT_BADGE[formatKey] || FORMAT_BADGE.static;
       const icon = PLATFORM_ICONS[platform] || '📱';
-      const ctypeRaw = (post.content_type || '').replace(/^(reel|static|carousel|story)_/, '');
-      const ctypeLabel = ctypeRaw.replace(/_/g, ' ');
+      const ctypeRaw = (post.content_type || '').replace(/^(reel|static|carousel|story|video)_/, '');
+      const ctypeLabel = (ctypeRaw === 'video' || ctypeRaw === 'image') ? '' : ctypeRaw.replace(/_/g, ' ');
       const statusClass = status.toLowerCase().replace(/\s+/g, '-').replace('ready-for-review','pending');
       const matchedRegenProduct = regenResolveProductFromCatalog(post);
       const regenCatalogProducts = Array.isArray(_vcShopifyProducts) ? _vcShopifyProducts.slice(0, 250) : [];
@@ -4950,6 +5007,7 @@
     };
     const FORMAT_BADGE = {
       reel: { label: 'Reel', color: 'var(--color-surface-2)', textColor: 'var(--color-text-muted)' },
+      video: { label: 'Video', color: 'var(--color-surface-2)', textColor: 'var(--color-text-muted)' },
       carousel: { label: 'Carousel', color: 'var(--color-surface-2)', textColor: 'var(--color-text-muted)' },
       static: { label: 'Static', color: 'var(--color-surface-2)', textColor: 'var(--color-text-muted)' },
       story: { label: 'Story', color: 'var(--color-surface-2)', textColor: 'var(--color-text-muted)' },
@@ -4958,15 +5016,18 @@
     function renderStudioCard(post, index) {
       const platform = (post.platform || 'instagram').toLowerCase();
       const status = post.status || 'Draft';
-      const isReel = (post.content_type || '').includes('reel') || (post.post_label || '').includes('reel');
+      const formatKey = contentFormatKey(post);
+      const isReel = formatKey === 'reel' || formatKey === 'video';
       const imageUrl = resolveImageUrl(post);
       const hasImage = !!imageUrl;
-      const videoUrl = post.video_url || '';
-      const hasVideo = videoUrl && videoUrl.startsWith('http');
+      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
+      const hasVideo = !!videoUrl;
       const fullText = post.full_post_text || post.caption || '';
       const hashtags = fullText.match(/#[\w]+/g) || [];
-      const date = post.scheduled_date ? new Date(post.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-      const formatKey = isReel ? 'reel' : (post.content_type || '').includes('carousel') ? 'carousel' : 'static';
+      const date = (() => {
+        const full = formatSchedDateTime(post.scheduled_date, resolveScheduledTime(post));
+        return full.replace(/, \d{4}/, '') || '';
+      })();
       const formatBadge = FORMAT_BADGE[formatKey] || FORMAT_BADGE.static;
       const icon = PLATFORM_ICONS[platform] || '📱';
       const statusClass = status.toLowerCase().replace(/\s+/g, '-').replace('ready-for-review','pending');
@@ -5021,7 +5082,7 @@
       if (isSchedulable && schedDate) {
         scheduleFooterHtml = '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
           + '<span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + status + '</span>'
-          + '<span style="font-size:0.68rem;color:var(--color-text-muted);">Scheduled: ' + schedDate
+          + '<span style="font-size:0.68rem;color:var(--color-text-muted);">Scheduled: ' + (formatSchedDateTime(schedDate, resolveScheduledTime(post)) || schedDate)
           + ' <button onclick="event.stopPropagation();scheduleFromContent(\'' + safePostId + '\',\'' + safeSchedDate + '\')" style="background:none;border:none;color:#7C3AED;font-size:0.68rem;cursor:pointer;text-decoration:underline;">View in calendar</button></span>'
           + '</div>';
       } else if (isSchedulable) {
@@ -5083,14 +5144,17 @@
     function renderStudioListItem(post, index) {
       const platform = (post.platform || 'instagram').toLowerCase();
       const status = post.status || 'Draft';
-      const isReel = (post.content_type || '').includes('reel') || (post.post_label || '').includes('reel');
+      const formatKey = contentFormatKey(post);
+      const isReel = formatKey === 'reel' || formatKey === 'video';
       const imageUrl = resolveImageUrl(post);
       const hasImage = !!imageUrl;
-      const videoUrl = post.video_url || '';
-      const hasVideo = videoUrl && videoUrl.startsWith('http');
+      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
+      const hasVideo = !!videoUrl;
       const fullText = post.full_post_text || post.caption || '';
-      const date = post.scheduled_date ? new Date(post.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-      const formatKey = isReel ? 'reel' : (post.content_type || '').includes('carousel') ? 'carousel' : 'static';
+      const date = (() => {
+        const full = formatSchedDateTime(post.scheduled_date, resolveScheduledTime(post));
+        return full.replace(/, \d{4}/, '') || '';
+      })();
       const formatBadge = FORMAT_BADGE[formatKey] || FORMAT_BADGE.static;
       const icon = PLATFORM_ICONS[platform] || '📱';
       const statusClass = status.toLowerCase().replace(/\s+/g, '-').replace('ready-for-review','pending');
@@ -16400,18 +16464,18 @@
         // Optimistic calendar entry so the day panel shows it immediately
         if (data.recordId || item.date) {
           _calPosts = _calPosts || [];
+          const isVid = !!(item.file && item.file.type && item.file.type.startsWith('video/'));
           _calPosts.push({
             id: data.recordId || ('local-' + Date.now()),
-            fields: {
-              scheduled_date: item.date,
-              scheduled_time: item.time || '09:00',
-              full_post_text: item.caption || '',
-              status: 'Approved',
-              platform: (item.platforms || []).join(','),
-              content_type: item.file.type.startsWith('video/') ? 'video' : 'image',
-              video_url: item.file.type.startsWith('video/') ? (data.cdnUrl || '') : '',
-              image_url: !item.file.type.startsWith('video/') ? (data.cdnUrl || '') : '',
-            },
+            scheduled_date: item.date,
+            scheduled_time: item.time || data.scheduledTime || '09:00',
+            full_post_text: item.caption || '',
+            caption: item.caption || '',
+            status: data.published ? 'Published' : 'Approved',
+            platform: (item.platforms || []).join(','),
+            content_type: isVid ? 'video' : 'image',
+            video_url: isVid ? (data.cdnUrl || item.objectUrl || '') : '',
+            image_url: !isVid ? (data.cdnUrl || item.objectUrl || '') : '',
           });
         }
         _renderBatchQueue();
@@ -16726,7 +16790,7 @@
         const icon = platIcon(p.platform || p.platforms);
         const text = (p.full_post_text || p.caption || '').slice(0, 26);
         const safeId = (p.id || '').replace(/['"]/g, '');
-        return `<div onclick="event.stopPropagation();_openCalPost('${safeId}')"
+        return `<div onclick="event.stopPropagation();openDatePanel('${dateKey}')"
           style="display:flex;align-items:center;gap:3px;padding:2px 5px;margin-bottom:2px;
                  background:${c.bg};border-left:2px solid ${c.border};border-radius:0 4px 4px 0;
                  cursor:pointer;transition:opacity 0.12s;"
@@ -16821,18 +16885,29 @@
   }
   window._calLocalDateKey = _calLocalDateKey;
 
-  function _openCalPost(postId) {
+  function _openCalPost(postId, opts) {
+    opts = opts || {};
     // Social history posts (from IG/FB) take a different panel
-    const hp = _calHistoryPosts.find(p => p.id === postId);
+    const hp = (_calHistoryPosts || []).find(p => p.id === postId);
     if (hp) { _openSocialPostPanel(hp); return; }
 
-    const p = _calPosts.find(p => p.id === postId);
-    if (!p) return;
-    const f = p.fields || p;
+    if (opts.returnDate) window._calPanelReturnDate = opts.returnDate;
+    else if (window._datePanelDate) window._calPanelReturnDate = window._datePanelDate;
+
+    const p = (_calPosts || []).find(x => x.id === postId);
+    let f = p ? (p.fields || p) : null;
+    // Prefer day-panel snapshot when calendar row is incomplete / still loading
+    if (opts.post) {
+      f = { ...(f || {}), ...opts.post, id: postId };
+    } else if ((!f || !(f.video_url || f.image_url || f.full_post_text || f.caption)) && window._datePanelPosts) {
+      const snap = (window._datePanelPosts || []).find(x => x.id === postId);
+      if (snap) f = { ...(f || {}), ...snap, id: postId };
+    }
+    if (!f) return;
     const status = f.status || 'draft';
 
     function badge(s) {
-      const sl = s.toLowerCase();
+      const sl = String(s || '').toLowerCase();
       if (sl === 'approved')  return { bg: 'rgba(34,197,94,0.15)',  color: '#86EFAC',  label: 'Approved' };
       if (sl === 'scheduled') return { bg: 'rgba(124,58,237,0.15)', color: '#C4B5FD',  label: 'Scheduled' };
       if (sl === 'published') return { bg: 'rgba(6,182,212,0.12)',  color: '#67E8F9',  label: 'Published' };
@@ -16843,43 +16918,55 @@
 
     const b = badge(status);
     const caption   = f.full_post_text || f.caption || '';
-    const imageUrl  = f.image_url || '';
-    const videoUrl  = f.video_url || '';
+    const rawVideo  = f.video_url || '';
+    const videoUrl  = (typeof resolvePlayableVideoUrl === 'function')
+      ? resolvePlayableVideoUrl(rawVideo)
+      : rawVideo;
+    const isVideo   = !!videoUrl || /video|reel/i.test(String(f.content_type || ''));
+    const imageUrl  = (!isVideo && (f.image_url || '')) || '';
     const platform  = f.platform || f.platforms || '—';
     const rawDate   = f.scheduled_date || f.scheduledDate || '';
-    const dateLabel = rawDate
-      ? new Date(rawDate).toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' })
-      : '—';
-    const contentType = f.content_type || '';
+    const timeForLabel = (typeof resolveScheduledTime === 'function') ? resolveScheduledTime(f) : (f.scheduled_time || '');
+    const dateLabel = (typeof formatSchedDateTime === 'function')
+      ? (formatSchedDateTime(rawDate, timeForLabel) || '—')
+      : (rawDate ? new Date(String(rawDate).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) : '—');
+    const formatKey = (typeof contentFormatKey === 'function') ? contentFormatKey(f) : (isVideo ? 'video' : 'static');
+    const formatLabel = formatKey === 'static' ? '' : formatKey;
 
-    const mediaHTML = imageUrl
-      ? `<img src="${imageUrl}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;" onerror="this.style.display='none'">`
-      : videoUrl
-      ? `<video src="${videoUrl}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;" controls></video>`
-      : '';
+    const safeCap = String(caption).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const mediaHTML = (isVideo && videoUrl)
+      ? `<video src="${String(videoUrl).replace(/"/g, '&quot;')}" style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;margin-bottom:16px;background:#000;" controls playsinline preload="metadata"></video>`
+      : (f.image_url
+        ? `<img src="${String(f.image_url).replace(/"/g, '&quot;')}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;" onerror="this.style.display='none'">`
+        : '');
 
     const panel = document.getElementById('cal-panel');
     if (!panel) return;
+    const returnDate = window._calPanelReturnDate || '';
 
     panel.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-        <h3 style="font-size:0.92rem;font-weight:700;color:var(--color-text);margin:0;">Post Details</h3>
-        <button onclick="_closeCalPanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:7px;width:28px;height:28px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">✕</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          ${returnDate ? `<button onclick="_backToDatePanel()" title="Back to day" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:5px 10px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:0.72rem;font-weight:600;font-family:var(--font-body);white-space:nowrap;">← Day</button>` : ''}
+          <h3 style="font-size:0.92rem;font-weight:700;color:var(--color-text);margin:0;">Post Details</h3>
+        </div>
+        <button onclick="_closeCalPanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:7px;width:28px;height:28px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);flex-shrink:0;">✕</button>
       </div>
-      ${mediaHTML}
+      ${mediaHTML || '<div style="padding:28px;text-align:center;background:rgba(255,255,255,0.03);border-radius:10px;margin-bottom:16px;color:rgba(255,255,255,0.3);font-size:0.78rem;">No media preview</div>'}
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
         <span style="padding:4px 10px;background:${b.bg};border-radius:20px;font-size:0.72rem;font-weight:600;color:${b.color};">${b.label}</span>
-        <span style="font-size:0.78rem;color:rgba(255,255,255,0.35);">${platform}</span>
-        ${contentType ? `<span style="font-size:0.7rem;color:rgba(255,255,255,0.22);">${contentType}</span>` : ''}
+        <span style="font-size:0.78rem;color:rgba(255,255,255,0.35);">${String(platform).replace(/</g,'&lt;')}</span>
+        ${formatLabel ? `<span style="font-size:0.7rem;color:rgba(255,255,255,0.4);text-transform:capitalize;">${formatLabel}</span>` : ''}
       </div>
       <div style="margin-bottom:16px;">
         <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">Scheduled</div>
         <div style="font-size:0.84rem;color:rgba(255,255,255,0.7);">${dateLabel}</div>
       </div>
-      ${caption ? `<div>
+      <div>
         <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Caption</div>
-        <div style="font-size:0.8rem;color:rgba(255,255,255,0.62);line-height:1.65;max-height:220px;overflow-y:auto;white-space:pre-wrap;">${caption}</div>
-      </div>` : ''}
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.62);line-height:1.65;max-height:220px;overflow-y:auto;white-space:pre-wrap;">${safeCap || '<span style="color:rgba(255,255,255,0.3);">No caption</span>'}</div>
+      </div>
+      ${returnDate ? `<button onclick="_backToDatePanel()" style="width:100%;margin-top:20px;padding:10px 12px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;color:#E9D5FF;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">← Back to ${returnDate}</button>` : ''}
     `;
 
     panel.style.transform = 'translateX(0)';
@@ -16915,17 +17002,19 @@
 
     const safeCaption = (post.caption || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const safeId = (post.id || '').replace(/'/g, "\\'");
+    const returnDate = window._calPanelReturnDate || window._datePanelDate || '';
 
     panel.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          ${returnDate ? `<button onclick="_backToDatePanel()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:5px 10px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:0.72rem;font-weight:600;font-family:var(--font-body);white-space:nowrap;">← Day</button>` : ''}
           <span style="font-size:1.1rem;">${platIcon2}</span>
           <div>
             <div style="font-size:0.7rem;font-weight:700;color:${platColor};text-transform:uppercase;letter-spacing:0.06em;">${platLabel} · ${post.media_type || 'Post'}</div>
             <div style="font-size:0.8rem;color:var(--color-text-muted);">${dateLabel}</div>
           </div>
         </div>
-        <button onclick="_closeCalPanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:7px;width:28px;height:28px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">✕</button>
+        <button onclick="_closeCalPanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:7px;width:28px;height:28px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);flex-shrink:0;">✕</button>
       </div>
       ${thumbHTML}
       ${metricsHTML}
@@ -17077,6 +17166,15 @@
     const panel = document.getElementById('cal-panel');
     if (panel) { panel.style.transform = 'translateX(100%)'; panel.style.opacity = '0'; }
   }
+
+  function _backToDatePanel() {
+    const d = window._calPanelReturnDate || window._datePanelDate || '';
+    _closeCalPanel();
+    if (d && typeof window.openDatePanel === 'function') {
+      window.openDatePanel(d);
+    }
+  }
+  window._backToDatePanel = _backToDatePanel;
 
   // Alias so any legacy references still work
   function _loadUpcomingScheduled() { _loadCalendar(); }
@@ -17350,11 +17448,16 @@
         const raw = (_calHistoryPosts || []).find(h => h.id === post.id)
           || (_calHistoryPosts || []).find(h => h.id === post._twinId)
           || post;
+        window._calPanelReturnDate = dateStr;
         window.closeDatePanel();
         window._openSocialPostPanel && window._openSocialPostPanel(raw);
-      } else {
+      } else if (post._source === 'batch') {
         window.closeDatePanel();
-        window._openCalPost && window._openCalPost(post.id);
+        if (typeof _batchToggleExpand === 'function') _batchToggleExpand(post._batchIdx);
+      } else {
+        window._calPanelReturnDate = dateStr;
+        window.closeDatePanel();
+        window._openCalPost && window._openCalPost(post.id, { returnDate: dateStr, post });
       }
     };
 
@@ -17553,17 +17656,32 @@
           return;
         }
 
+        const playUrl = (!isSocial && p.video_url && typeof resolvePlayableVideoUrl === 'function')
+          ? resolvePlayableVideoUrl(p.video_url)
+          : '';
+        const isVidCard = !!playUrl || (!isSocial && /video|reel/i.test(String(p.content_type || '')));
+        const mediaBlock = playUrl
+          ? `<video src="${String(playUrl).replace(/"/g,'&quot;')}" muted preload="metadata" playsinline style="width:100%;height:110px;object-fit:cover;display:block;background:#000;cursor:pointer;" onclick="_datePanelView(${idx})"></video>`
+          : (thumb && !/\.(mp4|mov|webm)(\?|$)/i.test(String(thumb))
+            ? `<img src="${String(thumb).replace(/"/g,'&quot;')}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;" onclick="_datePanelView(${idx})" onerror="this.style.display='none'">`
+            : '');
+        const timeResolved = (!isSocial && typeof resolveScheduledTime === 'function')
+          ? resolveScheduledTime(p)
+          : (p.scheduled_time || '');
+        const whenLabel = (!isSocial && (typeof formatSchedDateTime === 'function'))
+          ? formatSchedDateTime(p.scheduled_date || dateStr, timeResolved)
+          : timeResolved;
         html += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;overflow:hidden;">
-          ${thumb ? `<img src="${thumb}" style="width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;" onclick="_datePanelView(${idx})" onerror="this.style.display='none'">` : ''}
+          ${mediaBlock}
           <div style="padding:12px 13px;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap;">
               <span style="font-size:0.62rem;font-weight:800;color:${badge.color};letter-spacing:0.04em;">${badge.icon}</span>
               <span style="font-size:0.67rem;font-weight:700;color:${badge.color};text-transform:uppercase;letter-spacing:0.05em;">${badge.label}</span>
-              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">· ${p.media_type}</span>` : ''}
-              ${p.scheduled_time ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.35);">· ${p.scheduled_time}</span>` : ''}
+              ${p.media_type ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">· ${p.media_type}</span>` : (isVidCard ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">· Video</span>` : '')}
+              ${whenLabel ? `<span style="font-size:0.62rem;color:rgba(255,255,255,0.35);">· ${whenLabel}</span>` : ''}
               ${isSocial ? `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(6,182,212,0.1);color:#67E8F9;border-radius:4px;border:1px solid rgba(6,182,212,0.2);">Live</span>` : `<span style="margin-left:auto;font-size:0.6rem;padding:2px 6px;background:rgba(124,58,237,0.12);color:#C4B5FD;border-radius:4px;border:1px solid rgba(124,58,237,0.25);">${String(p.status || 'Scheduled')}</span>`}
             </div>
-            ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : (isSocial ? '' : `<div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">Scheduled content · ${String(p.content_type || 'post')} · ${String(p.scheduled_time || '')}</div>`)}
+            ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : (isSocial ? '' : `<div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">${isVidCard ? 'Video' : 'Post'} scheduled${p.scheduled_time ? ' · ' + p.scheduled_time : ''}${caption ? '' : ' · no caption'}</div>`)}
             ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : (isSocial ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.25);margin-bottom:10px;">No engagement yet</div>` : '')}
             <div style="display:flex;flex-direction:column;gap:7px;">
               ${isSocial ? `<button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
