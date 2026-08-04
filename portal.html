@@ -16781,6 +16781,20 @@
   let _calMonth        = new Date().getMonth(); // 0-indexed
   let _calPosts        = []; // scheduled / upcoming content from Airtable
   let _calHistoryPosts = []; // published social posts from IG + FB
+  function _getHiddenSocialIds() {
+    try { return new Set(JSON.parse(localStorage.getItem('se_hidden_social_ids') || '[]')); } catch (_) { return new Set(); }
+  }
+  function _hideSocialId(id) {
+    if (!id) return;
+    const s = _getHiddenSocialIds();
+    s.add(String(id));
+    try { localStorage.setItem('se_hidden_social_ids', JSON.stringify([...s])); } catch (_) {}
+  }
+  function _filterHiddenSocial(posts) {
+    const hidden = _getHiddenSocialIds();
+    if (!hidden.size) return posts || [];
+    return (posts || []).filter(p => !hidden.has(String(p.id)));
+  }
 
   async function _loadCalendar(opts) {
     opts = opts || {};
@@ -16803,7 +16817,7 @@
         const f = r.fields || r;
         return !!(f.scheduled_date || f.scheduledDate);
       });
-      _calHistoryPosts = histData.posts || [];
+      _calHistoryPosts = _filterHiddenSocial(histData.posts || []);
     } catch (e) {
       el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${e.message}</div>`;
       return;
@@ -17171,22 +17185,52 @@
         }),
       });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || !data.success) throw new Error(data.error || 'Delete failed');
       const removeIds = new Set([postId, twinId].filter(Boolean));
-      _calHistoryPosts = (_calHistoryPosts || []).filter(p => !removeIds.has(p.id));
-      if (window._datePanelPosts) {
-        window._datePanelPosts = window._datePanelPosts.filter(p => !removeIds.has(p.id) && p.id !== postId);
+      const finishLocalClear = () => {
+        removeIds.forEach((id) => { if (typeof _hideSocialId === 'function') _hideSocialId(id); });
+        _calHistoryPosts = (_calHistoryPosts || []).filter(p => !removeIds.has(p.id));
+        if (window._datePanelPosts) {
+          window._datePanelPosts = window._datePanelPosts.filter(p => !removeIds.has(p.id) && p.id !== postId);
+        }
+        _closeCalPanel();
+        if (typeof _renderCalendar === 'function') _renderCalendar();
+        const day = opts.returnDate || window._calPanelReturnDate || window._datePanelDate;
+        if (day && typeof openDatePanel === 'function') openDatePanel(day, window.__clientData);
+      };
+
+      // Meta blocks IG Reel API deletes — open Instagram so the user can delete for real.
+      if (!resp.ok || !data.success) {
+        const permalink = data.permalink || opts.permalink || '';
+        if (data.manual_required || /Instagram will not let our app delete|Meta #10|delete it there/i.test(String(data.error || ''))) {
+          if (permalink) window.open(permalink, '_blank', 'noopener');
+          const msg = (data.error || 'Instagram must be deleted in the Instagram app.')
+            + (permalink ? '\n\nInstagram was opened in a new tab. Delete the Reel there (⋯ → Delete), then click OK to clear it from this calendar.' : '\n\nOpen the Reel in Instagram → ⋯ → Delete, then click OK to clear it here.');
+          if (confirm(msg)) {
+            finishLocalClear();
+            if (typeof showToast === 'function') showToast('Cleared from calendar. Confirm it’s gone on Instagram, then reschedule with the right caption.', 'success');
+          }
+          return;
+        }
+        throw new Error(data.error || 'Delete failed');
       }
-      _closeCalPanel();
-      if (typeof _renderCalendar === 'function') _renderCalendar();
-      const day = opts.returnDate || window._calPanelReturnDate || window._datePanelDate;
-      if (day && typeof openDatePanel === 'function') openDatePanel(day, window.__clientData);
+
+      finishLocalClear();
       if (typeof showToast === 'function') {
         const base = data.already_deleted
           ? `Already removed from ${platLabel}.`
           : `Deleted from ${platLabel}.`;
-        const twinNote = data.twinError ? ` (IG/FB twin: ${data.twinError})` : '';
-        showToast(`${base} Schedule below with the correct caption.${twinNote}`, data.twinError ? 'warning' : 'success');
+        let twinNote = '';
+        if (data.twinManual && data.twinManual.permalink) {
+          window.open(data.twinManual.permalink, '_blank', 'noopener');
+          twinNote = ' Instagram twin opened — delete that Reel in the app too.';
+        } else if (data.twinError) {
+          twinNote = ' (twin: ' + data.twinError + ')';
+        }
+        if (data.manual && data.manual.permalink) {
+          window.open(data.manual.permalink, '_blank', 'noopener');
+          twinNote += ' Instagram opened for manual delete.';
+        }
+        showToast(`${base} Schedule below with the correct caption.${twinNote}`, (data.twinError || data.twinManual || data.manual) ? 'warning' : 'success');
       }
     } catch (e) {
       if (typeof showToast === 'function') showToast(e.message || 'Delete failed', 'error');
@@ -17298,7 +17342,7 @@
           <button onclick="_calPanelWhy('${safeId}')" style="flex:1;padding:8px 10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);border-radius:8px;color:#A5B4FC;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Why it worked</button>
         </div>
         ${post.permalink ? `<a href="${post.permalink}" target="_blank" rel="noopener" style="display:block;text-align:center;padding:8px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.78rem;font-weight:600;text-decoration:none;">Open on ${platLabel}</a>` : ''}
-        <button onclick="_deleteSocialPost('${safeId}', '${String(post.platform || platLabel).replace(/'/g, "\\'")}', {returnDate:'${String(returnDate || '').replace(/'/g, "\\'")}', twinId:'${String(post._twinId || '').replace(/'/g, "\\'")}'})" style="padding:9px 14px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete from ${platLabel}${post._twinId ? ' & Instagram' : ''}</button>
+        <button onclick="_deleteSocialPost('${safeId}', '${String(post.platform || platLabel).replace(/'/g, "\\'")}', {returnDate:'${String(returnDate || '').replace(/'/g, "\\'")}', twinId:'${String(post._twinId || '').replace(/'/g, "\\'")}', permalink:'${String(post.permalink || '').replace(/'/g, "\\'")}'})" style="padding:9px 14px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete from ${platLabel}${post._twinId ? ' & Instagram' : ''}</button>
         <div id="cal-post-insight" style="display:none;"></div>
       </div>`;
 
@@ -17973,7 +18017,7 @@
               ${canRetry ? `<button onclick="_retryPublishPost('${String(p.id || '').replace(/'/g, "\\'")}', '${dateStr}')" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Retry publish</button>` : ''}
               <div style="display:flex;gap:6px;">
                 <button onclick="_datePanelView(${idx})" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">View</button>
-                ${!isSocial ? `<button onclick="_deleteCalPost('${String(p.id || '').replace(/'/g, "\\'")}',{returnDate:'${dateStr}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>` : `<button onclick="_deleteSocialPost('${String(p.id || '').replace(/'/g, "\\'")}', '${String(p.platform || (p._platforms || []).join('+') || '').replace(/'/g, "\\'")}', {returnDate:'${dateStr}', twinId:'${String(p._twinId || '').replace(/'/g, "\\'")}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>`}
+                ${!isSocial ? `<button onclick="_deleteCalPost('${String(p.id || '').replace(/'/g, "\\'")}',{returnDate:'${dateStr}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>` : `<button onclick="_deleteSocialPost('${String(p.id || '').replace(/'/g, "\\'")}', '${String(p.platform || (p._platforms || []).join('+') || '').replace(/'/g, "\\'")}', {returnDate:'${dateStr}', twinId:'${String(p._twinId || '').replace(/'/g, "\\'")}', permalink:'${String(p.permalink || '').replace(/'/g, "\\'")}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>`}
                 ${isSocial && p.permalink ? `<a href="${p.permalink}" target="_blank" rel="noopener" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.45);font-size:0.7rem;font-weight:600;text-decoration:none;text-align:center;font-family:var(--font-body);">Open</a>` : ''}
               </div>
               <div id="day-post-insight-${idx}" style="display:none;"></div>
