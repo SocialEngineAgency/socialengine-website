@@ -3565,6 +3565,8 @@
 
       // 1. image_url text field (http/https or data URL)
       if (isHttp(post.image_url) || isData(post.image_url)) return post.image_url;
+      // 1b. Live social history thumbs
+      if (isHttp(post.thumbnail_url)) return post.thumbnail_url;
 
       // 2. legacy image field (multilineText containing JSON array)
       const legacy = post.image;
@@ -6795,6 +6797,7 @@
       const pending = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
       const approved = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
       const rejected = posts.filter(p => p.status === 'Rejected');
+      const published = posts.filter(p => /^published$/i.test(String(p.status || '')));
       const videos = posts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url);
 
       // Store posts for modal navigation + video image picker
@@ -6828,9 +6831,10 @@
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <div class="studio-filters" id="studio-filters" style="margin-bottom:0;">
-            <button class="studio-filter active" data-filter="all">All <span class="studio-filter__count">${posts.length}</span></button>
+            <button class="studio-filter active" data-filter="all">All <span class="studio-filter__count" id="studio-count-all">${posts.length}</span></button>
             <button class="studio-filter" data-filter="pending">Pending <span class="studio-filter__count">${pending.length}</span></button>
             <button class="studio-filter" data-filter="approved">Approved <span class="studio-filter__count">${approved.length}</span></button>
+            <button class="studio-filter" data-filter="published">Live <span class="studio-filter__count" id="studio-count-published">${published.length}</span></button>
             ${videos.length ? `<button class="studio-filter" data-filter="video">Video <span class="studio-filter__count">${videos.length}</span></button>` : ''}
             ${rejected.length ? `<button class="studio-filter" data-filter="rejected">Rejected <span class="studio-filter__count">${rejected.length}</span></button>` : ''}
           </div>
@@ -6873,15 +6877,79 @@
           btn.classList.add('active');
           const f = btn.dataset.filter;
           let filtered;
-          if (f === 'all') filtered = posts;
-          else if (f === 'pending') filtered = pending;
-          else if (f === 'approved') filtered = approved;
-          else if (f === 'video') filtered = videos;
-          else filtered = rejected;
+          const allPosts = window._studioPosts || posts;
+          if (f === 'all') filtered = allPosts;
+          else if (f === 'pending') filtered = allPosts.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
+          else if (f === 'approved') filtered = allPosts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
+          else if (f === 'published') filtered = allPosts.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
+          else if (f === 'video') filtered = allPosts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
+          else filtered = allPosts.filter(p => p.status === 'Rejected');
           studioPostsList = filtered;
           document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
         });
       });
+
+      // Merge live IG/FB posts (from Meta) so Content Review isn't blank after publish/delete of Airtable rows
+      if (!data._skipLiveMerge) {
+        (async () => {
+          try {
+            const hdrs = {
+              'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+              'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+            };
+            const histResp = await fetch(`${API}/api/calendar-history`, { headers: hdrs });
+            if (!histResp.ok) return;
+            const histData = await histResp.json().catch(() => ({}));
+            const live = (histData.posts || []).slice(0, 24).map((p) => ({
+              id: p.id,
+              status: 'Published',
+              platform: p.platform || 'Instagram',
+              full_post_text: p.caption || '',
+              caption: p.caption || '',
+              thumbnail_url: p.thumbnail_url || '',
+              image_url: p.thumbnail_url || '',
+              video_url: p.media_url || '',
+              content_type: /reel|video/i.test(String(p.media_type || '')) ? 'video' : 'image',
+              scheduled_date: String(p.timestamp || '').slice(0, 10),
+              permalink: p.permalink || '',
+              likes: p.likes,
+              comments: p.comments,
+              _source: 'social',
+              _live: true,
+            }));
+            if (!live.length) return;
+            const existingIds = new Set((window._studioPosts || []).map((p) => String(p.id)));
+            const extras = live.filter((p) => !existingIds.has(String(p.id)));
+            if (!extras.length) return;
+            const merged = [...(window._studioPosts || []), ...extras];
+            window._studioPosts = merged;
+            studioPostsList = merged;
+            if (data.content) data.content = merged;
+            const area = document.getElementById('studio-content-area');
+            const active = document.querySelector('#studio-filters .studio-filter.active');
+            const f = active?.dataset?.filter || 'all';
+            let filtered = merged;
+            if (f === 'pending') filtered = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
+            else if (f === 'approved') filtered = merged.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
+            else if (f === 'published') filtered = merged.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
+            else if (f === 'video') filtered = merged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live);
+            else if (f === 'rejected') filtered = merged.filter(p => p.status === 'Rejected');
+            studioPostsList = filtered;
+            if (area) area.innerHTML = renderStudioContent(filtered);
+            const allCount = document.getElementById('studio-count-all');
+            const pubCount = document.getElementById('studio-count-published');
+            if (allCount) allCount.textContent = String(merged.length);
+            if (pubCount) pubCount.textContent = String(merged.filter(p => /^published$/i.test(String(p.status || '')) || p._live).length);
+            const sub = document.querySelector('.studio-header__left p');
+            if (sub) {
+              const pendN = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status)).length;
+              const vidN = merged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live).length;
+              sub.textContent = `${merged.length} pieces · ${pendN} need review · ${vidN} videos`;
+            }
+            const pipe = document.querySelector('.dash-greeting + p, [data-pipeline-count]');
+          } catch (_) {}
+        })();
+      }
 
       // Platform filter logic
       content.querySelectorAll('.studio-platform-filter').forEach(btn => {
@@ -6908,7 +6976,7 @@
 
     function renderStudioContent(posts) {
       if (posts.length === 0) {
-        return `<div class="empty-state" style="padding:60px 20px;"><div class="empty-state__icon"><i data-lucide="inbox" style="width:40px;height:40px;"></i></div><div class="empty-state__title">No content yet</div><div class="empty-state__desc">Your AI is preparing your first batch of content. Check back soon.</div></div>`;
+        return `<div class="empty-state" style="padding:60px 20px;"><div class="empty-state__icon"><i data-lucide="inbox" style="width:40px;height:40px;"></i></div><div class="empty-state__title">No posts in review</div><div class="empty-state__desc">Live posts you already published show under <button onclick="document.querySelector('[data-nav=schedule]')?.click()" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:inherit;text-decoration:underline;padding:0;">Schedule</button> — or wait here while live history loads. New drafts will appear here when they're ready for approval.</div></div>`;
       }
       if (studioViewMode === 'list') {
         return `<div class="studio-list">${posts.map((p, i) => renderStudioListItem(p, i)).join('')}</div>`;
@@ -6942,7 +7010,8 @@
       let filtered = posts;
       if (f === 'pending') filtered = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
       else if (f === 'approved') filtered = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
-      else if (f === 'video') filtered = posts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url);
+      else if (f === 'published') filtered = posts.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
+      else if (f === 'video') filtered = posts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
       else if (f === 'rejected') filtered = posts.filter(p => p.status === 'Rejected');
       studioPostsList = filtered;
       document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
