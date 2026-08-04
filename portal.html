@@ -5186,12 +5186,43 @@
 
     // ── Schedule from Content tab — navigate to schedule and open the date panel ──
     window.scheduleFromContent = function(postId, existingDate) {
-      var targetDate = existingDate || new Date().toISOString().split('T')[0];
+      var targetDate = String(existingDate || '').slice(0, 10);
+      if (!targetDate) {
+        targetDate = (typeof _clientTodayDateKey === 'function')
+          ? _clientTodayDateKey()
+          : new Date().toISOString().split('T')[0];
+      }
+      // Remember intent — calendar may still be loading when Schedule mounts
+      window._pendingOpenDate = targetDate;
+      window._pendingOpenPostId = postId || '';
       var schedBtn = document.querySelector('[data-nav="schedule"]');
       if (schedBtn) schedBtn.click();
-      setTimeout(function() {
-        if (window.openDatePanel) window.openDatePanel(targetDate, window.__clientData);
-      }, 400);
+
+      (async function waitAndOpenDatePanel() {
+        for (var i = 0; i < 40; i++) {
+          await new Promise(function(r) { setTimeout(r, 250); });
+          var wrap = document.getElementById('sched-cal-wrap');
+          if (!wrap) continue;
+          var stillLoading = /Loading calendar/i.test(wrap.textContent || '');
+          if (stillLoading) continue;
+          if (typeof window.openDatePanel !== 'function') continue;
+          // Jump calendar month to the target day before opening the panel
+          try {
+            var parts = targetDate.split('-');
+            if (parts.length === 3) {
+              window._calYear = parseInt(parts[0], 10);
+              window._calMonth = parseInt(parts[1], 10) - 1;
+              if (typeof window._renderCalendar === 'function') window._renderCalendar();
+            }
+          } catch (_) {}
+          window.openDatePanel(targetDate, window.__clientData);
+          window._pendingOpenDate = null;
+          return;
+        }
+        if (typeof showToast === 'function') {
+          showToast('Calendar still loading — try View in calendar again in a moment', 'warning');
+        }
+      })();
     };
 
     // Toggle video brief visibility
@@ -16778,6 +16809,20 @@
       return;
     }
     _renderCalendar();
+    // Honor Content Review → View in calendar deep-link after load finishes
+    if (window._pendingOpenDate && typeof openDatePanel === 'function') {
+      const pending = String(window._pendingOpenDate).slice(0, 10);
+      window._pendingOpenDate = null;
+      try {
+        const parts = pending.split('-');
+        if (parts.length === 3) {
+          _calYear = parseInt(parts[0], 10);
+          _calMonth = parseInt(parts[1], 10) - 1;
+          _renderCalendar();
+        }
+      } catch (_) {}
+      setTimeout(() => openDatePanel(pending, window.__clientData), 50);
+    }
   }
 
   function _renderCalendar() {
@@ -17178,7 +17223,10 @@
       if (typeof _renderCalendar === 'function') _renderCalendar();
       const day = opts.returnDate || window._calPanelReturnDate || window._datePanelDate;
       if (day && typeof openDatePanel === 'function') openDatePanel(day);
-      if (typeof showToast === 'function') showToast('Post deleted', 'success');
+      if (typeof showToast === 'function') {
+        if (data.meta_warning) showToast('Removed from calendar. Live social delete: ' + data.meta_warning, 'warning');
+        else showToast('Post deleted', 'success');
+      }
       // Refresh content queue if visible
       try {
         if (typeof renderStudioContent === 'function' && typeof studioPostsList !== 'undefined') {
