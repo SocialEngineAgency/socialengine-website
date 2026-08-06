@@ -36,6 +36,30 @@
     return d.innerHTML;
   }
 
+  /** Atlas / Aliyun OSS hotlink-blocks portal Referers — route through API proxy. */
+  function mediaSrc(url) {
+    if (!url) return '';
+    if (/\/api\/media(\/|-fetch)/i.test(url)) return url;
+    if (/(aliyuncs\.com|higgsfield\.ai)/i.test(url)) {
+      return `${apiBase()}/api/media-fetch?url=${encodeURIComponent(url)}`;
+    }
+    return url;
+  }
+
+  function tileMedia(url, alt, status) {
+    const busy = !url && ['generating', 'pending', 'developing', 'assembling'].includes(status);
+    if (busy) {
+      return `<div class="anim-tile__ph anim-tile__ph--gen" aria-busy="true">
+        <span class="anim-tile__gen-label">${esc(status === 'assembling' ? 'Creating' : 'Generating')}</span>
+      </div>`;
+    }
+    if (!url) {
+      return `<div class="anim-tile__ph ${status === 'failed' ? 'anim-tile__ph--fail' : ''}">${esc(status === 'failed' ? 'Failed' : (status || '…'))}</div>`;
+    }
+    const src = mediaSrc(url);
+    return `<img class="anim-media" src="${esc(src)}" alt="${esc(alt || '')}" loading="lazy" data-fallback="1" />`;
+  }
+
   async function animFetch(path, opts) {
     const resp = await fetch(apiBase() + path, Object.assign({}, opts || {}, { headers: authHeaders() }));
     const data = await resp.json().catch(() => ({}));
@@ -115,6 +139,9 @@
     }
 
     const views = p.character_pack?.views || [];
+    const plannedViews = (!views.length && ['developing', 'generating', 'assembling'].includes(p.status) && p.agent_brief?.multi_view_plan?.length)
+      ? p.agent_brief.multi_view_plan.slice(0, 6).map((label) => ({ label, url: null, status: 'generating' }))
+      : views;
     const scenes = (p.scenes || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
     const brief = p.agent_brief;
 
@@ -129,18 +156,18 @@
 
       <div class="anim-section">
         <div class="anim-section__label">Character / asset lock</div>
-        ${views.length ? `
+        ${plannedViews.length ? `
         <div class="anim-strip">
-          ${views.map((v) => `
+          ${plannedViews.map((v) => `
             <div class="anim-tile">
-              ${v.url ? `<img src="${esc(v.url)}" alt="${esc(v.label)}" />` : `<div class="anim-tile__ph">${esc(v.status || '…')}</div>`}
+              ${tileMedia(v.url, v.label, v.status || p.status)}
               <div class="anim-tile__cap">${esc(v.label)}</div>
             </div>`).join('')}
         </div>` : (p.reference_urls || []).length || _refs.length ? `
         <div class="anim-strip">
           ${(p.reference_urls?.length ? p.reference_urls : _refs.map((r) => r.url)).map((url, i) => `
             <div class="anim-tile">
-              <img src="${esc(url)}" alt="Ref ${i + 1}" />
+              ${tileMedia(url, `Ref ${i + 1}`, 'ready')}
               <div class="anim-tile__cap">Ref ${i + 1}</div>
             </div>`).join('')}
         </div>
@@ -155,10 +182,10 @@
             <div class="anim-shot" data-scene="${esc(s.id)}">
               <div class="anim-shot__media">
                 ${s.video_url
-                  ? `<video src="${esc(s.video_url)}" muted loop playsinline controls></video>`
+                  ? `<video src="${esc(mediaSrc(s.video_url))}" muted loop playsinline controls></video>`
                   : s.keyframe_url
-                    ? `<img src="${esc(s.keyframe_url)}" alt="" />`
-                    : `<div class="anim-tile__ph">${esc(s.status || 'pending')}</div>`}
+                    ? tileMedia(s.keyframe_url, s.title || '', s.status)
+                    : tileMedia(null, '', s.status || 'pending')}
               </div>
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
@@ -170,7 +197,11 @@
               ? `Ready to generate ${brief.shots.length} shots — accept the brief in chat.`
               : 'Shot cards will land on this timeline.'}</div>
             ${brief?.shots?.length ? `<div class="anim-timeline anim-timeline--ghost">${brief.shots.map((s) => `
-              <div class="anim-shot anim-shot--ghost"><div class="anim-shot__media"><div class="anim-tile__ph">${esc(s.title || s.id)}</div></div></div>`).join('')}</div>` : ''}
+              <div class="anim-shot anim-shot--ghost"><div class="anim-shot__media">${
+                ['developing', 'generating', 'assembling'].includes(p.status)
+                  ? tileMedia(null, '', 'generating')
+                  : `<div class="anim-tile__ph">${esc(s.title || s.id)}</div>`
+              }</div></div>`).join('')}</div>` : ''}
           `}
         </div>
       </div>
@@ -180,8 +211,8 @@
         <div class="anim-section__label">Final</div>
         <div class="anim-final">
           ${/\.(mp4|webm|mov)(\?|$)/i.test(p.final_url) || p.scenes?.some((s) => s.video_url)
-            ? `<video src="${esc(p.final_url)}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
-            : `<img src="${esc(p.final_url)}" alt="Final" style="max-width:280px;border-radius:12px;" />`}
+            ? `<video src="${esc(mediaSrc(p.final_url))}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
+            : `<img src="${esc(mediaSrc(p.final_url))}" alt="Final" style="max-width:280px;border-radius:12px;" />`}
           ${p.content_record_id ? `<button type="button" class="anim-btn" id="anim-open-review">Open in Content Review</button>` : ''}
         </div>
       </div>` : ''}
@@ -190,6 +221,14 @@
 
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
+    });
+    el.querySelectorAll('img.anim-media[data-fallback]').forEach((img) => {
+      img.addEventListener('error', () => {
+        const ph = document.createElement('div');
+        ph.className = 'anim-tile__ph anim-tile__ph--fail';
+        ph.textContent = 'Unavailable';
+        img.replaceWith(ph);
+      }, { once: true });
     });
     document.getElementById('anim-open-review')?.addEventListener('click', () => {
       document.querySelector('[data-nav="content"]')?.click();
@@ -432,16 +471,16 @@
     root.innerHTML = `
       <style>
         .anim-shell { display:grid; grid-template-columns: 1fr minmax(320px,380px); gap:0; height:calc(100vh - 120px); min-height:560px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; overflow:hidden; background:#0B1220; }
-        .anim-canvas { display:flex; flex-direction:column; min-width:0; border-right:1px solid rgba(255,255,255,0.08); background:radial-gradient(1200px 600px at 10% 0%, rgba(124,58,237,0.12), transparent 55%), #0B1220; }
-        .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.06); }
+        .anim-canvas { display:flex; flex-direction:column; min-width:0; min-height:0; border-right:1px solid rgba(255,255,255,0.08); background:radial-gradient(1200px 600px at 10% 0%, rgba(124,58,237,0.12), transparent 55%), #0B1220; }
+        .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-canvas-header h2 { margin:0; font-size:1.05rem; color:#F8FAFC; font-weight:700; }
-        .anim-canvas-body { flex:1; overflow:auto; padding:18px; }
-        .anim-chat { display:flex; flex-direction:column; min-width:0; background:#0F172A; }
-        .anim-chat-header { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.06); }
+        .anim-canvas-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px 18px 40px; -webkit-overflow-scrolling:touch; }
+        .anim-chat { display:flex; flex-direction:column; min-width:0; min-height:0; background:#0F172A; }
+        .anim-chat-header { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-chat-header h3 { margin:0 0 4px; font-size:0.95rem; color:#E2E8F0; }
         .anim-chat-header p { margin:0; font-size:0.72rem; color:rgba(255,255,255,0.4); }
-        .anim-chat-log { flex:1; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
-        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); }
+        .anim-chat-log { flex:1; min-height:0; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
@@ -472,6 +511,15 @@
         .anim-tile img, .anim-shot__media img, .anim-shot__media video { width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:#1E293B; display:block; }
         .anim-shot__media video { aspect-ratio:9/16; max-height:220px; }
         .anim-tile__ph { width:100%; aspect-ratio:1; border-radius:10px; background:rgba(255,255,255,0.04); border:1px dashed rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.35); font-size:0.7rem; }
+        .anim-tile__ph--gen { border:none; position:relative; overflow:hidden; color:#F8FAFC; font-size:0.72rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
+          background: linear-gradient(120deg, #1E293B 0%, #312E81 35%, #7C3AED 55%, #1E293B 100%);
+          background-size: 220% 220%;
+          animation: animShimmer 2.4s ease-in-out infinite; }
+        .anim-tile__ph--gen::after { content:''; position:absolute; inset:0; background:linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%); background-size:200% 100%; animation: animSheen 1.8s linear infinite; pointer-events:none; }
+        .anim-tile__gen-label { position:relative; z-index:1; text-shadow:0 1px 8px rgba(0,0,0,0.45); }
+        .anim-tile__ph--fail { border-style:solid; border-color:rgba(248,113,113,0.35); color:#FCA5A5; background:rgba(248,113,113,0.08); }
+        @keyframes animShimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        @keyframes animSheen { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         .anim-tile__cap { margin-top:6px; font-size:0.68rem; color:rgba(255,255,255,0.5); text-align:center; }
         .anim-timeline { display:flex; flex-direction:column; gap:12px; }
         .anim-timeline--ghost { flex-direction:row; margin-top:10px; }
