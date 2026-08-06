@@ -169,12 +169,42 @@
     return p?.agent_brief?.title || p?.user_prompt?.slice(0, 48) || 'Untitled project';
   }
 
+  function projectMediaExpired(p) {
+    if (!p) return false;
+    if (p.media_expired) return true;
+    const views = p.character_pack?.views || [];
+    if (!views.length) return false;
+    return views.every((v) => !v.url || /\/api\/media\//i.test(String(v.url)));
+  }
+
   async function refreshRecent() {
     try {
       const list = await animFetch('/api/animation/projects');
       _recent = list.projects || [];
+      if (list.purged > 0) {
+        toast(`Removed ${list.purged} expired project${list.purged === 1 ? '' : 's'} (old links from a server restart)`, 'info');
+      }
     } catch (_) {
       _recent = [];
+    }
+  }
+
+  async function deleteProject(id, { silent } = {}) {
+    if (!id) return;
+    try {
+      const data = await animFetch(`/api/animation/projects/${id}`, { method: 'DELETE' });
+      _recent = data.projects || _recent.filter((p) => p.id !== id);
+      if (_project?.id === id) {
+        _project = null;
+        _refs = [];
+        stopPoll();
+      }
+      if (!silent) toast('Expired project removed', 'success');
+      renderCanvas();
+      renderChat();
+      renderRefs();
+    } catch (e) {
+      if (!silent) toast(e.message || 'Could not delete project', 'error');
     }
   }
 
@@ -183,9 +213,25 @@
     try {
       const data = await animFetch(`/api/animation/projects/${id}`);
       _project = data.project;
-      _refs = (_project.reference_urls || []).map((url) => ({ url, title: 'Ref' }));
+      if (projectMediaExpired(_project)) {
+        await deleteProject(_project.id, { silent: true });
+        toast('That project’s images expired after a server restart. Start a new one and re-upload refs.', 'error');
+        return;
+      }
+      _refs = (_project.references || []).map((r) => ({
+        url: r.url,
+        title: r.title || 'Ref',
+        role: r.role || 'character',
+      }));
+      if (!_refs.length && _project.reference_urls?.length) {
+        _refs = _project.reference_urls.map((url, i) => ({
+          url,
+          title: 'Ref',
+          role: i === 0 ? 'character' : i === 1 ? 'style' : 'scene',
+        }));
+      }
       if (!_refs.length && _project.character_ref_url) {
-        _refs = [{ url: _project.character_ref_url, title: 'Ref' }];
+        _refs = [{ url: _project.character_ref_url, title: 'Ref', role: 'character' }];
       }
       renderCanvas();
       renderChat();
@@ -194,6 +240,11 @@
       else stopPoll();
       toast(`Opened ${projectTitle(_project)}`, 'success');
     } catch (e) {
+      await refreshRecent();
+      _project = null;
+      renderCanvas();
+      renderChat();
+      renderRefs();
       toast(e.message || 'Could not open project', 'error');
     }
   }
@@ -203,27 +254,37 @@
     if (!el) return;
     const p = _project;
     if (!p) {
-      const recentHtml = _recent.length ? `
+      const usable = _recent.filter((rp) => !projectMediaExpired(rp));
+      const recentHtml = usable.length ? `
         <div class="anim-recent">
           <div class="anim-section__label">Recent projects</div>
           <div class="anim-recent__list">
-            ${_recent.slice(0, 12).map((rp) => `
-              <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
-                <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
-                <span class="anim-recent__meta">${statusBadge(rp.status)} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
-              </button>`).join('')}
+            ${usable.slice(0, 12).map((rp) => `
+              <div class="anim-recent__row">
+                <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
+                  <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
+                  <span class="anim-recent__meta">${statusBadge(rp.status)} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
+                </button>
+                <button type="button" class="anim-btn anim-btn--ghost anim-recent__del" data-del-project="${esc(rp.id)}" title="Delete project">✕</button>
+              </div>`).join('')}
           </div>
         </div>` : `
-        <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">No saved projects yet — send a prompt to start one. Projects now persist across refreshes.</div>`;
+        <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">No saved projects yet — send a prompt to start one. Generated images now persist on CDN across refreshes.</div>`;
       el.innerHTML = `
         <div class="anim-empty">
           <div class="anim-empty__title">Animation canvas</div>
           <div class="anim-empty__desc">Pick a mode, describe what you want, and Claude will rewrite it into a production brief. Accept to generate character views, scenes, and shots here.</div>
-          <div class="anim-empty__hint">Tip: use <strong>Character</strong> first to lock a sheet, then <strong>Video</strong> for multi-shot reels.</div>
+          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong> + <strong>Style</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
         </div>
         ${recentHtml}`;
       el.querySelectorAll('[data-open-project]').forEach((btn) => {
         btn.addEventListener('click', () => openProject(btn.dataset.openProject));
+      });
+      el.querySelectorAll('[data-del-project]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteProject(btn.dataset.delProject);
+        });
       });
       return;
     }
@@ -256,7 +317,11 @@
             </div>`).join('')}
         </div>
         <div class="anim-expired-banner" id="anim-expired-banner" hidden>
-          Images expired after a server restart (old ephemeral links). Click <strong>New project</strong>, re-upload refs (tag Char + Style), and run again — new runs persist on CDN.
+          <div>Images expired after a server restart (old ephemeral links). Delete this project, re-upload refs (tag Char + Style), and run again — new runs persist on CDN.</div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+            <button type="button" class="anim-btn" id="anim-delete-expired" style="width:auto;">Delete expired project</button>
+            <button type="button" class="anim-btn anim-btn--ghost" id="anim-new-from-expired" style="width:auto;">New project</button>
+          </div>
         </div>
         ${p.status === 'character_review' ? `
         <div class="anim-lock-banner">
@@ -335,6 +400,11 @@
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
     });
     let expiredCount = 0;
+    const showExpiredBanner = () => {
+      const banner = document.getElementById('anim-expired-banner');
+      if (banner) banner.hidden = false;
+    };
+    if (projectMediaExpired(p)) showExpiredBanner();
     el.querySelectorAll('img.anim-media[data-fallback]').forEach((img) => {
       img.addEventListener('error', () => {
         expiredCount += 1;
@@ -342,10 +412,13 @@
         ph.className = 'anim-tile__ph anim-tile__ph--fail';
         ph.textContent = 'Expired';
         img.replaceWith(ph);
-        const banner = document.getElementById('anim-expired-banner');
-        if (banner && expiredCount >= 1) banner.hidden = false;
+        if (expiredCount >= 1) showExpiredBanner();
       }, { once: true });
     });
+    document.getElementById('anim-delete-expired')?.addEventListener('click', () => {
+      if (_project?.id) deleteProject(_project.id);
+    });
+    document.getElementById('anim-new-from-expired')?.addEventListener('click', () => newProject());
     document.getElementById('anim-approve-character')?.addEventListener('click', approveCharacter);
     document.getElementById('anim-open-review')?.addEventListener('click', () => {
       document.querySelector('[data-nav="content"]')?.click();
@@ -579,6 +652,9 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      if (data.durable === false || /\/api\/media\//i.test(String(data.url))) {
+        throw new Error('Upload did not persist to CDN. Check Atlas API key on the server, then retry.');
+      }
       const role = defaultRefRole();
       _refs.push({ url: data.url, title: file.name || 'Upload', role });
       renderRefs();
@@ -684,8 +760,11 @@
         .anim-empty__hint { font-size:0.75rem; color:rgba(167,139,250,0.85); }
         .anim-recent { max-width:520px; margin:28px auto 0; text-align:left; }
         .anim-recent__list { display:flex; flex-direction:column; gap:8px; }
-        .anim-recent__item { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); color:#E2E8F0; cursor:pointer; font-family:inherit; }
+        .anim-recent__row { display:flex; align-items:stretch; gap:6px; }
+        .anim-recent__item { display:flex; align-items:center; justify-content:space-between; gap:12px; flex:1; text-align:left; padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); color:#E2E8F0; cursor:pointer; font-family:inherit; }
         .anim-recent__item:hover { border-color:rgba(167,139,250,0.45); background:rgba(124,58,237,0.12); }
+        .anim-recent__del { width:auto !important; padding:0 12px !important; font-size:0.85rem !important; opacity:0.55; }
+        .anim-recent__del:hover { opacity:1; color:#FCA5A5 !important; }
         .anim-recent__title { font-size:0.85rem; font-weight:650; color:#F8FAFC; }
         .anim-recent__meta { display:flex; align-items:center; gap:8px; flex-shrink:0; }
         .anim-recent__mode { font-size:0.65rem; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:0.04em; }
@@ -803,11 +882,19 @@
     }
     renderRefs();
 
-    // Auto-resume in-flight work; otherwise show home + recent projects.
-    if (!_project) {
+    // Auto-resume in-flight work; never reopen projects with dead ephemeral media.
+    if (_project && projectMediaExpired(_project)) {
+      const deadId = _project.id;
+      _project = null;
+      _refs = [];
+      stopPoll();
+      await refreshRecent();
+      if (deadId) await deleteProject(deadId, { silent: true });
+    } else if (!_project) {
       await refreshRecent();
       const inflight = _recent.find((p) =>
-        ['developing', 'generating', 'assembling', 'brief_ready', 'character_review'].includes(p.status)
+        !projectMediaExpired(p)
+        && ['developing', 'generating', 'assembling', 'brief_ready', 'character_review'].includes(p.status)
       );
       if (inflight) _project = inflight;
     } else {
