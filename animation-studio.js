@@ -7,6 +7,7 @@
 
   let _meta = null;
   let _project = null;
+  let _recent = []; // project list for home screen
   let _pollTimer = null;
   let _busy = false;
   let _refs = []; // [{ url, title }]
@@ -124,17 +125,66 @@
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:${c}22;border:1px solid ${c}55;color:${c};font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${esc(status || 'idle')}</span>`;
   }
 
+  function projectTitle(p) {
+    return p?.agent_brief?.title || p?.user_prompt?.slice(0, 48) || 'Untitled project';
+  }
+
+  async function refreshRecent() {
+    try {
+      const list = await animFetch('/api/animation/projects');
+      _recent = list.projects || [];
+    } catch (_) {
+      _recent = [];
+    }
+  }
+
+  async function openProject(id) {
+    if (!id || _busy) return;
+    try {
+      const data = await animFetch(`/api/animation/projects/${id}`);
+      _project = data.project;
+      _refs = (_project.reference_urls || []).map((url) => ({ url, title: 'Ref' }));
+      if (!_refs.length && _project.character_ref_url) {
+        _refs = [{ url: _project.character_ref_url, title: 'Ref' }];
+      }
+      renderCanvas();
+      renderChat();
+      renderRefs();
+      if (['developing', 'generating', 'assembling'].includes(_project.status)) startPoll();
+      else stopPoll();
+      toast(`Opened ${projectTitle(_project)}`, 'success');
+    } catch (e) {
+      toast(e.message || 'Could not open project', 'error');
+    }
+  }
+
   function renderCanvas() {
     const el = document.getElementById('anim-canvas-body');
     if (!el) return;
     const p = _project;
     if (!p) {
+      const recentHtml = _recent.length ? `
+        <div class="anim-recent">
+          <div class="anim-section__label">Recent projects</div>
+          <div class="anim-recent__list">
+            ${_recent.slice(0, 12).map((rp) => `
+              <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
+                <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
+                <span class="anim-recent__meta">${statusBadge(rp.status)} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
+              </button>`).join('')}
+          </div>
+        </div>` : `
+        <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">No saved projects yet — send a prompt to start one. Projects now persist across refreshes.</div>`;
       el.innerHTML = `
         <div class="anim-empty">
           <div class="anim-empty__title">Animation canvas</div>
           <div class="anim-empty__desc">Pick a mode, describe what you want, and Claude will rewrite it into a production brief. Accept to generate character views, scenes, and shots here.</div>
           <div class="anim-empty__hint">Tip: use <strong>Character</strong> first to lock a sheet, then <strong>Video</strong> for multi-shot reels.</div>
-        </div>`;
+        </div>
+        ${recentHtml}`;
+      el.querySelectorAll('[data-open-project]').forEach((btn) => {
+        btn.addEventListener('click', () => openProject(btn.dataset.openProject));
+      });
       return;
     }
 
@@ -430,10 +480,11 @@
     toast('Reference added', 'success');
   }
 
-  function goHome() {
+  async function goHome() {
     stopPoll();
     _project = null;
     _refs = [];
+    await refreshRecent();
     renderCanvas();
     renderChat();
     renderRefs();
@@ -499,10 +550,17 @@
         .anim-msg--agent { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); }
         .anim-msg__role { font-size:0.65rem; font-weight:700; color:#A78BFA; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.04em; }
         .anim-msg__text { font-size:0.82rem; color:#E2E8F0; line-height:1.45; white-space:pre-wrap; }
-        .anim-empty { max-width:420px; margin:12vh auto 0; text-align:center; }
+        .anim-empty { max-width:420px; margin:8vh auto 0; text-align:center; }
         .anim-empty__title { font-size:1.35rem; font-weight:800; color:#F8FAFC; margin-bottom:8px; }
         .anim-empty__desc { font-size:0.88rem; color:rgba(255,255,255,0.55); line-height:1.5; margin-bottom:12px; }
         .anim-empty__hint { font-size:0.75rem; color:rgba(167,139,250,0.85); }
+        .anim-recent { max-width:520px; margin:28px auto 0; text-align:left; }
+        .anim-recent__list { display:flex; flex-direction:column; gap:8px; }
+        .anim-recent__item { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); color:#E2E8F0; cursor:pointer; font-family:inherit; }
+        .anim-recent__item:hover { border-color:rgba(167,139,250,0.45); background:rgba(124,58,237,0.12); }
+        .anim-recent__title { font-size:0.85rem; font-weight:650; color:#F8FAFC; }
+        .anim-recent__meta { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+        .anim-recent__mode { font-size:0.65rem; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:0.04em; }
         .anim-canvas-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; }
         .anim-section { margin-bottom:22px; }
         .anim-section__label { font-size:0.68rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:10px; }
@@ -605,15 +663,15 @@
     }
     renderRefs();
 
-    // Only auto-resume an in-flight project — otherwise show the welcome/home screen.
+    // Auto-resume in-flight work; otherwise show home + recent projects.
     if (!_project) {
-      try {
-        const list = await animFetch('/api/animation/projects');
-        const inflight = (list.projects || []).find((p) =>
-          ['developing', 'generating', 'assembling', 'brief_ready'].includes(p.status)
-        );
-        if (inflight) _project = inflight;
-      } catch (_) {}
+      await refreshRecent();
+      const inflight = _recent.find((p) =>
+        ['developing', 'generating', 'assembling', 'brief_ready'].includes(p.status)
+      );
+      if (inflight) _project = inflight;
+    } else {
+      await refreshRecent();
     }
     renderCanvas();
     renderChat();
