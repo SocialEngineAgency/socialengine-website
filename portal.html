@@ -16683,9 +16683,17 @@
         _renderCalendar();
         _loadCalendar({ silent: true });
         if (typeof showToast === 'function') {
-          if (data.published) showToast(`Published to socials ✅ (${item.date} ${item.time || '09:00'})`, 'success');
-          else if (data.publish_error) showToast(`Saved to calendar — publish retry soon: ${data.publish_error}`, 'warning');
-          else showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) — goes live at that time`, 'success');
+          if (data.published_partial || data.publish_warning) {
+            const ok = (data.published_platforms || []).join(', ') || 'some platforms';
+            const bad = data.publish_warning || (data.failed_platforms || []).join(', ') || 'other platforms';
+            showToast(`Posted to ${ok} — failed: ${bad}`, 'warning');
+          } else if (data.published) {
+            showToast(`Published to ${(data.published_platforms || item.platforms || []).join(', ') || 'socials'} ✅`, 'success');
+          } else if (data.publish_error) {
+            showToast(`Saved to calendar — publish failed: ${data.publish_error}`, 'warning');
+          } else {
+            showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) — goes live at that time`, 'success');
+          }
         }
         // Refresh open day panel if viewing this date
         try {
