@@ -47,6 +47,7 @@ test('facebook requires both native page id and token for full analytics status'
       social_connected_platforms: ['facebook'],
       meta_page_id: '12345',
       meta_page_token: 'token-abc',
+      facebook_connected: 'true',
     },
     {
       accounts: [{ platform: 'facebook', name: 'Brand Page' }],
@@ -57,6 +58,22 @@ test('facebook requires both native page id and token for full analytics status'
   assert.equal(state.nativeConnected, true);
   assert.equal(state.fullyConnected, true);
   assert.equal(state.statusLabel, 'Connected');
+});
+
+test('facebook disconnect flag wins even when shared Meta tokens remain for Instagram', () => {
+  const state = getPlatformConnectionState(
+    'facebook',
+    {
+      meta_page_id: '12345',
+      meta_page_token: 'token-abc',
+      facebook_connected: 'false',
+      instagram_user_id: '17841402339474187',
+    },
+    { accounts: [] }
+  );
+  assert.equal(state.nativeConnected, false);
+  assert.equal(state.fullyConnected, false);
+  assert.equal(state.statusLabel, 'Not connected');
 });
 
 test('meta native-only connection shows Connected, not Analytics only', () => {

@@ -13072,7 +13072,7 @@
   // Disconnect a platform — clears tokens in Airtable then refreshes settings
   async function disconnectPlatform(platform) {
     const label = platform === 'instagram' ? 'Instagram' : platform === 'facebook' ? 'Facebook' : platform === 'tiktok' ? 'TikTok' : platform;
-    if (!confirm(`Disconnect ${label}? You can reconnect anytime to re-authorize Meta permissions for App Review videos.`)) return;
+    if (!confirm(`Disconnect ${label}? You can reconnect anytime to re-authorize Meta permissions.`)) return;
     try {
       const r = await fetch(`${API}/api/social-disconnect`, {
         method: 'POST',
@@ -13081,9 +13081,19 @@
       });
       const data = await r.json();
       if (data.success) {
-        // Refresh client data and re-render settings
+        // Optimistically clear local FB flag so UI updates even before refresh
+        if (platform === 'facebook' && clientData?.client) {
+          clientData.client.facebook_connected = 'false';
+          clientData.client.meta_page_name = '';
+        }
         clientData = await refreshClientData().catch(() => clientData);
+        if (platform === 'facebook' && clientData?.client) {
+          clientData.client.facebook_connected = 'false';
+        }
         renderSettingsPage(clientData);
+        if (typeof showToast === 'function') {
+          showToast(data.note || `${label} disconnected — you can Connect again to refresh permissions.`, 'success');
+        }
       } else {
         alert(`Could not disconnect ${platform}: ${data.error || 'Unknown error'}`);
       }

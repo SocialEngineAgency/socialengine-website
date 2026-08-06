@@ -66,8 +66,18 @@
   }
 
   function isNativeConnected(platform, clientRecord) {
-    const meta = getPlatformMeta(platform);
-    return meta.nativeFields.length > 0 && meta.nativeFields.every((field) => hasTruthyValue(clientRecord?.[field]));
+    const target = normalizePlatform(platform);
+    const meta = getPlatformMeta(target);
+    if (!meta.nativeFields.length) return false;
+    const hasNativeFields = meta.nativeFields.every((field) => hasTruthyValue(clientRecord?.[field]));
+    if (!hasNativeFields) return false;
+    // Facebook shares Meta page tokens with Instagram. An explicit disconnect
+    // sets facebook_connected=false while leaving tokens for IG — honor that.
+    if (target === 'facebook') {
+      const flag = String(clientRecord?.facebook_connected ?? '').toLowerCase();
+      if (flag === 'false' || flag === '0' || flag === 'no') return false;
+    }
+    return true;
   }
 
   // Real native OAuth routes live on the API server:
