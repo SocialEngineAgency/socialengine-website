@@ -308,23 +308,24 @@
     }
   }
 
-  async function newProject() {
+  function goHome() {
     stopPoll();
     _project = null;
-    const mode = document.getElementById('anim-mode')?.value || 'video';
-    const look = document.getElementById('anim-look')?.value || 'stylized';
-    try {
-      const data = await animFetch('/api/animation/projects', {
-        method: 'POST',
-        body: JSON.stringify({ mode, look }),
-      });
-      _project = data.project;
-      renderCanvas();
-      renderChat();
-      toast('New project', 'info');
-    } catch (e) {
-      toast(e.message, 'error');
+    renderCanvas();
+    renderChat();
+    const actions = document.getElementById('anim-brief-actions');
+    if (actions) actions.innerHTML = '';
+    const ta = document.getElementById('anim-prompt');
+    if (ta) {
+      ta.value = '';
+      ta.focus();
     }
+  }
+
+  async function newProject() {
+    // Back to the first Animate screen — do not create a server project until Send.
+    goHome();
+    toast('Ready for a new idea', 'info');
   }
 
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
@@ -406,7 +407,10 @@
         <section class="anim-canvas">
           <div class="anim-canvas-header">
             <h2>Animation Studio</h2>
-            <button type="button" class="anim-btn anim-btn--ghost" id="anim-new" style="padding:7px 12px;font-size:0.72rem;">New project</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-home" style="padding:7px 12px;font-size:0.72rem;" title="Back to start">Home</button>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-new" style="padding:7px 12px;font-size:0.72rem;">New project</button>
+            </div>
           </div>
           <div class="anim-canvas-body" id="anim-canvas-body"></div>
         </section>
@@ -431,14 +435,19 @@
 
     document.getElementById('anim-send')?.addEventListener('click', sendPrompt);
     document.getElementById('anim-new')?.addEventListener('click', newProject);
+    document.getElementById('anim-home')?.addEventListener('click', goHome);
     document.getElementById('anim-prompt')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendPrompt();
     });
 
+    // Only auto-resume an in-flight project — otherwise show the welcome/home screen.
     if (!_project) {
       try {
         const list = await animFetch('/api/animation/projects');
-        if (list.projects?.length) _project = list.projects[0];
+        const inflight = (list.projects || []).find((p) =>
+          ['developing', 'generating', 'assembling', 'brief_ready'].includes(p.status)
+        );
+        if (inflight) _project = inflight;
       } catch (_) {}
     }
     renderCanvas();
