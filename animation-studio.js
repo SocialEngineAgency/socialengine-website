@@ -10,7 +10,26 @@
   let _recent = []; // project list for home screen
   let _pollTimer = null;
   let _busy = false;
-  let _refs = []; // [{ url, title }]
+  let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
+  const REF_ROLES = [
+    { id: 'character', label: 'Character' },
+    { id: 'style', label: 'Style' },
+    { id: 'scene', label: 'Scene' },
+  ];
+
+  function defaultRefRole() {
+    if (!_refs.some((r) => r.role === 'character')) return 'character';
+    if (!_refs.some((r) => r.role === 'style')) return 'style';
+    return 'scene';
+  }
+
+  function refsPayload() {
+    return _refs.map((r) => ({
+      url: r.url,
+      role: REF_ROLES.some((x) => x.id === r.role) ? r.role : 'character',
+      title: r.title || undefined,
+    }));
+  }
 
   function apiBase() {
     return (typeof window.API !== 'undefined' && window.API) || window._seAPI || '';
@@ -82,13 +101,9 @@
         _project = data.project;
         renderCanvas();
         renderChat();
-        const done = ['ready', 'failed', 'brief_ready', 'brief'].includes(_project.status);
-        if (done && !['developing', 'generating', 'assembling'].includes(_project.status)) {
-          if (['ready', 'failed'].includes(_project.status)) stopPoll();
-        }
         if (['developing', 'generating', 'assembling'].includes(_project.status)) {
           /* keep polling */
-        } else if (_project.status === 'ready' || _project.status === 'failed') {
+        } else {
           stopPoll();
         }
       } catch (_) {}
@@ -116,6 +131,7 @@
       brief_ready: '#A78BFA',
       developing: '#FBBF24',
       generating: '#FBBF24',
+      character_review: '#F472B6',
       assembling: '#38BDF8',
       ready: '#34D399',
       failed: '#F87171',
@@ -205,15 +221,22 @@
       </div>
 
       <div class="anim-section">
-        <div class="anim-section__label">Character / asset lock</div>
+        <div class="anim-section__label">Character / asset lock ${p.character_pack?.locked ? '· Locked' : ''}</div>
+        ${p.model_plan?.imageEndpoint ? `<div class="anim-model-line">Model: ${esc((p.model_plan.imageEndpoint || '').split('/').slice(-2).join('/'))}${p.model_plan.character_ref ? ' · identity from Character ref' : ' · no Character ref'}${p.model_plan.style_ref ? ' · Style ref for look' : ''}</div>` : ''}
         ${plannedViews.length ? `
         <div class="anim-strip">
           ${plannedViews.map((v) => `
             <div class="anim-tile">
               ${tileMedia(v.url, v.label, v.status || p.status)}
-              <div class="anim-tile__cap">${esc(v.label)}</div>
+              <div class="anim-tile__cap">${esc(v.label)}${v.model ? `<span class="anim-tile__model">${esc(String(v.model).split('/').pop())}</span>` : ''}</div>
             </div>`).join('')}
-        </div>` : (p.reference_urls || []).length || _refs.length ? `
+        </div>
+        ${p.status === 'character_review' ? `
+        <div class="anim-lock-banner">
+          <div>Review the sheet. If identity looks right, approve the lock — shots will not generate until you do.</div>
+          <button type="button" class="anim-btn" id="anim-approve-character" style="width:auto;margin-top:10px;">Approve character lock</button>
+        </div>` : ''}
+        ` : (p.references || []).length || (p.reference_urls || []).length || _refs.length ? `
         <div class="anim-strip">
           ${(p.reference_urls?.length ? p.reference_urls : _refs.map((r) => r.url)).map((url, i) => `
             <div class="anim-tile">
@@ -243,8 +266,10 @@
                 <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>Regenerate</button>
               </div>
             </div>`).join('') : `
-            <div class="anim-placeholder-row">${brief?.shots?.length
-              ? `Ready to generate ${brief.shots.length} shots — accept the brief in chat.`
+            <div class="anim-placeholder-row">${p.status === 'character_review'
+              ? 'Shots wait until you Approve character lock.'
+              : brief?.shots?.length
+              ? `Ready to generate ${brief.shots.length} shots — accept the brief, then approve the character lock.`
               : 'Shot cards will land on this timeline.'}</div>
             ${brief?.shots?.length ? `<div class="anim-timeline anim-timeline--ghost">${brief.shots.map((s) => `
               <div class="anim-shot anim-shot--ghost"><div class="anim-shot__media">${
@@ -256,7 +281,7 @@
         </div>
       </div>
 
-      ${p.final_url ? `
+      ${p.final_url && p.status !== 'character_review' ? `
       <div class="anim-section">
         <div class="anim-section__label">Final</div>
         <div class="anim-final">
@@ -280,6 +305,7 @@
         img.replaceWith(ph);
       }, { once: true });
     });
+    document.getElementById('anim-approve-character')?.addEventListener('click', approveCharacter);
     document.getElementById('anim-open-review')?.addEventListener('click', () => {
       document.querySelector('[data-nav="content"]')?.click();
     });
@@ -318,6 +344,16 @@
           const ta = document.getElementById('anim-prompt');
           if (ta) ta.focus();
         });
+      } else if (_project?.status === 'character_review') {
+        actions.innerHTML = `
+          <div class="anim-brief-card">
+            <div class="anim-brief-card__title">Character lock</div>
+            <div class="anim-brief-shot">Check the canvas views. Approve only if face/hair/outfit match your Character reference.</div>
+            <div class="anim-brief-btns">
+              <button type="button" class="anim-btn" id="anim-accept-character">Approve character lock</button>
+            </div>
+          </div>`;
+        document.getElementById('anim-accept-character')?.addEventListener('click', approveCharacter);
       } else if (['developing', 'generating', 'assembling'].includes(_project?.status)) {
         actions.innerHTML = `<div class="anim-working">Generating — canvas updates live…</div>`;
       } else {
@@ -331,14 +367,15 @@
     if (_project?.id) return _project;
     const mode = document.getElementById('anim-mode')?.value || 'video';
     const look = document.getElementById('anim-look')?.value || 'stylized';
-    const reference_urls = _refs.map((r) => r.url);
+    const references = refsPayload();
     const data = await animFetch('/api/animation/projects', {
       method: 'POST',
       body: JSON.stringify({
         mode,
         look,
-        reference_urls,
-        character_ref_url: reference_urls[0] || null,
+        references,
+        reference_urls: references.map((r) => r.url),
+        character_ref_url: references.find((r) => r.role === 'character')?.url || null,
       }),
     });
     _project = data.project;
@@ -350,12 +387,15 @@
     const ta = document.getElementById('anim-prompt');
     const prompt = (ta?.value || '').trim();
     if (!prompt) return toast('Enter a prompt', 'error');
+    if (_refs.length && !_refs.some((r) => r.role === 'character')) {
+      return toast('Tag one reference as Character (identity)', 'error');
+    }
     _busy = true;
     try {
       await ensureProject();
       const mode = document.getElementById('anim-mode')?.value || 'video';
       const look = document.getElementById('anim-look')?.value || 'stylized';
-      const reference_urls = _refs.map((r) => r.url);
+      const references = refsPayload();
       _project.mode = mode;
       _project.look = look;
       toast('Claude is rewriting your brief…', 'info');
@@ -365,8 +405,9 @@
           prompt,
           mode,
           look,
-          reference_urls,
-          character_ref_url: reference_urls[0] || null,
+          references,
+          reference_urls: references.map((r) => r.url),
+          character_ref_url: references.find((r) => r.role === 'character')?.url || null,
         }),
       });
       _project = data.project;
@@ -395,9 +436,34 @@
       renderCanvas();
       renderChat();
       startPoll();
-      toast('Generation started', 'success');
+      toast('Generating character sheet…', 'success');
     } catch (e) {
       toast(e.message || 'Approve failed', 'error');
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function approveCharacter() {
+    if (_busy || !_project?.id) return;
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/approve-character`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      _project = data.project;
+      renderCanvas();
+      renderChat();
+      if (data.started) {
+        startPoll();
+        toast('Character locked — generating shots…', 'success');
+      } else {
+        stopPoll();
+        toast('Character lock saved', 'success');
+      }
+    } catch (e) {
+      toast(e.message || 'Character approve failed', 'error');
     } finally {
       _busy = false;
     }
@@ -426,18 +492,31 @@
     const box = document.getElementById('anim-refs');
     if (!box) return;
     if (!_refs.length) {
-      box.innerHTML = `<div class="anim-refs-empty">No references yet — upload or paste a URL</div>`;
+      box.innerHTML = `<div class="anim-refs-empty">Add refs and tag roles: Character = identity, Style = art look, Scene = setting</div>`;
       return;
     }
     box.innerHTML = _refs.map((r, i) => `
-      <div class="anim-ref-chip" title="${esc(r.title || r.url)}">
-        <img src="${esc(r.url)}" alt="" />
-        <button type="button" class="anim-ref-x" data-i="${i}" aria-label="Remove">×</button>
+      <div class="anim-ref-card">
+        <div class="anim-ref-chip" title="${esc(r.title || r.url)}">
+          <img src="${esc(mediaSrc(r.url))}" alt="" />
+          <button type="button" class="anim-ref-x" data-i="${i}" aria-label="Remove">×</button>
+        </div>
+        <select class="anim-ref-role" data-i="${i}" title="Reference role">
+          ${REF_ROLES.map((role) =>
+            `<option value="${role.id}" ${r.role === role.id ? 'selected' : ''}>${role.label}</option>`
+          ).join('')}
+        </select>
       </div>`).join('');
     box.querySelectorAll('.anim-ref-x').forEach((btn) => {
       btn.addEventListener('click', () => {
         _refs.splice(Number(btn.dataset.i), 1);
         renderRefs();
+      });
+    });
+    box.querySelectorAll('.anim-ref-role').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const i = Number(sel.dataset.i);
+        if (_refs[i]) _refs[i].role = sel.value;
       });
     });
   }
@@ -459,9 +538,10 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
-      _refs.push({ url: data.url, title: file.name || 'Upload' });
+      const role = defaultRefRole();
+      _refs.push({ url: data.url, title: file.name || 'Upload', role });
       renderRefs();
-      toast('Reference added', 'success');
+      toast(`Added as ${role}`, 'success');
     } catch (e) {
       toast(e.message || 'Upload failed', 'error');
     }
@@ -474,10 +554,11 @@
     if (!/^https?:\/\//i.test(raw)) return toast('URL must start with http(s)://', 'error');
     if (_refs.length >= 8) return toast('Max 8 reference images', 'error');
     if (_refs.some((r) => r.url === raw)) return toast('Already attached', 'info');
-    _refs.push({ url: raw, title: 'URL' });
+    const role = defaultRefRole();
+    _refs.push({ url: raw, title: 'URL', role });
     if (input) input.value = '';
     renderRefs();
-    toast('Reference added', 'success');
+    toast(`Added as ${role}`, 'success');
   }
 
   async function goHome() {
@@ -535,12 +616,17 @@
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
-        .anim-refs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; min-height:28px; }
-        .anim-refs-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); padding:4px 0; }
-        .anim-ref-chip { position:relative; width:52px; height:52px; border-radius:8px; overflow:hidden; border:1px solid rgba(167,139,250,0.45); }
+        .anim-refs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:8px; min-height:28px; }
+        .anim-refs-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); padding:4px 0; line-height:1.4; }
+        .anim-ref-card { display:flex; flex-direction:column; gap:4px; width:72px; }
+        .anim-ref-chip { position:relative; width:72px; height:72px; border-radius:8px; overflow:hidden; border:1px solid rgba(167,139,250,0.45); }
         .anim-ref-chip img { width:100%; height:100%; object-fit:cover; display:block; }
         .anim-ref-x { position:absolute; top:2px; right:2px; width:18px; height:18px; border:none; border-radius:50%; background:rgba(0,0,0,0.7); color:#fff; font-size:12px; line-height:1; cursor:pointer; padding:0; }
+        .anim-ref-role { width:100%; background:#1E293B; border:1px solid rgba(255,255,255,0.12); color:#E2E8F0; border-radius:6px; padding:3px 4px; font-size:0.62rem; font-family:inherit; }
         .anim-ref-tools { display:flex; gap:6px; margin-bottom:8px; align-items:center; }
+        .anim-model-line { font-size:0.68rem; color:rgba(167,139,250,0.85); margin:-4px 0 10px; }
+        .anim-tile__model { display:block; font-size:0.58rem; color:rgba(255,255,255,0.35); margin-top:2px; }
+        .anim-lock-banner { margin-top:12px; padding:12px 14px; border-radius:12px; background:rgba(244,114,182,0.1); border:1px solid rgba(244,114,182,0.35); color:#F9A8D4; font-size:0.78rem; line-height:1.4; }
         .anim-ref-url { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:7px 9px; font-size:0.72rem; font-family:inherit; }
         .anim-btn { width:100%; padding:10px 14px; border:none; border-radius:10px; background:linear-gradient(135deg,#7C3AED,#5B21B6); color:#fff; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit; }
         .anim-btn:disabled { opacity:0.5; cursor:not-allowed; }
@@ -624,7 +710,7 @@
               <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
               <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
             </div>
-            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References</div>
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag Character / Style / Scene</span></div>
             <div class="anim-refs" id="anim-refs"></div>
             <div class="anim-ref-tools">
               <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
@@ -655,11 +741,23 @@
     document.getElementById('anim-prompt')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendPrompt();
     });
-    // Restore refs from resumed project
-    if (_project?.reference_urls?.length && !_refs.length) {
-      _refs = _project.reference_urls.map((url) => ({ url, title: 'Ref' }));
-    } else if (_project?.character_ref_url && !_refs.length) {
-      _refs = [{ url: _project.character_ref_url, title: 'Ref' }];
+    // Restore refs from resumed project (prefer role-tagged references)
+    if (!_refs.length) {
+      if (_project?.references?.length) {
+        _refs = _project.references.map((r) => ({
+          url: r.url,
+          title: r.title || 'Ref',
+          role: r.role || 'character',
+        }));
+      } else if (_project?.reference_urls?.length) {
+        _refs = _project.reference_urls.map((url, i) => ({
+          url,
+          title: 'Ref',
+          role: i === 0 ? 'character' : i === 1 ? 'style' : 'scene',
+        }));
+      } else if (_project?.character_ref_url) {
+        _refs = [{ url: _project.character_ref_url, title: 'Ref', role: 'character' }];
+      }
     }
     renderRefs();
 
@@ -667,7 +765,7 @@
     if (!_project) {
       await refreshRecent();
       const inflight = _recent.find((p) =>
-        ['developing', 'generating', 'assembling', 'brief_ready'].includes(p.status)
+        ['developing', 'generating', 'assembling', 'brief_ready', 'character_review'].includes(p.status)
       );
       if (inflight) _project = inflight;
     } else {
