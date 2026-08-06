@@ -9,6 +9,7 @@
   let _project = null;
   let _pollTimer = null;
   let _busy = false;
+  let _refs = []; // [{ url, title }]
 
   function apiBase() {
     return (typeof window.API !== 'undefined' && window.API) || window._seAPI || '';
@@ -16,6 +17,12 @@
   function authHeaders() {
     return {
       'Content-Type': 'application/json',
+      'x-client-email': window.clientEmail || window.__clientEmail || '',
+      'x-client-hash': window.clientHash || window.__clientHash || '',
+    };
+  }
+  function authHeadersMultipart() {
+    return {
       'x-client-email': window.clientEmail || window.__clientEmail || '',
       'x-client-hash': window.clientHash || window.__clientHash || '',
     };
@@ -120,21 +127,26 @@
         ${statusBadge(p.status)}
       </div>
 
-      ${views.length ? `
       <div class="anim-section">
         <div class="anim-section__label">Character / asset lock</div>
+        ${views.length ? `
         <div class="anim-strip">
           ${views.map((v) => `
             <div class="anim-tile">
               ${v.url ? `<img src="${esc(v.url)}" alt="${esc(v.label)}" />` : `<div class="anim-tile__ph">${esc(v.status || '…')}</div>`}
               <div class="anim-tile__cap">${esc(v.label)}</div>
             </div>`).join('')}
+        </div>` : (p.reference_urls || []).length || _refs.length ? `
+        <div class="anim-strip">
+          ${(p.reference_urls?.length ? p.reference_urls : _refs.map((r) => r.url)).map((url, i) => `
+            <div class="anim-tile">
+              <img src="${esc(url)}" alt="Ref ${i + 1}" />
+              <div class="anim-tile__cap">Ref ${i + 1}</div>
+            </div>`).join('')}
         </div>
-      </div>` : `
-      <div class="anim-section">
-        <div class="anim-section__label">Character / asset lock</div>
-        <div class="anim-placeholder-row">Multi-view sheets appear here after you accept the brief.</div>
-      </div>`}
+        <div class="anim-placeholder-row" style="margin-top:10px;">Your references are attached — multi-view sheets generate after you accept the brief.</div>` : `
+        <div class="anim-placeholder-row">Add reference images in the chat panel, then accept the brief to generate multi-view sheets.</div>`}
+      </div>
 
       <div class="anim-section">
         <div class="anim-section__label">Timeline</div>
@@ -230,9 +242,15 @@
     if (_project?.id) return _project;
     const mode = document.getElementById('anim-mode')?.value || 'video';
     const look = document.getElementById('anim-look')?.value || 'stylized';
+    const reference_urls = _refs.map((r) => r.url);
     const data = await animFetch('/api/animation/projects', {
       method: 'POST',
-      body: JSON.stringify({ mode, look }),
+      body: JSON.stringify({
+        mode,
+        look,
+        reference_urls,
+        character_ref_url: reference_urls[0] || null,
+      }),
     });
     _project = data.project;
     return _project;
@@ -248,12 +266,19 @@
       await ensureProject();
       const mode = document.getElementById('anim-mode')?.value || 'video';
       const look = document.getElementById('anim-look')?.value || 'stylized';
+      const reference_urls = _refs.map((r) => r.url);
       _project.mode = mode;
       _project.look = look;
       toast('Claude is rewriting your brief…', 'info');
       const data = await animFetch(`/api/animation/projects/${_project.id}/brief`, {
         method: 'POST',
-        body: JSON.stringify({ prompt, mode, look }),
+        body: JSON.stringify({
+          prompt,
+          mode,
+          look,
+          reference_urls,
+          character_ref_url: reference_urls[0] || null,
+        }),
       });
       _project = data.project;
       if (ta) ta.value = '';
@@ -308,11 +333,71 @@
     }
   }
 
+  function renderRefs() {
+    const box = document.getElementById('anim-refs');
+    if (!box) return;
+    if (!_refs.length) {
+      box.innerHTML = `<div class="anim-refs-empty">No references yet — upload or paste a URL</div>`;
+      return;
+    }
+    box.innerHTML = _refs.map((r, i) => `
+      <div class="anim-ref-chip" title="${esc(r.title || r.url)}">
+        <img src="${esc(r.url)}" alt="" />
+        <button type="button" class="anim-ref-x" data-i="${i}" aria-label="Remove">×</button>
+      </div>`).join('');
+    box.querySelectorAll('.anim-ref-x').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        _refs.splice(Number(btn.dataset.i), 1);
+        renderRefs();
+      });
+    });
+  }
+
+  async function uploadRefFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return toast('Please upload an image', 'error');
+    if (file.size > 10 * 1024 * 1024) return toast('Image must be under 10MB', 'error');
+    if (_refs.length >= 8) return toast('Max 8 reference images', 'error');
+    toast('Uploading reference…', 'info');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('image', file);
+      const res = await fetch(`${apiBase()}/api/studio/upload-image`, {
+        method: 'POST',
+        headers: authHeadersMultipart(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      _refs.push({ url: data.url, title: file.name || 'Upload' });
+      renderRefs();
+      toast('Reference added', 'success');
+    } catch (e) {
+      toast(e.message || 'Upload failed', 'error');
+    }
+  }
+
+  function addRefUrl() {
+    const input = document.getElementById('anim-ref-url');
+    const raw = (input?.value || '').trim();
+    if (!raw) return toast('Paste an image URL first', 'error');
+    if (!/^https?:\/\//i.test(raw)) return toast('URL must start with http(s)://', 'error');
+    if (_refs.length >= 8) return toast('Max 8 reference images', 'error');
+    if (_refs.some((r) => r.url === raw)) return toast('Already attached', 'info');
+    _refs.push({ url: raw, title: 'URL' });
+    if (input) input.value = '';
+    renderRefs();
+    toast('Reference added', 'success');
+  }
+
   function goHome() {
     stopPoll();
     _project = null;
+    _refs = [];
     renderCanvas();
     renderChat();
+    renderRefs();
     const actions = document.getElementById('anim-brief-actions');
     if (actions) actions.innerHTML = '';
     const ta = document.getElementById('anim-prompt');
@@ -360,6 +445,13 @@
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
+        .anim-refs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; min-height:28px; }
+        .anim-refs-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); padding:4px 0; }
+        .anim-ref-chip { position:relative; width:52px; height:52px; border-radius:8px; overflow:hidden; border:1px solid rgba(167,139,250,0.45); }
+        .anim-ref-chip img { width:100%; height:100%; object-fit:cover; display:block; }
+        .anim-ref-x { position:absolute; top:2px; right:2px; width:18px; height:18px; border:none; border-radius:50%; background:rgba(0,0,0,0.7); color:#fff; font-size:12px; line-height:1; cursor:pointer; padding:0; }
+        .anim-ref-tools { display:flex; gap:6px; margin-bottom:8px; align-items:center; }
+        .anim-ref-url { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:7px 9px; font-size:0.72rem; font-family:inherit; }
         .anim-btn { width:100%; padding:10px 14px; border:none; border-radius:10px; background:linear-gradient(135deg,#7C3AED,#5B21B6); color:#fff; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit; }
         .anim-btn:disabled { opacity:0.5; cursor:not-allowed; }
         .anim-btn--ghost { background:transparent; border:1px solid rgba(255,255,255,0.15); color:#CBD5E1; width:auto; }
@@ -426,6 +518,14 @@
               <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
               <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
             </div>
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References</div>
+            <div class="anim-refs" id="anim-refs"></div>
+            <div class="anim-ref-tools">
+              <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;white-space:nowrap;">Upload</button>
+              <input type="url" id="anim-ref-url" class="anim-ref-url" placeholder="Paste image URL…" />
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-add-url" style="padding:7px 10px;font-size:0.72rem;width:auto;">Add</button>
+            </div>
             <textarea id="anim-prompt" class="anim-prompt" placeholder="Describe a character, scene, product, or full video idea…"></textarea>
             <button type="button" class="anim-btn" id="anim-send">Send to Claude</button>
           </div>
@@ -436,9 +536,26 @@
     document.getElementById('anim-send')?.addEventListener('click', sendPrompt);
     document.getElementById('anim-new')?.addEventListener('click', newProject);
     document.getElementById('anim-home')?.addEventListener('click', goHome);
+    document.getElementById('anim-ref-upload')?.addEventListener('click', () => document.getElementById('anim-ref-file')?.click());
+    document.getElementById('anim-ref-file')?.addEventListener('change', async (e) => {
+      const files = [...(e.target.files || [])];
+      for (const f of files) await uploadRefFile(f);
+      e.target.value = '';
+    });
+    document.getElementById('anim-ref-add-url')?.addEventListener('click', addRefUrl);
+    document.getElementById('anim-ref-url')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addRefUrl(); }
+    });
     document.getElementById('anim-prompt')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendPrompt();
     });
+    // Restore refs from resumed project
+    if (_project?.reference_urls?.length && !_refs.length) {
+      _refs = _project.reference_urls.map((url) => ({ url, title: 'Ref' }));
+    } else if (_project?.character_ref_url && !_refs.length) {
+      _refs = [{ url: _project.character_ref_url, title: 'Ref' }];
+    }
+    renderRefs();
 
     // Only auto-resume an in-flight project — otherwise show the welcome/home screen.
     if (!_project) {
