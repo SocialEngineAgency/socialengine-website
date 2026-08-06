@@ -12,7 +12,7 @@
   let _busy = false;
   let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
   const REF_ROLES = [
-    { id: 'character', label: 'Character' },
+    { id: 'character', label: 'Char' },
     { id: 'style', label: 'Style' },
     { id: 'scene', label: 'Scene' },
   ];
@@ -78,6 +78,30 @@
     }
     const src = mediaSrc(url);
     return `<img class="anim-media" src="${esc(src)}" alt="${esc(alt || '')}" loading="lazy" data-fallback="1" />`;
+  }
+
+  function projectHasCharacterRef(p) {
+    if (!p) return false;
+    if (p.model_plan?.character_ref) return true;
+    if (p.character_ref_url) return true;
+    return (p.references || []).some((r) => r.role === 'character' && r.url);
+  }
+
+  function projectHasStyleRef(p) {
+    if (!p) return false;
+    if (p.model_plan?.style_ref) return true;
+    if (p.style_ref_url) return true;
+    return (p.references || []).some((r) => r.role === 'style' && r.url)
+      || ((p.reference_urls || []).length > 1 && !(p.references || []).length);
+  }
+
+  function modelLine(p) {
+    if (!p?.model_plan?.imageEndpoint && !projectHasCharacterRef(p)) return '';
+    const ep = p.model_plan?.imageEndpoint || 'unknown';
+    const short = ep.split('/').slice(-2).join('/');
+    const char = projectHasCharacterRef(p) ? ' · identity from Character ref' : ' · no Character ref';
+    const style = projectHasStyleRef(p) ? ' · Style ref for look' : '';
+    return `<div class="anim-model-line">Model: ${esc(short)}${char}${style}</div>`;
   }
 
   async function animFetch(path, opts) {
@@ -222,7 +246,7 @@
 
       <div class="anim-section">
         <div class="anim-section__label">Character / asset lock ${p.character_pack?.locked ? '· Locked' : ''}</div>
-        ${p.model_plan?.imageEndpoint ? `<div class="anim-model-line">Model: ${esc((p.model_plan.imageEndpoint || '').split('/').slice(-2).join('/'))}${p.model_plan.character_ref ? ' · identity from Character ref' : ' · no Character ref'}${p.model_plan.style_ref ? ' · Style ref for look' : ''}</div>` : ''}
+        ${modelLine(p)}
         ${plannedViews.length ? `
         <div class="anim-strip">
           ${plannedViews.map((v) => `
@@ -230,6 +254,9 @@
               ${tileMedia(v.url, v.label, v.status || p.status)}
               <div class="anim-tile__cap">${esc(v.label)}${v.model ? `<span class="anim-tile__model">${esc(String(v.model).split('/').pop())}</span>` : ''}</div>
             </div>`).join('')}
+        </div>
+        <div class="anim-expired-banner" id="anim-expired-banner" hidden>
+          Images expired after a server restart (old ephemeral links). Click <strong>New project</strong>, re-upload refs (tag Char + Style), and run again — new runs persist on CDN.
         </div>
         ${p.status === 'character_review' ? `
         <div class="anim-lock-banner">
@@ -281,28 +308,42 @@
         </div>
       </div>
 
-      ${p.final_url && p.status !== 'character_review' ? `
+      ${(() => {
+        const finalUrl = p.final_url;
+        if (!finalUrl || p.status === 'character_review') return '';
+        // Hide Final when it's just the uploaded character ref (legacy bug)
+        if (finalUrl === p.character_ref_url && !(p.scenes || []).some((s) => s.video_url || s.keyframe_url)) {
+          const front = (p.character_pack?.views || []).find((v) => v.label === 'front' && v.url)?.url
+            || (p.character_pack?.views || []).find((v) => v.url)?.url;
+          if (!front || front === finalUrl) return '';
+        }
+        return `
       <div class="anim-section">
         <div class="anim-section__label">Final</div>
         <div class="anim-final">
-          ${/\.(mp4|webm|mov)(\?|$)/i.test(p.final_url) || p.scenes?.some((s) => s.video_url)
-            ? `<video src="${esc(mediaSrc(p.final_url))}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
-            : `<img src="${esc(mediaSrc(p.final_url))}" alt="Final" style="max-width:280px;border-radius:12px;" />`}
+          ${/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || p.scenes?.some((s) => s.video_url)
+            ? `<video src="${esc(mediaSrc(finalUrl))}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
+            : `<img class="anim-media" src="${esc(mediaSrc(finalUrl))}" alt="Final" style="max-width:280px;border-radius:12px;" data-fallback="1" />`}
           ${p.content_record_id ? `<button type="button" class="anim-btn" id="anim-open-review">Open in Content Review</button>` : ''}
         </div>
-      </div>` : ''}
+      </div>`;
+      })()}
       ${p.error ? `<div class="anim-error">${esc(p.error)}</div>` : ''}
     `;
 
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
     });
+    let expiredCount = 0;
     el.querySelectorAll('img.anim-media[data-fallback]').forEach((img) => {
       img.addEventListener('error', () => {
+        expiredCount += 1;
         const ph = document.createElement('div');
         ph.className = 'anim-tile__ph anim-tile__ph--fail';
-        ph.textContent = 'Unavailable';
+        ph.textContent = 'Expired';
         img.replaceWith(ph);
+        const banner = document.getElementById('anim-expired-banner');
+        if (banner && expiredCount >= 1) banner.hidden = false;
       }, { once: true });
     });
     document.getElementById('anim-approve-character')?.addEventListener('click', approveCharacter);
@@ -627,6 +668,7 @@
         .anim-model-line { font-size:0.68rem; color:rgba(167,139,250,0.85); margin:-4px 0 10px; }
         .anim-tile__model { display:block; font-size:0.58rem; color:rgba(255,255,255,0.35); margin-top:2px; }
         .anim-lock-banner { margin-top:12px; padding:12px 14px; border-radius:12px; background:rgba(244,114,182,0.1); border:1px solid rgba(244,114,182,0.35); color:#F9A8D4; font-size:0.78rem; line-height:1.4; }
+        .anim-expired-banner { margin-top:12px; padding:12px 14px; border-radius:12px; background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.35); color:#FCD34D; font-size:0.78rem; line-height:1.4; }
         .anim-ref-url { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:7px 9px; font-size:0.72rem; font-family:inherit; }
         .anim-btn { width:100%; padding:10px 14px; border:none; border-radius:10px; background:linear-gradient(135deg,#7C3AED,#5B21B6); color:#fff; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit; }
         .anim-btn:disabled { opacity:0.5; cursor:not-allowed; }
