@@ -15,6 +15,7 @@
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="./claude-studio.js" defer></script>
+  <script src="./animation-studio.js" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -2698,6 +2699,7 @@
           <button class="dash-nav-item" data-nav="content"><i data-lucide="clapperboard"></i> Content Review</button>
           <button class="dash-nav-item" data-nav="schedule"><i data-lucide="calendar"></i> Schedule</button>
           <button class="dash-nav-item" data-nav="creation-studio" id="nav-creation-studio"><i data-lucide="clapperboard"></i> Studio</button>
+          <button class="dash-nav-item" data-nav="animation-studio" id="nav-animation-studio"><i data-lucide="sparkles"></i> Animate</button>
           <button class="dash-nav-item" data-nav="ad-studio"><i data-lucide="megaphone"></i> Ads</button>
           <button class="dash-nav-item" data-nav="inbox" style="position:relative;"><i data-lucide="inbox"></i> Engage</button>
           <button class="dash-nav-item" data-nav="analytics"><i data-lucide="bar-chart-3"></i> Analytics</button>
@@ -5770,6 +5772,7 @@
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
         'creation-studio': 'Video + Post — catalog reference to queue',
+        'animation-studio': 'Canvas + AI agent — characters, scenes, multi-shot reels',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'settings': 'Account and platform settings',
         'fundraise': 'JustGiving + Meta fundraisers in one place'
@@ -5783,6 +5786,7 @@
       'dashboard': 'Home',
       'content': 'Content Review',
       'creation-studio': 'Studio',
+      'animation-studio': 'Animate',
       'analytics': 'Analytics',
       'brand-voice': 'Brand',
       'ai-coach': 'Coach',
@@ -5854,6 +5858,11 @@
         if (nav === 'dashboard') { renderDashboard(clientData); }
         else if (nav === 'content') { renderContentPage(clientData); }
         else if (nav === 'creation-studio') { window._studioClientData = clientData; renderVideoStudio(); }
+        else if (nav === 'animation-studio') {
+          window._studioClientData = clientData;
+          if (typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
+          else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Animation Studio failed to load — hard refresh.</div>';
+        }
         else if (nav === 'analytics') { renderAnalyticsPage(clientData); }
         else if (nav === 'brand-voice') { renderBrandVoicePage(clientData); }
         else if (nav === 'ai-coach') { renderAICoach(); }
@@ -5879,6 +5888,10 @@
         activeNav = 'creation-studio';
         window._studioClientData = clientData;
         if (typeof renderVideoStudio === 'function') renderVideoStudio();
+      } else if (nav === 'animation-studio' && typeof renderAnimationStudio === 'function') {
+        activeNav = 'animation-studio';
+        window._studioClientData = clientData;
+        renderAnimationStudio(clientData);
       } else if (nav === 'ad-studio' && typeof renderAdStudio === 'function') {
         activeNav = 'ad-studio';
         renderAdStudio();
