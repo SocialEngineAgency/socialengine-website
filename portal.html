@@ -16326,10 +16326,68 @@
     }) || null;
   }
 
+  function _batchSelectedPlatformsCsv(item) {
+    const plats = Array.isArray(item?.platforms) ? item.platforms.filter(Boolean) : [];
+    return plats.length ? plats.join(',') : 'Instagram';
+  }
+
+  /** If already Published, only retry platforms that look missing — avoids duplicate IG posts. */
+  function _batchPlatformsForPublish(item, rec) {
+    const selected = Array.isArray(item?.platforms) ? item.platforms.slice() : ['Instagram'];
+    const f = rec?.fields || rec || {};
+    const status = String(f.status || '').toLowerCase();
+    if (status !== 'published') return selected.join(',');
+    const method = String(f.publish_method || '').toLowerCase();
+    const theme = String(f.theme || '').toLowerCase();
+    const missing = selected.filter((p) => {
+      const key = String(p).toLowerCase();
+      if (key.includes('facebook')) {
+        if (/facebook/.test(method) && !/partial|fail|facebook:/.test(theme)) return false;
+        return true;
+      }
+      if (key.includes('instagram')) {
+        if (/instagram/.test(method) && !/partial|fail|instagram:/.test(theme)) return false;
+        return true;
+      }
+      if (key.includes('tiktok')) {
+        if (/tiktok/.test(method) && !/partial|fail/.test(theme)) return false;
+        return true;
+      }
+      return true;
+    });
+    return (missing.length ? missing : selected).join(',');
+  }
+
+  async function _batchSyncPlatformsToRecord(item) {
+    const postId = item?.recordId;
+    if (!postId || String(postId).startsWith('local-')) return;
+    const platforms = _batchSelectedPlatformsCsv(item);
+    try {
+      await fetch(`${API}/api/content/update-platforms`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
+          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        },
+        body: JSON.stringify({ postId, platforms }),
+      });
+      const hit = (_calPosts || []).find((p) => String(p.id || '') === String(postId));
+      if (hit) {
+        hit.platform = platforms;
+        if (hit.fields) hit.fields.platform = platforms;
+      }
+    } catch (_) {}
+  }
+
   async function _batchPublishNowFromDay(idx, dateStr) {
     const item = _batchFiles[idx];
     if (!item) {
       if (typeof showToast === 'function') showToast('Batch item missing — refresh Schedule and use Retry publish on the calendar card', 'error');
+      return;
+    }
+    if (!(item.platforms || []).length) {
+      if (typeof showToast === 'function') showToast('Select at least one platform (Instagram / Facebook)', 'error');
       return;
     }
     let rec = _batchFindCalendarRecord(item);
@@ -16342,9 +16400,13 @@
       rec = _batchFindCalendarRecord(item);
     }
     if (!rec?.id) return;
+    await _batchSyncPlatformsToRecord(item);
+    const platformsOverride = _batchPlatformsForPublish(item, rec);
+    if (typeof showToast === 'function') {
+      showToast(`Publishing to ${platformsOverride.replace(/,/g, ' + ')}…`, 'info');
+    }
     if (typeof window._retryPublishPost === 'function') {
-      await window._retryPublishPost(rec.id, dateStr || item.date);
-      // Drop the ghost batch row after a successful push attempt so the day panel isn’t stuck
+      await window._retryPublishPost(rec.id, dateStr || item.date, platformsOverride);
       if (_batchFiles[idx]) {
         _batchFiles[idx].status = 'scheduled';
         _batchFiles[idx].recordId = rec.id;
@@ -16627,6 +16689,13 @@
     if (i > -1) { if (item.platforms.length > 1) item.platforms.splice(i, 1); }
     else item.platforms.push(platform);
     _renderBatchQueue();
+    // Keep Airtable in sync so cron + Publish now honor FB/IG toggles after Schedule
+    if (item.status === 'scheduled' && item.recordId) {
+      _batchSyncPlatformsToRecord(item);
+      if (typeof showToast === 'function') {
+        showToast(`Platforms: ${_batchSelectedPlatformsCsv(item).replace(/,/g, ' + ')}`, 'info');
+      }
+    }
   }
 
   function _batchCloseSchedulePicker() {
@@ -16815,7 +16884,8 @@
           } else if (data.publish_error) {
             showToast(`Saved to calendar — publish failed: ${data.publish_error}`, 'warning');
           } else {
-            showToast(`Scheduled ${item.date} ${item.time || '09:00'} (${_tzShortLabel(_clientTimezone())}) — goes live at that time`, 'success');
+            const platLabel = (item.platforms || []).join(' + ') || 'selected platforms';
+            showToast(`Scheduled ${item.date} ${item.time || '09:00'} → ${platLabel} (${_tzShortLabel(_clientTimezone())})`, 'success');
           }
         }
         // Refresh open day panel if viewing this date
