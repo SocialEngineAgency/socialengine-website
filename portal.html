@@ -16186,6 +16186,11 @@
 
 <input type="file" id="sched-file-input" multiple accept="video/*,image/*" style="display:none" onchange="_handleBatchUpload(this.files)">
 `;
+    // Re-entering Schedule rebuilds DOM with queue hidden — restore if uploads are still in memory
+    if (_batchFiles.length) {
+      _batchEnsureQueueVisible();
+      _renderBatchQueue();
+    }
     _loadCalendar();
   }
 
@@ -16235,6 +16240,11 @@
     el.style.height = h + 'px';
   }
 
+  function _batchEnsureQueueVisible() {
+    const queueCol = document.getElementById('sched-queue-col');
+    if (queueCol) queueCol.style.display = 'flex';
+  }
+
   function _batchToggleExpand(idx) {
     const item = _batchFiles[idx];
     if (!item) return;
@@ -16242,7 +16252,85 @@
     if (item.expanded) item.compact = false;
     else if (item.date && item.status !== 'scheduled') item.compact = true;
     _batchExpandedIdx = item.expanded ? idx : null;
+    _batchEnsureQueueVisible();
     _renderBatchQueue();
+  }
+
+  /** From day panel — open/show Batch Queue and scroll to the card (Edit in queue was a no-op when the column was hidden). */
+  function _batchFocusFromDayPanel(idx) {
+    try { if (typeof closeDatePanel === 'function') closeDatePanel(); } catch (_) {}
+    const item = _batchFiles[idx];
+    if (!item) {
+      if (typeof showToast === 'function') {
+        showToast('That upload is no longer in Batch Queue. Look for the calendar post on this day (or refresh Schedule).', 'warning');
+      }
+      return;
+    }
+    item.expanded = true;
+    item.compact = false;
+    _batchExpandedIdx = idx;
+    _batchEnsureQueueVisible();
+    _renderBatchQueue();
+    requestAnimationFrame(() => {
+      const card = document.getElementById('bq-card-' + idx);
+      const list = document.getElementById('bq-list');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.style.boxShadow = '0 0 0 2px rgba(167,139,250,0.85)';
+        setTimeout(() => { try { card.style.boxShadow = ''; } catch (_) {} }, 2200);
+      } else if (list) {
+        list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+    if (typeof showToast === 'function') {
+      showToast(item.status === 'scheduled'
+        ? 'Opened in Batch Queue — use Publish now on the day card if it missed its slot'
+        : 'Opened in Batch Queue', 'info');
+    }
+  }
+
+  function _batchFindCalendarRecord(batchItem) {
+    if (!batchItem) return null;
+    if (batchItem.recordId) {
+      const byId = (_calPosts || []).find((p) => String(p.id || '') === String(batchItem.recordId));
+      if (byId) return byId;
+    }
+    const cap = String(batchItem.caption || '').trim().slice(0, 40);
+    const day = String(batchItem.date || '');
+    const time = String(batchItem.time || '').trim();
+    return (_calPosts || []).find((p) => {
+      const f = p.fields || p;
+      if (day && !(String(f.scheduled_date || '').startsWith(day))) return false;
+      if (time && String(f.scheduled_time || '').trim() && String(f.scheduled_time || '').trim() !== time) return false;
+      const c = String(f.full_post_text || f.caption || '').trim().slice(0, 40);
+      return !!(cap && c && c === cap);
+    }) || null;
+  }
+
+  async function _batchPublishNowFromDay(idx, dateStr) {
+    const item = _batchFiles[idx];
+    if (!item) {
+      if (typeof showToast === 'function') showToast('Batch item missing — refresh Schedule and use Retry publish on the calendar card', 'error');
+      return;
+    }
+    let rec = _batchFindCalendarRecord(item);
+    if (!rec?.id && item.recordId) rec = { id: item.recordId };
+    if (!rec?.id) {
+      if (typeof showToast === 'function') {
+        showToast('No calendar record found yet. Wait a few seconds, refresh Schedule, then Retry publish on the Approved card.', 'warning');
+      }
+      try { if (typeof _loadCalendar === 'function') await _loadCalendar({ silent: true }); } catch (_) {}
+      rec = _batchFindCalendarRecord(item);
+    }
+    if (!rec?.id) return;
+    if (typeof window._retryPublishPost === 'function') {
+      await window._retryPublishPost(rec.id, dateStr || item.date);
+      // Drop the ghost batch row after a successful push attempt so the day panel isn’t stuck
+      if (_batchFiles[idx]) {
+        _batchFiles[idx].status = 'scheduled';
+        _batchFiles[idx].recordId = rec.id;
+      }
+    }
   }
 
   function _batchUpdateCaption(idx, value) {
@@ -16459,8 +16547,9 @@
           ${!isScheduled ? `<button onclick="event.stopPropagation();_batchWriteCaption(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.12);border-radius:5px;color:rgba(255,255,255,0.55);font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap ? '✨ Rewrite with AI' : (aiBriefOpen ? '✨ Write with AI' : '✨ AI caption')}</button>` : ''}
           <button type="button" onclick="event.stopPropagation();_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${hasDate ? (dateLabel + ' · ' + (item.time || '09:00')) : 'Set date & time'}</button>
           ${hasCap && !isScheduled ? `<button onclick="event.stopPropagation();_batchScheduleOne(${idx})" style="padding:4px 10px;background:#7C3AED;border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Schedule</button>` : ''}
+          ${isScheduled ? `<button onclick="event.stopPropagation();_batchPublishNowFromDay(${idx},'${_bqEsc(item.date || '')}')" style="padding:4px 10px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Publish now</button>` : ''}
         </div>
-        ${!isScheduled ? `<div style="margin-top:6px;font-size:0.62rem;color:rgba(255,255,255,0.28);">Times use ${_bqEsc(_tzShortLabel(_clientTimezone()))} (${_bqEsc(_clientTimezone())})</div>` : ''}
+        ${!isScheduled ? `<div style="margin-top:6px;font-size:0.62rem;color:rgba(255,255,255,0.28);">Times use ${_bqEsc(_tzShortLabel(_clientTimezone()))} (${_bqEsc(_clientTimezone())})</div>` : `<div style="margin-top:6px;font-size:0.62rem;color:rgba(134,239,172,0.65);">In calendar — cron publishes at the scheduled time, or hit Publish now</div>`}
       </div>`;
     }).join('');
 
@@ -16672,12 +16761,16 @@
       const data = await resp.json();
       if (data.success) {
         _batchFiles[idx].status = 'scheduled';
+        if (data.recordId) _batchFiles[idx].recordId = data.recordId;
         // Optimistic calendar entry so the day panel shows it immediately
         if (data.recordId || item.date) {
           _calPosts = _calPosts || [];
           const isVid = !!(item.file && item.file.type && item.file.type.startsWith('video/'));
+          const newId = data.recordId || ('local-' + Date.now());
+          // Replace any prior optimistic stub for this batch item
+          _calPosts = _calPosts.filter((p) => String(p.id || '') !== String(_batchFiles[idx].recordId || '') && String(p.id || '') !== String(newId));
           _calPosts.push({
-            id: data.recordId || ('local-' + Date.now()),
+            id: newId,
             scheduled_date: item.date,
             scheduled_time: item.time || data.scheduledTime || '09:00',
             full_post_text: item.caption || '',
@@ -16688,6 +16781,7 @@
             video_url: isVid ? (data.cdnUrl || item.objectUrl || '') : '',
             image_url: !isVid ? (data.cdnUrl || item.objectUrl || '') : '',
           });
+          _batchFiles[idx].recordId = newId;
         }
         _renderBatchQueue();
         _renderCalendar();
@@ -17605,6 +17699,9 @@
   window._batchGenerateOne          = _batchGenerateOne;
   window._batchGenerateAll          = _batchGenerateAll;
   window._batchToggleExpand         = _batchToggleExpand;
+  window._batchFocusFromDayPanel    = _batchFocusFromDayPanel;
+  window._batchPublishNowFromDay    = _batchPublishNowFromDay;
+  window._batchEnsureQueueVisible   = _batchEnsureQueueVisible;
   window._batchUpdateCaption        = _batchUpdateCaption;
   window._batchToggleAiBrief        = _batchToggleAiBrief;
   window._batchWriteCaption         = _batchWriteCaption;
@@ -17790,10 +17887,19 @@
     // Prefer Airtable content; still show batch items not yet reflected in _calPosts
     const contentKeys = new Set(contentOnDay.map(p => String(p.id)));
     const batchExtra = batchOnDay.filter(b => {
-      // Hide batch row once a matching Airtable caption exists for this day
+      // Hide batch ghost once the Airtable calendar row exists (by id, time+caption, or caption)
+      const batchItem = (typeof _batchFiles !== 'undefined' ? _batchFiles : [])[b._batchIdx];
+      const rid = batchItem?.recordId || '';
+      if (rid && contentOnDay.some((c) => String(c.id || '') === String(rid))) return false;
       const cap = String(b.caption || '').trim().slice(0, 40);
+      const time = String(b.scheduled_time || '').trim();
       if (!cap) return true;
-      return !contentOnDay.some(c => String(c.full_post_text || c.caption || '').trim().slice(0, 40) === cap);
+      return !contentOnDay.some((c) => {
+        const cCap = String(c.full_post_text || c.caption || '').trim().slice(0, 40);
+        if (cCap !== cap) return false;
+        const cTime = String(c.scheduled_time || '').trim();
+        return !time || !cTime || cTime === time;
+      });
     });
     // Content + batch first (what you just scheduled), then live social history
     const allOnDay = [...contentOnDay, ...batchExtra, ...socialOnDay];
@@ -17871,8 +17977,11 @@
         window.closeDatePanel();
         window._openSocialPostPanel && window._openSocialPostPanel(raw);
       } else if (post._source === 'batch') {
-        window.closeDatePanel();
-        if (typeof _batchToggleExpand === 'function') _batchToggleExpand(post._batchIdx);
+        if (typeof _batchFocusFromDayPanel === 'function') _batchFocusFromDayPanel(post._batchIdx);
+        else {
+          window.closeDatePanel();
+          if (typeof _batchToggleExpand === 'function') _batchToggleExpand(post._batchIdx);
+        }
       } else {
         window._calPanelReturnDate = dateStr;
         window.closeDatePanel();
@@ -18067,8 +18176,10 @@
               <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(p._fileName || 'Upload').replace(/</g,'&lt;')}</div>
               ${caption ? `<div style="font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : '<div style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-bottom:10px;">No caption yet</div>'}
               <div style="display:flex;gap:6px;">
-                <button onclick="closeDatePanel();_batchToggleExpand(${p._batchIdx})" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Edit in queue</button>
-                ${st !== 'Scheduled' ? `<button onclick="_batchScheduleOne(${p._batchIdx});setTimeout(()=>openDatePanel('${dateStr}'),800);" style="flex:1;padding:8px;background:#7C3AED;border:none;border-radius:8px;color:#fff;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>` : `<span style="flex:1;padding:8px;text-align:center;font-size:0.72rem;color:#86EFAC;font-weight:600;">In calendar ✓</span>`}
+                <button onclick="_batchFocusFromDayPanel(${p._batchIdx})" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Edit in queue</button>
+                ${st !== 'Scheduled'
+                  ? `<button onclick="_batchScheduleOne(${p._batchIdx});setTimeout(()=>openDatePanel('${dateStr}'),800);" style="flex:1;padding:8px;background:#7C3AED;border:none;border-radius:8px;color:#fff;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>`
+                  : `<button onclick="_batchPublishNowFromDay(${p._batchIdx},'${dateStr}')" style="flex:1;padding:8px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Publish now</button>`}
               </div>
             </div>
           </div>`;
