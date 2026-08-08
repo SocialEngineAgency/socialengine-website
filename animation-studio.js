@@ -125,10 +125,108 @@
     if (!p) return '';
     const scenes = (p.scenes || []).map((s) => [
       s.id, s.status, s.video_url || '', s.keyframe_url || '', s.error || '', s.motion || '',
+      s.active_take_id || '', (s.takes || []).length,
     ]);
-    return JSON.stringify([p.id, p.status, p.error || '', scenes]);
+    return JSON.stringify([
+      p.id, p.status, p.error || '', p.final_url || '', p.active_final_id || '',
+      (p.final_history || []).length, scenes,
+    ]);
   }
   let _canvasFp = '';
+  let _pastFinalsOpen = false;
+
+  function formatTakeTime(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }
+
+  function sceneTakes(scene) {
+    return Array.isArray(scene?.takes) ? scene.takes : [];
+  }
+
+  function activeTakeIndex(scene) {
+    const takes = sceneTakes(scene);
+    if (!takes.length) return -1;
+    if (scene.active_take_id) {
+      const i = takes.findIndex((t) => t.id === scene.active_take_id);
+      if (i >= 0) return i;
+    }
+    if (scene.video_url) {
+      const i = takes.findIndex((t) => t.video_url === scene.video_url);
+      if (i >= 0) return i;
+    }
+    return takes.length - 1;
+  }
+
+  function takeNavHtml(scene) {
+    if (!scene?.video_url) return '';
+    const takes = sceneTakes(scene);
+    const N = Math.max(1, takes.length);
+    const idx = takes.length ? Math.max(0, activeTakeIndex(scene)) : 0;
+    const n = idx + 1;
+    return `
+      <div class="anim-take-nav" data-scene="${esc(scene.id)}">
+        <button type="button" class="anim-take-nav__btn anim-take-prev" data-scene="${esc(scene.id)}" ${takes.length < 2 || idx <= 0 ? 'disabled' : ''} aria-label="Previous take">‹</button>
+        <span class="anim-take-nav__label">${n}/${N}</span>
+        <button type="button" class="anim-take-nav__btn anim-take-next" data-scene="${esc(scene.id)}" ${takes.length < 2 || idx >= N - 1 ? 'disabled' : ''} aria-label="Next take">›</button>
+        <button type="button" class="anim-btn anim-btn--ghost anim-expand-btn" data-expand="shot" data-scene="${esc(scene.id)}" style="padding:4px 8px;font-size:0.65rem;width:auto;">Expand</button>
+      </div>`;
+  }
+
+  function closeExpandModal() {
+    document.getElementById('anim-expand-modal')?.remove();
+  }
+
+  function openExpandModal({ url, title, kind, sceneId, takeId, finalId, canUse }) {
+    closeExpandModal();
+    if (!url) return;
+    const root = document.getElementById('dash-content')
+      || document.getElementById('animation-studio-root')
+      || document.querySelector('.anim-shell')?.parentElement
+      || document.body;
+    if (!root) return;
+    const useLabel = kind === 'final' ? 'Use this final' : 'Use this take';
+    const modal = document.createElement('div');
+    modal.id = 'anim-expand-modal';
+    modal.className = 'anim-expand';
+    modal.innerHTML = `
+      <div class="anim-expand__backdrop" data-close="1"></div>
+      <div class="anim-expand__panel" role="dialog" aria-modal="true" aria-label="${esc(title || 'Preview')}">
+        <div class="anim-expand__top">
+          <div class="anim-expand__title">${esc(title || 'Preview')}</div>
+          <button type="button" class="anim-btn anim-btn--ghost anim-expand__close" data-close="1" style="width:auto;padding:6px 10px;">✕</button>
+        </div>
+        <video class="anim-expand__video" src="${esc(mediaSrc(url))}" controls autoplay playsinline></video>
+        <div class="anim-expand__actions">
+          ${canUse ? `<button type="button" class="anim-btn" id="anim-expand-use">${esc(useLabel)}</button>` : ''}
+        </div>
+      </div>`;
+    root.appendChild(modal);
+    modal.querySelectorAll('[data-close]').forEach((el) => {
+      el.addEventListener('click', closeExpandModal);
+    });
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        closeExpandModal();
+        document.removeEventListener('keydown', onKey);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.getElementById('anim-expand-use')?.addEventListener('click', async () => {
+      try {
+        if (kind === 'final' && finalId) await selectFinal(finalId);
+        else if (kind === 'shot' && sceneId && takeId) await selectTake(sceneId, takeId);
+        closeExpandModal();
+      } catch (e) {
+        toast(e.message || 'Could not restore', 'error');
+      }
+    });
+  }
 
   function startPoll() {
     stopPoll();
@@ -472,10 +570,11 @@
                     ? `<div class="anim-shot__updating">${tileMedia(s.keyframe_url, s.title || '', 'ready')}<div class="anim-shot__updating-badge">Updating…</div></div>`
                     : tileMedia(null, '', 'generating'))
                   : s.video_url
-                    ? `<video src="${esc(mediaSrc(s.video_url))}" poster="${esc(mediaSrc(s.keyframe_url || ''))}" muted loop playsinline controls preload="metadata"></video>`
+                    ? `<video class="anim-shot__video" src="${esc(mediaSrc(s.video_url))}" poster="${esc(mediaSrc(s.keyframe_url || ''))}" muted loop playsinline controls preload="metadata" data-expand="shot" data-scene="${esc(s.id)}"></video>`
                     : s.keyframe_url
                       ? tileMedia(s.keyframe_url, s.title || '', s.status)
                       : tileMedia(null, '', s.status || 'pending')}
+                ${takeNavHtml(s)}
               </div>
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
@@ -502,23 +601,66 @@
       </div>
 
       ${(() => {
+        if (p.status === 'character_review') return '';
+        const readyShotUrls = (p.scenes || [])
+          .filter((s) => s.video_url && s.status === 'ready')
+          .sort((a, b) => (a.order || 0) - (b.order || 0))
+          .map((s) => s.video_url);
+        const front = (p.character_pack?.views || []).find((v) => v.label === 'front' && v.url)?.url
+          || (p.character_pack?.views || []).find((v) => v.url)?.url
+          || p.character_ref_url
+          || p.character_pack?.hero_url
+          || '';
         const finalUrl = p.final_url;
-        if (!finalUrl || p.status === 'character_review') return '';
-        // Hide Final when it's just the uploaded character ref (legacy bug)
-        if (finalUrl === p.character_ref_url && !(p.scenes || []).some((s) => s.video_url || s.keyframe_url)) {
-          const front = (p.character_pack?.views || []).find((v) => v.label === 'front' && v.url)?.url
-            || (p.character_pack?.views || []).find((v) => v.url)?.url;
-          if (!front || front === finalUrl) return '';
-        }
+        const isCharPlaceholder = !!(finalUrl && front && finalUrl === front)
+          || !!(finalUrl && p.character_ref_url && finalUrl === p.character_ref_url);
+        const source = Array.isArray(p.final_source_urls) ? p.final_source_urls : [];
+        const stale = readyShotUrls.length > 0 && (
+          !finalUrl
+          || isCharPlaceholder
+          || source.length !== readyShotUrls.length
+          || source.some((u, i) => u !== readyShotUrls[i])
+        );
+        const showPlayer = finalUrl && !isCharPlaceholder;
+        const history = Array.isArray(p.final_history) ? p.final_history : [];
+        const pastFinals = history.filter((f) => f.id !== p.active_final_id && f.video_url !== finalUrl);
+        // Prefer showing non-active history; if active not tagged, hide only the last (= current)
+        const pastList = pastFinals.length
+          ? pastFinals
+          : (history.length >= 2 ? history.slice(0, -1) : []);
+        if (!showPlayer && !readyShotUrls.length && !pastList.length) return '';
         return `
       <div class="anim-section">
         <div class="anim-section__label">Final</div>
         <div class="anim-final">
-          ${/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || p.scenes?.some((s) => s.video_url)
-            ? `<video src="${esc(mediaSrc(finalUrl))}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
-            : `<img class="anim-media" src="${esc(mediaSrc(finalUrl))}" alt="Final" style="max-width:280px;border-radius:12px;" data-fallback="1" />`}
-          ${p.content_record_id ? `<button type="button" class="anim-btn" id="anim-open-review">Open in Content Review</button>` : ''}
+          ${showPlayer
+            ? (/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || readyShotUrls.length
+              ? `<video class="anim-final__video" src="${esc(mediaSrc(finalUrl))}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
+              : `<img class="anim-media" src="${esc(mediaSrc(finalUrl))}" alt="Final" style="max-width:280px;border-radius:12px;" data-fallback="1" />`)
+            : `<div class="anim-placeholder-row">${readyShotUrls.length
+              ? `Ready to stitch ${readyShotUrls.length} shot${readyShotUrls.length === 1 ? '' : 's'} into the Final reel.`
+              : 'Final reel appears after shots are ready.'}</div>`}
+          ${stale ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 4px;line-height:1.35;">Final is out of date — stitch the current timeline shots.</div>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
+            ${readyShotUrls.length ? `<button type="button" class="anim-btn" id="anim-rebuild-final" ${p.status === 'assembling' || (p.scenes || []).some((s) => s.status === 'generating') ? 'disabled' : ''}>${p.status === 'assembling' ? 'Assembling…' : 'Rebuild final'}</button>` : ''}
+            ${p.content_record_id ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
+          </div>
         </div>
+        ${pastList.length ? `
+        <details class="anim-past-finals" ${ _pastFinalsOpen ? 'open' : '' }>
+          <summary class="anim-past-finals__summary">Past finals (${pastList.length})</summary>
+          <div class="anim-past-finals__strip">
+            ${pastList.slice().reverse().map((f) => `
+              <button type="button" class="anim-past-final" data-final-id="${esc(f.id)}" title="${esc(formatTakeTime(f.created_at))}">
+                <div class="anim-past-final__thumb">▶</div>
+                <div class="anim-past-final__meta">
+                  <div class="anim-past-final__title">Final · ${esc(formatTakeTime(f.created_at) || 'earlier')}</div>
+                  <div class="anim-past-final__sub">${esc(String(f.shot_count || (f.source_urls || []).length || '?'))} shots</div>
+                </div>
+              </button>`).join('')}
+          </div>
+        </details>` : ''}
       </div>`;
       })()}
       ${p.error ? `<div class="anim-error">${esc(p.error)}</div>` : ''}
@@ -526,6 +668,45 @@
 
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
+    });
+    el.querySelectorAll('.anim-take-prev').forEach((btn) => {
+      btn.addEventListener('click', () => stepTake(btn.dataset.scene, -1));
+    });
+    el.querySelectorAll('.anim-take-next').forEach((btn) => {
+      btn.addEventListener('click', () => stepTake(btn.dataset.scene, 1));
+    });
+    el.querySelectorAll('.anim-expand-btn').forEach((btn) => {
+      btn.addEventListener('click', () => expandShot(btn.dataset.scene));
+    });
+    el.querySelectorAll('.anim-shot__video').forEach((vid) => {
+      vid.addEventListener('dblclick', () => expandShot(vid.dataset.scene));
+    });
+    document.getElementById('anim-expand-final')?.addEventListener('click', () => {
+      if (!_project?.final_url) return;
+      openExpandModal({
+        url: _project.final_url,
+        title: 'Final reel',
+        kind: 'final',
+        finalId: _project.active_final_id || null,
+        canUse: false,
+      });
+    });
+    el.querySelector('.anim-past-finals')?.addEventListener('toggle', (e) => {
+      _pastFinalsOpen = !!e.target.open;
+    });
+    el.querySelectorAll('.anim-past-final').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.finalId;
+        const entry = (_project?.final_history || []).find((f) => f.id === id);
+        if (!entry) return;
+        openExpandModal({
+          url: entry.video_url,
+          title: `Past final · ${formatTakeTime(entry.created_at)}`,
+          kind: 'final',
+          finalId: entry.id,
+          canUse: entry.id !== _project.active_final_id && entry.video_url !== _project.final_url,
+        });
+      });
     });
     let expiredCount = 0;
     const showExpiredBanner = () => {
@@ -548,6 +729,7 @@
     });
     document.getElementById('anim-new-from-expired')?.addEventListener('click', () => newProject());
     document.getElementById('anim-approve-character')?.addEventListener('click', approveCharacter);
+    document.getElementById('anim-rebuild-final')?.addEventListener('click', rebuildFinal);
     document.getElementById('anim-open-review')?.addEventListener('click', () => {
       document.querySelector('[data-nav="content"]')?.click();
     });
@@ -759,6 +941,103 @@
     }
   }
 
+  async function rebuildFinal() {
+    if (!_project?.id || _busy) return;
+    if ((_project.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending')) {
+      return toast('Wait for shots to finish before rebuilding Final', 'info');
+    }
+    const ready = (_project.scenes || []).filter((s) => s.video_url && s.status === 'ready');
+    if (!ready.length) return toast('No ready shot videos to stitch', 'error');
+    _busy = true;
+    try {
+      toast(`Stitching ${ready.length} shots into Final…`, 'info');
+      const data = await animFetch(`/api/animation/projects/${_project.id}/assemble`, {
+        method: 'POST',
+        body: JSON.stringify({ create_content: !_project.content_record_id }),
+      });
+      _project = data.project || _project;
+      if (data.final_url) _project.final_url = data.final_url;
+      renderCanvas();
+      toast(`Final updated from ${data.shot_count || ready.length} shots`, 'success');
+    } catch (e) {
+      toast(e.message || 'Assemble failed', 'error');
+      try {
+        const data = await animFetch(`/api/animation/projects/${_project.id}`);
+        _project = data.project;
+        renderCanvas();
+      } catch (_) {}
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function selectTake(sceneId, takeId) {
+    if (!_project?.id || !sceneId || !takeId) return;
+    const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/select-take`, {
+      method: 'POST',
+      body: JSON.stringify({ take_id: takeId }),
+    });
+    _project = data.project;
+    _canvasFp = '';
+    renderCanvas();
+    toast('Take restored — rebuild Final if you want the reel to match', 'success');
+  }
+
+  async function stepTake(sceneId, delta) {
+    if (!_project?.id || _busy) return;
+    const scene = (_project.scenes || []).find((s) => s.id === sceneId);
+    if (!scene) return;
+    const takes = sceneTakes(scene);
+    if (takes.length < 2) return;
+    const idx = activeTakeIndex(scene);
+    const next = idx + delta;
+    if (next < 0 || next >= takes.length) return;
+    _busy = true;
+    try {
+      await selectTake(sceneId, takes[next].id);
+    } catch (e) {
+      toast(e.message || 'Could not switch take', 'error');
+    } finally {
+      _busy = false;
+    }
+  }
+
+  function expandShot(sceneId) {
+    const scene = (_project?.scenes || []).find((s) => s.id === sceneId);
+    if (!scene?.video_url) return;
+    const takes = sceneTakes(scene);
+    const idx = activeTakeIndex(scene);
+    const take = idx >= 0 ? takes[idx] : null;
+    openExpandModal({
+      url: scene.video_url,
+      title: `${scene.title || scene.id}${takes.length ? ` · take ${idx + 1}/${takes.length}` : ''}`,
+      kind: 'shot',
+      sceneId: scene.id,
+      takeId: take?.id || scene.active_take_id || null,
+      canUse: false,
+    });
+  }
+
+  async function selectFinal(finalId) {
+    if (!_project?.id || !finalId || _busy) return;
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/select-final`, {
+        method: 'POST',
+        body: JSON.stringify({ final_id: finalId }),
+      });
+      _project = data.project;
+      _canvasFp = '';
+      renderCanvas();
+      toast('Past Final restored as current', 'success');
+    } catch (e) {
+      toast(e.message || 'Could not restore Final', 'error');
+      throw e;
+    } finally {
+      _busy = false;
+    }
+  }
+
   function renderRefs() {
     const box = document.getElementById('anim-refs');
     if (!box) return;
@@ -877,16 +1156,18 @@
     root.innerHTML = `
       <style>
         .anim-shell { display:grid; grid-template-columns: 1fr minmax(320px,380px); gap:0; height:calc(100vh - 120px); min-height:560px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; overflow:hidden; background:#0B1220; }
-        .anim-canvas { display:flex; flex-direction:column; min-width:0; min-height:0; border-right:1px solid rgba(255,255,255,0.08); background:radial-gradient(1200px 600px at 10% 0%, rgba(124,58,237,0.12), transparent 55%), #0B1220; }
+        .anim-canvas { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.08); background:radial-gradient(1200px 600px at 10% 0%, rgba(124,58,237,0.12), transparent 55%), #0B1220; }
         .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-canvas-header h2 { margin:0; font-size:1.05rem; color:#F8FAFC; font-weight:700; }
         .anim-canvas-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px 18px 40px; -webkit-overflow-scrolling:touch; }
-        .anim-chat { display:flex; flex-direction:column; min-width:0; min-height:0; background:#0F172A; }
+        .anim-chat { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; overflow:hidden; background:#0F172A; }
         .anim-chat-header { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-chat-header h3 { margin:0 0 4px; font-size:0.95rem; color:#E2E8F0; }
         .anim-chat-header p { margin:0; font-size:0.72rem; color:rgba(255,255,255,0.4); }
-        .anim-chat-log { flex:1; min-height:0; overflow:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
-        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+        /* One scroll region for log + brief + compose (compose used to be pinned and clipped). */
+        .anim-chat-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:flex; flex-direction:column; }
+        .anim-chat-log { flex:0 0 auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); flex:0 0 auto; }
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
@@ -961,6 +1242,26 @@
         .anim-working { font-size:0.78rem; color:#FBBF24; padding:8px 0; }
         .anim-error { margin-top:12px; padding:10px 12px; border-radius:10px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#FCA5A5; font-size:0.78rem; }
         .anim-final { display:flex; flex-direction:column; gap:12px; align-items:flex-start; }
+        .anim-take-nav { display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap; }
+        .anim-take-nav__btn { width:28px; height:28px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.06); color:#E2E8F0; cursor:pointer; font-size:1rem; line-height:1; }
+        .anim-take-nav__btn:disabled { opacity:0.35; cursor:not-allowed; }
+        .anim-take-nav__label { font-size:0.68rem; color:rgba(255,255,255,0.55); min-width:2.4em; text-align:center; font-variant-numeric:tabular-nums; }
+        .anim-past-finals { margin-top:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); padding:8px 10px; }
+        .anim-past-finals__summary { cursor:pointer; font-size:0.72rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:rgba(255,255,255,0.4); list-style:none; }
+        .anim-past-finals__summary::-webkit-details-marker { display:none; }
+        .anim-past-finals__strip { display:flex; gap:8px; overflow-x:auto; padding:10px 0 4px; }
+        .anim-past-final { display:flex; align-items:center; gap:8px; flex:0 0 auto; min-width:160px; text-align:left; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(15,23,42,0.65); color:#E2E8F0; cursor:pointer; font-family:inherit; }
+        .anim-past-final:hover { border-color:rgba(167,139,250,0.45); }
+        .anim-past-final__thumb { width:36px; height:48px; border-radius:6px; background:#1E293B; display:flex; align-items:center; justify-content:center; color:#A78BFA; font-size:0.75rem; flex-shrink:0; }
+        .anim-past-final__title { font-size:0.72rem; font-weight:650; color:#F8FAFC; }
+        .anim-past-final__sub { font-size:0.62rem; color:rgba(255,255,255,0.4); margin-top:2px; }
+        .anim-expand { position:fixed; inset:0; z-index:10050; display:flex; align-items:center; justify-content:center; padding:24px; }
+        .anim-expand__backdrop { position:absolute; inset:0; background:rgba(2,6,23,0.82); }
+        .anim-expand__panel { position:relative; z-index:1; width:min(420px, 92vw); max-height:92vh; display:flex; flex-direction:column; gap:12px; background:#0F172A; border:1px solid rgba(255,255,255,0.12); border-radius:16px; padding:14px; box-shadow:0 24px 80px rgba(0,0,0,0.55); }
+        .anim-expand__top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .anim-expand__title { font-size:0.85rem; font-weight:700; color:#F8FAFC; }
+        .anim-expand__video { width:100%; max-height:70vh; border-radius:12px; background:#000; aspect-ratio:9/16; object-fit:contain; }
+        .anim-expand__actions { display:flex; gap:8px; justify-content:flex-end; }
         @media (max-width: 960px) {
           .anim-shell { grid-template-columns:1fr; height:auto; }
           .anim-canvas { border-right:none; border-bottom:1px solid rgba(255,255,255,0.08); min-height:50vh; }
@@ -983,37 +1284,39 @@
             <h3>AI Agent</h3>
             <p>Claude rewrites → you approve → canvas fills</p>
           </div>
-          <div class="anim-chat-log" id="anim-chat-log"></div>
-          <div id="anim-brief-actions" style="padding:0 14px;"></div>
-          <div class="anim-chat-compose">
-            <div class="anim-row">
-              <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
-              <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
-            </div>
-            <div class="anim-row" style="margin-top:8px;">
-              <select id="anim-motion" class="anim-select" title="Motion" style="flex:1;">${motionOptions()}</select>
-            </div>
-            <div id="anim-motion-hint" style="font-size:0.68rem;color:rgba(255,255,255,0.4);line-height:1.4;margin:6px 0 8px;">${esc(motionHint())}</div>
-            <div id="anim-drive-wrap" hidden style="margin-bottom:10px;">
-              <input type="file" id="anim-drive-file" accept="video/*" hidden />
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <button type="button" class="anim-btn anim-btn--ghost" id="anim-drive-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;">Upload driving video</button>
-                <span id="anim-drive-status" style="font-size:0.68rem;color:rgba(255,255,255,0.4);">No driving video yet</span>
+          <div class="anim-chat-body">
+            <div class="anim-chat-log" id="anim-chat-log"></div>
+            <div id="anim-brief-actions" style="padding:0 14px;"></div>
+            <div class="anim-chat-compose">
+              <div class="anim-row">
+                <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
+                <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
               </div>
-              ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
+              <div class="anim-row" style="margin-top:8px;">
+                <select id="anim-motion" class="anim-select" title="Motion" style="flex:1;">${motionOptions()}</select>
+              </div>
+              <div id="anim-motion-hint" style="font-size:0.68rem;color:rgba(255,255,255,0.4);line-height:1.4;margin:6px 0 8px;">${esc(motionHint())}</div>
+              <div id="anim-drive-wrap" hidden style="margin-bottom:10px;">
+                <input type="file" id="anim-drive-file" accept="video/*" hidden />
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-drive-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;">Upload driving video</button>
+                  <span id="anim-drive-status" style="font-size:0.68rem;color:rgba(255,255,255,0.4);">No driving video yet</span>
+                </div>
+                ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
+              </div>
+              ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
+              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Kling → DreamActor.</div>
+              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char required · Scene for setting · Style optional</span></div>
+              <div class="anim-refs" id="anim-refs"></div>
+              <div class="anim-ref-tools">
+                <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;white-space:nowrap;">Upload</button>
+                <input type="url" id="anim-ref-url" class="anim-ref-url" placeholder="Paste image URL…" />
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-add-url" style="padding:7px 10px;font-size:0.72rem;width:auto;">Add</button>
+              </div>
+              <textarea id="anim-prompt" class="anim-prompt" placeholder="Describe a character, scene, product, or full video idea…"></textarea>
+              <button type="button" class="anim-btn" id="anim-send">Send to Claude</button>
             </div>
-            ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-            <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Kling → DreamActor.</div>
-            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char required · Scene for setting · Style optional</span></div>
-            <div class="anim-refs" id="anim-refs"></div>
-            <div class="anim-ref-tools">
-              <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;white-space:nowrap;">Upload</button>
-              <input type="url" id="anim-ref-url" class="anim-ref-url" placeholder="Paste image URL…" />
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-add-url" style="padding:7px 10px;font-size:0.72rem;width:auto;">Add</button>
-            </div>
-            <textarea id="anim-prompt" class="anim-prompt" placeholder="Describe a character, scene, product, or full video idea…"></textarea>
-            <button type="button" class="anim-btn" id="anim-send">Send to Claude</button>
           </div>
         </aside>
       </div>
