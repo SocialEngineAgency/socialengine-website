@@ -176,7 +176,7 @@
     if (hit?.hint) return hit.hint;
     if (id === 'drive') return 'Upload a driving video for motion — DreamActor maps your locked character onto it.';
     if (id === 'kling') return 'Kling image-to-video only (faster, weaker identity lock).';
-    return 'Compose Char into Scene as a keyframe, Kling adds motion, DreamActor locks identity.';
+    return 'fal: Seedream keyframe → Kling motion → DreamActor identity.';
   }
 
   async function syncMotionSettings() {
@@ -982,7 +982,7 @@
               ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
             </div>
             ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-            <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity lock. Scene = environment. Each shot composes her <em>into</em> the scene, then Kling → DreamActor.</div>
+            <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Kling → DreamActor.</div>
             <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char required · Scene for setting · Style optional</span></div>
             <div class="anim-refs" id="anim-refs"></div>
             <div class="anim-ref-tools">
