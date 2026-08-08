@@ -120,6 +120,16 @@
     return (p?.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending');
   }
 
+  /** Avoid remounting <video> on every poll tick (causes READY shots to spin). */
+  function projectUiFingerprint(p) {
+    if (!p) return '';
+    const scenes = (p.scenes || []).map((s) => [
+      s.id, s.status, s.video_url || '', s.keyframe_url || '', s.error || '', s.motion || '',
+    ]);
+    return JSON.stringify([p.id, p.status, p.error || '', scenes]);
+  }
+  let _canvasFp = '';
+
   function startPoll() {
     stopPoll();
     _pollTimer = setInterval(async () => {
@@ -127,8 +137,12 @@
       try {
         const data = await animFetch(`/api/animation/projects/${_project.id}`);
         _project = data.project;
-        renderCanvas();
-        renderChat();
+        const fp = projectUiFingerprint(_project);
+        if (fp !== _canvasFp) {
+          _canvasFp = fp;
+          renderCanvas();
+          renderChat();
+        }
         const projectBusy = ['developing', 'generating', 'assembling'].includes(_project.status);
         if (projectBusy || projectHasBusyScenes(_project)) {
           /* keep polling */
@@ -358,6 +372,7 @@
   function renderCanvas() {
     const el = document.getElementById('anim-canvas-body');
     if (!el) return;
+    _canvasFp = projectUiFingerprint(_project);
     const p = _project;
     if (!p) {
       const usable = _recent.filter((rp) => !projectMediaExpired(rp));
@@ -452,11 +467,15 @@
           ${scenes.length ? scenes.map((s) => `
             <div class="anim-shot" data-scene="${esc(s.id)}">
               <div class="anim-shot__media">
-                ${s.video_url
-                  ? `<video src="${esc(mediaSrc(s.video_url))}" muted loop playsinline controls></video>`
-                  : s.keyframe_url
-                    ? tileMedia(s.keyframe_url, s.title || '', s.status)
-                    : tileMedia(null, '', s.status || 'pending')}
+                ${s.status === 'generating'
+                  ? (s.keyframe_url
+                    ? `<div class="anim-shot__updating">${tileMedia(s.keyframe_url, s.title || '', 'ready')}<div class="anim-shot__updating-badge">Updating…</div></div>`
+                    : tileMedia(null, '', 'generating'))
+                  : s.video_url
+                    ? `<video src="${esc(mediaSrc(s.video_url))}" poster="${esc(mediaSrc(s.keyframe_url || ''))}" muted loop playsinline controls preload="metadata"></video>`
+                    : s.keyframe_url
+                      ? tileMedia(s.keyframe_url, s.title || '', s.status)
+                      : tileMedia(null, '', s.status || 'pending')}
               </div>
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
@@ -913,6 +932,8 @@
         .anim-tile { width:110px; flex:0 0 auto; }
         .anim-tile img, .anim-shot__media img, .anim-shot__media video { width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:#1E293B; display:block; }
         .anim-shot__media video { aspect-ratio:9/16; max-height:220px; }
+        .anim-shot__updating { position:relative; }
+        .anim-shot__updating-badge { position:absolute; left:6px; bottom:6px; z-index:2; font-size:0.62rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:#F8FAFC; background:rgba(124,58,237,0.85); border:1px solid rgba(196,181,253,0.5); padding:3px 7px; border-radius:999px; }
         .anim-tile__ph { width:100%; aspect-ratio:1; border-radius:10px; background:rgba(255,255,255,0.04); border:1px dashed rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.35); font-size:0.7rem; }
         .anim-tile__ph--gen { border:none; position:relative; overflow:hidden; color:#F8FAFC; font-size:0.72rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;
           background: linear-gradient(120deg, #1E293B 0%, #312E81 35%, #7C3AED 55%, #1E293B 100%);
