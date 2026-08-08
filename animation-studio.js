@@ -149,6 +149,104 @@
     ).join('');
   }
 
+  function currentMotionMode() {
+    return _project?.motion_mode || _meta?.default_motion_mode || 'auto';
+  }
+
+  function motionOptions() {
+    const modes = _meta?.motion_modes || [
+      { id: 'auto', label: 'Auto (DreamActor)' },
+      { id: 'drive', label: 'Upload drive' },
+      { id: 'kling', label: 'Kling only' },
+    ];
+    const cur = currentMotionMode();
+    return modes.map((m) =>
+      `<option value="${esc(m.id)}" ${cur === m.id ? 'selected' : ''}>${esc(m.label)}</option>`
+    ).join('');
+  }
+
+  function motionHint() {
+    const id = document.getElementById('anim-motion')?.value || currentMotionMode();
+    const hit = (_meta?.motion_modes || []).find((m) => m.id === id);
+    if (hit?.hint) return hit.hint;
+    if (id === 'drive') return 'Upload a driving video for motion — DreamActor maps your locked character onto it.';
+    if (id === 'kling') return 'Kling image-to-video only (faster, weaker identity lock).';
+    return 'Kling builds motion from the keyframe, then DreamActor reinforces the locked character.';
+  }
+
+  async function syncMotionSettings() {
+    if (!_project?.id) return;
+    const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/settings`, {
+        method: 'POST',
+        body: JSON.stringify({
+          motion_mode,
+          driving_video_url: _project.driving_video_url || null,
+        }),
+      });
+      _project = data.project;
+    } catch (e) {
+      toast(e.message || 'Could not save motion settings', 'error');
+    }
+  }
+
+  async function uploadDrivingVideo(file) {
+    if (!file) return;
+    if (!file.type.startsWith('video/')) return toast('Please upload a video (mp4/mov)', 'error');
+    if (file.size > 80 * 1024 * 1024) return toast('Driving video must be under 80MB', 'error');
+    toast('Uploading driving video…', 'info');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('video', file);
+      const res = await fetch(`${apiBase()}/api/studio/upload-video`, {
+        method: 'POST',
+        headers: authHeadersMultipart(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      if (!_project?.id) {
+        const created = await animFetch('/api/animation/projects', {
+          method: 'POST',
+          body: JSON.stringify({
+            mode: document.getElementById('anim-mode')?.value || 'video',
+            look: document.getElementById('anim-look')?.value || 'stylized',
+            motion_mode: 'drive',
+            driving_video_url: data.url,
+          }),
+        });
+        _project = created.project;
+      } else {
+        _project.driving_video_url = data.url;
+        _project.motion_mode = 'drive';
+        const sel = document.getElementById('anim-motion');
+        if (sel) sel.value = 'drive';
+        await syncMotionSettings();
+      }
+      renderDriveControls();
+      toast('Driving video attached', 'success');
+    } catch (e) {
+      toast(e.message || 'Driving video upload failed', 'error');
+    }
+  }
+
+  function renderDriveControls() {
+    const wrap = document.getElementById('anim-drive-wrap');
+    if (!wrap) return;
+    const mode = document.getElementById('anim-motion')?.value || currentMotionMode();
+    wrap.hidden = mode !== 'drive';
+    const status = document.getElementById('anim-drive-status');
+    if (status) {
+      const url = _project?.driving_video_url;
+      status.textContent = url ? 'Driving video ready' : 'No driving video yet';
+      status.style.color = url ? '#86EFAC' : 'rgba(255,255,255,0.4)';
+    }
+    const hint = document.getElementById('anim-motion-hint');
+    if (hint) hint.textContent = motionHint();
+  }
+
   function statusBadge(status) {
     const colors = {
       brief: '#94A3B8',
@@ -355,6 +453,8 @@
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
                 <div class="anim-shot__prompt">${esc((s.prompt || '').slice(0, 120))}${(s.prompt || '').length > 120 ? '…' : ''}</div>
+                ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
+                ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
                 <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>Regenerate</button>
               </div>
             </div>`).join('') : `
@@ -481,12 +581,15 @@
     if (_project?.id) return _project;
     const mode = document.getElementById('anim-mode')?.value || 'video';
     const look = document.getElementById('anim-look')?.value || 'stylized';
+    const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
     const references = refsPayload();
     const data = await animFetch('/api/animation/projects', {
       method: 'POST',
       body: JSON.stringify({
         mode,
         look,
+        motion_mode,
+        driving_video_url: _project?.driving_video_url || null,
         references,
         reference_urls: references.map((r) => r.url),
         character_ref_url: references.find((r) => r.role === 'character')?.url || null,
@@ -509,9 +612,12 @@
       await ensureProject();
       const mode = document.getElementById('anim-mode')?.value || 'video';
       const look = document.getElementById('anim-look')?.value || 'stylized';
+      const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
       const references = refsPayload();
       _project.mode = mode;
       _project.look = look;
+      _project.motion_mode = motion_mode;
+      await syncMotionSettings();
       toast('Claude is rewriting your brief…', 'info');
       const data = await animFetch(`/api/animation/projects/${_project.id}/brief`, {
         method: 'POST',
@@ -560,11 +666,19 @@
 
   async function approveCharacter() {
     if (_busy || !_project?.id) return;
+    const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
+    if (motion_mode === 'drive' && !_project.driving_video_url) {
+      return toast('Upload a driving video first (or switch motion to Auto / Kling only)', 'error');
+    }
     _busy = true;
     try {
+      await syncMotionSettings();
       const data = await animFetch(`/api/animation/projects/${_project.id}/approve-character`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          motion_mode,
+          driving_video_url: _project.driving_video_url || null,
+        }),
       });
       _project = data.project;
       renderCanvas();
@@ -590,7 +704,9 @@
       toast('Regenerating shot…', 'info');
       const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/regenerate`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          motion_mode: document.getElementById('anim-motion')?.value || currentMotionMode(),
+        }),
       });
       _project = data.project;
       renderCanvas();
@@ -831,7 +947,20 @@
               <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
               <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
             </div>
-            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag Character / Style / Scene</span></div>
+            <div class="anim-row" style="margin-top:8px;">
+              <select id="anim-motion" class="anim-select" title="Motion" style="flex:1;">${motionOptions()}</select>
+            </div>
+            <div id="anim-motion-hint" style="font-size:0.68rem;color:rgba(255,255,255,0.4);line-height:1.4;margin:6px 0 8px;">${esc(motionHint())}</div>
+            <div id="anim-drive-wrap" hidden style="margin-bottom:10px;">
+              <input type="file" id="anim-drive-file" accept="video/*" hidden />
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-drive-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;">Upload driving video</button>
+                <span id="anim-drive-status" style="font-size:0.68rem;color:rgba(255,255,255,0.4);">No driving video yet</span>
+              </div>
+              ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
+            </div>
+            ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Character = your person · or prompt to create one</span></div>
             <div class="anim-refs" id="anim-refs"></div>
             <div class="anim-ref-tools">
               <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
@@ -862,6 +991,18 @@
     document.getElementById('anim-prompt')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendPrompt();
     });
+    document.getElementById('anim-motion')?.addEventListener('change', async () => {
+      if (_project) _project.motion_mode = document.getElementById('anim-motion').value;
+      renderDriveControls();
+      if (_project?.id) await syncMotionSettings();
+    });
+    document.getElementById('anim-drive-upload')?.addEventListener('click', () => document.getElementById('anim-drive-file')?.click());
+    document.getElementById('anim-drive-file')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file) await uploadDrivingVideo(file);
+      e.target.value = '';
+    });
+    renderDriveControls();
     // Restore refs from resumed project (prefer role-tagged references)
     if (!_refs.length) {
       if (_project?.references?.length) {
