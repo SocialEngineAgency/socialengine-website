@@ -178,11 +178,13 @@
     if (!_project?.id) return;
     const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
     try {
+      const identity_source = document.getElementById('anim-identity')?.value || _project.identity_source || 'upload';
       const data = await animFetch(`/api/animation/projects/${_project.id}/settings`, {
         method: 'POST',
         body: JSON.stringify({
           motion_mode,
           driving_video_url: _project.driving_video_url || null,
+          identity_source,
         }),
       });
       _project = data.project;
@@ -960,6 +962,12 @@
               ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
             </div>
             ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
+            <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">Identity</div>
+            <select id="anim-identity" class="anim-select" title="Identity source" style="width:100%;margin-bottom:8px;">
+              <option value="upload" ${(_project?.identity_source || 'upload') !== 'generate' ? 'selected' : ''}>Use Char upload as lock (OiiOii sheets)</option>
+              <option value="generate" ${_project?.identity_source === 'generate' ? 'selected' : ''}>Regenerate sheet with Soul</option>
+            </select>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.38);line-height:1.35;margin:-2px 0 10px;">For finished OiiOii sheets keep “Use Char upload” — Soul was redesigning the character.</div>
             <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Character = your person · or prompt to create one</span></div>
             <div class="anim-refs" id="anim-refs"></div>
             <div class="anim-ref-tools">
@@ -994,6 +1002,10 @@
     document.getElementById('anim-motion')?.addEventListener('change', async () => {
       if (_project) _project.motion_mode = document.getElementById('anim-motion').value;
       renderDriveControls();
+      if (_project?.id) await syncMotionSettings();
+    });
+    document.getElementById('anim-identity')?.addEventListener('change', async () => {
+      if (_project) _project.identity_source = document.getElementById('anim-identity').value;
       if (_project?.id) await syncMotionSettings();
     });
     document.getElementById('anim-drive-upload')?.addEventListener('click', () => document.getElementById('anim-drive-file')?.click());
