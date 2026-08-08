@@ -116,6 +116,10 @@
     _pollTimer = null;
   }
 
+  function projectHasBusyScenes(p) {
+    return (p?.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending');
+  }
+
   function startPoll() {
     stopPoll();
     _pollTimer = setInterval(async () => {
@@ -125,7 +129,8 @@
         _project = data.project;
         renderCanvas();
         renderChat();
-        if (['developing', 'generating', 'assembling'].includes(_project.status)) {
+        const projectBusy = ['developing', 'generating', 'assembling'].includes(_project.status);
+        if (projectBusy || projectHasBusyScenes(_project)) {
           /* keep polling */
         } else {
           stopPoll();
@@ -335,7 +340,9 @@
       renderCanvas();
       renderChat();
       renderRefs();
-      if (['developing', 'generating', 'assembling'].includes(_project.status)) startPoll();
+      if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project)) {
+        startPoll();
+      }
       else stopPoll();
       toast(`Opened ${projectTitle(_project)}`, 'success');
     } catch (e) {
@@ -456,7 +463,8 @@
                 <div class="anim-shot__prompt">${esc((s.prompt || '').slice(0, 120))}${(s.prompt || '').length > 120 ? '…' : ''}</div>
                 ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
                 ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
-                <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>Regenerate</button>
+                ${s.error ? `<div style="font-size:0.62rem;color:#FCA5A5;margin:2px 0 6px;line-height:1.35;">${esc(s.error)}</div>` : ''}
+                <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>${s.status === 'generating' ? 'Generating…' : 'Regenerate'}</button>
               </div>
             </div>`).join('') : `
             <div class="anim-placeholder-row">${p.status === 'character_review'
@@ -700,20 +708,33 @@
 
   async function regenScene(sceneId) {
     if (!_project?.id || !sceneId || _busy) return;
+    const scene = (_project.scenes || []).find((s) => s.id === sceneId);
+    if (scene?.status === 'generating') return toast('This shot is already generating — hang tight', 'info');
     _busy = true;
     try {
-      toast('Regenerating shot…', 'info');
+      toast('Regenerating shot (compose → Kling → DreamActor)…', 'info');
+      const references = refsPayload();
       const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/regenerate`, {
         method: 'POST',
         body: JSON.stringify({
           motion_mode: document.getElementById('anim-motion')?.value || currentMotionMode(),
+          references,
+          reference_urls: references.map((r) => r.url),
+          character_ref_url: references.find((r) => r.role === 'character')?.url || null,
         }),
       });
       _project = data.project;
       renderCanvas();
-      toast('Shot updated', 'success');
+      startPoll();
+      toast(data.started ? 'Shot regenerating — canvas will update when ready' : 'Shot updated', 'success');
     } catch (e) {
       toast(e.message || 'Regen failed', 'error');
+      // Refresh so a stuck GENERATING can clear / show the real error
+      try {
+        const data = await animFetch(`/api/animation/projects/${_project.id}`);
+        _project = data.project;
+        renderCanvas();
+      } catch (_) {}
     } finally {
       _busy = false;
     }
@@ -1045,7 +1066,9 @@
     }
     renderCanvas();
     renderChat();
-    if (_project && ['developing', 'generating', 'assembling'].includes(_project.status)) startPoll();
+    if (_project && (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project))) {
+      startPoll();
+    }
     if (typeof lucide !== 'undefined') lucide.createIcons();
   };
 })();
