@@ -10,6 +10,8 @@
   let _recent = []; // project list for home screen
   let _pollTimer = null;
   let _busy = false;
+  let _captionStudioOpen = false;
+  let _captionPreviewRaf = 0;
   let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
   const REF_ROLES = [
     { id: 'character', label: 'Char' },
@@ -346,6 +348,223 @@
     };
   }
 
+  function captionPresets() {
+    return Array.isArray(_meta?.caption_presets) ? _meta.caption_presets : [];
+  }
+
+  function normalizeCaptionStyle(input) {
+    const presets = captionPresets();
+    const fallback = _meta?.default_caption_style || presets[0]?.style || {
+      mode: 'karaoke', preset_id: 'bold-pop', font_family: 'Inter', font_size: 52, font_weight: 800,
+      color: '#FFFFFF', highlight_color: '#FFE14D', outline_color: '#000000', outline_width: 4,
+      shadow: { x: 0, y: 3, blur: 0, color: 'rgba(0,0,0,0.65)' },
+      background: { enabled: false, color: 'rgba(0,0,0,0.45)', padding: 12, radius: 10 },
+      position: { y_pct: 78, align: 'center' }, animation: 'pop', words_per_line: 4, text_case: 'as_is',
+    };
+    const s = input && typeof input === 'object' ? { ...fallback, ...input } : { ...fallback };
+    if (!['karaoke', 'phrase', 'static'].includes(s.mode)) s.mode = 'karaoke';
+    if (!['none', 'pop', 'fade', 'bounce'].includes(s.animation)) s.animation = 'pop';
+    if (!['as_is', 'upper', 'title'].includes(s.text_case)) s.text_case = 'as_is';
+    s.words_per_line = Math.max(1, Math.min(10, Number(s.words_per_line) || 4));
+    s.font_size = Math.max(18, Math.min(96, Number(s.font_size) || 52));
+    s.position = s.position || { y_pct: 78, align: 'center' };
+    s.shadow = s.shadow || fallback.shadow;
+    s.background = s.background || fallback.background;
+    return s;
+  }
+
+  function applyCaptionCase(text, textCase) {
+    const t = String(text || '');
+    if (textCase === 'upper') return t.toUpperCase();
+    if (textCase === 'title') return t.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    return t;
+  }
+
+  function estimatePhraseCues(text, durationSec) {
+    const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const dur = Math.max(2, Number(durationSec) || 8);
+    const each = dur / words.length;
+    return words.map((w, i) => ({
+      i, text: w, start: i * each, end: Math.min(dur, (i + 1) * each),
+    }));
+  }
+
+  function captionCuesForPreview() {
+    if (Array.isArray(_project?.caption_cues) && _project.caption_cues.length) return _project.caption_cues;
+    const text = document.getElementById('anim-caption-text')?.value
+      || _project?.caption_text
+      || document.getElementById('anim-vo-script')?.value
+      || _project?.vo_script
+      || _project?.agent_brief?.caption
+      || '';
+    return estimatePhraseCues(text, 8);
+  }
+
+  function captionLayoutAtTime(cues, style, t) {
+    const s = normalizeCaptionStyle(style);
+    const list = Array.isArray(cues) ? cues : [];
+    const n = s.words_per_line || 4;
+    if (s.mode === 'static' || !list.length) {
+      const text = applyCaptionCase(
+        list.map((c) => c.text).join(' ')
+          || document.getElementById('anim-caption-text')?.value
+          || _project?.caption_text
+          || '',
+        s.text_case
+      );
+      return { words: text ? [{ text, active: false }] : [], activeIndex: -1 };
+    }
+    // Find active chunk containing t
+    let chunkStart = 0;
+    while (chunkStart < list.length) {
+      const chunk = list.slice(chunkStart, chunkStart + n);
+      const start = chunk[0].start;
+      const end = chunk[chunk.length - 1].end;
+      if (t >= start && t <= end + 0.05) {
+        let activeIndex = -1;
+        const words = chunk.map((w, i) => {
+          const active = t >= w.start && t < w.end + 0.02;
+          if (active) activeIndex = i;
+          return { text: applyCaptionCase(w.text, s.text_case), active: s.mode === 'karaoke' ? active : false };
+        });
+        // If between words in karaoke, highlight nearest spoken
+        if (s.mode === 'karaoke' && activeIndex < 0) {
+          for (let i = chunk.length - 1; i >= 0; i--) {
+            if (t >= chunk[i].start) { words[i].active = true; activeIndex = i; break; }
+          }
+        }
+        return { words, activeIndex };
+      }
+      if (t < start) break;
+      chunkStart += n;
+    }
+    return { words: [], activeIndex: -1 };
+  }
+
+  function readCaptionStyleFromDom() {
+    const base = normalizeCaptionStyle(_project?.caption_style);
+    if (!document.getElementById('anim-cap-mode')) return base;
+    const presetId = document.getElementById('anim-cap-preset')?.value || base.preset_id;
+    const preset = captionPresets().find((p) => p.id === presetId);
+    const next = normalizeCaptionStyle({
+      ...(preset?.style || base),
+      preset_id: presetId,
+      mode: document.getElementById('anim-cap-mode')?.value || base.mode,
+      font_size: Number(document.getElementById('anim-cap-size')?.value) || base.font_size,
+      color: document.getElementById('anim-cap-color')?.value || base.color,
+      highlight_color: document.getElementById('anim-cap-highlight')?.value || base.highlight_color,
+      outline_color: document.getElementById('anim-cap-outline')?.value || base.outline_color,
+      outline_width: Number(document.getElementById('anim-cap-outline-w')?.value) || base.outline_width,
+      position: {
+        y_pct: Number(document.getElementById('anim-cap-y')?.value) || base.position?.y_pct || 78,
+        align: 'center',
+      },
+      animation: document.getElementById('anim-cap-anim')?.value || base.animation,
+      words_per_line: Number(document.getElementById('anim-cap-wpl')?.value) || base.words_per_line,
+      text_case: document.getElementById('anim-cap-case')?.value || base.text_case,
+      background: {
+        ...(base.background || {}),
+        enabled: !!document.getElementById('anim-cap-box')?.checked,
+      },
+    });
+    return next;
+  }
+
+  function paintCaptionOverlay(t) {
+    const stage = document.getElementById('anim-cap-overlay');
+    if (!stage) return;
+    const style = readCaptionStyleFromDom();
+    const layout = captionLayoutAtTime(captionCuesForPreview(), style, t);
+    const y = style.position?.y_pct ?? 78;
+    const outline = Math.max(0, style.outline_width || 0);
+    const box = style.background?.enabled
+      ? `background:${style.background.color};padding:${style.background.padding || 12}px;border-radius:${style.background.radius || 10}px;`
+      : '';
+    stage.style.top = `${y}%`;
+    stage.style.transform = 'translate(-50%, -50%)';
+    stage.innerHTML = layout.words.length
+      ? `<span class="anim-cap-line" style="${box}font-size:${Math.round((style.font_size || 48) * 0.42)}px;font-weight:${style.font_weight || 800};color:${style.color};-webkit-text-stroke:${outline ? Math.max(1, outline * 0.35) : 0}px ${style.outline_color};paint-order:stroke fill;text-shadow:0 ${style.shadow?.y || 2}px ${style.shadow?.blur || 0}px ${style.shadow?.color || 'rgba(0,0,0,0.55)'};">${
+        layout.words.map((w) => `<span class="anim-cap-word${w.active ? ' is-active' : ''}" style="${w.active ? `color:${style.highlight_color};` : ''}">${esc(w.text)}</span>`).join(' ')
+      }</span>`
+      : '';
+  }
+
+  function bindCaptionPreview() {
+    const vid = document.querySelector('.anim-final__video');
+    const stage = document.getElementById('anim-cap-overlay');
+    if (!vid || !stage) return;
+    const tick = () => {
+      paintCaptionOverlay(vid.currentTime || 0);
+      if (!vid.paused && !vid.ended) _captionPreviewRaf = requestAnimationFrame(tick);
+    };
+    const kick = () => {
+      cancelAnimationFrame(_captionPreviewRaf);
+      paintCaptionOverlay(vid.currentTime || 0);
+      if (!vid.paused) _captionPreviewRaf = requestAnimationFrame(tick);
+    };
+    vid.addEventListener('timeupdate', () => paintCaptionOverlay(vid.currentTime || 0));
+    vid.addEventListener('play', kick);
+    vid.addEventListener('seeked', kick);
+    vid.addEventListener('pause', () => {
+      cancelAnimationFrame(_captionPreviewRaf);
+      paintCaptionOverlay(vid.currentTime || 0);
+    });
+    paintCaptionOverlay(vid.currentTime || 0);
+  }
+
+  function renderCaptionStudioPanel(p) {
+    const style = normalizeCaptionStyle(p.caption_style || _meta?.default_caption_style);
+    const presets = captionPresets();
+    const cuesN = Array.isArray(p.caption_cues) ? p.caption_cues.length : 0;
+    return `
+      <div class="anim-cap-studio" id="anim-cap-studio" ${_captionStudioOpen ? '' : 'hidden'}>
+        <div class="anim-cap-studio__head">
+          <strong>Caption Studio</strong>
+          <button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-close" style="width:auto;padding:4px 8px;font-size:0.65rem;">Close</button>
+        </div>
+        <div style="font-size:0.62rem;color:rgba(255,255,255,0.4);margin-bottom:8px;line-height:1.35;">
+          Live preview on Final · ${cuesN ? `${cuesN} word cues from VO` : 'Estimated timing until Rebuild (VO + Captions)'}
+        </div>
+        <div class="anim-row" style="margin:0 0 8px;">
+          <select id="anim-cap-mode" class="anim-select" title="Mode">
+            ${['karaoke', 'phrase', 'static'].map((m) => `<option value="${m}" ${style.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+          <select id="anim-cap-preset" class="anim-select" title="Preset">
+            ${(presets.length ? presets : [{ id: style.preset_id || 'bold-pop', label: style.preset_id || 'Bold Pop' }]).map((pr) =>
+              `<option value="${esc(pr.id)}" ${style.preset_id === pr.id ? 'selected' : ''}>${esc(pr.label || pr.id)}</option>`).join('')}
+          </select>
+        </div>
+        <details class="anim-cap-advanced">
+          <summary>Customize</summary>
+          <div class="anim-cap-grid">
+            <label>Size <input id="anim-cap-size" type="range" min="24" max="84" value="${style.font_size || 52}" /></label>
+            <label>Y% <input id="anim-cap-y" type="range" min="50" max="92" value="${style.position?.y_pct || 78}" /></label>
+            <label>Words/line <input id="anim-cap-wpl" type="number" min="1" max="10" value="${style.words_per_line || 4}" style="width:64px;" /></label>
+            <label>Outline <input id="anim-cap-outline-w" type="number" min="0" max="10" value="${style.outline_width || 0}" style="width:64px;" /></label>
+            <label>Fill <input id="anim-cap-color" type="color" value="${(style.color || '#FFFFFF').slice(0, 7)}" /></label>
+            <label>Highlight <input id="anim-cap-highlight" type="color" value="${(style.highlight_color || '#FFE14D').slice(0, 7)}" /></label>
+            <label>Outline color <input id="anim-cap-outline" type="color" value="${(style.outline_color || '#000000').slice(0, 7)}" /></label>
+            <label>Anim
+              <select id="anim-cap-anim" class="anim-select" style="width:auto;">
+                ${['none', 'pop', 'fade', 'bounce'].map((a) => `<option value="${a}" ${style.animation === a ? 'selected' : ''}>${a}</option>`).join('')}
+              </select>
+            </label>
+            <label>Case
+              <select id="anim-cap-case" class="anim-select" style="width:auto;">
+                ${['as_is', 'upper', 'title'].map((c) => `<option value="${c}" ${style.text_case === c ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+            </label>
+            <label><input type="checkbox" id="anim-cap-box" ${style.background?.enabled ? 'checked' : ''}/> Soft box</label>
+          </div>
+        </details>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-save" style="width:auto;padding:6px 10px;font-size:0.68rem;">Save style</button>
+          <span style="font-size:0.62rem;color:rgba(255,255,255,0.38);align-self:center;">Rebuild final to burn into export</span>
+        </div>
+      </div>`;
+  }
+
   async function syncMotionSettings() {
     if (!_project?.id) return;
     const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
@@ -368,6 +587,9 @@
     }
     if (document.getElementById('anim-caption-text')) {
       body.caption_text = document.getElementById('anim-caption-text').value;
+    }
+    if (document.getElementById('anim-cap-mode') || _project.caption_style) {
+      body.caption_style = readCaptionStyleFromDom();
     }
     if (document.getElementById('anim-music-prompt')) {
       body.music_prompt = document.getElementById('anim-music-prompt').value;
@@ -735,7 +957,10 @@
         <div class="anim-final">
           ${showPlayer
             ? (/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || readyShotUrls.length
-              ? `<video class="anim-final__video" src="${esc(mediaSrc(finalUrl))}" controls playsinline style="max-width:280px;border-radius:12px;background:#000;"></video>`
+              ? `<div class="anim-final__stage">
+                  <video class="anim-final__video" src="${esc(mediaSrc(finalUrl))}" controls playsinline></video>
+                  <div class="anim-cap-overlay" id="anim-cap-overlay" aria-hidden="true"></div>
+                </div>`
               : `<img class="anim-media" src="${esc(mediaSrc(finalUrl))}" alt="Final" style="max-width:280px;border-radius:12px;" data-fallback="1" />`)
             : `<div class="anim-placeholder-row">${readyShotUrls.length
               ? `Ready to stitch ${readyShotUrls.length} shot${readyShotUrls.length === 1 ? '' : 's'} into the Final reel.`
@@ -752,7 +977,8 @@
               <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
             </div>
             <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="VO script (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
-            <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;margin-top:6px;" placeholder="Burn-in caption text…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
+            <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;margin-top:6px;" placeholder="Caption / static text (VO script drives timed words)…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
+            ${renderCaptionStudioPanel(p)}
             <textarea id="anim-music-prompt" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="Music bed prompt (e.g. warm lo-fi instrumental, soft pulse, no vocals)…">${esc(p.music_prompt || '')}</textarea>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
               <select id="anim-music-length" class="anim-select" style="width:auto;min-width:96px;font-size:0.68rem;" title="Music length">
@@ -774,6 +1000,7 @@
           </div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
             ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
+            ${readyShotUrls.length ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-open" style="width:auto;">${_captionStudioOpen ? 'Caption Studio ✓' : 'Edit captions'}</button>` : ''}
             ${readyShotUrls.length ? `<button type="button" class="anim-btn" id="anim-rebuild-final" ${p.status === 'assembling' || (p.scenes || []).some((s) => s.status === 'generating') ? 'disabled' : ''}>${p.status === 'assembling' ? 'Assembling…' : 'Rebuild final'}</button>` : ''}
             ${p.content_record_id && !p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
             ${p.content_record_id && p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review" title="Final may not be durable">Open in Content Review</button>` : ''}
@@ -809,6 +1036,77 @@
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
     document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
     document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
+    document.getElementById('anim-cap-open')?.addEventListener('click', () => {
+      _captionStudioOpen = !_captionStudioOpen;
+      const panel = document.getElementById('anim-cap-studio');
+      if (panel) panel.hidden = !_captionStudioOpen;
+      else renderCanvas();
+      const btn = document.getElementById('anim-cap-open');
+      if (btn) btn.textContent = _captionStudioOpen ? 'Caption Studio ✓' : 'Edit captions';
+      if (_captionStudioOpen) {
+        const flag = document.getElementById('anim-flag-captions');
+        if (flag) flag.checked = true;
+        paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
+      }
+    });
+    document.getElementById('anim-cap-close')?.addEventListener('click', () => {
+      _captionStudioOpen = false;
+      const panel = document.getElementById('anim-cap-studio');
+      if (panel) panel.hidden = true;
+      const btn = document.getElementById('anim-cap-open');
+      if (btn) btn.textContent = 'Edit captions';
+    });
+    document.getElementById('anim-cap-save')?.addEventListener('click', async () => {
+      if (!_project) return;
+      _project.caption_style = readCaptionStyleFromDom();
+      await syncMotionSettings();
+      toast('Caption style saved — Rebuild final to burn', 'success');
+      paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
+    });
+    document.getElementById('anim-cap-preset')?.addEventListener('change', () => {
+      const id = document.getElementById('anim-cap-preset')?.value;
+      const preset = captionPresets().find((p) => p.id === id);
+      if (preset?.style) {
+        _project.caption_style = normalizeCaptionStyle({ ...preset.style, preset_id: id });
+        // Refresh panel fields from preset
+        const mode = document.getElementById('anim-cap-mode');
+        if (mode) mode.value = _project.caption_style.mode;
+        const size = document.getElementById('anim-cap-size');
+        if (size) size.value = _project.caption_style.font_size;
+        const y = document.getElementById('anim-cap-y');
+        if (y) y.value = _project.caption_style.position.y_pct;
+        const wpl = document.getElementById('anim-cap-wpl');
+        if (wpl) wpl.value = _project.caption_style.words_per_line;
+        const ow = document.getElementById('anim-cap-outline-w');
+        if (ow) ow.value = _project.caption_style.outline_width;
+        const color = document.getElementById('anim-cap-color');
+        if (color) color.value = (_project.caption_style.color || '#FFFFFF').slice(0, 7);
+        const hi = document.getElementById('anim-cap-highlight');
+        if (hi) hi.value = (_project.caption_style.highlight_color || '#FFE14D').slice(0, 7);
+        const oc = document.getElementById('anim-cap-outline');
+        if (oc) oc.value = (_project.caption_style.outline_color || '#000000').slice(0, 7);
+        const anim = document.getElementById('anim-cap-anim');
+        if (anim) anim.value = _project.caption_style.animation;
+        const tc = document.getElementById('anim-cap-case');
+        if (tc) tc.value = _project.caption_style.text_case;
+        const box = document.getElementById('anim-cap-box');
+        if (box) box.checked = !!_project.caption_style.background?.enabled;
+      }
+      paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
+    });
+    [
+      'anim-cap-mode', 'anim-cap-size', 'anim-cap-y', 'anim-cap-wpl', 'anim-cap-outline-w',
+      'anim-cap-color', 'anim-cap-highlight', 'anim-cap-outline', 'anim-cap-anim', 'anim-cap-case', 'anim-cap-box',
+      'anim-caption-text', 'anim-vo-script',
+    ].forEach((id) => {
+      document.getElementById(id)?.addEventListener('input', () => {
+        paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
+      });
+      document.getElementById(id)?.addEventListener('change', () => {
+        paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
+      });
+    });
+    bindCaptionPreview();
     document.getElementById('anim-music-file')?.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (file) await uploadProjectAsset(file, 'music');
@@ -1487,6 +1785,20 @@
         .anim-assemble-panel { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
         .anim-assemble-flags { display:flex; flex-wrap:wrap; gap:12px; font-size:0.72rem; color:#CBD5E1; }
         .anim-assemble-flags label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
+        .anim-final__stage { position:relative; width:280px; max-width:100%; border-radius:12px; overflow:hidden; background:#000; }
+        .anim-final__video { display:block; width:100%; max-width:280px; border-radius:12px; background:#000; }
+        .anim-cap-overlay { position:absolute; left:50%; width:92%; pointer-events:none; z-index:2; text-align:center; }
+        .anim-cap-line { display:inline-block; line-height:1.15; letter-spacing:0.01em; max-width:100%; }
+        .anim-cap-word { display:inline; margin:0 0.12em; transition: color 80ms linear, transform 120ms ease; }
+        .anim-cap-word.is-active { transform: scale(1.06); }
+        .anim-cap-studio { margin-top:10px; padding:10px; border-radius:10px; border:1px solid rgba(167,139,250,0.35); background:rgba(124,58,237,0.08); }
+        .anim-cap-studio__head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; color:#E9D5FF; font-size:0.78rem; }
+        .anim-cap-advanced { margin-top:6px; font-size:0.72rem; color:#CBD5E1; }
+        .anim-cap-advanced summary { cursor:pointer; color:#C4B5FD; margin-bottom:8px; }
+        .anim-cap-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
+        .anim-cap-grid label { display:flex; flex-direction:column; gap:4px; font-size:0.65rem; color:rgba(255,255,255,0.55); }
+        .anim-cap-grid input[type="range"] { width:100%; }
+        .anim-cap-grid input[type="color"] { width:100%; height:28px; border:none; background:transparent; padding:0; }
         .anim-placeholder-row { font-size:0.8rem; color:rgba(255,255,255,0.4); padding:14px; border:1px dashed rgba(255,255,255,0.1); border-radius:12px; }
         .anim-brief-card { margin-top:8px; padding:12px; border-radius:12px; background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.28); }
         .anim-brief-card__title { font-size:0.72rem; font-weight:700; color:#C4B5FD; margin-bottom:8px; text-transform:uppercase; }
