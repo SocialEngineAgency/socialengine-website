@@ -274,11 +274,40 @@
     const modes = _meta?.motion_modes || [
       { id: 'auto', label: 'Auto (DreamActor)' },
       { id: 'drive', label: 'Upload drive' },
-      { id: 'kling', label: 'Kling only' },
+      { id: 'kling', label: 'I2V only' },
     ];
     const cur = currentMotionMode();
     return modes.map((m) =>
       `<option value="${esc(m.id)}" ${cur === m.id ? 'selected' : ''}>${esc(m.label)}</option>`
+    ).join('');
+  }
+
+  function currentI2vModel() {
+    return _project?.pipeline?.i2v_model || _meta?.default_i2v_model || 'seedance';
+  }
+
+  function i2vOptions() {
+    const models = _meta?.i2v_models || [
+      { id: 'seedance', label: 'Seedance 2.0' },
+      { id: 'kling', label: 'Kling' },
+      { id: 'auto', label: 'Auto (Seedance→Kling)' },
+    ];
+    const cur = currentI2vModel();
+    return models.map((m) =>
+      `<option value="${esc(m.id)}" ${cur === m.id ? 'selected' : ''}>${esc(m.label)}</option>`
+    ).join('');
+  }
+
+  function templateOptions(selected) {
+    const tpls = _meta?.motion_templates || [
+      { id: 'hold', label: 'Hold' },
+      { id: 'gentle-pan', label: 'Gentle pan' },
+      { id: 'push-in', label: 'Push in' },
+      { id: 'parallax-lite', label: 'Parallax lite' },
+    ];
+    const cur = selected || _project?.motion_template_id || '';
+    return `<option value="">Template (optional)</option>` + tpls.map((t) =>
+      `<option value="${esc(t.id)}" ${cur === t.id ? 'selected' : ''}>${esc(t.label)}</option>`
     ).join('');
   }
 
@@ -287,26 +316,62 @@
     const hit = (_meta?.motion_modes || []).find((m) => m.id === id);
     if (hit?.hint) return hit.hint;
     if (id === 'drive') return 'Upload a driving video for motion — DreamActor maps your locked character onto it.';
-    if (id === 'kling') return 'Kling image-to-video only (faster, weaker identity lock).';
-    return 'fal: Seedream keyframe → Kling motion → DreamActor identity.';
+    if (id === 'kling') return 'I2V only (no DreamActor) — uses Seedance/Kling from the I2V select.';
+    return 'Seedream keyframe → Seedance motion (spatial-stable) → DreamActor identity.';
+  }
+
+  function assembleFlags() {
+    const a = _project?.pipeline?.assemble || {};
+    return {
+      vo: a.vo !== false,
+      captions: a.captions !== false,
+      music: a.music !== false,
+      outro: a.outro !== false,
+    };
   }
 
   async function syncMotionSettings() {
     if (!_project?.id) return;
     const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
+    const i2v_model = document.getElementById('anim-i2v')?.value || currentI2vModel();
+    const motion_template_id = document.getElementById('anim-template')?.value || null;
+    const body = {
+      motion_mode,
+      i2v_model,
+      motion_template_id: motion_template_id || null,
+      driving_video_url: _project.driving_video_url || null,
+      identity_source: 'upload',
+      music_bed_url: _project.music_bed_url || null,
+      outro_url: _project.outro_url || null,
+    };
+    if (document.getElementById('anim-flag-vo')) {
+      body.assemble = assembleFlagsFromDom();
+    }
+    if (document.getElementById('anim-vo-script')) {
+      body.vo_script = document.getElementById('anim-vo-script').value;
+    }
+    if (document.getElementById('anim-caption-text')) {
+      body.caption_text = document.getElementById('anim-caption-text').value;
+    }
     try {
       const data = await animFetch(`/api/animation/projects/${_project.id}/settings`, {
         method: 'POST',
-        body: JSON.stringify({
-          motion_mode,
-          driving_video_url: _project.driving_video_url || null,
-          identity_source: 'upload',
-        }),
+        body: JSON.stringify(body),
       });
       _project = data.project;
     } catch (e) {
       toast(e.message || 'Could not save motion settings', 'error');
     }
+  }
+
+  function assembleFlagsFromDom() {
+    if (!document.getElementById('anim-flag-vo')) return assembleFlags();
+    return {
+      vo: !!document.getElementById('anim-flag-vo')?.checked,
+      captions: !!document.getElementById('anim-flag-captions')?.checked,
+      music: !!document.getElementById('anim-flag-music')?.checked,
+      outro: !!document.getElementById('anim-flag-outro')?.checked,
+    };
   }
 
   async function uploadDrivingVideo(file) {
@@ -579,9 +644,21 @@
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
                 <div class="anim-shot__prompt">${esc((s.prompt || '').slice(0, 120))}${(s.prompt || '').length > 120 ? '…' : ''}</div>
-                ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
+                ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.i2v_model ? ` · ${esc(s.i2v_model)}` : ''}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
                 ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
+                ${s.persist_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.persist_warning)}</div>` : ''}
                 ${s.error ? `<div style="font-size:0.62rem;color:#FCA5A5;margin:2px 0 6px;line-height:1.35;">${esc(s.error)}</div>` : ''}
+                <div class="anim-shot__overrides">
+                  <select class="anim-select anim-shot-i2v" data-scene="${esc(s.id)}" title="I2V model" style="font-size:0.65rem;padding:4px 6px;">
+                    <option value="">I2V: inherit</option>
+                    <option value="seedance" ${s.i2v_model === 'seedance' ? 'selected' : ''}>Seedance</option>
+                    <option value="kling" ${s.i2v_model === 'kling' ? 'selected' : ''}>Kling</option>
+                    <option value="auto" ${s.i2v_model === 'auto' ? 'selected' : ''}>Auto</option>
+                  </select>
+                  <select class="anim-select anim-shot-template" data-scene="${esc(s.id)}" title="Motion template" style="font-size:0.65rem;padding:4px 6px;">
+                    ${templateOptions(s.motion_template_id)}
+                  </select>
+                </div>
                 <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>${s.status === 'generating' ? 'Generating…' : 'Regenerate'}</button>
               </div>
             </div>`).join('') : `
@@ -641,10 +718,32 @@
               ? `Ready to stitch ${readyShotUrls.length} shot${readyShotUrls.length === 1 ? '' : 's'} into the Final reel.`
               : 'Final reel appears after shots are ready.'}</div>`}
           ${stale ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 4px;line-height:1.35;">Final is out of date — stitch the current timeline shots.</div>` : ''}
+          ${p.persist_warning ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 4px;line-height:1.35;">${esc(p.persist_warning)}</div>` : ''}
+          ${readyShotUrls.length ? `
+          <div class="anim-assemble-panel">
+            <div class="anim-assemble-flags">
+              ${(() => { const f = assembleFlags(); return `
+              <label><input type="checkbox" id="anim-flag-vo" ${f.vo ? 'checked' : ''}/> VO</label>
+              <label><input type="checkbox" id="anim-flag-captions" ${f.captions ? 'checked' : ''}/> Captions</label>
+              <label><input type="checkbox" id="anim-flag-music" ${f.music ? 'checked' : ''}/> Music</label>
+              <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
+            </div>
+            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="VO script (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
+            <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;margin-top:6px;" placeholder="Burn-in caption text…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
+              <input type="file" id="anim-music-file" accept="audio/*,video/*" hidden />
+              <input type="file" id="anim-outro-file" accept="video/*" hidden />
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.music_bed_url ? 'Music ✓' : 'Upload music'}</button>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.outro_url ? 'Outro ✓' : 'Upload outro'}</button>
+              ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
+              ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
+            </div>
+          </div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
             ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
             ${readyShotUrls.length ? `<button type="button" class="anim-btn" id="anim-rebuild-final" ${p.status === 'assembling' || (p.scenes || []).some((s) => s.status === 'generating') ? 'disabled' : ''}>${p.status === 'assembling' ? 'Assembling…' : 'Rebuild final'}</button>` : ''}
-            ${p.content_record_id ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
+            ${p.content_record_id && !p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
+            ${p.content_record_id && p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review" title="Final may not be durable">Open in Content Review</button>` : ''}
           </div>
         </div>
         ${pastList.length ? `
@@ -668,6 +767,38 @@
 
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
+    });
+    document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
+    document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
+    document.getElementById('anim-music-file')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file) await uploadProjectAsset(file, 'music');
+      e.target.value = '';
+    });
+    document.getElementById('anim-outro-file')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file) await uploadProjectAsset(file, 'outro');
+      e.target.value = '';
+    });
+    document.getElementById('anim-music-clear')?.addEventListener('click', async () => {
+      if (!_project) return;
+      _project.music_bed_url = null;
+      await syncMotionSettings();
+      renderCanvas();
+    });
+    document.getElementById('anim-outro-clear')?.addEventListener('click', async () => {
+      if (!_project) return;
+      _project.outro_url = null;
+      await syncMotionSettings();
+      renderCanvas();
+    });
+    ['anim-flag-vo', 'anim-flag-captions', 'anim-flag-music', 'anim-flag-outro'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => {
+        if (_project) {
+          _project.pipeline = _project.pipeline || {};
+          _project.pipeline.assemble = assembleFlagsFromDom();
+        }
+      });
     });
     el.querySelectorAll('.anim-take-prev').forEach((btn) => {
       btn.addEventListener('click', () => stepTake(btn.dataset.scene, -1));
@@ -915,10 +1046,15 @@
     try {
       toast('Regenerating shot (compose → Kling → DreamActor)…', 'info');
       const references = refsPayload();
+      const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
+      const shotI2v = shotCard?.querySelector('.anim-shot-i2v')?.value || '';
+      const shotTpl = shotCard?.querySelector('.anim-shot-template')?.value || '';
       const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/regenerate`, {
         method: 'POST',
         body: JSON.stringify({
           motion_mode: document.getElementById('anim-motion')?.value || currentMotionMode(),
+          i2v_model: shotI2v || currentI2vModel(),
+          motion_template_id: shotTpl || null,
           references,
           reference_urls: references.map((r) => r.url),
           character_ref_url: references.find((r) => r.role === 'character')?.url || null,
@@ -941,6 +1077,33 @@
     }
   }
 
+  async function uploadProjectAsset(file, kind) {
+    if (!_project?.id || !file) return;
+    toast(`Uploading ${kind}…`, 'info');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('video', file);
+      const endpoint = file.type.startsWith('audio/')
+        ? `${apiBase()}/api/studio/upload-video`
+        : `${apiBase()}/api/studio/upload-video`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: authHeadersMultipart(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      if (kind === 'music') _project.music_bed_url = data.url;
+      if (kind === 'outro') _project.outro_url = data.url;
+      await syncMotionSettings();
+      renderCanvas();
+      toast(`${kind === 'music' ? 'Music bed' : 'Outro'} attached`, 'success');
+    } catch (e) {
+      toast(e.message || 'Upload failed', 'error');
+    }
+  }
+
   async function rebuildFinal() {
     if (!_project?.id || _busy) return;
     if ((_project.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending')) {
@@ -950,7 +1113,8 @@
     if (!ready.length) return toast('No ready shot videos to stitch', 'error');
     _busy = true;
     try {
-      toast(`Stitching ${ready.length} shots into Final…`, 'info');
+      await syncMotionSettings();
+      toast(`Building Final (shots + assemble flags)…`, 'info');
       const data = await animFetch(`/api/animation/projects/${_project.id}/assemble`, {
         method: 'POST',
         body: JSON.stringify({ create_content: !_project.content_record_id }),
@@ -958,7 +1122,8 @@
       _project = data.project || _project;
       if (data.final_url) _project.final_url = data.final_url;
       renderCanvas();
-      toast(`Final updated from ${data.shot_count || ready.length} shots`, 'success');
+      const note = (data.warnings || []).length ? ` · ${data.warnings[0]}` : '';
+      toast(`Final updated from ${data.shot_count || ready.length} shots${note}`, data.warnings?.length ? 'info' : 'success');
     } catch (e) {
       toast(e.message || 'Assemble failed', 'error');
       try {
@@ -1232,6 +1397,10 @@
         .anim-shot--ghost { grid-template-columns:1fr; width:100px; }
         .anim-shot__title { display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:#F1F5F9; margin-bottom:6px; }
         .anim-shot__prompt { font-size:0.75rem; color:rgba(255,255,255,0.45); line-height:1.4; margin-bottom:8px; }
+        .anim-shot__overrides { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 8px; }
+        .anim-assemble-panel { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
+        .anim-assemble-flags { display:flex; flex-wrap:wrap; gap:12px; font-size:0.72rem; color:#CBD5E1; }
+        .anim-assemble-flags label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
         .anim-placeholder-row { font-size:0.8rem; color:rgba(255,255,255,0.4); padding:14px; border:1px dashed rgba(255,255,255,0.1); border-radius:12px; }
         .anim-brief-card { margin-top:8px; padding:12px; border-radius:12px; background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.28); }
         .anim-brief-card__title { font-size:0.72rem; font-weight:700; color:#C4B5FD; margin-bottom:8px; text-transform:uppercase; }
@@ -1294,6 +1463,10 @@
               </div>
               <div class="anim-row" style="margin-top:8px;">
                 <select id="anim-motion" class="anim-select" title="Motion" style="flex:1;">${motionOptions()}</select>
+                <select id="anim-i2v" class="anim-select" title="I2V model" style="flex:1;">${i2vOptions()}</select>
+              </div>
+              <div class="anim-row" style="margin-top:8px;">
+                <select id="anim-template" class="anim-select" title="Motion template" style="flex:1;">${templateOptions()}</select>
               </div>
               <div id="anim-motion-hint" style="font-size:0.68rem;color:rgba(255,255,255,0.4);line-height:1.4;margin:6px 0 8px;">${esc(motionHint())}</div>
               <div id="anim-drive-wrap" hidden style="margin-bottom:10px;">
@@ -1305,7 +1478,8 @@
                 ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
               </div>
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Kling → DreamActor.</div>
+              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
+              ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">VO needs ELEVENLABS_API_KEY on the API — captions/music/outro still work.</div>` : ''}
               <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char required · Scene for setting · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
@@ -1341,6 +1515,17 @@
     document.getElementById('anim-motion')?.addEventListener('change', async () => {
       if (_project) _project.motion_mode = document.getElementById('anim-motion').value;
       renderDriveControls();
+      if (_project?.id) await syncMotionSettings();
+    });
+    document.getElementById('anim-i2v')?.addEventListener('change', async () => {
+      if (_project) {
+        _project.pipeline = _project.pipeline || {};
+        _project.pipeline.i2v_model = document.getElementById('anim-i2v').value;
+      }
+      if (_project?.id) await syncMotionSettings();
+    });
+    document.getElementById('anim-template')?.addEventListener('change', async () => {
+      if (_project) _project.motion_template_id = document.getElementById('anim-template').value || null;
       if (_project?.id) await syncMotionSettings();
     });
     document.getElementById('anim-drive-upload')?.addEventListener('click', () => document.getElementById('anim-drive-file')?.click());
