@@ -134,6 +134,8 @@
   }
   let _canvasFp = '';
   let _pastFinalsOpen = false;
+  /** Local shot prompt edits — survive poll remounts until regenerate. */
+  const _shotPromptDrafts = Object.create(null);
 
   function formatTakeTime(iso) {
     if (!iso) return '';
@@ -236,9 +238,11 @@
         const data = await animFetch(`/api/animation/projects/${_project.id}`);
         _project = data.project;
         const fp = projectUiFingerprint(_project);
+        const editingShotPrompt = document.activeElement?.classList?.contains('anim-shot__prompt-edit');
         if (fp !== _canvasFp) {
           _canvasFp = fp;
-          renderCanvas();
+          // Don't wipe an in-progress prompt edit on poll remount.
+          if (!editingShotPrompt) renderCanvas();
           renderChat();
         }
         const projectBusy = ['developing', 'generating', 'assembling'].includes(_project.status);
@@ -643,7 +647,8 @@
               </div>
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
-                <div class="anim-shot__prompt">${esc((s.prompt || '').slice(0, 120))}${(s.prompt || '').length > 120 ? '…' : ''}</div>
+                <label class="anim-shot__prompt-label">Shot prompt</label>
+                <textarea class="anim-shot__prompt-edit" data-scene="${esc(s.id)}" rows="3" ${s.status === 'generating' ? 'disabled' : ''} placeholder="Describe this shot — edit before Regenerate">${esc(_shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : (s.prompt || ''))}</textarea>
                 ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.i2v_model ? ` · ${esc(s.i2v_model)}` : ''}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
                 ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
                 ${s.persist_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.persist_warning)}</div>` : ''}
@@ -765,6 +770,11 @@
       ${p.error ? `<div class="anim-error">${esc(p.error)}</div>` : ''}
     `;
 
+    el.querySelectorAll('.anim-shot__prompt-edit').forEach((ta) => {
+      ta.addEventListener('input', () => {
+        _shotPromptDrafts[ta.dataset.scene] = ta.value;
+      });
+    });
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
     });
@@ -1042,16 +1052,23 @@
     if (!_project?.id || !sceneId || _busy) return;
     const scene = (_project.scenes || []).find((s) => s.id === sceneId);
     if (scene?.status === 'generating') return toast('This shot is already generating — hang tight', 'info');
+    const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
+    const promptEdit = (shotCard?.querySelector('.anim-shot__prompt-edit')?.value
+      || _shotPromptDrafts[sceneId]
+      || scene?.prompt
+      || '').trim();
+    if (!promptEdit) return toast('Shot prompt can’t be empty', 'error');
     _busy = true;
     try {
-      toast('Regenerating shot (compose → Kling → DreamActor)…', 'info');
+      toast('Regenerating shot (compose → I2V → DreamActor)…', 'info');
       const references = refsPayload();
-      const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
       const shotI2v = shotCard?.querySelector('.anim-shot-i2v')?.value || '';
       const shotTpl = shotCard?.querySelector('.anim-shot-template')?.value || '';
+      _shotPromptDrafts[sceneId] = promptEdit;
       const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/regenerate`, {
         method: 'POST',
         body: JSON.stringify({
+          prompt: promptEdit,
           motion_mode: document.getElementById('anim-motion')?.value || currentMotionMode(),
           i2v_model: shotI2v || currentI2vModel(),
           motion_template_id: shotTpl || null,
@@ -1061,6 +1078,9 @@
         }),
       });
       _project = data.project;
+      // Keep draft in sync with what we sent (server now has it on the scene).
+      const updated = (_project.scenes || []).find((s) => s.id === sceneId);
+      if (updated?.prompt) _shotPromptDrafts[sceneId] = updated.prompt;
       renderCanvas();
       startPoll();
       toast(data.started ? 'Shot regenerating — canvas will update when ready' : 'Shot updated', 'success');
@@ -1397,6 +1417,10 @@
         .anim-shot--ghost { grid-template-columns:1fr; width:100px; }
         .anim-shot__title { display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:#F1F5F9; margin-bottom:6px; }
         .anim-shot__prompt { font-size:0.75rem; color:rgba(255,255,255,0.45); line-height:1.4; margin-bottom:8px; }
+        .anim-shot__prompt-label { display:block; font-size:0.62rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:rgba(255,255,255,0.4); margin:0 0 4px; }
+        .anim-shot__prompt-edit { width:100%; min-height:64px; resize:vertical; box-sizing:border-box; background:#0F172A; border:1px solid rgba(255,255,255,0.14); color:#F1F5F9; border-radius:8px; padding:8px 10px; font-size:0.75rem; line-height:1.4; font-family:inherit; margin-bottom:8px; }
+        .anim-shot__prompt-edit:focus { outline:none; border-color:rgba(167,139,250,0.65); }
+        .anim-shot__prompt-edit:disabled { opacity:0.55; cursor:not-allowed; }
         .anim-shot__overrides { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 8px; }
         .anim-assemble-panel { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
         .anim-assemble-flags { display:flex; flex-wrap:wrap; gap:12px; font-size:0.72rem; color:#CBD5E1; }
