@@ -238,12 +238,24 @@
         const data = await animFetch(`/api/animation/projects/${_project.id}`);
         _project = data.project;
         const fp = projectUiFingerprint(_project);
-        const editingShotPrompt = document.activeElement?.classList?.contains('anim-shot__prompt-edit');
+        const activePrompt = document.activeElement?.classList?.contains('anim-shot__prompt-edit')
+          ? document.activeElement
+          : null;
+        const focusSceneId = activePrompt?.dataset?.scene || null;
         if (fp !== _canvasFp) {
+          // Never stamp fingerprint without rendering — that permanently hides
+          // new videos if the user had a shot prompt focused when regen finished.
           _canvasFp = fp;
-          // Don't wipe an in-progress prompt edit on poll remount.
-          if (!editingShotPrompt) renderCanvas();
+          renderCanvas();
           renderChat();
+          if (focusSceneId) {
+            const ta = document.querySelector(`.anim-shot__prompt-edit[data-scene="${focusSceneId}"]`);
+            if (ta && !ta.disabled) {
+              const len = ta.value.length;
+              ta.focus();
+              try { ta.setSelectionRange(len, len); } catch (_) {}
+            }
+          }
         }
         const projectBusy = ['developing', 'generating', 'assembling'].includes(_project.status);
         if (projectBusy || projectHasBusyScenes(_project)) {
@@ -639,7 +651,7 @@
                     ? `<div class="anim-shot__updating">${tileMedia(s.keyframe_url, s.title || '', 'ready')}<div class="anim-shot__updating-badge">Updating…</div></div>`
                     : tileMedia(null, '', 'generating'))
                   : s.video_url
-                    ? `<video class="anim-shot__video" src="${esc(mediaSrc(s.video_url))}" poster="${esc(mediaSrc(s.keyframe_url || ''))}" muted loop playsinline controls preload="metadata" data-expand="shot" data-scene="${esc(s.id)}"></video>`
+                    ? `<video class="anim-shot__video" src="${esc(mediaSrc(s.video_url))}${s.active_take_id ? `${/\?/.test(mediaSrc(s.video_url)) ? '&' : '?'}take=${encodeURIComponent(s.active_take_id)}` : ''}" poster="${esc(mediaSrc(s.keyframe_url || ''))}" muted loop playsinline controls preload="metadata" data-expand="shot" data-scene="${esc(s.id)}"></video>`
                     : s.keyframe_url
                       ? tileMedia(s.keyframe_url, s.title || '', s.status)
                       : tileMedia(null, '', s.status || 'pending')}
