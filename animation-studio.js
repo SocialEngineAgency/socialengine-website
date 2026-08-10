@@ -369,6 +369,12 @@
     if (document.getElementById('anim-caption-text')) {
       body.caption_text = document.getElementById('anim-caption-text').value;
     }
+    if (document.getElementById('anim-music-prompt')) {
+      body.music_prompt = document.getElementById('anim-music-prompt').value;
+    }
+    if (document.getElementById('anim-music-length')) {
+      body.music_length_ms = Number(document.getElementById('anim-music-length').value) || 30000;
+    }
     try {
       const data = await animFetch(`/api/animation/projects/${_project.id}/settings`, {
         method: 'POST',
@@ -747,7 +753,16 @@
             </div>
             <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="VO script (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
             <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;margin-top:6px;" placeholder="Burn-in caption text…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
+            <textarea id="anim-music-prompt" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="Music bed prompt (e.g. warm lo-fi instrumental, soft pulse, no vocals)…">${esc(p.music_prompt || '')}</textarea>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
+              <select id="anim-music-length" class="anim-select" style="width:auto;min-width:96px;font-size:0.68rem;" title="Music length">
+                ${[15, 30, 45, 60].map((s) => {
+                  const ms = s * 1000;
+                  const cur = Number(p.music_length_ms) || 30000;
+                  return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
+                }).join('')}
+              </select>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Needs ELEVENLABS_API_KEY"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
               <input type="file" id="anim-music-file" accept="audio/*,video/*" hidden />
               <input type="file" id="anim-outro-file" accept="video/*" hidden />
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.music_bed_url ? 'Music ✓' : 'Upload music'}</button>
@@ -755,6 +770,7 @@
               ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
               ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
             </div>
+            <div style="font-size:0.62rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.35;">Generate or upload a bed, then Rebuild final. ElevenLabs Music supports 3s–10min; pick 30–60s for typical reels.</div>
           </div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
             ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
@@ -792,6 +808,7 @@
     });
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
     document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
+    document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
     document.getElementById('anim-music-file')?.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (file) await uploadProjectAsset(file, 'music');
@@ -1133,6 +1150,39 @@
       toast(`${kind === 'music' ? 'Music bed' : 'Outro'} attached`, 'success');
     } catch (e) {
       toast(e.message || 'Upload failed', 'error');
+    }
+  }
+
+  async function generateMusicBed() {
+    if (!_project?.id || _busy) return;
+    if (!_meta?.providers?.elevenlabs_configured) {
+      return toast('Music generation needs ELEVENLABS_API_KEY on the API', 'error');
+    }
+    const prompt = String(document.getElementById('anim-music-prompt')?.value || '').trim();
+    if (!prompt) return toast('Describe the music bed first', 'error');
+    const lengthMs = Number(document.getElementById('anim-music-length')?.value) || 30000;
+    _busy = true;
+    const btn = document.getElementById('anim-music-generate');
+    if (btn) btn.disabled = true;
+    try {
+      toast(`Generating ${Math.round(lengthMs / 1000)}s instrumental bed…`, 'info');
+      const data = await animFetch(`/api/animation/projects/${_project.id}/generate-music`, {
+        method: 'POST',
+        body: JSON.stringify({
+          music_prompt: prompt,
+          music_length_ms: lengthMs,
+          instrumental: true,
+        }),
+      });
+      _project = data.project || _project;
+      if (data.music_bed_url) _project.music_bed_url = data.music_bed_url;
+      renderCanvas();
+      toast(`Music bed ready (${Math.round((data.length_ms || lengthMs) / 1000)}s) — Rebuild final to mix it in`, 'success');
+    } catch (e) {
+      toast(e.message || 'Music generation failed', 'error');
+    } finally {
+      _busy = false;
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -1515,7 +1565,7 @@
               </div>
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
               <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
-              ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">VO needs ELEVENLABS_API_KEY on the API — captions/music/outro still work.</div>` : ''}
+              ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">VO + Generate music need ELEVENLABS_API_KEY — captions / upload music / outro still work.</div>` : ''}
               <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char required · Scene for setting · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
