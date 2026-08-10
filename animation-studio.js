@@ -365,9 +365,11 @@
     if (!['karaoke', 'phrase', 'static'].includes(s.mode)) s.mode = 'karaoke';
     if (!['none', 'pop', 'fade', 'bounce'].includes(s.animation)) s.animation = 'pop';
     if (!['as_is', 'upper', 'title'].includes(s.text_case)) s.text_case = 'as_is';
-    s.words_per_line = Math.max(1, Math.min(10, Number(s.words_per_line) || 4));
-    s.font_size = Math.max(18, Math.min(96, Number(s.font_size) || 52));
-    s.position = s.position || { y_pct: 78, align: 'center' };
+    s.words_per_line = Math.max(1, Math.min(10, Number(s.words_per_line) || 3));
+    s.font_size = Math.max(16, Math.min(96, Number(s.font_size) || 42));
+    s.max_width_pct = Math.max(40, Math.min(96, Number(s.max_width_pct) || 78));
+    s.letter_spacing = Math.max(0, Math.min(6, Number(s.letter_spacing) || 0));
+    s.position = s.position || { y_pct: 74, align: 'center' };
     s.shadow = s.shadow || fallback.shadow;
     s.background = s.background || fallback.background;
     return s;
@@ -446,9 +448,10 @@
     const base = normalizeCaptionStyle(_project?.caption_style);
     if (!document.getElementById('anim-cap-mode')) return base;
     const presetId = document.getElementById('anim-cap-preset')?.value || base.preset_id;
-    const preset = captionPresets().find((p) => p.id === presetId);
+    const pad = document.getElementById('anim-cap-pad')?.value;
+    const rad = document.getElementById('anim-cap-radius')?.value;
     const next = normalizeCaptionStyle({
-      ...(preset?.style || base),
+      ...base,
       preset_id: presetId,
       mode: document.getElementById('anim-cap-mode')?.value || base.mode,
       font_size: Number(document.getElementById('anim-cap-size')?.value) || base.font_size,
@@ -457,15 +460,18 @@
       outline_color: document.getElementById('anim-cap-outline')?.value || base.outline_color,
       outline_width: Number(document.getElementById('anim-cap-outline-w')?.value) || base.outline_width,
       position: {
-        y_pct: Number(document.getElementById('anim-cap-y')?.value) || base.position?.y_pct || 78,
+        y_pct: Number(document.getElementById('anim-cap-y')?.value) || base.position?.y_pct || 74,
         align: 'center',
       },
       animation: document.getElementById('anim-cap-anim')?.value || base.animation,
       words_per_line: Number(document.getElementById('anim-cap-wpl')?.value) || base.words_per_line,
       text_case: document.getElementById('anim-cap-case')?.value || base.text_case,
+      max_width_pct: Number(document.getElementById('anim-cap-width')?.value) || base.max_width_pct || 78,
       background: {
         ...(base.background || {}),
         enabled: !!document.getElementById('anim-cap-box')?.checked,
+        padding: pad != null && pad !== '' ? Number(pad) : (base.background?.padding ?? 8),
+        radius: rad != null && rad !== '' ? Number(rad) : (base.background?.radius ?? 8),
       },
     });
     return next;
@@ -476,15 +482,25 @@
     if (!stage) return;
     const style = readCaptionStyleFromDom();
     const layout = captionLayoutAtTime(captionCuesForPreview(), style, t);
-    const y = style.position?.y_pct ?? 78;
+    const y = style.position?.y_pct ?? 74;
     const outline = Math.max(0, style.outline_width || 0);
+    const widthPct = style.max_width_pct || 78;
+    const pad = style.background?.padding ?? 8;
+    const rad = style.background?.radius ?? 8;
     const box = style.background?.enabled
-      ? `background:${style.background.color};padding:${style.background.padding || 12}px;border-radius:${style.background.radius || 10}px;`
+      ? `background:${style.background.color};padding:${Math.max(2, Math.round(pad * 0.55))}px ${Math.max(6, Math.round(pad * 0.9))}px;border-radius:${rad >= 200 ? 999 : Math.round(rad * 0.55)}px;`
       : '';
+    // Preview is ~280px wide vs 1080 design; scale font ~0.38 so Size slider feels true.
+    const previewPx = Math.max(11, Math.round((style.font_size || 42) * 0.38));
     stage.style.top = `${y}%`;
+    stage.style.width = `${widthPct}%`;
     stage.style.transform = 'translate(-50%, -50%)';
+    const sizeLabel = document.getElementById('anim-cap-size-val');
+    if (sizeLabel) sizeLabel.textContent = String(style.font_size || 42);
+    const widthLabel = document.getElementById('anim-cap-width-val');
+    if (widthLabel) widthLabel.textContent = `${widthPct}%`;
     stage.innerHTML = layout.words.length
-      ? `<span class="anim-cap-line" style="${box}font-size:${Math.round((style.font_size || 48) * 0.42)}px;font-weight:${style.font_weight || 800};color:${style.color};-webkit-text-stroke:${outline ? Math.max(1, outline * 0.35) : 0}px ${style.outline_color};paint-order:stroke fill;text-shadow:0 ${style.shadow?.y || 2}px ${style.shadow?.blur || 0}px ${style.shadow?.color || 'rgba(0,0,0,0.55)'};">${
+      ? `<span class="anim-cap-line" style="${box}font-size:${previewPx}px;font-weight:${style.font_weight || 800};color:${style.color};letter-spacing:${(style.letter_spacing || 0) * 0.4}px;-webkit-text-stroke:${outline ? Math.max(0.6, outline * 0.3) : 0}px ${style.outline_color};paint-order:stroke fill;text-shadow:${style.background?.enabled ? 'none' : `0 ${style.shadow?.y || 2}px ${style.shadow?.blur || 0}px ${style.shadow?.color || 'rgba(0,0,0,0.55)'}`};">${
         layout.words.map((w) => `<span class="anim-cap-word${w.active ? ' is-active' : ''}" style="${w.active ? `color:${style.highlight_color};` : ''}">${esc(w.text)}</span>`).join(' ')
       }</span>`
       : '';
@@ -517,6 +533,8 @@
     const style = normalizeCaptionStyle(p.caption_style || _meta?.default_caption_style);
     const presets = captionPresets();
     const cuesN = Array.isArray(p.caption_cues) ? p.caption_cues.length : 0;
+    const size = style.font_size || 42;
+    const widthPct = style.max_width_pct || 78;
     return `
       <div class="anim-cap-studio" id="anim-cap-studio" ${_captionStudioOpen ? '' : 'hidden'}>
         <div class="anim-cap-studio__head">
@@ -531,19 +549,38 @@
             ${['karaoke', 'phrase', 'static'].map((m) => `<option value="${m}" ${style.mode === m ? 'selected' : ''}>${m}</option>`).join('')}
           </select>
           <select id="anim-cap-preset" class="anim-select" title="Preset">
-            ${(presets.length ? presets : [{ id: style.preset_id || 'bold-pop', label: style.preset_id || 'Bold Pop' }]).map((pr) =>
+            ${(presets.length ? presets : [{ id: style.preset_id || 'reels-classic', label: 'Reels Classic' }]).map((pr) =>
               `<option value="${esc(pr.id)}" ${style.preset_id === pr.id ? 'selected' : ''}>${esc(pr.label || pr.id)}</option>`).join('')}
           </select>
         </div>
-        <details class="anim-cap-advanced">
-          <summary>Customize</summary>
+        <div class="anim-cap-quick">
+          <div class="anim-cap-chips" id="anim-cap-size-chips">
+            <span class="anim-cap-chips__label">Size</span>
+            ${[[28, 'S'], [36, 'M'], [42, 'L'], [54, 'XL']].map(([v, lab]) =>
+              `<button type="button" class="anim-cap-chip${Number(size) === v ? ' is-on' : ''}" data-cap-size="${v}">${lab}</button>`).join('')}
+          </div>
+          <label class="anim-cap-slider">Font size <strong id="anim-cap-size-val">${size}</strong>
+            <input id="anim-cap-size" type="range" min="18" max="72" value="${size}" />
+          </label>
+          <label class="anim-cap-slider">Caption width <strong id="anim-cap-width-val">${widthPct}%</strong>
+            <input id="anim-cap-width" type="range" min="45" max="94" value="${widthPct}" />
+          </label>
+          <label class="anim-cap-slider">Vertical <strong>${style.position?.y_pct || 74}%</strong>
+            <input id="anim-cap-y" type="range" min="50" max="92" value="${style.position?.y_pct || 74}" />
+          </label>
+          <div class="anim-cap-inline">
+            <label>Words/line <input id="anim-cap-wpl" type="number" min="1" max="8" value="${style.words_per_line || 3}" /></label>
+            <label class="anim-cap-check"><input type="checkbox" id="anim-cap-box" ${style.background?.enabled ? 'checked' : ''}/> Box</label>
+            <label>Pad <input id="anim-cap-pad" type="number" min="0" max="24" value="${style.background?.padding ?? 8}" /></label>
+            <label>Radius <input id="anim-cap-radius" type="number" min="0" max="999" value="${style.background?.radius ?? 8}" /></label>
+          </div>
+        </div>
+        <details class="anim-cap-advanced" open>
+          <summary>Colors &amp; extras</summary>
           <div class="anim-cap-grid">
-            <label>Size <input id="anim-cap-size" type="range" min="24" max="84" value="${style.font_size || 52}" /></label>
-            <label>Y% <input id="anim-cap-y" type="range" min="50" max="92" value="${style.position?.y_pct || 78}" /></label>
-            <label>Words/line <input id="anim-cap-wpl" type="number" min="1" max="10" value="${style.words_per_line || 4}" style="width:64px;" /></label>
             <label>Outline <input id="anim-cap-outline-w" type="number" min="0" max="10" value="${style.outline_width || 0}" style="width:64px;" /></label>
             <label>Fill <input id="anim-cap-color" type="color" value="${(style.color || '#FFFFFF').slice(0, 7)}" /></label>
-            <label>Highlight <input id="anim-cap-highlight" type="color" value="${(style.highlight_color || '#FFE14D').slice(0, 7)}" /></label>
+            <label>Highlight <input id="anim-cap-highlight" type="color" value="${(style.highlight_color || '#FFE566').slice(0, 7)}" /></label>
             <label>Outline color <input id="anim-cap-outline" type="color" value="${(style.outline_color || '#000000').slice(0, 7)}" /></label>
             <label>Anim
               <select id="anim-cap-anim" class="anim-select" style="width:auto;">
@@ -555,12 +592,11 @@
                 ${['as_is', 'upper', 'title'].map((c) => `<option value="${c}" ${style.text_case === c ? 'selected' : ''}>${c}</option>`).join('')}
               </select>
             </label>
-            <label><input type="checkbox" id="anim-cap-box" ${style.background?.enabled ? 'checked' : ''}/> Soft box</label>
           </div>
         </details>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
           <button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-save" style="width:auto;padding:6px 10px;font-size:0.68rem;">Save style</button>
-          <span style="font-size:0.62rem;color:rgba(255,255,255,0.38);align-self:center;">Rebuild final to burn into export</span>
+          <span style="font-size:0.62rem;color:rgba(255,255,255,0.38);align-self:center;">Shrink width / pad to tighten the box · Rebuild to burn</span>
         </div>
       </div>`;
   }
@@ -1063,40 +1099,51 @@
       toast('Caption style saved — Rebuild final to burn', 'success');
       paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
+    const applyPresetFields = (st) => {
+      const set = (id, val, prop = 'value') => {
+        const el = document.getElementById(id);
+        if (el) el[prop] = val;
+      };
+      set('anim-cap-mode', st.mode);
+      set('anim-cap-size', st.font_size);
+      set('anim-cap-width', st.max_width_pct || 78);
+      set('anim-cap-y', st.position.y_pct);
+      set('anim-cap-wpl', st.words_per_line);
+      set('anim-cap-outline-w', st.outline_width);
+      set('anim-cap-color', (st.color || '#FFFFFF').slice(0, 7));
+      set('anim-cap-highlight', (st.highlight_color || '#FFE566').slice(0, 7));
+      set('anim-cap-outline', (st.outline_color || '#000000').slice(0, 7));
+      set('anim-cap-anim', st.animation);
+      set('anim-cap-case', st.text_case);
+      set('anim-cap-pad', st.background?.padding ?? 8);
+      set('anim-cap-radius', st.background?.radius ?? 8);
+      set('anim-cap-box', !!st.background?.enabled, 'checked');
+      document.querySelectorAll('.anim-cap-chip[data-cap-size]').forEach((b) => {
+        b.classList.toggle('is-on', Number(b.dataset.capSize) === Number(st.font_size));
+      });
+    };
     document.getElementById('anim-cap-preset')?.addEventListener('change', () => {
       const id = document.getElementById('anim-cap-preset')?.value;
       const preset = captionPresets().find((p) => p.id === id);
       if (preset?.style) {
         _project.caption_style = normalizeCaptionStyle({ ...preset.style, preset_id: id });
-        // Refresh panel fields from preset
-        const mode = document.getElementById('anim-cap-mode');
-        if (mode) mode.value = _project.caption_style.mode;
-        const size = document.getElementById('anim-cap-size');
-        if (size) size.value = _project.caption_style.font_size;
-        const y = document.getElementById('anim-cap-y');
-        if (y) y.value = _project.caption_style.position.y_pct;
-        const wpl = document.getElementById('anim-cap-wpl');
-        if (wpl) wpl.value = _project.caption_style.words_per_line;
-        const ow = document.getElementById('anim-cap-outline-w');
-        if (ow) ow.value = _project.caption_style.outline_width;
-        const color = document.getElementById('anim-cap-color');
-        if (color) color.value = (_project.caption_style.color || '#FFFFFF').slice(0, 7);
-        const hi = document.getElementById('anim-cap-highlight');
-        if (hi) hi.value = (_project.caption_style.highlight_color || '#FFE14D').slice(0, 7);
-        const oc = document.getElementById('anim-cap-outline');
-        if (oc) oc.value = (_project.caption_style.outline_color || '#000000').slice(0, 7);
-        const anim = document.getElementById('anim-cap-anim');
-        if (anim) anim.value = _project.caption_style.animation;
-        const tc = document.getElementById('anim-cap-case');
-        if (tc) tc.value = _project.caption_style.text_case;
-        const box = document.getElementById('anim-cap-box');
-        if (box) box.checked = !!_project.caption_style.background?.enabled;
+        applyPresetFields(_project.caption_style);
       }
       paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
+    document.querySelectorAll('.anim-cap-chip[data-cap-size]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const size = Number(btn.dataset.capSize);
+        const el = document.getElementById('anim-cap-size');
+        if (el) el.value = String(size);
+        document.querySelectorAll('.anim-cap-chip[data-cap-size]').forEach((b) => b.classList.toggle('is-on', b === btn));
+        paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
+      });
+    });
     [
-      'anim-cap-mode', 'anim-cap-size', 'anim-cap-y', 'anim-cap-wpl', 'anim-cap-outline-w',
-      'anim-cap-color', 'anim-cap-highlight', 'anim-cap-outline', 'anim-cap-anim', 'anim-cap-case', 'anim-cap-box',
+      'anim-cap-mode', 'anim-cap-size', 'anim-cap-width', 'anim-cap-y', 'anim-cap-wpl', 'anim-cap-outline-w',
+      'anim-cap-color', 'anim-cap-highlight', 'anim-cap-outline', 'anim-cap-anim', 'anim-cap-case',
+      'anim-cap-box', 'anim-cap-pad', 'anim-cap-radius',
       'anim-caption-text', 'anim-vo-script',
     ].forEach((id) => {
       document.getElementById(id)?.addEventListener('input', () => {
@@ -1807,12 +1854,24 @@
         .anim-assemble-flags label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
         .anim-final__stage { position:relative; width:280px; max-width:100%; border-radius:12px; overflow:hidden; background:#000; }
         .anim-final__video { display:block; width:100%; max-width:280px; border-radius:12px; background:#000; }
-        .anim-cap-overlay { position:absolute; left:50%; width:92%; pointer-events:none; z-index:2; text-align:center; }
-        .anim-cap-line { display:inline-block; line-height:1.15; letter-spacing:0.01em; max-width:100%; }
-        .anim-cap-word { display:inline; margin:0 0.12em; transition: color 80ms linear, transform 120ms ease; }
-        .anim-cap-word.is-active { transform: scale(1.06); }
+        .anim-cap-overlay { position:absolute; left:50%; width:78%; pointer-events:none; z-index:2; text-align:center; }
+        .anim-cap-line { display:inline-block; line-height:1.12; letter-spacing:0.01em; max-width:100%; }
+        .anim-cap-word { display:inline; margin:0 0.08em; transition: color 80ms linear, transform 120ms ease; }
+        .anim-cap-word.is-active { transform: scale(1.05); }
         .anim-cap-studio { margin-top:10px; padding:10px; border-radius:10px; border:1px solid rgba(167,139,250,0.35); background:rgba(124,58,237,0.08); }
         .anim-cap-studio__head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; color:#E9D5FF; font-size:0.78rem; }
+        .anim-cap-quick { display:flex; flex-direction:column; gap:8px; margin-bottom:8px; }
+        .anim-cap-chips { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+        .anim-cap-chips__label { font-size:0.62rem; color:rgba(255,255,255,0.45); margin-right:2px; }
+        .anim-cap-chip { border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.04); color:#E2E8F0; border-radius:999px; padding:3px 9px; font-size:0.65rem; cursor:pointer; font-family:inherit; }
+        .anim-cap-chip.is-on { border-color:rgba(196,181,253,0.7); background:rgba(124,58,237,0.35); color:#F8FAFC; }
+        .anim-cap-slider { display:flex; flex-direction:column; gap:3px; font-size:0.65rem; color:rgba(255,255,255,0.55); }
+        .anim-cap-slider strong { color:#E9D5FF; font-variant-numeric:tabular-nums; }
+        .anim-cap-slider input[type="range"] { width:100%; }
+        .anim-cap-inline { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; font-size:0.65rem; color:rgba(255,255,255,0.55); }
+        .anim-cap-inline label { display:inline-flex; align-items:center; gap:4px; }
+        .anim-cap-inline input[type="number"] { width:56px; background:#0F172A; border:1px solid rgba(255,255,255,0.14); color:#F8FAFC; border-radius:6px; padding:4px 6px; font-size:0.68rem; font-family:inherit; }
+        .anim-cap-check { cursor:pointer; }
         .anim-cap-advanced { margin-top:6px; font-size:0.72rem; color:#CBD5E1; }
         .anim-cap-advanced summary { cursor:pointer; color:#C4B5FD; margin-bottom:8px; }
         .anim-cap-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
