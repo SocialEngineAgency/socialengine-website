@@ -1543,28 +1543,49 @@
     if ((_project.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending')) {
       return toast('Wait for shots to finish before rebuilding Final', 'info');
     }
+    if (_project.status === 'assembling') {
+      startPoll();
+      return toast('Final is already assembling — hanging tight…', 'info');
+    }
     const ready = (_project.scenes || []).filter((s) => s.video_url && s.status === 'ready');
     if (!ready.length) return toast('No ready shot videos to stitch', 'error');
     _busy = true;
+    const projectId = _project.id;
     try {
       await syncMotionSettings();
       toast(`Building Final (shots + assemble flags)…`, 'info');
-      const data = await animFetch(`/api/animation/projects/${_project.id}/assemble`, {
+      const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
         method: 'POST',
         body: JSON.stringify({ create_content: !_project.content_record_id }),
       });
+      // Keep the open project — never bounce to Home while assemble runs.
       _project = data.project || _project;
-      if (data.final_url) _project.final_url = data.final_url;
+      _project.status = _project.status || 'assembling';
       renderCanvas();
-      const note = (data.warnings || []).length ? ` · ${data.warnings[0]}` : '';
-      toast(`Final updated from ${data.shot_count || ready.length} shots${note}`, data.warnings?.length ? 'info' : 'success');
+      renderChat();
+      startPoll();
+      if (data.started || data.already) {
+        toast(`Assembling ${data.shot_count || ready.length} shots — canvas will update when ready`, 'success');
+      } else if (data.final_url) {
+        _project.final_url = data.final_url;
+        renderCanvas();
+        toast('Final updated', 'success');
+      }
     } catch (e) {
       toast(e.message || 'Assemble failed', 'error');
       try {
-        const data = await animFetch(`/api/animation/projects/${_project.id}`);
+        const data = await animFetch(`/api/animation/projects/${projectId}`);
         _project = data.project;
         renderCanvas();
-      } catch (_) {}
+        if (_project?.status === 'assembling') startPoll();
+      } catch (_) {
+        // Stay on the project view even if refresh fails.
+        if (_project) {
+          _project.status = 'assembling';
+          renderCanvas();
+          startPoll();
+        }
+      }
     } finally {
       _busy = false;
     }
@@ -1746,6 +1767,22 @@
 
     const root = document.getElementById('dash-content');
     if (!root) return;
+
+    // If Animate is already mounted with an open project, don't wipe the canvas
+    // (nav re-entry / parent re-render used to bounce Rebuild → Home).
+    if (
+      _project?.id
+      && root.querySelector('.anim-shell')
+      && document.getElementById('anim-canvas-body')
+    ) {
+      if (!_meta) {
+        try { _meta = await animFetch('/api/animation/meta'); } catch (_) {}
+      }
+      if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project)) {
+        startPoll();
+      }
+      return;
+    }
 
     // Kick project list immediately (don't wait on meta) — home felt empty for ~30s otherwise.
     const recentPromise = (!_project || !_recent.length)
