@@ -12,6 +12,7 @@
   let _busy = false;
   let _captionStudioOpen = false;
   let _captionPreviewRaf = 0;
+  let _recentLoading = false;
   let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
   const REF_ROLES = [
     { id: 'character', label: 'Char' },
@@ -738,15 +739,19 @@
     return views.every((v) => !v.url || /\/api\/media\//i.test(String(v.url)));
   }
 
-  async function refreshRecent() {
+  async function refreshRecent({ silent } = {}) {
+    _recentLoading = true;
     try {
       const list = await animFetch('/api/animation/projects');
       _recent = list.projects || [];
-      if (list.purged > 0) {
+      if (!silent && list.purged > 0) {
         toast(`Removed ${list.purged} expired project${list.purged === 1 ? '' : 's'} (old links from a server restart)`, 'info');
       }
     } catch (_) {
-      _recent = [];
+      // Keep prior cache on failure so a slow/flaky list doesn't wipe the home screen.
+      if (!_recent.length) _recent = [];
+    } finally {
+      _recentLoading = false;
     }
   }
 
@@ -819,7 +824,9 @@
     const p = _project;
     if (!p) {
       const usable = _recent.filter((rp) => !projectMediaExpired(rp));
-      const recentHtml = usable.length ? `
+      const recentHtml = _recentLoading ? `
+        <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">Loading recent projects…</div>`
+        : usable.length ? `
         <div class="anim-recent">
           <div class="anim-section__label">Recent projects</div>
           <div class="anim-recent__list">
@@ -1710,10 +1717,12 @@
     stopPoll();
     _project = null;
     _refs = [];
-    await refreshRecent();
+    _recentLoading = true;
     renderCanvas();
     renderChat();
     renderRefs();
+    await refreshRecent();
+    renderCanvas();
     const actions = document.getElementById('anim-brief-actions');
     if (actions) actions.innerHTML = '';
     const ta = document.getElementById('anim-prompt');
@@ -1737,6 +1746,11 @@
 
     const root = document.getElementById('dash-content');
     if (!root) return;
+
+    // Kick project list immediately (don't wait on meta) — home felt empty for ~30s otherwise.
+    const recentPromise = (!_project || !_recent.length)
+      ? ((_recentLoading = true), refreshRecent({ silent: true }))
+      : Promise.resolve();
 
     if (!_meta) {
       let lastErr = null;
@@ -2032,23 +2046,36 @@
     }
     renderRefs();
 
+    // Paint shell immediately (loading / cached recent), then settle when list returns.
+    if (!_project) {
+      renderCanvas();
+      renderChat();
+    }
+
+    await recentPromise;
+
     // Auto-resume in-flight work; never reopen projects with dead ephemeral media.
     if (_project && projectMediaExpired(_project)) {
       const deadId = _project.id;
       _project = null;
       _refs = [];
       stopPoll();
-      await refreshRecent();
+      if (!_recent.length) await refreshRecent({ silent: true });
       if (deadId) await deleteProject(deadId, { silent: true });
     } else if (!_project) {
-      await refreshRecent();
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)
         && ['developing', 'generating', 'assembling', 'brief_ready', 'character_review'].includes(p.status)
       );
-      if (inflight) _project = inflight;
-    } else {
-      await refreshRecent();
+      if (inflight) {
+        // Summaries aren't full projects — open the real record.
+        try {
+          const data = await animFetch(`/api/animation/projects/${inflight.id}`);
+          _project = data.project;
+        } catch (_) {
+          _project = null;
+        }
+      }
     }
     renderCanvas();
     renderChat();
