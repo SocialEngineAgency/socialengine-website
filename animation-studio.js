@@ -1692,8 +1692,28 @@
     if (!root) return;
 
     if (!_meta) {
-      try { _meta = await animFetch('/api/animation/meta'); } catch (e) {
-        root.innerHTML = `<div style="padding:40px;color:#F87171;">Animation Studio API unavailable: ${esc(e.message)}</div>`;
+      let lastErr = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          _meta = await animFetch('/api/animation/meta');
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          // Railway edge 502s often surface as "Failed to fetch" (no CORS on the proxy error).
+          if (attempt < 3) await new Promise((r) => setTimeout(r, 700 * attempt));
+        }
+      }
+      if (!_meta) {
+        root.innerHTML = `<div style="padding:40px;max-width:520px;">
+          <div style="color:#F87171;font-weight:700;margin-bottom:8px;">Animation Studio API unavailable</div>
+          <div style="color:rgba(255,255,255,0.65);font-size:0.85rem;line-height:1.45;margin-bottom:14px;">${esc(lastErr?.message || 'Failed to fetch')} — usually the API is restarting after a deploy. Wait ~30s and retry.</div>
+          <button type="button" class="anim-btn" id="anim-api-retry" style="width:auto;padding:10px 16px;">Retry</button>
+        </div>`;
+        document.getElementById('anim-api-retry')?.addEventListener('click', () => {
+          _meta = null;
+          window.renderAnimationStudio(window.__clientData || window.clientData);
+        });
         return;
       }
     }
