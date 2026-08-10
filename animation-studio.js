@@ -481,6 +481,16 @@
   function paintCaptionOverlay(t) {
     const stage = document.getElementById('anim-cap-overlay');
     if (!stage) return;
+    // Live overlay is edit-preview only. After Rebuild, captions are burned into
+    // the Final — leaving the overlay on stacks a second caption on top.
+    if (!_captionStudioOpen) {
+      stage.innerHTML = '';
+      stage.hidden = true;
+      stage.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    stage.hidden = false;
+    stage.setAttribute('aria-hidden', 'false');
     const style = readCaptionStyleFromDom();
     const layout = captionLayoutAtTime(captionCuesForPreview(), style, t);
     const y = style.position?.y_pct ?? 74;
@@ -1002,7 +1012,7 @@
             ? (/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || readyShotUrls.length
               ? `<div class="anim-final__stage">
                   <video class="anim-final__video" src="${esc(mediaSrc(finalUrl))}" controls playsinline></video>
-                  <div class="anim-cap-overlay" id="anim-cap-overlay" aria-hidden="true"></div>
+                  <div class="anim-cap-overlay" id="anim-cap-overlay" hidden aria-hidden="true"></div>
                 </div>`
               : `<img class="anim-media" src="${esc(mediaSrc(finalUrl))}" alt="Final" style="max-width:280px;border-radius:12px;" data-fallback="1" />`)
             : `<div class="anim-placeholder-row">${readyShotUrls.length
@@ -1089,8 +1099,8 @@
       if (_captionStudioOpen) {
         const flag = document.getElementById('anim-flag-captions');
         if (flag) flag.checked = true;
-        paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
       }
+      paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
     document.getElementById('anim-cap-close')?.addEventListener('click', () => {
       _captionStudioOpen = false;
@@ -1098,6 +1108,7 @@
       if (panel) panel.hidden = true;
       const btn = document.getElementById('anim-cap-open');
       if (btn) btn.textContent = 'Edit captions';
+      paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
     document.getElementById('anim-cap-save')?.addEventListener('click', async () => {
       if (!_project) return;
