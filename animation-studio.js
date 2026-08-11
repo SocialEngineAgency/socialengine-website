@@ -669,6 +669,13 @@
     }
   }
 
+  function assembleLooksStuck(p) {
+    if (!p || p.status !== 'assembling') return false;
+    const started = Date.parse(p.assembling_started_at || '') || 0;
+    if (!started) return true; // legacy / interrupted job with no timestamp
+    return (Date.now() - started) > 90 * 1000;
+  }
+
   function assembleFlagsFromDom() {
     if (!document.getElementById('anim-flag-vo')) return assembleFlags();
     return {
@@ -1130,7 +1137,19 @@
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
             ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
             ${readyShotUrls.length ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-open" style="width:auto;">${_captionStudioOpen ? 'Caption Studio ✓' : 'Edit captions'}</button>` : ''}
-            ${readyShotUrls.length ? `<button type="button" class="anim-btn" id="anim-rebuild-final" ${p.status === 'assembling' || (p.scenes || []).some((s) => s.status === 'generating') ? 'disabled' : ''}>${p.status === 'assembling' ? 'Assembling…' : 'Rebuild final'}</button>` : ''}
+            ${readyShotUrls.length ? (() => {
+              const stuck = assembleLooksStuck(p);
+              const genBusy = (p.scenes || []).some((s) => s.status === 'generating');
+              const disabled = genBusy || (p.status === 'assembling' && !stuck);
+              const label = p.status === 'assembling'
+                ? (stuck ? 'Retry assemble' : 'Assembling…')
+                : 'Rebuild final';
+              return `<button type="button" class="anim-btn" id="anim-rebuild-final" ${disabled ? 'disabled' : ''}>${label}</button>${
+                p.status === 'assembling' && stuck
+                  ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 0;line-height:1.35;">Rebuild looks stuck — tap Retry assemble.</div>`
+                  : ''
+              }`;
+            })() : ''}
             ${p.content_record_id && !p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
             ${p.content_record_id && p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review" title="Final may not be durable">Open in Content Review</button>` : ''}
           </div>
@@ -1778,7 +1797,7 @@
     if ((_project.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending')) {
       return toast('Wait for shots to finish before rebuilding Final', 'info');
     }
-    if (_project.status === 'assembling') {
+    if (_project.status === 'assembling' && !assembleLooksStuck(_project)) {
       startPoll();
       return toast('Final is already assembling — hanging tight…', 'info');
     }
@@ -1790,6 +1809,7 @@
     }
     // Close studio so Final shows the burned file (not overlay-on-burn doubles).
     _captionStudioOpen = false;
+    const forceRetry = assembleLooksStuck(_project) || _project.status === 'assembling';
     _busy = true;
     const projectId = _project.id;
     const prevSummary = _project.last_assemble_summary || '';
@@ -1800,11 +1820,12 @@
       const clipHint = flags.outro && _project.outro_url
         ? `${ready.length} shots + outro`
         : `${ready.length} shots`;
-      toast(`Building Final (${clipHint})…`, 'info');
+      toast(forceRetry ? `Retrying Final assemble (${clipHint})…` : `Building Final (${clipHint})…`, 'info');
       const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
         method: 'POST',
         body: JSON.stringify({
           create_content: !_project.content_record_id,
+          force: forceRetry,
           assemble: flags,
           caption_style: style,
           caption_text: document.getElementById('anim-caption-text')?.value
