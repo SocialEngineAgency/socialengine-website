@@ -143,6 +143,8 @@
   let _pastFinalsOpen = false;
   /** Local shot prompt edits — survive poll remounts until regenerate. */
   const _shotPromptDrafts = Object.create(null);
+  /** Caption style draft — survives canvas remounts so Rebuild burns what you picked. */
+  let _captionStyleDraft = null;
 
   function formatTakeTime(iso) {
     if (!iso) return '';
@@ -454,36 +456,49 @@
   }
 
   function readCaptionStyleFromDom() {
-    const base = normalizeCaptionStyle(_project?.caption_style);
-    if (!document.getElementById('anim-cap-mode')) return base;
+    const base = normalizeCaptionStyle(_captionStyleDraft || _project?.caption_style);
+    if (!document.getElementById('anim-cap-mode')) {
+      return _captionStyleDraft ? normalizeCaptionStyle(_captionStyleDraft) : base;
+    }
+    const num = (id, fallback) => {
+      const raw = document.getElementById(id)?.value;
+      if (raw == null || raw === '') return fallback;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : fallback;
+    };
     const presetId = document.getElementById('anim-cap-preset')?.value || base.preset_id;
-    const pad = document.getElementById('anim-cap-pad')?.value;
-    const rad = document.getElementById('anim-cap-radius')?.value;
     const next = normalizeCaptionStyle({
       ...base,
       preset_id: presetId,
       mode: document.getElementById('anim-cap-mode')?.value || base.mode,
-      font_size: Number(document.getElementById('anim-cap-size')?.value) || base.font_size,
+      font_size: num('anim-cap-size', base.font_size),
       color: document.getElementById('anim-cap-color')?.value || base.color,
       highlight_color: document.getElementById('anim-cap-highlight')?.value || base.highlight_color,
       outline_color: document.getElementById('anim-cap-outline')?.value || base.outline_color,
-      outline_width: Number(document.getElementById('anim-cap-outline-w')?.value) || base.outline_width,
+      outline_width: num('anim-cap-outline-w', base.outline_width ?? 0),
       position: {
-        y_pct: Number(document.getElementById('anim-cap-y')?.value) || base.position?.y_pct || 74,
+        y_pct: num('anim-cap-y', base.position?.y_pct || 74),
         align: 'center',
       },
       animation: document.getElementById('anim-cap-anim')?.value || base.animation,
-      words_per_line: Number(document.getElementById('anim-cap-wpl')?.value) || base.words_per_line,
+      words_per_line: num('anim-cap-wpl', base.words_per_line || 3),
       text_case: document.getElementById('anim-cap-case')?.value || base.text_case,
-      max_width_pct: Number(document.getElementById('anim-cap-width')?.value) || base.max_width_pct || 78,
+      max_width_pct: num('anim-cap-width', base.max_width_pct || 78),
       background: {
         ...(base.background || {}),
         enabled: !!document.getElementById('anim-cap-box')?.checked,
-        padding: pad != null && pad !== '' ? Number(pad) : (base.background?.padding ?? 8),
-        radius: rad != null && rad !== '' ? Number(rad) : (base.background?.radius ?? 8),
+        padding: num('anim-cap-pad', base.background?.padding ?? 8),
+        radius: num('anim-cap-radius', base.background?.radius ?? 8),
       },
     });
+    _captionStyleDraft = next;
     return next;
+  }
+
+  function currentCaptionStyle() {
+    if (document.getElementById('anim-cap-mode')) return readCaptionStyleFromDom();
+    if (_captionStyleDraft) return normalizeCaptionStyle(_captionStyleDraft);
+    return normalizeCaptionStyle(_project?.caption_style || _meta?.default_caption_style);
   }
 
   function paintCaptionOverlay(t) {
@@ -549,7 +564,7 @@
   }
 
   function renderCaptionStudioPanel(p) {
-    const style = normalizeCaptionStyle(p.caption_style || _meta?.default_caption_style);
+    const style = normalizeCaptionStyle(_captionStyleDraft || p.caption_style || _meta?.default_caption_style);
     const presets = captionPresets();
     const cuesN = Array.isArray(p.caption_cues) ? p.caption_cues.length : 0;
     const size = style.font_size || 42;
@@ -643,8 +658,8 @@
     if (document.getElementById('anim-caption-text')) {
       body.caption_text = document.getElementById('anim-caption-text').value;
     }
-    if (document.getElementById('anim-cap-mode') || _project.caption_style) {
-      body.caption_style = readCaptionStyleFromDom();
+    if (document.getElementById('anim-cap-mode') || _project.caption_style || _captionStyleDraft) {
+      body.caption_style = currentCaptionStyle();
     }
     if (document.getElementById('anim-music-prompt')) {
       body.music_prompt = document.getElementById('anim-music-prompt').value;
@@ -1223,9 +1238,13 @@
     });
     document.getElementById('anim-cap-save')?.addEventListener('click', async () => {
       if (!_project) return;
-      _project.caption_style = readCaptionStyleFromDom();
+      const style = currentCaptionStyle();
+      _captionStyleDraft = style;
+      _project.caption_style = style;
+      const flag = document.getElementById('anim-flag-captions');
+      if (flag) flag.checked = true;
       await syncMotionSettings();
-      toast('Caption style saved — Rebuild final to burn', 'success');
+      toast(`Caption style saved (${style.preset_id || 'custom'}) — Rebuild final to burn`, 'success');
       paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
     const applyPresetFields = (st) => {
@@ -1238,7 +1257,7 @@
       set('anim-cap-width', st.max_width_pct || 78);
       set('anim-cap-y', st.position.y_pct);
       set('anim-cap-wpl', st.words_per_line);
-      set('anim-cap-outline-w', st.outline_width);
+      set('anim-cap-outline-w', st.outline_width ?? 0);
       set('anim-cap-color', (st.color || '#FFFFFF').slice(0, 7));
       set('anim-cap-highlight', (st.highlight_color || '#FFE566').slice(0, 7));
       set('anim-cap-outline', (st.outline_color || '#000000').slice(0, 7));
@@ -1247,16 +1266,28 @@
       set('anim-cap-pad', st.background?.padding ?? 8);
       set('anim-cap-radius', st.background?.radius ?? 8);
       set('anim-cap-box', !!st.background?.enabled, 'checked');
+      const presetEl = document.getElementById('anim-cap-preset');
+      if (presetEl && st.preset_id) presetEl.value = st.preset_id;
       document.querySelectorAll('.anim-cap-chip[data-cap-size]').forEach((b) => {
         b.classList.toggle('is-on', Number(b.dataset.capSize) === Number(st.font_size));
       });
+      const sizeLabel = document.getElementById('anim-cap-size-val');
+      if (sizeLabel) sizeLabel.textContent = String(st.font_size || 42);
+      const widthLabel = document.getElementById('anim-cap-width-val');
+      if (widthLabel) widthLabel.textContent = `${st.max_width_pct || 78}%`;
     };
-    document.getElementById('anim-cap-preset')?.addEventListener('change', () => {
+    document.getElementById('anim-cap-preset')?.addEventListener('change', async () => {
       const id = document.getElementById('anim-cap-preset')?.value;
       const preset = captionPresets().find((p) => p.id === id);
       if (preset?.style) {
-        _project.caption_style = normalizeCaptionStyle({ ...preset.style, preset_id: id });
-        applyPresetFields(_project.caption_style);
+        const style = normalizeCaptionStyle({ ...preset.style, preset_id: id });
+        _captionStyleDraft = style;
+        _project.caption_style = style;
+        applyPresetFields(style);
+        const flag = document.getElementById('anim-flag-captions');
+        if (flag) flag.checked = true;
+        await syncMotionSettings();
+        toast(`Preset “${preset.label || id}” applied — Rebuild final to burn`, 'success');
       }
       paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
@@ -1266,6 +1297,7 @@
         const el = document.getElementById('anim-cap-size');
         if (el) el.value = String(size);
         document.querySelectorAll('.anim-cap-chip[data-cap-size]').forEach((b) => b.classList.toggle('is-on', b === btn));
+        _captionStyleDraft = currentCaptionStyle();
         paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
       });
     });
@@ -1276,9 +1308,11 @@
       'anim-caption-text', 'anim-vo-script',
     ].forEach((id) => {
       document.getElementById(id)?.addEventListener('input', () => {
+        _captionStyleDraft = currentCaptionStyle();
         paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
       });
       document.getElementById(id)?.addEventListener('change', () => {
+        _captionStyleDraft = currentCaptionStyle();
         paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
       });
     });
@@ -1807,6 +1841,13 @@
     if (flags.outro && !_project.outro_url) {
       return toast('Outro is checked but no clip is uploaded — Upload outro, then Rebuild', 'error');
     }
+    // Capture style BEFORE closing studio / remounting — draft survives remounts.
+    const style = currentCaptionStyle();
+    _captionStyleDraft = style;
+    _project.caption_style = style;
+    flags.captions = true; // always burn when rebuilding with an explicit style
+    const flagEl = document.getElementById('anim-flag-captions');
+    if (flagEl) flagEl.checked = true;
     // Close studio so Final shows the burned file (not overlay-on-burn doubles).
     _captionStudioOpen = false;
     const forceRetry = assembleLooksStuck(_project) || _project.status === 'assembling';
@@ -1815,12 +1856,15 @@
     const prevSummary = _project.last_assemble_summary || '';
     try {
       await syncMotionSettings();
-      const style = readCaptionStyleFromDom();
-      _project.caption_style = style;
       const clipHint = flags.outro && _project.outro_url
         ? `${ready.length} shots + outro`
         : `${ready.length} shots`;
-      toast(forceRetry ? `Retrying Final assemble (${clipHint})…` : `Building Final (${clipHint})…`, 'info');
+      toast(
+        forceRetry
+          ? `Retrying Final (${clipHint}, ${style.preset_id || 'custom'} captions)…`
+          : `Building Final (${clipHint}, ${style.preset_id || 'custom'} captions)…`,
+        'info'
+      );
       const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
         method: 'POST',
         body: JSON.stringify({
