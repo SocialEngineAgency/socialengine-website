@@ -652,6 +652,12 @@
     if (document.getElementById('anim-music-length')) {
       body.music_length_ms = Number(document.getElementById('anim-music-length').value) || 30000;
     }
+    if (document.getElementById('anim-music-volume')) {
+      body.music_volume = Math.max(0, Math.min(1, Number(document.getElementById('anim-music-volume').value) / 100));
+    }
+    if (document.getElementById('anim-vo-volume')) {
+      body.vo_volume = Math.max(0, Math.min(1, Number(document.getElementById('anim-vo-volume').value) / 100));
+    }
     try {
       const data = await animFetch(`/api/animation/projects/${_project.id}/settings`, {
         method: 'POST',
@@ -1087,6 +1093,18 @@
               <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
             </div>
             <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="VO script (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
+            <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px;">
+              <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
+                VO vol
+                <input type="range" id="anim-vo-volume" min="0" max="100" step="1" value="${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}" style="width:120px;" />
+                <span id="anim-vo-volume-val">${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}%</span>
+              </label>
+              <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
+                Music vol
+                <input type="range" id="anim-music-volume" min="0" max="100" step="1" value="${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}" style="width:120px;" />
+                <span id="anim-music-volume-val">${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}%</span>
+              </label>
+            </div>
             <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;margin-top:6px;" placeholder="Caption / static text (VO script drives timed words)…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
             ${renderCaptionStudioPanel(p)}
             <textarea id="anim-music-prompt" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="Music bed prompt (e.g. warm lo-fi instrumental, soft pulse, no vocals)…">${esc(p.music_prompt || '')}</textarea>
@@ -1154,6 +1172,18 @@
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
     document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
     document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
+    const bindVol = (id, labelId, projectKey) => {
+      const el = document.getElementById(id);
+      const lab = document.getElementById(labelId);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        if (lab) lab.textContent = `${el.value}%`;
+        if (_project) _project[projectKey] = Math.max(0, Math.min(1, Number(el.value) / 100));
+      });
+      el.addEventListener('change', () => { syncMotionSettings(); });
+    };
+    bindVol('anim-music-volume', 'anim-music-volume-val', 'music_volume');
+    bindVol('anim-vo-volume', 'anim-vo-volume-val', 'vo_volume');
     document.getElementById('anim-cap-open')?.addEventListener('click', () => {
       _captionStudioOpen = !_captionStudioOpen;
       _canvasFp = '';
@@ -1783,6 +1813,12 @@
           vo_script: document.getElementById('anim-vo-script')?.value
             || _project.vo_script
             || '',
+          music_volume: document.getElementById('anim-music-volume')
+            ? Math.max(0, Math.min(1, Number(document.getElementById('anim-music-volume').value) / 100))
+            : (_project.music_volume ?? 0.18),
+          vo_volume: document.getElementById('anim-vo-volume')
+            ? Math.max(0, Math.min(1, Number(document.getElementById('anim-vo-volume').value) / 100))
+            : (_project.vo_volume ?? 1),
         }),
       });
       // Keep the open project — never bounce to Home while assemble runs.
