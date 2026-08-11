@@ -77,6 +77,9 @@
       </div>`;
     }
     if (!url) {
+      if (status === 'draft') {
+        return `<div class="anim-tile__ph">No clip yet</div>`;
+      }
       return `<div class="anim-tile__ph ${status === 'failed' ? 'anim-tile__ph--fail' : ''}">${esc(status === 'failed' ? 'Failed' : (status || '…'))}</div>`;
     }
     const src = mediaSrc(url);
@@ -127,8 +130,8 @@
   function projectUiFingerprint(p) {
     if (!p) return '';
     const scenes = (p.scenes || []).map((s) => [
-      s.id, s.status, s.video_url || '', s.keyframe_url || '', s.error || '', s.motion || '',
-      s.active_take_id || '', (s.takes || []).length,
+      s.id, s.order || 0, s.status, s.video_url || '', s.keyframe_url || '', s.error || '', s.motion || '',
+      s.active_take_id || '', (s.takes || []).length, s.prompt || '', s.title || '',
     ]);
     return JSON.stringify([
       p.id, p.status, p.error || '', p.final_url || '', p.active_final_id || '',
@@ -732,9 +735,29 @@
       ready: '#34D399',
       failed: '#F87171',
       pending: '#64748B',
+      draft: '#94A3B8',
     };
     const c = colors[status] || '#94A3B8';
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:${c}22;border:1px solid ${c}55;color:${c};font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${esc(status || 'idle')}</span>`;
+  }
+
+  const ANIM_MAX_SCENES_UI = 6;
+
+  function projectHasUsableCharLock(p) {
+    if (!p) return false;
+    if (projectHasCharacterRef(p)) return true;
+    if (p.character_pack?.locked) return true;
+    if (p.character_pack?.hero_url) return true;
+    return (p.character_pack?.views || []).some((v) => v && v.url);
+  }
+
+  function addSceneDisabledReason(p) {
+    if (!p) return 'Open a project first';
+    if (!projectHasUsableCharLock(p)) return 'Approve character lock first';
+    if ((p.scenes || []).length >= ANIM_MAX_SCENES_UI) return `Timeline capped at ${ANIM_MAX_SCENES_UI} shots`;
+    if (p.status === 'assembling') return 'Wait for Final assemble to finish';
+    if (projectHasBusyScenes(p)) return 'Wait for shots to finish generating';
+    return '';
   }
 
   function projectTitle(p) {
@@ -924,7 +947,14 @@
       <div class="anim-section">
         <div class="anim-section__label">Timeline</div>
         <div class="anim-timeline">
-          ${scenes.length ? scenes.map((s) => `
+          ${scenes.length ? (() => {
+            const timelineBusy = projectHasBusyScenes(p) || p.status === 'assembling';
+            const addReason = addSceneDisabledReason(p);
+            return `${scenes.map((s, idx) => {
+              const regenLabel = s.status === 'generating'
+                ? 'Generating…'
+                : (s.video_url || (s.takes || []).length) ? 'Regenerate' : 'Generate';
+              return `
             <div class="anim-shot" data-scene="${esc(s.id)}">
               <div class="anim-shot__media">
                 ${s.status === 'generating'
@@ -935,13 +965,13 @@
                     ? `<video class="anim-shot__video" src="${esc(mediaSrc(s.video_url))}${s.active_take_id ? `${/\?/.test(mediaSrc(s.video_url)) ? '&' : '?'}take=${encodeURIComponent(s.active_take_id)}` : ''}" poster="${esc(mediaSrc(s.keyframe_url || ''))}" muted loop playsinline controls preload="metadata" data-expand="shot" data-scene="${esc(s.id)}"></video>`
                     : s.keyframe_url
                       ? tileMedia(s.keyframe_url, s.title || '', s.status)
-                      : tileMedia(null, '', s.status || 'pending')}
+                      : tileMedia(null, '', s.status || 'draft')}
                 ${takeNavHtml(s)}
               </div>
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
                 <label class="anim-shot__prompt-label">Shot prompt</label>
-                <textarea class="anim-shot__prompt-edit" data-scene="${esc(s.id)}" rows="3" ${s.status === 'generating' ? 'disabled' : ''} placeholder="Describe this shot — edit before Regenerate">${esc(_shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : (s.prompt || ''))}</textarea>
+                <textarea class="anim-shot__prompt-edit" data-scene="${esc(s.id)}" rows="3" ${s.status === 'generating' ? 'disabled' : ''} placeholder="Describe this shot, or tap Suggest…">${esc(_shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : (s.prompt || ''))}</textarea>
                 ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.i2v_model ? ` · ${esc(s.i2v_model)}` : ''}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
                 ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
                 ${s.persist_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.persist_warning)}</div>` : ''}
@@ -957,9 +987,20 @@
                     ${templateOptions(s.motion_template_id)}
                   </select>
                 </div>
-                <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>${s.status === 'generating' ? 'Generating…' : 'Regenerate'}</button>
+                <div class="anim-shot__actions">
+                  <button type="button" class="anim-btn anim-btn--ghost anim-shot-move" data-scene="${esc(s.id)}" data-delta="-1" ${timelineBusy || idx === 0 ? 'disabled' : ''} title="Move earlier" aria-label="Move shot earlier">↑</button>
+                  <button type="button" class="anim-btn anim-btn--ghost anim-shot-move" data-scene="${esc(s.id)}" data-delta="1" ${timelineBusy || idx === scenes.length - 1 ? 'disabled' : ''} title="Move later" aria-label="Move shot later">↓</button>
+                  <button type="button" class="anim-btn anim-btn--ghost anim-shot-suggest" data-scene="${esc(s.id)}" ${s.status === 'generating' || timelineBusy ? 'disabled' : ''}>Suggest</button>
+                  <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>${regenLabel}</button>
+                </div>
               </div>
-            </div>`).join('') : `
+            </div>`;
+            }).join('')}
+            <div class="anim-add-scene-wrap">
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-add-scene" ${addReason ? 'disabled' : ''} title="${esc(addReason || 'Append a blank shot')}" style="width:100%;">+ Add scene</button>
+              ${addReason ? `<div class="anim-add-scene-hint">${esc(addReason)}</div>` : ''}
+            </div>`;
+          })() : `
             <div class="anim-placeholder-row">${p.status === 'character_review'
               ? 'Shots wait until you Approve character lock.'
               : brief?.shots?.length
@@ -1086,6 +1127,13 @@
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
     });
+    el.querySelectorAll('.anim-shot-suggest').forEach((btn) => {
+      btn.addEventListener('click', () => suggestScene(btn.dataset.scene));
+    });
+    el.querySelectorAll('.anim-shot-move').forEach((btn) => {
+      btn.addEventListener('click', () => moveScene(btn.dataset.scene, Number(btn.dataset.delta) || 0));
+    });
+    document.getElementById('anim-add-scene')?.addEventListener('click', () => addScene());
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
     document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
     document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
@@ -1435,6 +1483,138 @@
       }
     } catch (e) {
       toast(e.message || 'Character approve failed', 'error');
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function addScene() {
+    if (!_project?.id || _busy) return;
+    const reason = addSceneDisabledReason(_project);
+    if (reason) return toast(reason, 'info');
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/scenes`, {
+        method: 'POST',
+        body: '{}',
+      });
+      _project = data.project;
+      const newId = data.scene?.id;
+      if (newId) _shotPromptDrafts[newId] = '';
+      _canvasFp = '';
+      renderCanvas();
+      toast('Blank shot added — write a prompt or tap Suggest', 'success');
+      if (newId) {
+        const ta = document.querySelector(`.anim-shot__prompt-edit[data-scene="${newId}"]`);
+        ta?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        ta?.focus();
+      }
+    } catch (e) {
+      toast(e.message || 'Add scene failed', 'error');
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function suggestScene(sceneId, { force = false } = {}) {
+    if (!_project?.id || !sceneId || _busy) return;
+    const scene = (_project.scenes || []).find((s) => s.id === sceneId);
+    if (!scene) return;
+    if (scene.status === 'generating' || projectHasBusyScenes(_project) || _project.status === 'assembling') {
+      return toast('Wait for shots to finish before suggesting', 'info');
+    }
+    const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
+    const localPrompt = (shotCard?.querySelector('.anim-shot__prompt-edit')?.value
+      || _shotPromptDrafts[sceneId]
+      || scene.prompt
+      || '').trim();
+    if (localPrompt && !force) {
+      const ok = window.confirm('Replace current prompt with AI draft?');
+      if (!ok) return;
+      return suggestScene(sceneId, { force: true });
+    }
+    const btn = shotCard?.querySelector('.anim-shot-suggest');
+    const ta = shotCard?.querySelector('.anim-shot__prompt-edit');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Suggesting…';
+    }
+    if (ta) ta.disabled = true;
+    _busy = true;
+    try {
+      const resp = await fetch(`${apiBase()}/api/animation/projects/${_project.id}/scenes/${sceneId}/suggest`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ force: !!force }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.status === 409 && data.needs_confirm) {
+        const ok = window.confirm('Replace current prompt with AI draft?');
+        if (!ok) return;
+        return suggestScene(sceneId, { force: true });
+      }
+      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      _project = data.project;
+      const prompt = data.scene?.prompt || data.suggestion?.prompt || '';
+      _shotPromptDrafts[sceneId] = prompt;
+      _canvasFp = '';
+      renderCanvas();
+      toast('Draft prompt ready — edit or Generate', 'success');
+      document.querySelector(`.anim-shot__prompt-edit[data-scene="${sceneId}"]`)?.focus();
+    } catch (e) {
+      toast(e.message || 'Suggest failed', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Suggest';
+      }
+      if (ta) ta.disabled = false;
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function moveScene(sceneId, delta) {
+    if (!_project?.id || !sceneId || !delta || _busy) return;
+    if (projectHasBusyScenes(_project) || _project.status === 'assembling') {
+      return toast('Wait for shots to finish before reordering', 'info');
+    }
+    const ordered = [...(_project.scenes || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+    const i = ordered.findIndex((s) => s.id === sceneId);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= ordered.length) return;
+    const prev = ordered.map((s) => ({ id: s.id, order: s.order, title: s.title }));
+    const ids = ordered.map((s) => s.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    ids.forEach((id, idx) => {
+      const scene = (_project.scenes || []).find((s) => s.id === id);
+      if (!scene) return;
+      scene.order = idx + 1;
+      if (/^Shot\s+\d+$/i.test(String(scene.title || '').trim())) scene.title = `Shot ${idx + 1}`;
+    });
+    _project.scenes = [...(_project.scenes || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+    _project.final_source_urls = null;
+    _canvasFp = '';
+    renderCanvas();
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ scene_ids: ids }),
+      });
+      _project = data.project;
+      _canvasFp = '';
+      renderCanvas();
+    } catch (e) {
+      prev.forEach((p) => {
+        const scene = (_project.scenes || []).find((s) => s.id === p.id);
+        if (!scene) return;
+        scene.order = p.order;
+        scene.title = p.title;
+      });
+      _project.scenes = [...(_project.scenes || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+      _canvasFp = '';
+      renderCanvas();
+      toast(e.message || 'Reorder failed', 'error');
     } finally {
       _busy = false;
     }
@@ -1911,6 +2091,10 @@
         .anim-shot__prompt-edit:focus { outline:none; border-color:rgba(167,139,250,0.65); }
         .anim-shot__prompt-edit:disabled { opacity:0.55; cursor:not-allowed; }
         .anim-shot__overrides { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 8px; }
+        .anim-shot__actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+        .anim-shot__actions .anim-btn { width:auto; padding:6px 10px; font-size:0.72rem; }
+        .anim-add-scene-wrap { margin-top:4px; }
+        .anim-add-scene-hint { margin-top:6px; font-size:0.68rem; color:rgba(148,163,184,0.95); line-height:1.35; }
         .anim-assemble-panel { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
         .anim-assemble-flags { display:flex; flex-wrap:wrap; gap:12px; font-size:0.72rem; color:#CBD5E1; }
         .anim-assemble-flags label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
