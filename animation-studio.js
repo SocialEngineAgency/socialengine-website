@@ -134,8 +134,9 @@
       s.active_take_id || '', (s.takes || []).length, s.prompt || '', s.title || '',
     ]);
     return JSON.stringify([
-      p.id, p.status, p.error || '', p.final_url || '', p.active_final_id || '',
-      (p.final_history || []).length, scenes,
+      p.id, p.status, p.error || '', p.final_url || '', p.final_pre_caption_url || '',
+      p.final_assembled_at || '', p.active_final_id || '',
+      (p.final_history || []).length, _captionStudioOpen ? 1 : 0, scenes,
     ]);
   }
   let _canvasFp = '';
@@ -1032,6 +1033,12 @@
           || p.character_pack?.hero_url
           || '';
         const finalUrl = p.final_url;
+        const previewBaseUrl = (_captionStudioOpen && p.final_pre_caption_url)
+          ? p.final_pre_caption_url
+          : finalUrl;
+        const finalCacheBust = p.final_assembled_at
+          ? `${/\?/.test(mediaSrc(previewBaseUrl || '')) ? '&' : '?'}v=${encodeURIComponent(p.final_assembled_at)}`
+          : '';
         const isCharPlaceholder = !!(finalUrl && front && finalUrl === front)
           || !!(finalUrl && p.character_ref_url && finalUrl === p.character_ref_url);
         const source = Array.isArray(p.final_source_urls) ? p.final_source_urls : [];
@@ -1056,9 +1063,14 @@
           ${showPlayer
             ? (/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || readyShotUrls.length
               ? `<div class="anim-final__stage">
-                  <video class="anim-final__video" src="${esc(mediaSrc(finalUrl))}" controls playsinline></video>
+                  <video class="anim-final__video" src="${esc(mediaSrc(previewBaseUrl))}${esc(finalCacheBust)}" controls playsinline></video>
                   <div class="anim-cap-overlay" id="anim-cap-overlay" hidden aria-hidden="true"></div>
-                </div>`
+                </div>
+                ${_captionStudioOpen && p.final_pre_caption_url
+                  ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:6px 0 0;line-height:1.35;">Caption Studio preview — live style on a clean master. Close studio or Rebuild to see the burned Final.</div>`
+                  : (_captionStudioOpen
+                    ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 0;line-height:1.35;">Rebuild Final once to unlock clean caption preview (avoids stacking on an older burn).</div>`
+                    : '')}`
               : `<img class="anim-media" src="${esc(mediaSrc(finalUrl))}" alt="Final" style="max-width:280px;border-radius:12px;" data-fallback="1" />`)
             : `<div class="anim-placeholder-row">${readyShotUrls.length
               ? `Ready to stitch ${readyShotUrls.length} shot${readyShotUrls.length === 1 ? '' : 's'} into the Final reel.`
@@ -1144,24 +1156,21 @@
     document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
     document.getElementById('anim-cap-open')?.addEventListener('click', () => {
       _captionStudioOpen = !_captionStudioOpen;
-      const panel = document.getElementById('anim-cap-studio');
-      if (panel) panel.hidden = !_captionStudioOpen;
-      else renderCanvas();
+      _canvasFp = '';
+      renderCanvas();
       const btn = document.getElementById('anim-cap-open');
       if (btn) btn.textContent = _captionStudioOpen ? 'Caption Studio ✓' : 'Edit captions';
       if (_captionStudioOpen) {
         const flag = document.getElementById('anim-flag-captions');
         if (flag) flag.checked = true;
       }
-      paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
     document.getElementById('anim-cap-close')?.addEventListener('click', () => {
       _captionStudioOpen = false;
-      const panel = document.getElementById('anim-cap-studio');
-      if (panel) panel.hidden = true;
+      _canvasFp = '';
+      renderCanvas();
       const btn = document.getElementById('anim-cap-open');
       if (btn) btn.textContent = 'Edit captions';
-      paintCaptionOverlay(document.querySelector('.anim-final__video')?.currentTime || 0);
     });
     document.getElementById('anim-cap-save')?.addEventListener('click', async () => {
       if (!_project) return;
@@ -1749,18 +1758,32 @@
     if (flags.outro && !_project.outro_url) {
       return toast('Outro is checked but no clip is uploaded — Upload outro, then Rebuild', 'error');
     }
+    // Close studio so Final shows the burned file (not overlay-on-burn doubles).
+    _captionStudioOpen = false;
     _busy = true;
     const projectId = _project.id;
     const prevSummary = _project.last_assemble_summary || '';
     try {
       await syncMotionSettings();
+      const style = readCaptionStyleFromDom();
+      _project.caption_style = style;
       const clipHint = flags.outro && _project.outro_url
         ? `${ready.length} shots + outro`
         : `${ready.length} shots`;
       toast(`Building Final (${clipHint})…`, 'info');
       const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
         method: 'POST',
-        body: JSON.stringify({ create_content: !_project.content_record_id }),
+        body: JSON.stringify({
+          create_content: !_project.content_record_id,
+          assemble: flags,
+          caption_style: style,
+          caption_text: document.getElementById('anim-caption-text')?.value
+            || _project.caption_text
+            || '',
+          vo_script: document.getElementById('anim-vo-script')?.value
+            || _project.vo_script
+            || '',
+        }),
       });
       // Keep the open project — never bounce to Home while assemble runs.
       _project = data.project || _project;
