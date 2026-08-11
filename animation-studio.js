@@ -236,8 +236,9 @@
     });
   }
 
-  function startPoll() {
+  function startPoll(opts = {}) {
     stopPoll();
+    const onIdle = typeof opts.onIdle === 'function' ? opts.onIdle : null;
     _pollTimer = setInterval(async () => {
       if (!_project?.id) return;
       try {
@@ -268,6 +269,9 @@
           /* keep polling */
         } else {
           stopPoll();
+          if (onIdle) {
+            try { onIdle(); } catch (_) {}
+          }
         }
       } catch (_) {}
     }, 3000);
@@ -1090,6 +1094,7 @@
               ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
               ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
             </div>
+            ${assembleFlags().outro && !p.outro_url ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 0;line-height:1.35;">Outro is on, but no clip is attached — upload an outro before Rebuild.</div>` : ''}
             <div style="font-size:0.62rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.35;">Generate or upload a bed, then Rebuild final. ElevenLabs Music supports 3s–10min; pick 30–60s for typical reels.</div>
           </div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
@@ -1740,11 +1745,19 @@
     }
     const ready = (_project.scenes || []).filter((s) => s.video_url && s.status === 'ready');
     if (!ready.length) return toast('No ready shot videos to stitch', 'error');
+    const flags = assembleFlagsFromDom();
+    if (flags.outro && !_project.outro_url) {
+      return toast('Outro is checked but no clip is uploaded — Upload outro, then Rebuild', 'error');
+    }
     _busy = true;
     const projectId = _project.id;
+    const prevSummary = _project.last_assemble_summary || '';
     try {
       await syncMotionSettings();
-      toast(`Building Final (shots + assemble flags)…`, 'info');
+      const clipHint = flags.outro && _project.outro_url
+        ? `${ready.length} shots + outro`
+        : `${ready.length} shots`;
+      toast(`Building Final (${clipHint})…`, 'info');
       const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
         method: 'POST',
         body: JSON.stringify({ create_content: !_project.content_record_id }),
@@ -1754,9 +1767,18 @@
       _project.status = _project.status || 'assembling';
       renderCanvas();
       renderChat();
-      startPoll();
+      startPoll({
+        onIdle: () => {
+          if (!_project || _project.id !== projectId) return;
+          const notes = Array.isArray(_project.last_assemble_warnings) ? _project.last_assemble_warnings : [];
+          const summary = _project.last_assemble_summary || '';
+          if (notes.length) toast(notes.join(' · '), 'info');
+          else if (summary && summary !== prevSummary) toast(summary.replace(/^Final reel updated from /, 'Final ready · '), 'success');
+          else toast('Final updated', 'success');
+        },
+      });
       if (data.started || data.already) {
-        toast(`Assembling ${data.shot_count || ready.length} shots — canvas will update when ready`, 'success');
+        toast(`Assembling ${clipHint} — canvas will update when ready`, 'success');
       } else if (data.final_url) {
         _project.final_url = data.final_url;
         renderCanvas();
