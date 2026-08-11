@@ -136,6 +136,8 @@
     return JSON.stringify([
       p.id, p.status, p.error || '', p.final_url || '', p.final_pre_caption_url || '',
       p.final_assembled_at || '', p.active_final_id || '',
+      p.caption_burn_error || '', p.last_burned_caption_style?.preset_id || '',
+      p.last_burned_caption_style?.burned_at || '', p.last_assemble_summary || '',
       (p.final_history || []).length, _captionStudioOpen ? 1 : 0, scenes,
     ]);
   }
@@ -1064,9 +1066,16 @@
         const previewBaseUrl = (_captionStudioOpen && p.final_pre_caption_url)
           ? p.final_pre_caption_url
           : finalUrl;
-        const finalCacheBust = p.final_assembled_at
-          ? `${/\?/.test(mediaSrc(previewBaseUrl || '')) ? '&' : '?'}v=${encodeURIComponent(p.final_assembled_at)}`
-          : '';
+        const finalCacheBust = (() => {
+          const parts = [
+            p.final_assembled_at,
+            p.last_burned_caption_style?.preset_id,
+            p.last_burned_caption_style?.font_size,
+            p.last_burned_caption_style?.burned_at,
+          ].filter(Boolean).join('-');
+          if (!parts || !previewBaseUrl) return '';
+          return `${/\?/.test(mediaSrc(previewBaseUrl || '')) ? '&' : '?'}v=${encodeURIComponent(parts)}`;
+        })();
         const isCharPlaceholder = !!(finalUrl && front && finalUrl === front)
           || !!(finalUrl && p.character_ref_url && finalUrl === p.character_ref_url);
         const source = Array.isArray(p.final_source_urls) ? p.final_source_urls : [];
@@ -1105,6 +1114,11 @@
               : 'Final reel appears after shots are ready.'}</div>`}
           ${stale ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 4px;line-height:1.35;">Final is out of date — stitch the current timeline shots.</div>` : ''}
           ${p.persist_warning ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 4px;line-height:1.35;">${esc(p.persist_warning)}</div>` : ''}
+          ${p.caption_burn_error
+            ? `<div style="font-size:0.68rem;color:#FCA5A5;margin:6px 0 4px;line-height:1.35;">Caption burn failed — ${esc(p.caption_burn_error)}. Rebuild again (check Captions is on).</div>`
+            : (p.last_burned_caption_style
+              ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:6px 0 4px;line-height:1.35;">Burned captions: ${esc(p.last_burned_caption_style.preset_id || 'custom')} · ${esc(String(p.last_burned_caption_style.mode || ''))} · ${esc(String(p.last_burned_caption_style.font_size || ''))}px${p.last_burned_caption_style.background ? ' · box' : ''}</div>`
+              : '')}
           ${readyShotUrls.length ? `
           <div class="anim-assemble-panel">
             <div class="anim-assemble-flags">
@@ -1896,7 +1910,14 @@
           if (!_project || _project.id !== projectId) return;
           const notes = Array.isArray(_project.last_assemble_warnings) ? _project.last_assemble_warnings : [];
           const summary = _project.last_assemble_summary || '';
-          if (notes.length) toast(notes.join(' · '), 'info');
+          const burnFailed = notes.some((n) => /captions failed/i.test(String(n)))
+            || !!_project.caption_burn_error
+            || /captionsFAILED/i.test(summary);
+          if (burnFailed) {
+            toast(_project.caption_burn_error
+              ? `Caption burn failed: ${_project.caption_burn_error}`
+              : (notes.find((n) => /caption/i.test(String(n))) || 'Caption burn failed — Final may not show your new style'), 'error');
+          } else if (notes.length) toast(notes.join(' · '), 'info');
           else if (summary && summary !== prevSummary) toast(summary.replace(/^Final reel updated from /, 'Final ready · '), 'success');
           else toast('Final updated', 'success');
         },
