@@ -1443,10 +1443,13 @@
     const actions = document.getElementById('anim-brief-actions');
     if (actions) {
       if (_project?.status === 'brief_ready' && brief) {
+        const optimized = String(brief.rewritten_prompt || '').trim()
+          || (brief.shots || []).map((s, i) => `${i + 1}. ${s.title || `Shot ${i + 1}`}: ${s.prompt || ''}`).join('\n\n')
+          || String(_project.user_prompt || '').trim();
         actions.innerHTML = `
           <div class="anim-brief-card">
             <div class="anim-brief-card__title">Optimized brief</div>
-            <textarea id="anim-brief-edit" class="anim-brief-edit">${esc(brief.rewritten_prompt || '')}</textarea>
+            <textarea id="anim-brief-edit" class="anim-brief-edit">${esc(optimized)}</textarea>
             <div class="anim-brief-shots">${(brief.shots || []).map((s, i) =>
               `<div class="anim-brief-shot"><strong>${i + 1}. ${esc(s.title)}</strong> — ${esc((s.prompt || '').slice(0, 80))}…</div>`
             ).join('')}</div>
