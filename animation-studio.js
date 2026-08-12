@@ -21,7 +21,9 @@
   ];
 
   function defaultRefRole() {
-    if (!_refs.some((r) => r.role === 'character')) return 'character';
+    const charCount = _refs.filter((r) => r.role === 'character').length;
+    // Multi-cast projects need 2+ Char tags — don't auto-steal the 2nd upload as Style.
+    if (charCount < 2) return 'character';
     if (!_refs.some((r) => r.role === 'style')) return 'style';
     return 'scene';
   }
@@ -945,14 +947,14 @@
       </div>
 
       <div class="anim-section">
-        <div class="anim-section__label">Character / asset lock ${p.character_pack?.locked ? '· Locked' : ''}</div>
+        <div class="anim-section__label">Character / asset lock ${p.character_pack?.locked ? '· Locked' : ''}${(p.character_pack?.cast || []).length > 1 ? ` · Cast ${(p.character_pack.cast || []).length}` : ''}</div>
         ${modelLine(p)}
         ${plannedViews.length ? `
         <div class="anim-strip">
           ${plannedViews.map((v) => `
             <div class="anim-tile">
-              ${tileMedia(v.url, v.label, v.status || p.status)}
-              <div class="anim-tile__cap">${esc(v.label)}${v.model ? `<span class="anim-tile__model">${esc(String(v.model).split('/').pop())}</span>` : ''}</div>
+              ${tileMedia(v.url, v.character_name || v.label, v.status || p.status)}
+              <div class="anim-tile__cap">${esc(v.character_name || v.label)}${v.model ? `<span class="anim-tile__model">${esc(String(v.model).split('/').pop())}</span>` : ''}</div>
             </div>`).join('')}
         </div>
         <div class="anim-expired-banner" id="anim-expired-banner" hidden>
@@ -2056,7 +2058,7 @@
     const box = document.getElementById('anim-refs');
     if (!box) return;
     if (!_refs.length) {
-      box.innerHTML = `<div class="anim-refs-empty">Add refs and tag roles: Character = identity, Style = art look, Scene = setting</div>`;
+      box.innerHTML = `<div class="anim-refs-empty">Add refs and tag roles: Character = identity (tag EACH person as Char), Style = art look, Scene = setting</div>`;
       return;
     }
     box.innerHTML = _refs.map((r, i) => `
@@ -2406,7 +2408,7 @@
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
               <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
               ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">VO + Generate music need ELEVENLABS_API_KEY — captions / upload music / outro still work.</div>` : ''}
-              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char required · Scene for setting · Style optional</span></div>
+              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag every person as Char · Scene for setting · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
                 <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
