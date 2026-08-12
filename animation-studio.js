@@ -1455,9 +1455,11 @@
         actions.innerHTML = `
           <div class="anim-brief-card">
             <div class="anim-brief-card__title">Optimized brief</div>
-            ${looksRaw || brief._rewritten_repaired
-              ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This brief needs a fresh Art Director rewrite — tap <strong>Re-brief</strong> (don’t Accept the raw draft).</div>`
-              : ''}
+            ${looksRaw
+              ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This still looks like your raw draft — tap <strong>Re-brief</strong> to run Claude again (it will rewrite automatically).</div>`
+              : (brief._rewritten_repaired
+                ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:0 0 8px;line-height:1.35;">Recovered from shot plan — tap Re-brief if you want a fuller Art Director rewrite.</div>`
+                : '')}
             <textarea id="anim-brief-edit" class="anim-brief-edit">${esc(optimized)}</textarea>
             <div class="anim-brief-shots">${(brief.shots || []).map((s, i) =>
               `<div class="anim-brief-shot"><strong>${i + 1}. ${esc(s.title)}</strong> — ${esc((s.prompt || '').slice(0, 80))}…</div>`
@@ -1469,12 +1471,7 @@
           </div>`;
         document.getElementById('anim-accept')?.addEventListener('click', acceptBrief);
         document.getElementById('anim-rebrief')?.addEventListener('click', () => {
-          const ta = document.getElementById('anim-prompt');
-          if (ta) {
-            if (!String(ta.value || '').trim() && _project.user_prompt) ta.value = _project.user_prompt;
-            ta.focus();
-          }
-          toast('Edit your prompt if needed, then send again for a fresh Optimized brief', 'info');
+          rebriefProject();
         });
       } else if (_project?.status === 'character_review') {
         actions.innerHTML = `
@@ -1517,6 +1514,18 @@
     return _project;
   }
 
+  async function rebriefProject() {
+    if (_busy) return;
+    const ta = document.getElementById('anim-prompt');
+    const prior = String(_project?.user_prompt || '').trim();
+    if (ta && !String(ta.value || '').trim() && prior) ta.value = prior;
+    const prompt = String(ta?.value || prior || '').trim();
+    if (!prompt) return toast('Enter a prompt to re-brief', 'error');
+    if (ta) ta.value = prompt;
+    toast('Re-briefing with Claude Art Director…', 'info');
+    await sendPrompt();
+  }
+
   async function sendPrompt() {
     if (_busy) return;
     const ta = document.getElementById('anim-prompt');
@@ -1546,12 +1555,23 @@
           references,
           reference_urls: references.map((r) => r.url),
           character_ref_url: references.find((r) => r.role === 'character')?.url || null,
+          force_rewrite: true,
         }),
       });
       _project = data.project;
       if (ta) ta.value = '';
       renderCanvas();
       renderChat();
+      const rewritten = String(_project?.agent_brief?.rewritten_prompt || '').trim();
+      const userP = String(_project?.user_prompt || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const opt = rewritten.toLowerCase().replace(/\s+/g, ' ');
+      const stillRaw = !rewritten
+        || (userP && (opt === userP || (userP.length > 60 && opt.includes(userP) && opt.length < userP.length * 1.25)));
+      if (stillRaw) {
+        toast('Brief still looks unoptimized — try Re-brief once more', 'error');
+      } else {
+        toast('Optimized brief ready — review, then Accept & generate', 'success');
+      }
     } catch (e) {
       toast(e.message || 'Brief failed', 'error');
     } finally {
