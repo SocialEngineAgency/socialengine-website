@@ -1444,11 +1444,20 @@
     if (actions) {
       if (_project?.status === 'brief_ready' && brief) {
         const optimized = String(brief.rewritten_prompt || '').trim()
-          || (brief.shots || []).map((s, i) => `${i + 1}. ${s.title || `Shot ${i + 1}`}: ${s.prompt || ''}`).join('\n\n')
-          || String(_project.user_prompt || '').trim();
+          || (brief.shots || []).map((s, i) => `${i + 1}. ${s.title || `Shot ${i + 1}`}: ${s.prompt || ''}`).join('\n\n');
+        const looksRaw = (() => {
+          const a = optimized.toLowerCase().replace(/\s+/g, ' ');
+          const b = String(_project.user_prompt || '').toLowerCase().replace(/\s+/g, ' ');
+          if (!optimized) return true;
+          if (!b) return false;
+          return a === b || (b.length > 60 && a.includes(b) && a.length < b.length * 1.25);
+        })();
         actions.innerHTML = `
           <div class="anim-brief-card">
             <div class="anim-brief-card__title">Optimized brief</div>
+            ${looksRaw || brief._rewritten_repaired
+              ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This brief needs a fresh Art Director rewrite — tap <strong>Re-brief</strong> (don’t Accept the raw draft).</div>`
+              : ''}
             <textarea id="anim-brief-edit" class="anim-brief-edit">${esc(optimized)}</textarea>
             <div class="anim-brief-shots">${(brief.shots || []).map((s, i) =>
               `<div class="anim-brief-shot"><strong>${i + 1}. ${esc(s.title)}</strong> — ${esc((s.prompt || '').slice(0, 80))}…</div>`
@@ -1461,7 +1470,11 @@
         document.getElementById('anim-accept')?.addEventListener('click', acceptBrief);
         document.getElementById('anim-rebrief')?.addEventListener('click', () => {
           const ta = document.getElementById('anim-prompt');
-          if (ta) ta.focus();
+          if (ta) {
+            if (!String(ta.value || '').trim() && _project.user_prompt) ta.value = _project.user_prompt;
+            ta.focus();
+          }
+          toast('Edit your prompt if needed, then send again for a fresh Optimized brief', 'info');
         });
       } else if (_project?.status === 'character_review') {
         actions.innerHTML = `
