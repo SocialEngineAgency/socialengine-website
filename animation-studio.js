@@ -804,9 +804,32 @@
   function projectMediaExpired(p) {
     if (!p) return false;
     if (p.media_expired) return true;
+    // Summaries omit character_pack — trust media_expired from the API.
+    // Full projects: only "expired" when every media URL is dead ephemeral.
+    const urls = [];
+    for (const v of p.character_pack?.views || []) if (v?.url) urls.push(v.url);
+    for (const r of p.references || []) if (r?.url) urls.push(r.url);
+    for (const u of p.reference_urls || []) if (u) urls.push(u);
+    if (p.character_ref_url) urls.push(p.character_ref_url);
+    if (p.final_url) urls.push(p.final_url);
+    for (const s of p.scenes || []) {
+      if (s?.keyframe_url) urls.push(s.keyframe_url);
+      if (s?.video_url) urls.push(s.video_url);
+    }
+    if (!urls.length) return false;
+    const ephemeral = (u) => /\/api\/media\/[a-f0-9]+/i.test(String(u || ''));
+    const durable = urls.some((u) => !ephemeral(u));
+    if (durable) return false;
+    return urls.every(ephemeral);
+  }
+
+  function projectNeedsCharReupload(p) {
+    if (!p) return false;
+    if (p.needs_char_reupload) return true;
+    if (projectMediaExpired(p)) return false;
     const views = p.character_pack?.views || [];
     if (!views.length) return false;
-    return views.every((v) => !v.url || /\/api\/media\//i.test(String(v.url)));
+    return views.every((v) => !v.url || /\/api\/media\/[a-f0-9]+/i.test(String(v.url)));
   }
 
   async function refreshRecent({ silent } = {}) {
@@ -817,9 +840,12 @@
       if (!silent && list.purged > 0) {
         toast(`Removed ${list.purged} expired project${list.purged === 1 ? '' : 's'} (old links from a server restart)`, 'info');
       }
-    } catch (_) {
+    } catch (e) {
       // Keep prior cache on failure so a slow/flaky list doesn't wipe the home screen.
-      if (!_recent.length) _recent = [];
+      if (!_recent.length) {
+        _recent = [];
+        if (!silent) toast(e.message || 'Could not load recent projects', 'error');
+      }
     } finally {
       _recentLoading = false;
     }
@@ -854,6 +880,9 @@
         toast('That project’s images expired after a server restart. Start a new one and re-upload refs.', 'error');
         return;
       }
+      if (projectNeedsCharReupload(_project)) {
+        toast('Char sheet links died after a restart — re-upload Char refs. Shots/Finals on CDN are still here.', 'warning');
+      }
       _refs = (_project.references || []).map((r) => ({
         url: r.url,
         title: r.title || 'Ref',
@@ -869,6 +898,8 @@
       if (!_refs.length && _project.character_ref_url) {
         _refs = [{ url: _project.character_ref_url, title: 'Ref', role: 'character' }];
       }
+      // Drop dead ephemeral refs from the chip strip so broken thumbnails don't stick around.
+      _refs = _refs.filter((r) => r.url && !/\/api\/media\/[a-f0-9]+/i.test(String(r.url)));
       renderCanvas();
       renderChat();
       renderRefs();
@@ -893,18 +924,20 @@
     _canvasFp = projectUiFingerprint(_project);
     const p = _project;
     if (!p) {
-      const usable = _recent.filter((rp) => !projectMediaExpired(rp));
+      // Show every saved project. Fully expired ones can still be deleted from the row;
+      // do not hide the list just because Char sheets need a re-upload.
+      const listed = _recent.filter((rp) => !projectMediaExpired(rp));
       const recentHtml = _recentLoading ? `
         <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">Loading recent projects…</div>`
-        : usable.length ? `
+        : listed.length ? `
         <div class="anim-recent">
           <div class="anim-section__label">Recent projects</div>
           <div class="anim-recent__list">
-            ${usable.slice(0, 12).map((rp) => `
+            ${listed.slice(0, 12).map((rp) => `
               <div class="anim-recent__row">
                 <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
                   <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
-                  <span class="anim-recent__meta">${statusBadge(rp.status)} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
+                  <span class="anim-recent__meta">${statusBadge(rp.status)}${projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : ''} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
                 </button>
                 <button type="button" class="anim-btn anim-btn--ghost anim-recent__del" data-del-project="${esc(rp.id)}" title="Delete project">✕</button>
               </div>`).join('')}
@@ -958,9 +991,11 @@
             </div>`).join('')}
         </div>
         <div class="anim-expired-banner" id="anim-expired-banner" hidden>
-          <div>Images expired after a server restart (old ephemeral links). Delete this project, re-upload refs (tag Char + Style), and run again — new runs persist on CDN.</div>
+          <div>${projectNeedsCharReupload(p) && !projectMediaExpired(p)
+            ? 'Char sheet links died after a server restart, but your shots/Finals on CDN are still here. Re-upload Char refs to keep regenerating.'
+            : 'Images expired after a server restart (old ephemeral links). Delete this project, re-upload refs (tag Char + Style), and run again — new runs persist on CDN.'}</div>
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-            <button type="button" class="anim-btn" id="anim-delete-expired" style="width:auto;">Delete expired project</button>
+            ${projectMediaExpired(p) ? `<button type="button" class="anim-btn" id="anim-delete-expired" style="width:auto;">Delete expired project</button>` : ''}
             <button type="button" class="anim-btn anim-btn--ghost" id="anim-new-from-expired" style="width:auto;">New project</button>
           </div>
         </div>
@@ -1408,6 +1443,7 @@
       if (banner) banner.hidden = false;
     };
     if (projectMediaExpired(p)) showExpiredBanner();
+    else if (projectNeedsCharReupload(p)) showExpiredBanner();
     el.querySelectorAll('img.anim-media[data-fallback]').forEach((img) => {
       img.addEventListener('error', () => {
         expiredCount += 1;
