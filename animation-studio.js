@@ -1933,10 +1933,12 @@
     const style = currentCaptionStyle();
     _captionStyleDraft = style;
     _project.caption_style = style;
-    flags.captions = true; // always burn when rebuilding with an explicit style
+    // Respect the Captions checkbox. (Previously always forced on, so you could never
+    // Rebuild a clean Final after Caption Studio.)
+    // Opening Caption Studio + Rebuild still implies burn if the box is checked.
     const flagEl = document.getElementById('anim-flag-captions');
-    if (flagEl) flagEl.checked = true;
-    // Close studio so Final shows the burned file (not overlay-on-burn doubles).
+    if (flagEl) flags.captions = !!flagEl.checked;
+    // Close studio so Final shows the burned (or clean) file, not overlay-on-burn doubles.
     _captionStudioOpen = false;
     const forceRetry = assembleLooksStuck(_project) || _project.status === 'assembling';
     _busy = true;
@@ -1947,10 +1949,11 @@
       const clipHint = flags.outro && _project.outro_url
         ? `${ready.length} shots + outro`
         : `${ready.length} shots`;
+      const capHint = flags.captions ? `${style.preset_id || 'custom'} captions` : 'no captions';
       toast(
         forceRetry
-          ? `Retrying Final (${clipHint}, ${style.preset_id || 'custom'} captions)…`
-          : `Building Final (${clipHint}, ${style.preset_id || 'custom'} captions)…`,
+          ? `Retrying Final (${clipHint}, ${capHint})…`
+          : `Building Final (${clipHint}, ${capHint})…`,
         'info'
       );
       const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
