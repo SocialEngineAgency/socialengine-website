@@ -1962,7 +1962,8 @@
           create_content: !_project.content_record_id,
           force: forceRetry,
           assemble: flags,
-          caption_style: style,
+          // Only send style when burning — avoids any "style present ⇒ burn" coupling.
+          ...(flags.captions ? { caption_style: style } : {}),
           caption_text: document.getElementById('anim-caption-text')?.value
             || _project.caption_text
             || '',
@@ -1977,6 +1978,11 @@
             : (_project.vo_volume ?? 1),
         }),
       });
+      // Keep local assemble flags so remount during assemble doesn't re-check Captions.
+      if (_project) {
+        _project.pipeline = _project.pipeline || {};
+        _project.pipeline.assemble = { ...flags };
+      }
       // Keep the open project — never bounce to Home while assemble runs.
       _project = data.project || _project;
       _project.status = _project.status || 'assembling';
