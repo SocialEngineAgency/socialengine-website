@@ -876,11 +876,9 @@
       const data = await animFetch(`/api/animation/projects/${id}`);
       _project = data.project;
       if (projectMediaExpired(_project)) {
-        await deleteProject(_project.id, { silent: true });
-        toast('That project’s images expired after a server restart. Start a new one and re-upload refs.', 'error');
-        return;
-      }
-      if (projectNeedsCharReupload(_project)) {
+        toast('Some media links died after a restart — re-upload Char refs. Project was kept.', 'warning');
+        // Do NOT auto-delete. Prior behavior wiped multi-hour projects.
+      } else if (projectNeedsCharReupload(_project)) {
         toast('Char sheet links died after a restart — re-upload Char refs. Shots/Finals on CDN are still here.', 'warning');
       }
       _refs = (_project.references || []).map((r) => ({
@@ -924,9 +922,9 @@
     _canvasFp = projectUiFingerprint(_project);
     const p = _project;
     if (!p) {
-      // Show every saved project. Fully expired ones can still be deleted from the row;
-      // do not hide the list just because Char sheets need a re-upload.
-      const listed = _recent.filter((rp) => !projectMediaExpired(rp));
+      // Always show saved projects — including soft-expired (need Char re-upload).
+      // Filtering these out made the home screen look wiped after a restart.
+      const listed = _recent.slice();
       const recentHtml = _recentLoading ? `
         <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">Loading recent projects…</div>`
         : listed.length ? `
@@ -937,7 +935,7 @@
               <div class="anim-recent__row">
                 <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
                   <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
-                  <span class="anim-recent__meta">${statusBadge(rp.status)}${projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : ''} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
+                  <span class="anim-recent__meta">${statusBadge(rp.status)}${projectMediaExpired(rp) ? ' <span class="anim-recent__mode">expired media</span>' : (projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : '')} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
                 </button>
                 <button type="button" class="anim-btn anim-btn--ghost anim-recent__del" data-del-project="${esc(rp.id)}" title="Delete project">✕</button>
               </div>`).join('')}
@@ -2536,14 +2534,9 @@
 
     await recentPromise;
 
-    // Auto-resume in-flight work; never reopen projects with dead ephemeral media.
+    // Auto-resume in-flight work. Never auto-delete on expired media.
     if (_project && projectMediaExpired(_project)) {
-      const deadId = _project.id;
-      _project = null;
-      _refs = [];
-      stopPoll();
-      if (!_recent.length) await refreshRecent({ silent: true });
-      if (deadId) await deleteProject(deadId, { silent: true });
+      toast('Some media links died after a restart — re-upload Char refs if needed.', 'warning');
     } else if (!_project) {
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)
