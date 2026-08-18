@@ -245,6 +245,7 @@ const TAB_DEFINITIONS = [
         name: 'Analytics primary action',
         locator: async (page) =>
           resolveFirstVisible(
+            page.locator('#analytics-scale'),
             page.locator('#analytics-refresh'),
             page.locator('#analytics-charts-toggle'),
             page.getByRole('link', { name: /Upgrade to Pro/i })

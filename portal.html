@@ -15,8 +15,8 @@
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="./claude-studio.js" defer></script>
-  <script src="./animation-studio.js?v=20260813-no-autopurge" defer></script>
-  <script src="./analytics-cockpit.js?v=20260817-cockpit" defer></script>
+  <script src="./animation-studio.js?v=20260818-remix" defer></script>
+  <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -6414,6 +6414,27 @@
     window.applyRemixSessionIfAny = applyRemixSessionIfAny;
     window.openStudioFromRemix = openStudioFromRemix;
     window.renderVideoStudio = renderVideoStudio;
+
+    function openAnimationFromRemix(session) {
+      if (!session || !(session.still_url || session.referenceUrl)) {
+        if (typeof showToast === 'function') showToast('Need a still from this post to remix', 'warning');
+        return;
+      }
+      window.__SE_ANIM_REMIX_SESSION = {
+        kind: session.kind || 'scale',
+        referenceUrl: session.still_url || session.referenceUrl,
+        prompt: session.prompt || '',
+        format_template_id: session.format_template_id || 'remix-24s',
+        target_seconds: session.target_seconds || 24,
+        caption: session.caption || '',
+        permalink: session.permalink || null,
+        sourcePostId: session.source_post_id || session.sourcePostId || null,
+      };
+      const nav = document.querySelector('[data-nav="animation-studio"]');
+      if (nav) nav.click();
+      else if (typeof switchNav === 'function') switchNav('animation-studio');
+    }
+    window.openAnimationFromRemix = openAnimationFromRemix;
     // Keep VS upload URL readable by Claude Design (separate script)
     Object.defineProperty(window, 'vsUploadedImageUrl', {
       configurable: true,
@@ -7058,6 +7079,8 @@
           connectIg: typeof connectInstagramOAuth === 'function' ? connectInstagramOAuth : window.connectInstagramOAuth,
           connectFb: typeof connectFacebookOAuth === 'function' ? connectFacebookOAuth : window.connectFacebookOAuth,
           switchNav: typeof switchNav === 'function' ? switchNav : null,
+          openAnimRemix: typeof window.openAnimationFromRemix === 'function' ? window.openAnimationFromRemix : null,
+          toast: typeof showToast === 'function' ? showToast : null,
         });
         return;
       }
@@ -17732,19 +17755,32 @@
   async function _launchStudioRemix(post, remixedCaption) {
     const referenceUrl = _remixReferenceUrl(post);
     if (!referenceUrl) {
-      if (typeof showToast === 'function') showToast('No reference image for this post — open Studio and upload a still', 'warning');
+      if (typeof showToast === 'function') showToast('No reference image for this post — open Animate and upload a still', 'warning');
       return false;
     }
-    if (typeof window.openStudioFromRemix === 'function') {
-      window.openStudioFromRemix({
-        sourcePostId: post.id,
-        referenceUrl,
-        mediaType: post.media_type || 'Post',
-        remixedCaption: remixedCaption || post.caption || '',
-        originalCaption: post.caption || '',
-        platform: (post._platforms || [post.platform]).filter(Boolean).join('+'),
-        brandLocked: true,
+    const n = Number(post.duration_sec || post.duration);
+    const target = (!Number.isFinite(n) || n <= 0) ? 24 : (n < 20 ? Math.round(n) : Math.min(30, Math.round(n)));
+    const shots = Math.min(6, Math.max(2, Math.round(target / 5) || 5));
+    const caption = remixedCaption || post.caption || '';
+    const formatId = target <= 15 ? 'awareness-15s' : (target <= 20 ? 'mythbust-20s' : 'remix-24s');
+    if (typeof window.openAnimationFromRemix === 'function') {
+      window.openAnimationFromRemix({
+        kind: 'scale',
+        still_url: referenceUrl,
+        source_post_id: post.id,
+        caption,
         permalink: post.permalink || null,
+        platform: post.platform || 'instagram',
+        media_type: post.media_type || 'Reel',
+        target_seconds: target,
+        format_template_id: formatId,
+        prompt: [
+          'REMIX a proven ' + (post.platform || 'instagram') + ' ' + (post.media_type || 'reel') + '.',
+          'Target runtime: ' + target + ' seconds. Plan ' + shots + ' shots at about 5 seconds each. Do not make a 5s or 8s clip.',
+          'HARD BRAND LOCK: preserve logo, colors, typography, and identity from the Character reference still.',
+          'This is SCALE: remake the winner with a stronger scroll-stop, same message angle.',
+          caption ? ('Original caption:\n' + caption) : '',
+        ].filter(Boolean).join('\n'),
       });
       return true;
     }

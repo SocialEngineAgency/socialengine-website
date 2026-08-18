@@ -84,14 +84,33 @@
     };
   }
 
-  function lineChartHtml(card) {
-    const labels = card.charts?.labels;
-    const ig = card.charts?.instagram;
-    const fb = card.charts?.facebook;
+  function lineChartHtml(labels, fb, ig, emptyCopy) {
     if (typeof _deps.lineChart === 'function' && labels && (ig || fb)) {
       return _deps.lineChart(labels, fb || [], ig || []);
     }
-    return '<p style="color:rgba(255,255,255,.4);font-size:0.82rem;padding:24px 0;text-align:center">No chart series for this period.</p>';
+    return `<p style="color:rgba(255,255,255,.4);font-size:0.82rem;padding:24px 0;text-align:center">${esc(emptyCopy || 'No chart series for this period.')}</p>`;
+  }
+
+  function intentSplitHtml(rows) {
+    return formatSplitHtml((rows || []).map((r) => ({ format: r.intent || 'unknown' })));
+  }
+
+  function startRemix(item) {
+    const remix = item && item.remix;
+    if (!remix || !remix.still_url) {
+      if (typeof _deps.toast === 'function') _deps.toast('Need a still from this post to remix', 'warning');
+      return;
+    }
+    if (typeof _deps.openAnimRemix === 'function') _deps.openAnimRemix(remix);
+    else if (typeof global.openAnimationFromRemix === 'function') global.openAnimationFromRemix(remix);
+  }
+
+  function openPermalink(url) {
+    if (url) {
+      global.open(url, '_blank', 'noopener');
+      return;
+    }
+    if (typeof _deps.toast === 'function') _deps.toast('No live post link for this item', 'warning');
   }
 
   function formatSplitHtml(rows) {
@@ -101,7 +120,7 @@
       counts[k] = (counts[k] || 0) + 1;
     });
     const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
-    const colors = { reel: '#A855F7', photo: '#3B9EFF', carousel: '#64748B', video: '#A855F7' };
+    const colors = { reel: '#A855F7', photo: '#3B9EFF', carousel: '#64748B', video: '#A855F7', views: '#A855F7', engagement: '#3B9EFF', followers: '#4ADE80', donations: '#FBBF24' };
     return Object.entries(counts).map(([k, n]) => {
       const pct = Math.round((n / total) * 100);
       return `<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.45);margin-bottom:4px"><span>${esc(k)}</span><span>${pct}%</span></div><div style="height:6px;background:rgba(255,255,255,.06);border-radius:99px"><div style="height:6px;width:${pct}%;background:${colors[k] || '#64748B'};border-radius:99px"></div></div></div>`;
@@ -201,30 +220,41 @@
     } else {
       const k = card.kpis || {};
       const moves = card.moves || { scale: [], kill: [], test: [] };
-      const moveCard = (label, color, border, bg, item) => {
-        if (!item) return `<div style="background:${bg};border:1px solid ${border};border-radius:12px;padding:14px 16px;opacity:.4"><div style="font-size:10px;letter-spacing:.1em;color:${color}">${label}</div><div>None this period</div></div>`;
-        return `<div style="background:${bg};border:1px solid ${border};border-radius:12px;padding:14px 16px">
+      const moveCard = (id, label, color, border, bg, item) => {
+        if (!item) {
+          return `<button type="button" id="${id}" disabled style="text-align:left;width:100%;font-family:inherit;color:inherit;background:${bg};border:1px solid ${border};border-radius:12px;padding:14px 16px;opacity:.4;cursor:default"><div style="font-size:10px;letter-spacing:.1em;color:${color}">${label}</div><div>None this period</div></button>`;
+        }
+        return `<button type="button" id="${id}" style="text-align:left;width:100%;cursor:pointer;font-family:inherit;color:inherit;background:${bg};border:1px solid ${border};border-radius:12px;padding:14px 16px">
           <div style="font-size:10px;letter-spacing:.1em;color:${color};margin-bottom:6px">${label}</div>
           <div style="font-weight:700">${esc(item.title || 'Untitled')}</div>
           <div style="color:rgba(255,255,255,.5);font-size:12px">${esc(item.intent || '')}${item.views != null ? ' · ' + fmtNum(item.views) + ' views' : ''}${item.eng_rate != null ? ' · ' + item.eng_rate + '% eng' : ''}</div>
-        </div>`;
+        </button>`;
       };
       const rows = (card.ranked && card.ranked.length ? card.ranked : card.rows) || [];
-      const table = rows.map((r) => `<div style="display:grid;grid-template-columns:1.6fr .6fr .5fr .5fr .7fr;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px">
+      const table = rows.map((r, i) => `<div class="analytics-row" id="analytics-row-${i}" data-permalink="${esc(r.permalink || '')}" style="display:grid;grid-template-columns:1.6fr .6fr .5fr .5fr .7fr;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px;cursor:${r.permalink ? 'pointer' : 'default'}">
         <span>${esc(r.title)}</span><span>${esc(r.intent || '—')}</span><span>${fmtNum(r.views)}</span><span>${r.eng_rate != null ? r.eng_rate + '%' : '—'}</span><span style="color:${r.taxonomy_status === 'unknown' ? 'rgba(255,255,255,.4)' : '#4ADE80'}">${esc(r.taxonomy_status === 'unknown' ? 'unknown' : 'proven')}</span>
       </div>`).join('') || '<p style="color:rgba(255,255,255,.4)">No proven posts in this book yet.</p>';
-      const chartsPanel = _chartsOpen ? `<div id="analytics-charts-panel" style="display:grid;grid-template-columns:1.3fr .7fr;gap:12px;margin-bottom:20px">
-        <div style="background:#121A2B;border:1px solid #243049;border-radius:12px;padding:12px">${lineChartHtml(card)}</div>
-        <div style="background:#121A2B;border:1px solid #243049;border-radius:12px;padding:12px"><div style="font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.4);margin-bottom:10px">BY FORMAT</div>${formatSplitHtml(rows)}</div>
+      const charts = card.charts || {};
+      const labels = charts.labels;
+      const reachIg = charts.reach?.instagram || charts.instagram;
+      const reachFb = charts.reach?.facebook || charts.facebook;
+      const intIg = charts.interactions?.instagram;
+      const intFb = charts.interactions?.facebook;
+      const chartBox = (id, title, inner) => `<div id="${id}" style="background:#121A2B;border:1px solid #243049;border-radius:12px;padding:12px"><div style="font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.4);margin-bottom:10px">${title}</div>${inner}</div>`;
+      const chartsPanel = _chartsOpen ? `<div id="analytics-charts-panel" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        ${chartBox('analytics-chart-reach', 'REACH', lineChartHtml(labels, reachFb, reachIg, 'No reach series for this period.'))}
+        ${chartBox('analytics-chart-interactions', 'INTERACTIONS', lineChartHtml(labels, intFb, intIg, 'No interaction series for this period.'))}
+        ${chartBox('analytics-chart-format', 'BY FORMAT', formatSplitHtml(rows))}
+        ${chartBox('analytics-chart-intent', 'BY INTENT', intentSplitHtml(rows))}
       </div>` : '<div id="analytics-charts-panel" hidden></div>';
       main = `<div style="padding:28px 32px;flex:1;min-width:0">
         <div style="font-size:11px;letter-spacing:.08em;color:rgba(255,255,255,.4);margin-bottom:8px">${esc(bookLabel(_book, clientType)).toUpperCase()} · LAST ${_period.toUpperCase()}</div>
         <h3 style="font-size:26px;font-weight:650;letter-spacing:-.03em;line-height:1.25;margin:0 0 8px;font-family:Newsreader,Georgia,serif;color:#fff">${esc(card.verdict || 'Proven posts in this book.')}</h3>
         <p style="color:rgba(255,255,255,.5);margin:0 0 22px;font-size:13px">Three moves. Ranked only on proven data.</p>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:22px">
-          ${moveCard('SCALE', '#4ADE80', '#166534', '#12261C', moves.scale[0])}
-          ${moveCard('KILL', '#F87171', '#7F1D1D', '#2A1212', moves.kill[0])}
-          ${moveCard('TEST', '#C4B5FD', '#5B21B6', '#1A1730', moves.test[0])}
+          ${moveCard('analytics-scale', 'SCALE', '#4ADE80', '#166534', '#12261C', moves.scale[0])}
+          ${moveCard('analytics-kill', 'KILL', '#F87171', '#7F1D1D', '#2A1212', moves.kill[0])}
+          ${moveCard('analytics-test', 'TEST', '#C4B5FD', '#5B21B6', '#1A1730', moves.test[0])}
         </div>
         <div style="display:flex;gap:28px;margin-bottom:20px;flex-wrap:wrap">
           <div><div style="font-size:11px;color:rgba(255,255,255,.4)">Views</div><div class="analytics-kpi-card__value" style="font-size:28px;font-weight:700">${fmtNum(k.views)}</div></div>
@@ -282,6 +312,18 @@
       const nav = emptyCopy(_book).nav;
       if (nav && typeof _deps.switchNav === 'function') _deps.switchNav(nav);
       else if (nav) document.querySelector(`[data-nav="${nav}"]`)?.click();
+    });
+    document.getElementById('analytics-scale')?.addEventListener('click', () => {
+      startRemix((_card?.moves?.scale || [])[0]);
+    });
+    document.getElementById('analytics-test')?.addEventListener('click', () => {
+      startRemix((_card?.moves?.test || [])[0]);
+    });
+    document.getElementById('analytics-kill')?.addEventListener('click', () => {
+      openPermalink((_card?.moves?.kill || [])[0]?.permalink);
+    });
+    body.querySelectorAll('.analytics-row').forEach((el) => {
+      el.addEventListener('click', () => openPermalink(el.getAttribute('data-permalink')));
     });
     if (typeof global.lucide !== 'undefined') global.lucide.createIcons();
   }

@@ -14,6 +14,7 @@
   let _captionPreviewRaf = 0;
   let _recentLoading = false;
   let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
+  let _pendingFormatTemplateId = null;
   const REF_ROLES = [
     { id: 'character', label: 'Char' },
     { id: 'style', label: 'Style' },
@@ -1592,8 +1593,10 @@
           reference_urls: references.map((r) => r.url),
           character_ref_url: references.find((r) => r.role === 'character')?.url || null,
           force_rewrite: true,
+          format_template_id: _pendingFormatTemplateId || undefined,
         }),
       });
+      _pendingFormatTemplateId = null;
       _project = data.project;
       if (ta) ta.value = '';
       renderCanvas();
@@ -2198,11 +2201,34 @@
     toast('Ready for a new idea', 'info');
   }
 
+  async function applyAnimRemixSessionIfAny() {
+    const s = window.__SE_ANIM_REMIX_SESSION;
+    if (!s || !s.referenceUrl) return false;
+    window.__SE_ANIM_REMIX_SESSION = null;
+    const modeEl = document.getElementById('anim-mode');
+    if (modeEl) modeEl.value = 'video';
+    _refs = [{ url: s.referenceUrl, title: 'Remix still', role: 'character' }];
+    renderRefs();
+    const ta = document.getElementById('anim-prompt');
+    if (ta) ta.value = s.prompt || '';
+    _pendingFormatTemplateId = s.format_template_id || 'remix-24s';
+    toast('Remix loaded in Animate — ' + (s.target_seconds || 24) + 's target. Review the brief, then Accept.', 'success');
+    await sendPrompt();
+    return true;
+  }
+  window.applyAnimRemixSessionIfAny = applyAnimRemixSessionIfAny;
+
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
     window.__clientData = data || window.__clientData || window.clientData;
     window.__clientEmail = window.clientEmail || window.__clientEmail || '';
     window.__clientHash = window.clientHash || window.__clientHash || '';
     window.API = typeof API !== 'undefined' ? API : window._seAPI;
+
+    const remixSession = window.__SE_ANIM_REMIX_SESSION;
+    if (remixSession && remixSession.referenceUrl) {
+      _project = null;
+      stopPoll();
+    }
 
     const root = document.getElementById('dash-content');
     if (!root) return;
@@ -2537,7 +2563,7 @@
     // Auto-resume in-flight work. Never auto-delete on expired media.
     if (_project && projectMediaExpired(_project)) {
       toast('Some media links died after a restart — re-upload Char refs if needed.', 'warning');
-    } else if (!_project) {
+    } else if (!_project && !(remixSession && remixSession.referenceUrl)) {
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)
         && ['developing', 'generating', 'assembling', 'brief_ready', 'character_review'].includes(p.status)
@@ -2556,6 +2582,9 @@
     renderChat();
     if (_project && (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project))) {
       startPoll();
+    }
+    if (remixSession && remixSession.referenceUrl) {
+      await applyAnimRemixSessionIfAny();
     }
     if (typeof lucide !== 'undefined') lucide.createIcons();
   };
