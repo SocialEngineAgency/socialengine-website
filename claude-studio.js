@@ -1,6 +1,7 @@
 /**
  * Studio · Post — Phase 1.5
  * Reference picker (Products / Library / Uploads) → on-brand square → PNG → queue
+ * Infographic upload → split into IG+FB carousel slides
  */
 (function () {
   'use strict';
@@ -12,6 +13,11 @@
   let _csBrandName = '';
   let _csRef = null; // { url, type, title, source, product_id?, video_url?, poster_url? }
   let _csPickerTab = 'products';
+  let _csCarousel = null; // { originalUrl, width, height, method, slides: [{ url, y0, y1 }], selected: 0 }
+  let _csOriginalPreviewUrl = null;
+  let _csCutTimer = null;
+  let _csQueueSingleUrl = null;
+  let _csSplitSeq = 0;
 
   function apiBase() {
     return (typeof window.API !== 'undefined' && window.API) || window._seAPI || '';
@@ -40,10 +46,74 @@
     if (typeof showToast === 'function') showToast(msg, type || 'info');
   }
 
+  function queuePlatform() {
+    const data = window.__clientData || window.clientData || window._studioClientData || {};
+    const raw = data?.client?.social_connected_platforms;
+    const list = Array.isArray(raw)
+      ? raw
+      : String(raw || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const lower = list.map((p) => String(p || '').toLowerCase());
+    const hasIg = lower.includes('instagram');
+    const hasFb = lower.includes('facebook');
+    if (hasIg && hasFb) return 'Instagram,Facebook';
+    if (hasIg) return 'Instagram';
+    if (hasFb) return 'Facebook';
+    return 'Instagram,Facebook';
+  }
+
+  function hasCarousel() {
+    return !!( _csCarousel && Array.isArray(_csCarousel.slides) && _csCarousel.slides.length >= 2 );
+  }
+
+  function syncSplitButton() {
+    const btn = document.getElementById('cs-split-carousel');
+    if (!btn) return;
+    const on = !!(_csRef && _csRef.type === 'image' && _csRef.url);
+    btn.disabled = !on;
+    btn.style.cursor = on ? 'pointer' : 'not-allowed';
+    btn.style.opacity = on ? '1' : '0.5';
+    btn.style.color = on ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)';
+  }
+
+  function setPreviewHeader(text) {
+    const el = document.getElementById('cs-preview-header');
+    if (el) el.textContent = text;
+  }
+
+  function hidePreviewPanes() {
+    const empty = document.getElementById('cs-empty');
+    const loading = document.getElementById('cs-loading');
+    const frame = document.getElementById('cs-frame');
+    const original = document.getElementById('cs-original-preview');
+    const carousel = document.getElementById('cs-carousel');
+    if (empty) empty.style.display = 'none';
+    if (loading) loading.style.display = 'none';
+    if (frame) frame.style.display = 'none';
+    if (original) original.style.display = 'none';
+    if (carousel) carousel.style.display = 'none';
+  }
+
+  function showOriginalPreview(url) {
+    const src = url || _csOriginalPreviewUrl || _csRef?.url;
+    if (!src) return;
+    _csOriginalPreviewUrl = src;
+    hidePreviewPanes();
+    setPreviewHeader('Preview · Infographic');
+    const wrap = document.getElementById('cs-original-preview');
+    const img = document.getElementById('cs-original-preview-img');
+    if (img) img.src = src;
+    if (wrap) wrap.style.display = 'block';
+    refreshActionButtons();
+  }
+
   function setReference(ref) {
+    const prevUrl = _csRef?.url || '';
     if (!ref || !ref.url) {
       _csRef = null;
       window._studioReference = null;
+      _csCarousel = null;
+      _csOriginalPreviewUrl = null;
+      _csQueueSingleUrl = null;
     } else {
       _csRef = {
         url: String(ref.url),
@@ -55,8 +125,16 @@
         poster_url: ref.poster_url || undefined,
       };
       window._studioReference = { ..._csRef };
+      if (_csCarousel && _csCarousel.originalUrl !== _csRef.url) {
+        _csCarousel = null;
+      }
+      if (prevUrl && prevUrl !== _csRef.url && _csOriginalPreviewUrl === prevUrl) {
+        _csOriginalPreviewUrl = null;
+      }
     }
     renderRefSummary();
+    syncSplitButton();
+    if (!ref || !ref.url) restorePreview();
   }
 
   function heroUrlForGenerate() {
@@ -329,6 +407,9 @@
     _csBrandName = data?.client?.business_name || data?.business_name || 'Your Brand';
     _csHtml = '';
     _csBrief = '';
+    _csCarousel = null;
+    _csOriginalPreviewUrl = null;
+    _csQueueSingleUrl = null;
 
     // Inherit shared reference (e.g. from Video Studio upload)
     if (window._studioReference && window._studioReference.url) {
@@ -361,6 +442,13 @@
           </div>
 
           <div>
+            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Infographic</div>
+            <input id="cs-infographic-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">
+            <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
+            <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Split into carousel</button>
+          </div>
+
+          <div>
             <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Describe your post</div>
             <textarea id="cs-brief" rows="5" placeholder="e.g. Bella Bustier launch — gothic elegance, shop now. Bold product-first square." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:11px 12px;color:#fff;font-size:0.82rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
           </div>
@@ -388,18 +476,40 @@
         </div>
 
         <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:rgba(8,14,24,0.8);">
-          <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:rgba(255,255,255,0.35);">Preview · Instagram Square 1:1</div>
+          <div id="cs-preview-header" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:rgba(255,255,255,0.35);">Preview · Instagram Square 1:1</div>
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
               <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Claude Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it — or upload a tall infographic and split it into a carousel.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
-              <div style="font-size:0.9rem;color:rgba(255,255,255,0.5);">Generating on-brand design…</div>
+              <div id="cs-loading-msg" style="font-size:0.9rem;color:rgba(255,255,255,0.5);">Generating on-brand design…</div>
             </div>
             <div id="cs-frame" style="display:none;position:relative;">
               <iframe id="cs-iframe" style="border:none;display:block;border-radius:4px;background:#fff;" scrolling="no"></iframe>
+            </div>
+            <div id="cs-original-preview" style="display:none;max-width:min(420px,100%);text-align:center;">
+              <img id="cs-original-preview-img" alt="Infographic" style="max-width:100%;max-height:min(70vh,640px);border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#111;">
+            </div>
+            <div id="cs-carousel" style="display:none;width:min(640px,100%);">
+              <div id="cs-slide-strip" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;"></div>
+              <div id="cs-cut-canvas" style="margin-top:12px;"></div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
+                <button type="button" id="cs-slide-delete" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.1);color:#FCA5A5;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete selected</button>
+                <button type="button" id="cs-slide-left" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move left</button>
+                <button type="button" id="cs-slide-right" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move right</button>
+                <label style="margin-left:auto;font-size:0.72rem;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:8px;">Slides
+                  <select id="cs-slide-count" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;padding:6px 8px;font-size:0.75rem;font-family:var(--font-body);">
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
           <div id="cs-tweak-bar" style="display:none;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);align-items:center;gap:10px;">
@@ -450,6 +560,7 @@
     `;
 
     renderRefSummary();
+    syncSplitButton();
 
     document.getElementById('cs-back-video')?.addEventListener('click', () => {
       if (typeof window.renderVideoStudio === 'function') {
@@ -466,6 +577,22 @@
     document.getElementById('cs-queue')?.addEventListener('click', () => exportPng(true));
     document.getElementById('cs-caption')?.addEventListener('click', () => getCaption());
     document.getElementById('cs-resolve-url')?.addEventListener('click', () => resolveAdvancedUrl());
+    document.getElementById('cs-upload-infographic')?.addEventListener('click', () => {
+      document.getElementById('cs-infographic-file')?.click();
+    });
+    document.getElementById('cs-infographic-file')?.addEventListener('change', (e) => {
+      const f = e.target?.files?.[0];
+      if (f) uploadInfographicFile(f);
+      e.target.value = '';
+    });
+    document.getElementById('cs-split-carousel')?.addEventListener('click', () => splitCarousel());
+    document.getElementById('cs-slide-delete')?.addEventListener('click', () => deleteSelectedSlide());
+    document.getElementById('cs-slide-left')?.addEventListener('click', () => moveSelectedSlide(-1));
+    document.getElementById('cs-slide-right')?.addEventListener('click', () => moveSelectedSlide(1));
+    document.getElementById('cs-slide-count')?.addEventListener('change', (e) => {
+      const n = Number(e.target.value);
+      if (n >= 3 && n <= 8) splitCarousel({ slideCount: n });
+    });
     document.getElementById('cs-picker-close')?.addEventListener('click', closePicker);
     document.getElementById('cs-picker-modal')?.addEventListener('click', (e) => {
       if (e.target && e.target.id === 'cs-picker-modal') closePicker();
@@ -483,6 +610,37 @@
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 
+  function setActionEnabled(id, on, extra) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = !on;
+    btn.style.cursor = on ? 'pointer' : 'not-allowed';
+    btn.style.color = on ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)';
+    btn.style.borderColor = on ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)';
+    if (id === 'cs-queue') {
+      if (on) {
+        btn.style.background = 'linear-gradient(135deg,rgba(124,58,237,0.35),rgba(79,70,229,0.25))';
+        btn.style.borderColor = 'rgba(124,58,237,0.45)';
+        btn.style.color = '#E9D5FF';
+      } else {
+        btn.style.background = 'rgba(255,255,255,0.04)';
+      }
+    }
+    if (extra && extra.label) btn.textContent = extra.label;
+  }
+
+  function refreshActionButtons() {
+    const carousel = hasCarousel();
+    const designed = !!_csHtml;
+    const single = !!(!carousel && !designed && _csQueueSingleUrl);
+    setActionEnabled('cs-export', carousel || designed, { label: carousel ? 'Export ZIP' : 'Export PNG' });
+    setActionEnabled('cs-queue', carousel || designed || single);
+    setActionEnabled('cs-regen', designed && !carousel);
+    setActionEnabled('cs-caption', carousel || designed || !!_csOriginalPreviewUrl || single);
+    const bar = document.getElementById('cs-tweak-bar');
+    if (bar) bar.style.display = designed && !carousel ? 'flex' : 'none';
+  }
+
   function setBusy(busy, msg) {
     _csGenerating = busy;
     const gen = document.getElementById('cs-generate');
@@ -490,34 +648,64 @@
       gen.disabled = busy;
       gen.textContent = busy ? (msg || 'Generating…') : 'Generate design';
     }
-    document.getElementById('cs-empty').style.display = busy || _csHtml ? 'none' : 'block';
-    document.getElementById('cs-loading').style.display = busy ? 'block' : 'none';
-    if (busy) document.getElementById('cs-frame').style.display = 'none';
+    const loadMsg = document.getElementById('cs-loading-msg');
+    if (loadMsg && msg) loadMsg.textContent = msg;
+    if (busy) {
+      hidePreviewPanes();
+      const loading = document.getElementById('cs-loading');
+      if (loading) loading.style.display = 'block';
+    } else {
+      const loading = document.getElementById('cs-loading');
+      const loadingOn = loading && loading.style.display === 'block';
+      if (loading) loading.style.display = 'none';
+      const shown = ['cs-frame', 'cs-carousel', 'cs-original-preview'].some((id) => {
+        const el = document.getElementById(id);
+        return el && el.style.display && el.style.display !== 'none';
+      });
+      if (loadingOn && !shown) restorePreview();
+    }
+  }
+
+  function restorePreview() {
+    if (hasCarousel()) {
+      renderCarouselPreview();
+      return;
+    }
+    if (_csHtml) {
+      showDesign(_csHtml, _csSpec);
+      return;
+    }
+    if (_csOriginalPreviewUrl) {
+      showOriginalPreview(_csOriginalPreviewUrl);
+      return;
+    }
+    hidePreviewPanes();
+    setPreviewHeader('Preview · Instagram Square 1:1');
+    const empty = document.getElementById('cs-empty');
+    if (empty) empty.style.display = 'block';
+    refreshActionButtons();
   }
 
   function enableActions(on) {
-    ['cs-export', 'cs-queue', 'cs-regen', 'cs-caption'].forEach((id) => {
-      const btn = document.getElementById(id);
-      if (!btn) return;
-      btn.disabled = !on;
-      btn.style.cursor = on ? 'pointer' : 'not-allowed';
-      btn.style.color = on ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)';
-      btn.style.borderColor = on ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)';
-      if (id === 'cs-queue' && on) {
-        btn.style.background = 'linear-gradient(135deg,rgba(124,58,237,0.35),rgba(79,70,229,0.25))';
-        btn.style.borderColor = 'rgba(124,58,237,0.45)';
-        btn.style.color = '#E9D5FF';
-      }
-    });
+    if (on) {
+      refreshActionButtons();
+      return;
+    }
+    setActionEnabled('cs-export', false, { label: 'Export PNG' });
+    setActionEnabled('cs-queue', false);
+    setActionEnabled('cs-regen', false);
+    setActionEnabled('cs-caption', !!_csOriginalPreviewUrl || hasCarousel());
     const bar = document.getElementById('cs-tweak-bar');
-    if (bar) bar.style.display = on ? 'flex' : 'none';
+    if (bar) bar.style.display = 'none';
   }
 
   function showDesign(html, spec) {
     _csHtml = html;
     _csSpec = spec || _csSpec;
-    document.getElementById('cs-empty').style.display = 'none';
-    document.getElementById('cs-loading').style.display = 'none';
+    _csCarousel = null;
+    _csQueueSingleUrl = null;
+    hidePreviewPanes();
+    setPreviewHeader('Preview · Instagram Square 1:1');
     const frame = document.getElementById('cs-frame');
     const iframe = document.getElementById('cs-iframe');
     frame.style.display = 'block';
@@ -530,7 +718,225 @@
     frame.style.width = Math.round(_csSpec.w * scale) + 'px';
     frame.style.height = Math.round(_csSpec.h * scale) + 'px';
     iframe.srcdoc = html;
-    enableActions(true);
+    refreshActionButtons();
+  }
+
+  async function uploadInfographicFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Please upload an image file', 'warning'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10MB', 'warning'); return; }
+    toast('Uploading infographic…', 'info');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('image', file);
+      const res = await fetch(`${apiBase()}/api/studio/upload-image`, {
+        method: 'POST',
+        headers: authHeadersMultipart(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      _csCarousel = null;
+      _csHtml = '';
+      _csQueueSingleUrl = null;
+      _csOriginalPreviewUrl = data.url;
+      setReference({ url: data.url, type: 'image', title: 'Infographic', source: 'upload' });
+      showOriginalPreview(data.url);
+      toast('Infographic uploaded', 'success');
+    } catch (e) {
+      toast(e.message || 'Upload failed', 'error');
+    }
+  }
+
+  async function splitCarousel(opts) {
+    const slideCount = opts && opts.slideCount;
+    const cuts = opts && opts.cuts;
+    const quiet = Array.isArray(cuts) && cuts.length >= 2;
+    const imageUrl = (quiet ? _csCarousel?.originalUrl : null) || _csRef?.url || _csOriginalPreviewUrl;
+    if (!imageUrl) { toast('Upload or pick an image first', 'warning'); return; }
+    if (_csRef && _csRef.type === 'video') { toast('Split needs an image, not a video', 'warning'); return; }
+    const splitBtn = document.getElementById('cs-split-carousel');
+    if (splitBtn) { splitBtn.disabled = true; splitBtn.textContent = 'Splitting…'; }
+    const seq = ++_csSplitSeq;
+    if (!quiet) setBusy(true, 'Splitting into carousel…');
+    try {
+      const body = { image_url: imageUrl };
+      if (quiet) body.cuts = cuts;
+      else if (slideCount) body.slide_count = slideCount;
+      const res = await fetch(`${apiBase()}/api/studio/split-carousel`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (seq !== _csSplitSeq) return;
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Split failed');
+      if (data.split === false) {
+        _csCarousel = null;
+        _csOriginalPreviewUrl = imageUrl;
+        _csQueueSingleUrl = imageUrl;
+        if (!quiet) setBusy(false);
+        else restorePreview();
+        toast('Already square — queue as a single post', 'info');
+        return;
+      }
+      const slides = Array.isArray(data.slides) ? data.slides : [];
+      if (slides.length < 2) throw new Error('Split did not return enough slides');
+      const selected = _csCarousel ? Math.min(_csCarousel.selected || 0, slides.length - 1) : 0;
+      _csCarousel = {
+        originalUrl: data.original_url || imageUrl,
+        width: data.width,
+        height: data.height,
+        method: data.method || (quiet ? 'cuts' : 'even'),
+        slides,
+        selected,
+      };
+      _csOriginalPreviewUrl = _csCarousel.originalUrl;
+      _csQueueSingleUrl = null;
+      if (!quiet) setBusy(false);
+      else renderCarouselPreview();
+      if (_csCarousel.method === 'even' && !quiet && !slideCount) {
+        toast('used even split — drag cuts if needed', 'info');
+      } else if (!quiet) {
+        toast('Carousel ready', 'success');
+      }
+    } catch (e) {
+      if (seq !== _csSplitSeq) return;
+      if (!quiet) setBusy(false);
+      toast(e.message || 'Split failed', 'error');
+    } finally {
+      if (splitBtn && seq === _csSplitSeq) {
+        splitBtn.textContent = 'Split into carousel';
+        syncSplitButton();
+      }
+    }
+  }
+
+  function scheduleResplitFromCuts() {
+    clearTimeout(_csCutTimer);
+    _csCutTimer = setTimeout(() => {
+      if (!hasCarousel()) return;
+      const cuts = _csCarousel.slides.map((s) => ({ y0: s.y0, y1: s.y1 }));
+      splitCarousel({ cuts });
+    }, 400);
+  }
+
+  function renderCarouselPreview() {
+    if (!hasCarousel()) return;
+    hidePreviewPanes();
+    setPreviewHeader('Preview · Carousel · Instagram + Facebook');
+    const wrap = document.getElementById('cs-carousel');
+    if (wrap) wrap.style.display = 'block';
+    const slides = _csCarousel.slides;
+    if (_csCarousel.selected == null || _csCarousel.selected < 0 || _csCarousel.selected >= slides.length) {
+      _csCarousel.selected = 0;
+    }
+    const strip = document.getElementById('cs-slide-strip');
+    if (strip) {
+      strip.innerHTML = slides.map((s, i) => {
+        const on = i === _csCarousel.selected;
+        return `<button type="button" class="cs-slide-btn" data-i="${i}" style="flex:0 0 auto;width:88px;padding:0;border:${on ? '2px solid #A78BFA' : '1px solid rgba(255,255,255,0.12)'};border-radius:8px;background:#111;cursor:pointer;overflow:hidden;outline:none;">
+          <img src="${escapeHtml(s.url)}" alt="Slide ${i + 1}" style="width:88px;height:88px;object-fit:cover;display:block;">
+        </button>`;
+      }).join('');
+      strip.querySelectorAll('.cs-slide-btn').forEach((el) => {
+        el.addEventListener('click', () => {
+          _csCarousel.selected = Number(el.getAttribute('data-i')) || 0;
+          renderCarouselPreview();
+        });
+      });
+    }
+    const countSel = document.getElementById('cs-slide-count');
+    if (countSel) {
+      const n = Math.min(8, Math.max(3, slides.length));
+      countSel.value = String(n);
+    }
+    renderCutCanvas();
+    refreshActionButtons();
+  }
+
+  function renderCutCanvas() {
+    const canvas = document.getElementById('cs-cut-canvas');
+    if (!canvas || !hasCarousel()) return;
+    const orig = _csCarousel.originalUrl;
+    const slides = _csCarousel.slides;
+    const lines = slides.slice(0, -1).map((s, i) => {
+      const pct = Math.min(100, Math.max(0, (Number(s.y1) || 0) * 100));
+      return `<div data-cut-line="${i}" style="position:absolute;left:0;right:0;top:${pct}%;height:0;border-top:2px solid rgba(167,139,250,0.9);pointer-events:none;">
+        <span style="position:absolute;right:4px;top:-11px;font-size:0.58rem;font-weight:700;color:#E9D5FF;background:rgba(15,23,42,0.85);padding:1px 5px;border-radius:4px;">${Math.round(pct)}%</span>
+      </div>`;
+    }).join('');
+    const sliders = slides.slice(0, -1).map((s, i) => {
+      const pct = Math.min(100, Math.max(0, (Number(s.y1) || 0) * 100));
+      const prev = i === 0 ? 1 : Math.min(99, Math.max(1, (Number(slides[i - 1].y1) || 0) * 100 + 1));
+      const next = i >= slides.length - 2 ? 99 : Math.min(99, Math.max(1, (Number(slides[i + 1].y1) || 1) * 100 - 1));
+      const min = Math.min(prev, pct);
+      const max = Math.max(next, pct);
+      return `<label style="display:flex;align-items:center;gap:10px;font-size:0.7rem;color:rgba(255,255,255,0.5);">
+        Cut ${i + 1}
+        <input type="range" class="cs-cut-range" data-i="${i}" min="${Math.round(min)}" max="${Math.round(max)}" value="${Math.round(pct)}" style="flex:1;accent-color:#A78BFA;">
+        <span class="cs-cut-pct" data-i="${i}" style="width:36px;text-align:right;color:rgba(255,255,255,0.7);">${Math.round(pct)}%</span>
+      </label>`;
+    }).join('');
+    canvas.innerHTML = `
+      <div style="max-height:280px;overflow:auto;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#111;">
+        <div style="position:relative;">
+          <img src="${escapeHtml(orig)}" alt="Original cuts" style="width:100%;display:block;">
+          ${lines}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">${sliders}</div>
+      <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);margin-top:6px;">Adjust cut handles (0–100%) to redraw slides. Updates debounce 400ms.</div>`;
+    canvas.querySelectorAll('.cs-cut-range').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        if (!hasCarousel()) return;
+        const i = Number(e.target.getAttribute('data-i'));
+        const pct = Number(e.target.value);
+        const frac = pct / 100;
+        _csCarousel.slides[i].y1 = frac;
+        if (_csCarousel.slides[i + 1]) _csCarousel.slides[i + 1].y0 = frac;
+        const line = canvas.querySelector(`[data-cut-line="${i}"]`);
+        if (line) line.style.top = pct + '%';
+        const label = canvas.querySelector(`.cs-cut-pct[data-i="${i}"]`);
+        if (label) label.textContent = Math.round(pct) + '%';
+        scheduleResplitFromCuts();
+      });
+    });
+  }
+
+  function deleteSelectedSlide() {
+    if (!hasCarousel()) return;
+    const i = _csCarousel.selected || 0;
+    _csCarousel.slides.splice(i, 1);
+    if (_csCarousel.slides.length < 2) {
+      const orig = _csCarousel.originalUrl || _csRef?.url;
+      _csCarousel = null;
+      if (orig) {
+        _csOriginalPreviewUrl = orig;
+        setReference({ url: orig, type: 'image', title: _csRef?.title || 'Infographic', source: _csRef?.source || 'upload' });
+        showOriginalPreview(orig);
+      } else {
+        restorePreview();
+      }
+      toast('Carousel cleared — one slide left', 'info');
+      return;
+    }
+    _csCarousel.selected = Math.min(i, _csCarousel.slides.length - 1);
+    renderCarouselPreview();
+  }
+
+  function moveSelectedSlide(dir) {
+    if (!hasCarousel()) return;
+    const i = _csCarousel.selected || 0;
+    const j = i + dir;
+    if (j < 0 || j >= _csCarousel.slides.length) return;
+    const slides = _csCarousel.slides;
+    const tmp = slides[i];
+    slides[i] = slides[j];
+    slides[j] = tmp;
+    _csCarousel.selected = j;
+    renderCarouselPreview();
   }
 
   async function generate() {
@@ -578,8 +984,6 @@
       showDesign(data.html, data.spec);
       toast('Design ready', 'success');
     } catch (e) {
-      document.getElementById('cs-loading').style.display = 'none';
-      document.getElementById('cs-empty').style.display = _csHtml ? 'none' : 'block';
       toast(e.message || 'Generation failed', 'error');
     } finally {
       setBusy(false);
@@ -632,7 +1036,16 @@
   }
 
   async function exportPng(andQueue) {
-    if (_csGenerating || !_csHtml) return;
+    if (_csGenerating) return;
+    if (hasCarousel()) {
+      await exportCarousel(andQueue);
+      return;
+    }
+    if (!_csHtml && _csQueueSingleUrl && andQueue) {
+      await queueSingleImage(_csQueueSingleUrl);
+      return;
+    }
+    if (!_csHtml) return;
     const btn = document.getElementById(andQueue ? 'cs-queue' : 'cs-export');
     const prev = btn?.textContent;
     if (btn) { btn.textContent = andQueue ? 'Queuing…' : 'Exporting…'; btn.disabled = true; }
@@ -660,6 +1073,7 @@
 
       const captionBox = document.getElementById('cs-caption-box');
       const captionText = captionBox?.dataset?.caption || '';
+      _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
 
       const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
         method: 'POST',
@@ -668,7 +1082,7 @@
           image_url: upData.url,
           brief: _csBrief,
           caption: captionText || _csBrief,
-          platform: 'Instagram',
+          platform: queuePlatform(),
           status: 'Approved',
         }),
       });
@@ -681,14 +1095,104 @@
       toast(e.message || 'Export failed', 'error');
     } finally {
       if (btn && btn.textContent.includes('…')) btn.textContent = prev || (andQueue ? 'Add to Queue' : 'Export PNG');
-      enableActions(true);
+      refreshActionButtons();
+    }
+  }
+
+  async function queueSingleImage(imageUrl) {
+    const btn = document.getElementById('cs-queue');
+    const prev = btn?.textContent;
+    if (btn) { btn.textContent = 'Queuing…'; btn.disabled = true; }
+    try {
+      const captionBox = document.getElementById('cs-caption-box');
+      _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
+      const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          image_url: imageUrl,
+          brief: _csBrief,
+          caption: captionBox?.dataset?.caption || _csBrief,
+          platform: queuePlatform(),
+          status: 'Approved',
+        }),
+      });
+      const qData = await q.json().catch(() => ({}));
+      if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
+      toast('Added to content queue', 'success');
+      if (btn) btn.textContent = 'Added ✓';
+      setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
+    } catch (e) {
+      toast(e.message || 'Queue failed', 'error');
+    } finally {
+      if (btn && String(btn.textContent).includes('…')) btn.textContent = prev || 'Add to Queue';
+      refreshActionButtons();
+    }
+  }
+
+  async function exportCarousel(andQueue) {
+    const slides = _csCarousel.slides;
+    const imageUrls = slides.map((s) => s.url).filter(Boolean);
+    if (imageUrls.length < 2) return;
+    const btn = document.getElementById(andQueue ? 'cs-queue' : 'cs-export');
+    const prev = btn?.textContent;
+    if (btn) { btn.textContent = andQueue ? 'Queuing…' : 'Exporting…'; btn.disabled = true; }
+    try {
+      if (!andQueue) {
+        const res = await fetch(`${apiBase()}/api/studio/carousel-zip`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ image_urls: imageUrls }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'ZIP export failed');
+        }
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'carousel-slides.zip';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast('ZIP downloaded', 'success');
+        return;
+      }
+
+      const captionBox = document.getElementById('cs-caption-box');
+      _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
+      const captionText = captionBox?.dataset?.caption || _csBrief;
+      const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          image_urls: imageUrls,
+          brief: _csBrief,
+          caption: captionText || _csBrief,
+          platform: queuePlatform(),
+          status: 'Approved',
+        }),
+      });
+      const qData = await q.json().catch(() => ({}));
+      if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
+      toast('Added to content queue', 'success');
+      if (btn) btn.textContent = 'Added ✓';
+      setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
+    } catch (e) {
+      toast(e.message || 'Export failed', 'error');
+    } finally {
+      if (btn && String(btn.textContent).includes('…')) btn.textContent = prev || (andQueue ? 'Add to Queue' : 'Export ZIP');
+      refreshActionButtons();
     }
   }
 
   async function getCaption() {
     const box = document.getElementById('cs-caption-box');
     const btn = document.getElementById('cs-caption');
-    if (!_csBrief) return;
+    _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
+    if (!_csBrief) {
+      toast('Describe your post first', 'warning');
+      return;
+    }
     if (btn) { btn.disabled = true; btn.textContent = 'Writing…'; }
     if (box) box.innerHTML = '<span style="color:rgba(255,255,255,0.35);">Writing caption…</span>';
     try {
