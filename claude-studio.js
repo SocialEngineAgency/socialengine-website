@@ -13,7 +13,7 @@
   let _csBrandName = '';
   let _csRef = null; // { url, type, title, source, product_id?, video_url?, poster_url? }
   let _csPickerTab = 'products';
-  let _csCarousel = null; // { originalUrl, width, height, method, slides: [{ url, y0, y1 }], selected: 0 }
+  let _csCarousel = null; // { originalUrl, width, height, method, slides: [{ url, y0, y1 }], queueOrder: number[], selected: 0 }
   let _csOriginalPreviewUrl = null;
   let _csCutTimer = null;
   let _csQueueSingleUrl = null;
@@ -65,6 +65,24 @@
     return !!( _csCarousel && Array.isArray(_csCarousel.slides) && _csCarousel.slides.length >= 2 );
   }
 
+  function identityQueueOrder(n) {
+    return Array.from({ length: n }, (_, i) => i);
+  }
+
+  function carouselQueueOrder() {
+    if (!_csCarousel || !Array.isArray(_csCarousel.slides)) return [];
+    const n = _csCarousel.slides.length;
+    if (!_csCarousel.queueOrder || _csCarousel.queueOrder.length !== n) {
+      _csCarousel.queueOrder = identityQueueOrder(n);
+    }
+    return _csCarousel.queueOrder;
+  }
+
+  function slidesInQueueOrder() {
+    const slides = _csCarousel.slides || [];
+    return carouselQueueOrder().map((idx) => slides[idx]).filter(Boolean);
+  }
+
   function syncSplitButton() {
     const btn = document.getElementById('cs-split-carousel');
     if (!btn) return;
@@ -108,6 +126,7 @@
 
   function setReference(ref) {
     const prevUrl = _csRef?.url || '';
+    let clearedCarouselForNewRef = false;
     if (!ref || !ref.url) {
       _csRef = null;
       window._studioReference = null;
@@ -127,6 +146,8 @@
       window._studioReference = { ..._csRef };
       if (_csCarousel && _csCarousel.originalUrl !== _csRef.url) {
         _csCarousel = null;
+        clearedCarouselForNewRef = true;
+        _csQueueSingleUrl = _csRef.type === 'image' ? _csRef.url : null;
       }
       if (prevUrl && prevUrl !== _csRef.url && _csOriginalPreviewUrl === prevUrl) {
         _csOriginalPreviewUrl = null;
@@ -134,7 +155,13 @@
     }
     renderRefSummary();
     syncSplitButton();
-    if (!ref || !ref.url) restorePreview();
+    if (!ref || !ref.url) {
+      restorePreview();
+    } else if (clearedCarouselForNewRef) {
+      if (_csRef.type === 'image' && _csRef.url) showOriginalPreview(_csRef.url);
+      else restorePreview();
+    }
+    refreshActionButtons();
   }
 
   function heroUrlForGenerate() {
@@ -791,6 +818,7 @@
         method: data.method || (quiet ? 'cuts' : 'even'),
         slides,
         selected,
+        queueOrder: identityQueueOrder(slides.length),
       };
       _csOriginalPreviewUrl = _csCarousel.originalUrl;
       _csQueueSingleUrl = null;
@@ -817,7 +845,10 @@
     clearTimeout(_csCutTimer);
     _csCutTimer = setTimeout(() => {
       if (!hasCarousel()) return;
-      const cuts = _csCarousel.slides.map((s) => ({ y0: s.y0, y1: s.y1 }));
+      const cuts = _csCarousel.slides
+        .slice()
+        .sort((a, b) => (Number(a.y0) || 0) - (Number(b.y0) || 0))
+        .map((s) => ({ y0: s.y0, y1: s.y1 }));
       splitCarousel({ cuts });
     }, 400);
   }
@@ -829,12 +860,15 @@
     const wrap = document.getElementById('cs-carousel');
     if (wrap) wrap.style.display = 'block';
     const slides = _csCarousel.slides;
-    if (_csCarousel.selected == null || _csCarousel.selected < 0 || _csCarousel.selected >= slides.length) {
+    const order = carouselQueueOrder();
+    if (_csCarousel.selected == null || _csCarousel.selected < 0 || _csCarousel.selected >= order.length) {
       _csCarousel.selected = 0;
     }
     const strip = document.getElementById('cs-slide-strip');
     if (strip) {
-      strip.innerHTML = slides.map((s, i) => {
+      strip.innerHTML = order.map((slideIdx, i) => {
+        const s = slides[slideIdx];
+        if (!s) return '';
         const on = i === _csCarousel.selected;
         return `<button type="button" class="cs-slide-btn" data-i="${i}" style="flex:0 0 auto;width:88px;padding:0;border:${on ? '2px solid #A78BFA' : '1px solid rgba(255,255,255,0.12)'};border-radius:8px;background:#111;cursor:pointer;overflow:hidden;outline:none;">
           <img src="${escapeHtml(s.url)}" alt="Slide ${i + 1}" style="width:88px;height:88px;object-fit:cover;display:block;">
@@ -907,34 +941,41 @@
 
   function deleteSelectedSlide() {
     if (!hasCarousel()) return;
-    const i = _csCarousel.selected || 0;
-    _csCarousel.slides.splice(i, 1);
+    const displayI = _csCarousel.selected || 0;
+    const order = carouselQueueOrder();
+    const slideI = order[displayI];
+    if (slideI == null) return;
+    _csCarousel.slides.splice(slideI, 1);
     if (_csCarousel.slides.length < 2) {
-      const orig = _csCarousel.originalUrl || _csRef?.url;
+      const surviving = _csCarousel.slides[0];
+      const survivingUrl = surviving?.url || '';
       _csCarousel = null;
-      if (orig) {
-        _csOriginalPreviewUrl = orig;
-        setReference({ url: orig, type: 'image', title: _csRef?.title || 'Infographic', source: _csRef?.source || 'upload' });
-        showOriginalPreview(orig);
+      if (survivingUrl) {
+        _csQueueSingleUrl = survivingUrl;
+        showOriginalPreview(survivingUrl);
       } else {
         restorePreview();
       }
+      refreshActionButtons();
       toast('Carousel cleared — one slide left', 'info');
       return;
     }
-    _csCarousel.selected = Math.min(i, _csCarousel.slides.length - 1);
+    _csCarousel.queueOrder = order
+      .filter((idx) => idx !== slideI)
+      .map((idx) => (idx > slideI ? idx - 1 : idx));
+    _csCarousel.selected = Math.min(displayI, _csCarousel.queueOrder.length - 1);
     renderCarouselPreview();
   }
 
   function moveSelectedSlide(dir) {
     if (!hasCarousel()) return;
+    const order = carouselQueueOrder();
     const i = _csCarousel.selected || 0;
     const j = i + dir;
-    if (j < 0 || j >= _csCarousel.slides.length) return;
-    const slides = _csCarousel.slides;
-    const tmp = slides[i];
-    slides[i] = slides[j];
-    slides[j] = tmp;
+    if (j < 0 || j >= order.length) return;
+    const tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
     _csCarousel.selected = j;
     renderCarouselPreview();
   }
@@ -1131,7 +1172,7 @@
   }
 
   async function exportCarousel(andQueue) {
-    const slides = _csCarousel.slides;
+    const slides = slidesInQueueOrder();
     const imageUrls = slides.map((s) => s.url).filter(Boolean);
     if (imageUrls.length < 2) return;
     const btn = document.getElementById(andQueue ? 'cs-queue' : 'cs-export');
