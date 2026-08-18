@@ -5707,7 +5707,7 @@
       else if (activeNav === 'brand-voice') renderBrandVoicePage(clientData);
       else if (activeNav === 'ai-coach') renderAICoach();
       else if (activeNav === 'competitor-intel') renderCompetitorIntel();
-      else if (activeNav === 'video-studio') renderVideoStudio();
+      else if (activeNav === 'video-studio' || activeNav === 'creation-studio') renderVideoStudio();
       else if (activeNav === 'ad-studio') renderAdStudio();
       else if (activeNav === 'ai-studio') renderAIStudio();
       else if (activeNav === 'inbox') renderInbox();
@@ -6008,7 +6008,7 @@
         // Cold start — render once with whatever we have (probably empty),
         // fire the fetch, then re-render as soon as it returns.
         loadUnifiedVideoModels(true).then(rows => {
-          if (rows.length && typeof activeNav === 'string' && activeNav === 'video-studio') {
+          if (rows.length && typeof activeNav === 'string' && (activeNav === 'video-studio' || activeNav === 'creation-studio')) {
             renderVideoStudio();
           }
         });
@@ -6137,7 +6137,9 @@
                   <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">AI Model</label>
                   <select id="vs-model" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;cursor:pointer;">
                     ${selectableModels.length === 0
-                      ? '<option disabled>Loading models…</option>'
+                      ? (models.length
+                        ? '<option disabled>No models available for this plan</option>'
+                        : '<option disabled>Loading models…</option>')
                       : selectableModels.map(m => '<option value="' + m.id + '">' + m.name + ' (' + m.provider + ') — Preservation ' + m.pres + '/10' + (m.badge ? ' [' + m.badge + ']' : '') + '</option>').join('')}
                   </select>
 
