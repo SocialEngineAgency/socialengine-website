@@ -16,6 +16,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="./claude-studio.js" defer></script>
   <script src="./animation-studio.js?v=20260813-no-autopurge" defer></script>
+  <script src="./analytics-cockpit.js?v=20260817-cockpit" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -7035,6 +7036,31 @@
     let growLastPayload = null;
 
     function renderAnalyticsPage(data) {
+      if (typeof window.renderAnalyticsCockpit === 'function') {
+        window.renderAnalyticsCockpit(data, {
+          isPaid: isPaid(),
+          upgradeHTML: isPaid() ? '' : upgradeFullpageHTML(
+            'trending-up',
+            'Grow — Performance Analytics',
+            'See exactly what\'s working. Track reach, impressions, engagement rate, and follower growth across Instagram &amp; Facebook — plus AI insights powered by Claude.',
+            [
+              'Reach &amp; impressions over time',
+              'Engagement rate &amp; follower growth',
+              'Best time to post analysis',
+              'Top &amp; lowest performing posts',
+              'AI growth insights &amp; strategy reports',
+            ]
+          ),
+          api: typeof API !== 'undefined' ? API : (window.API || ''),
+          email: typeof clientEmail !== 'undefined' ? clientEmail : (window.clientEmail || ''),
+          hash: typeof clientHash !== 'undefined' ? clientHash : (window.clientHash || ''),
+          lineChart: typeof growLineChart === 'function' ? growLineChart : null,
+          connectIg: typeof connectInstagramOAuth === 'function' ? connectInstagramOAuth : window.connectInstagramOAuth,
+          connectFb: typeof connectFacebookOAuth === 'function' ? connectFacebookOAuth : window.connectFacebookOAuth,
+          switchNav: typeof switchNav === 'function' ? switchNav : null,
+        });
+        return;
+      }
       const content = document.getElementById('dash-content');
       if (!content) return; // Guard against timing issue where nav fires before content root mounts
       data = data || {};

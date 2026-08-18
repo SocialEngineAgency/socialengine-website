@@ -236,8 +236,8 @@ const TAB_DEFINITIONS = [
       if (expectedBusinessName) {
         await expect(page.locator('#dash-content')).toContainText(expectedBusinessName, { timeout: TAB_TIMEOUT_MS });
       }
-      await expect(page.locator('#analytics-body').getByText(/Total Content Created|Approval Rate|Posts Published/i))
-        .toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(page.locator('#analytics-cockpit')).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(page.getByText(/Organic|Paid|Fundraising/i).first()).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(page.locator('.analytics-kpi-card__value').first()).not.toHaveText(/^$/, { timeout: TAB_TIMEOUT_MS });
     },
     ctas: [
@@ -245,15 +245,15 @@ const TAB_DEFINITIONS = [
         name: 'Analytics primary action',
         locator: async (page) =>
           resolveFirstVisible(
-            page.locator('#analytics-download-pdf'),
             page.locator('#analytics-refresh'),
+            page.locator('#analytics-charts-toggle'),
             page.getByRole('link', { name: /Upgrade to Pro/i })
           ),
       },
       {
         name: 'Secondary analytics action',
         locator: async (page) =>
-          resolveFirstVisible(page.locator('#analytics-refresh'), page.locator('#analytics-download-pdf')),
+          resolveFirstVisible(page.locator('#analytics-refresh'), page.locator('#analytics-charts-toggle')),
       },
     ],
   },
