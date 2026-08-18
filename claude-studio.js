@@ -133,6 +133,7 @@
       _csCarousel = null;
       _csOriginalPreviewUrl = null;
       _csQueueSingleUrl = null;
+      _csSplitSeq += 1;
     } else {
       _csRef = {
         url: String(ref.url),
@@ -147,6 +148,7 @@
       if (_csCarousel && _csCarousel.originalUrl !== _csRef.url) {
         _csCarousel = null;
         clearedCarouselForNewRef = true;
+        _csSplitSeq += 1;
         _csQueueSingleUrl = _csRef.type === 'image' ? _csRef.url : null;
       }
       if (prevUrl && prevUrl !== _csRef.url && _csOriginalPreviewUrl === prevUrl) {
@@ -786,6 +788,7 @@
     const splitBtn = document.getElementById('cs-split-carousel');
     if (splitBtn) { splitBtn.disabled = true; splitBtn.textContent = 'Splitting…'; }
     const seq = ++_csSplitSeq;
+    if (!quiet) _csHtml = '';
     if (!quiet) setBusy(true, 'Splitting into carousel…');
     try {
       const body = { image_url: imageUrl };
@@ -950,6 +953,8 @@
       const surviving = _csCarousel.slides[0];
       const survivingUrl = surviving?.url || '';
       _csCarousel = null;
+      _csHtml = '';
+      _csSplitSeq += 1;
       if (survivingUrl) {
         _csQueueSingleUrl = survivingUrl;
         showOriginalPreview(survivingUrl);
