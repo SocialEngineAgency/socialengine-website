@@ -2,6 +2,7 @@
  * Studio · Post — Phase 1.5
  * Reference picker (Products / Library / Uploads) → on-brand square → PNG → queue
  * Infographic upload → split into IG+FB carousel slides
+ * Or upload 2–8 already-cut squares (filename order) and queue as a carousel
  */
 (function () {
   'use strict';
@@ -63,6 +64,10 @@
 
   function hasCarousel() {
     return !!( _csCarousel && Array.isArray(_csCarousel.slides) && _csCarousel.slides.length >= 2 );
+  }
+
+  function isAssembledCarousel() {
+    return hasCarousel() && _csCarousel.method === 'assembled';
   }
 
   function identityQueueOrder(n) {
@@ -471,10 +476,13 @@
           </div>
 
           <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Infographic</div>
+            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Carousel</div>
             <input id="cs-infographic-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">
+            <input id="cs-slides-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
             <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
+            <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
             <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Split into carousel</button>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Split. Or pick 2–8 squares (filename order) if they are already cut.</div>
           </div>
 
           <div>
@@ -509,7 +517,7 @@
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
               <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Claude Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it — or upload a tall infographic and split it into a carousel.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it — or upload a tall infographic to split, or 2–8 already-cut squares as a carousel.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
@@ -528,7 +536,7 @@
                 <button type="button" id="cs-slide-delete" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.1);color:#FCA5A5;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete selected</button>
                 <button type="button" id="cs-slide-left" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move left</button>
                 <button type="button" id="cs-slide-right" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move right</button>
-                <label style="margin-left:auto;font-size:0.72rem;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:8px;">Slides
+                <label id="cs-slide-count-wrap" style="margin-left:auto;font-size:0.72rem;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:8px;">Slides
                   <select id="cs-slide-count" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;padding:6px 8px;font-size:0.75rem;font-family:var(--font-body);">
                     <option value="3">3</option>
                     <option value="4">4</option>
@@ -614,11 +622,20 @@
       if (f) uploadInfographicFile(f);
       e.target.value = '';
     });
+    document.getElementById('cs-upload-slides')?.addEventListener('click', () => {
+      document.getElementById('cs-slides-file')?.click();
+    });
+    document.getElementById('cs-slides-file')?.addEventListener('change', (e) => {
+      const files = e.target?.files ? Array.from(e.target.files) : [];
+      if (files.length) uploadSlideFiles(files);
+      e.target.value = '';
+    });
     document.getElementById('cs-split-carousel')?.addEventListener('click', () => splitCarousel());
     document.getElementById('cs-slide-delete')?.addEventListener('click', () => deleteSelectedSlide());
     document.getElementById('cs-slide-left')?.addEventListener('click', () => moveSelectedSlide(-1));
     document.getElementById('cs-slide-right')?.addEventListener('click', () => moveSelectedSlide(1));
     document.getElementById('cs-slide-count')?.addEventListener('change', (e) => {
+      if (isAssembledCarousel()) return;
       const n = Number(e.target.value);
       if (n >= 3 && n <= 8) splitCarousel({ slideCount: n });
     });
@@ -750,35 +767,106 @@
     refreshActionButtons();
   }
 
+  async function uploadStudioImage(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('image', file);
+    const res = await fetch(`${apiBase()}/api/studio/upload-image`, {
+      method: 'POST',
+      headers: authHeadersMultipart(),
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+    return data.url;
+  }
+
   async function uploadInfographicFile(file) {
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast('Please upload an image file', 'warning'); return; }
     if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10MB', 'warning'); return; }
     toast('Uploading infographic…', 'info');
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('image', file);
-      const res = await fetch(`${apiBase()}/api/studio/upload-image`, {
-        method: 'POST',
-        headers: authHeadersMultipart(),
-        body: fd,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      const url = await uploadStudioImage(file);
       _csCarousel = null;
       _csHtml = '';
       _csQueueSingleUrl = null;
-      _csOriginalPreviewUrl = data.url;
-      setReference({ url: data.url, type: 'image', title: 'Infographic', source: 'upload' });
-      showOriginalPreview(data.url);
+      _csOriginalPreviewUrl = url;
+      setReference({ url, type: 'image', title: 'Infographic', source: 'upload' });
+      showOriginalPreview(url);
       toast('Infographic uploaded', 'success');
     } catch (e) {
       toast(e.message || 'Upload failed', 'error');
     }
   }
 
+  async function uploadSlideFiles(files) {
+    const list = (files || [])
+      .filter((f) => {
+        const t = String(f?.type || '').toLowerCase();
+        const name = String(f?.name || '').toLowerCase();
+        return t === 'image/png' || t === 'image/jpeg' || t === 'image/jpg' || t === 'image/webp'
+          || /\.(png|jpe?g|webp)$/.test(name);
+      })
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' }));
+    if (!list.length) {
+      toast('Only PNG, JPG, or WebP slides are allowed', 'warning');
+      return;
+    }
+    if (list.length < 2 || list.length > 8) {
+      toast('Pick 2–8 slide images', 'warning');
+      return;
+    }
+    if (list.some((f) => f.size > 10 * 1024 * 1024)) {
+      toast('Each slide must be under 10MB', 'warning');
+      return;
+    }
+    const seq = ++_csSplitSeq;
+    _csHtml = '';
+    setBusy(true, `Uploading slides 1/${list.length}…`);
+    try {
+      const urls = [];
+      for (let i = 0; i < list.length; i++) {
+        if (seq !== _csSplitSeq) return;
+        setBusy(true, `Uploading slides ${i + 1}/${list.length}…`);
+        urls.push(await uploadStudioImage(list[i]));
+      }
+      if (seq !== _csSplitSeq) return;
+      const n = urls.length;
+      const slides = urls.map((url, i) => ({
+        url,
+        y0: i / n,
+        y1: (i + 1) / n,
+      }));
+      _csCarousel = null;
+      setReference({ url: urls[0], type: 'image', title: 'Carousel slides', source: 'upload' });
+      if (seq !== _csSplitSeq) return;
+      _csCarousel = {
+        originalUrl: urls[0],
+        width: 1080,
+        height: 1080,
+        method: 'assembled',
+        slides,
+        selected: 0,
+        queueOrder: identityQueueOrder(n),
+      };
+      _csOriginalPreviewUrl = urls[0];
+      _csQueueSingleUrl = null;
+      setBusy(false);
+      renderCarouselPreview();
+      toast('Carousel ready from slides', 'success');
+    } catch (e) {
+      if (seq !== _csSplitSeq) return;
+      setBusy(false);
+      toast(e.message || 'Slide upload failed', 'error');
+    }
+  }
+
   async function splitCarousel(opts) {
+    if (isAssembledCarousel() && !(opts && Array.isArray(opts.cuts))) {
+      toast('These are already separate slides — reorder or delete instead', 'info');
+      return;
+    }
     const slideCount = opts && opts.slideCount;
     const cuts = opts && opts.cuts;
     const quiet = Array.isArray(cuts) && cuts.length >= 2;
@@ -847,7 +935,7 @@
   function scheduleResplitFromCuts() {
     clearTimeout(_csCutTimer);
     _csCutTimer = setTimeout(() => {
-      if (!hasCarousel()) return;
+      if (!hasCarousel() || isAssembledCarousel()) return;
       const cuts = _csCarousel.slides
         .slice()
         .sort((a, b) => (Number(a.y0) || 0) - (Number(b.y0) || 0))
@@ -884,8 +972,10 @@
         });
       });
     }
+    const countWrap = document.getElementById('cs-slide-count-wrap');
+    if (countWrap) countWrap.style.display = isAssembledCarousel() ? 'none' : 'flex';
     const countSel = document.getElementById('cs-slide-count');
-    if (countSel) {
+    if (countSel && !isAssembledCarousel()) {
       const n = Math.min(8, Math.max(3, slides.length));
       countSel.value = String(n);
     }
@@ -896,6 +986,10 @@
   function renderCutCanvas() {
     const canvas = document.getElementById('cs-cut-canvas');
     if (!canvas || !hasCarousel()) return;
+    if (isAssembledCarousel()) {
+      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">These slides were uploaded separately. Reorder with Move left/right, or delete a slide. Cut handles are only for a tall infographic split.</div>`;
+      return;
+    }
     const orig = _csCarousel.originalUrl;
     const slides = _csCarousel.slides;
     const lines = slides.slice(0, -1).map((s, i) => {
