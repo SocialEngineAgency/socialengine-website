@@ -47,6 +47,16 @@
     if (typeof showToast === 'function') showToast(msg, type || 'info');
   }
 
+  /** Atlas / Aliyun OSS hotlink-blocks portal Referers — display via API proxy. Keep canonical URLs for queue/export. */
+  function mediaSrc(url) {
+    if (!url) return '';
+    if (/\/api\/media(\/|-fetch)/i.test(url)) return url;
+    if (/(aliyuncs\.com|atlascloud\.ai|higgsfield\.ai)/i.test(url)) {
+      return `${apiBase()}/api/media-fetch?url=${encodeURIComponent(url)}`;
+    }
+    return url;
+  }
+
   function queuePlatform() {
     const data = window.__clientData || window.clientData || window._studioClientData || {};
     const raw = data?.client?.social_connected_platforms;
@@ -124,7 +134,10 @@
     setPreviewHeader('Preview · Infographic');
     const wrap = document.getElementById('cs-original-preview');
     const img = document.getElementById('cs-original-preview-img');
-    if (img) img.src = src;
+    if (img) {
+      img.referrerPolicy = 'no-referrer';
+      img.src = mediaSrc(src);
+    }
     if (wrap) wrap.style.display = 'block';
     refreshActionButtons();
   }
@@ -190,7 +203,7 @@
     const thumb = _csRef.poster_url || _csRef.url;
     box.innerHTML = `
       <div style="display:flex;gap:10px;align-items:flex-start;">
-        <img src="${escapeHtml(thumb)}" alt="" style="width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.1);background:#111;">
+        <img src="${escapeHtml(mediaSrc(thumb))}" alt="" referrerpolicy="no-referrer" style="width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,0.1);background:#111;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.78rem;font-weight:700;color:#fff;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(_csRef.title)}</div>
           <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);margin-top:3px;text-transform:uppercase;letter-spacing:0.06em;">${escapeHtml(_csRef.source)} · ${_csRef.type}</div>
@@ -252,7 +265,7 @@
         const title = p.title || 'Product';
         const id = p.id || '';
         return `<button type="button" class="cs-pick-card" data-url="${escapeHtml(img)}" data-title="${escapeHtml(title)}" data-id="${escapeHtml(String(id))}" data-source="shopify" style="text-align:left;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);cursor:pointer;overflow:hidden;">
-          <div style="aspect-ratio:1;background:#111;"><img src="${escapeHtml(img)}" alt="" style="width:100%;height:100%;object-fit:cover;" loading="lazy"></div>
+          <div style="aspect-ratio:1;background:#111;"><img src="${escapeHtml(mediaSrc(img))}" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;" loading="lazy"></div>
           <div style="padding:8px 9px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.8);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</div>
         </button>`;
       }).join('');
@@ -294,7 +307,7 @@
         const title = it.title || 'Content';
         return `<button type="button" class="cs-lib-card" data-url="${escapeHtml(thumb || it.video_url || '')}" data-poster="${escapeHtml(thumb)}" data-video="${escapeHtml(it.video_url || '')}" data-type="${isVideo ? 'video' : 'image'}" data-title="${escapeHtml(title)}" style="text-align:left;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);cursor:pointer;overflow:hidden;position:relative;">
           <div style="aspect-ratio:1;background:#111;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:0.7rem;">
-            ${thumb ? `<img src="${escapeHtml(thumb)}" alt="" style="width:100%;height:100%;object-fit:cover;" loading="lazy">` : (isVideo ? 'VIDEO' : '—')}
+            ${thumb ? `<img src="${escapeHtml(mediaSrc(thumb))}" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;" loading="lazy">` : (isVideo ? 'VIDEO' : '—')}
           </div>
           ${isVideo ? '<span style="position:absolute;top:6px;left:6px;font-size:0.58rem;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,0.55);color:#fff;">VIDEO</span>' : ''}
           <div style="padding:8px 9px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.8);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</div>
@@ -530,6 +543,7 @@
               <img id="cs-original-preview-img" alt="Infographic" style="max-width:100%;max-height:min(70vh,640px);border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#111;">
             </div>
             <div id="cs-carousel" style="display:none;width:min(640px,100%);">
+              <div id="cs-slide-hero" style="display:none;margin:0 auto 16px;max-width:min(420px,100%);text-align:center;"></div>
               <div id="cs-slide-strip" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;"></div>
               <div id="cs-cut-canvas" style="margin-top:12px;"></div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
@@ -960,6 +974,17 @@
     if (_csCarousel.selected == null || _csCarousel.selected < 0 || _csCarousel.selected >= order.length) {
       _csCarousel.selected = 0;
     }
+    const selectedSlide = slides[order[_csCarousel.selected]];
+    const hero = document.getElementById('cs-slide-hero');
+    if (hero) {
+      if (isAssembledCarousel() && selectedSlide?.url) {
+        hero.style.display = 'block';
+        hero.innerHTML = `<img src="${escapeHtml(mediaSrc(selectedSlide.url))}" alt="Selected slide" referrerpolicy="no-referrer" style="width:100%;max-height:min(70vh,640px);object-fit:contain;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#111;">`;
+      } else {
+        hero.style.display = 'none';
+        hero.innerHTML = '';
+      }
+    }
     const strip = document.getElementById('cs-slide-strip');
     if (strip) {
       strip.innerHTML = order.map((slideIdx, i) => {
@@ -967,7 +992,7 @@
         if (!s) return '';
         const on = i === _csCarousel.selected;
         return `<button type="button" class="cs-slide-btn" data-i="${i}" style="flex:0 0 auto;width:88px;padding:0;border:${on ? '2px solid #A78BFA' : '1px solid rgba(255,255,255,0.12)'};border-radius:8px;background:#111;cursor:pointer;overflow:hidden;outline:none;">
-          <img src="${escapeHtml(s.url)}" alt="Slide ${i + 1}" style="width:88px;height:88px;object-fit:cover;display:block;">
+          <img src="${escapeHtml(mediaSrc(s.url))}" alt="Slide ${i + 1}" referrerpolicy="no-referrer" style="width:88px;height:88px;object-fit:cover;display:block;">
         </button>`;
       }).join('');
       strip.querySelectorAll('.cs-slide-btn').forEach((el) => {
@@ -1018,7 +1043,7 @@
     canvas.innerHTML = `
       <div style="max-height:280px;overflow:auto;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#111;">
         <div style="position:relative;">
-          <img src="${escapeHtml(orig)}" alt="Original cuts" style="width:100%;display:block;">
+          <img src="${escapeHtml(mediaSrc(orig))}" alt="Original cuts" referrerpolicy="no-referrer" style="width:100%;display:block;">
           ${lines}
         </div>
       </div>
