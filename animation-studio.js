@@ -951,7 +951,7 @@
               <div class="anim-recent__row">
                 <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
                   <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
-                  <span class="anim-recent__meta">${statusBadge(rp.status)}${projectMediaExpired(rp) ? ' <span class="anim-recent__mode">expired media</span>' : (projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : '')} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
+                  <span class="anim-recent__meta">${statusBadge(rp.status)}${rp.recovered_from_content ? ' <span class="anim-recent__mode">recovered</span>' : ''}${projectMediaExpired(rp) ? ' <span class="anim-recent__mode">expired media</span>' : (projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : '')} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
                 </button>
                 <button type="button" class="anim-btn anim-btn--ghost anim-recent__del" data-del-project="${esc(rp.id)}" title="Delete project">✕</button>
               </div>`).join('')}
