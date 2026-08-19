@@ -477,7 +477,7 @@
 
           <div>
             <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Carousel</div>
-            <input id="cs-infographic-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">
+            <input id="cs-infographic-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
             <input id="cs-slides-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
             <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
             <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
@@ -618,8 +618,9 @@
       document.getElementById('cs-infographic-file')?.click();
     });
     document.getElementById('cs-infographic-file')?.addEventListener('change', (e) => {
-      const f = e.target?.files?.[0];
-      if (f) uploadInfographicFile(f);
+      const files = e.target?.files ? Array.from(e.target.files) : [];
+      if (files.length >= 2) uploadSlideFiles(files);
+      else if (files[0]) uploadInfographicFile(files[0]);
       e.target.value = '';
     });
     document.getElementById('cs-upload-slides')?.addEventListener('click', () => {
@@ -827,20 +828,17 @@
     try {
       const urls = [];
       for (let i = 0; i < list.length; i++) {
-        if (seq !== _csSplitSeq) return;
+        if (seq !== _csSplitSeq) throw new Error('__aborted__');
         setBusy(true, `Uploading slides ${i + 1}/${list.length}…`);
         urls.push(await uploadStudioImage(list[i]));
       }
-      if (seq !== _csSplitSeq) return;
+      if (seq !== _csSplitSeq) throw new Error('__aborted__');
       const n = urls.length;
       const slides = urls.map((url, i) => ({
         url,
         y0: i / n,
         y1: (i + 1) / n,
       }));
-      _csCarousel = null;
-      setReference({ url: urls[0], type: 'image', title: 'Carousel slides', source: 'upload' });
-      if (seq !== _csSplitSeq) return;
       _csCarousel = {
         originalUrl: urls[0],
         width: 1080,
@@ -852,13 +850,20 @@
       };
       _csOriginalPreviewUrl = urls[0];
       _csQueueSingleUrl = null;
-      setBusy(false);
+      _csRef = { url: urls[0], type: 'image', title: `${n} carousel slides`, source: 'upload' };
+      window._studioReference = { ..._csRef };
+      renderRefSummary();
+      syncSplitButton();
       renderCarouselPreview();
-      toast('Carousel ready from slides', 'success');
+      toast(`${n} slides uploaded. Add to Queue to save them — they are not posted yet.`, 'success');
     } catch (e) {
-      if (seq !== _csSplitSeq) return;
-      setBusy(false);
+      if (e && e.message === '__aborted__') return;
       toast(e.message || 'Slide upload failed', 'error');
+    } finally {
+      if (seq === _csSplitSeq) {
+        setBusy(false);
+        if (hasCarousel()) renderCarouselPreview();
+      }
     }
   }
 
@@ -947,11 +952,11 @@
   function renderCarouselPreview() {
     if (!hasCarousel()) return;
     hidePreviewPanes();
-    setPreviewHeader('Preview · Carousel · Instagram + Facebook');
     const wrap = document.getElementById('cs-carousel');
     if (wrap) wrap.style.display = 'block';
     const slides = _csCarousel.slides;
     const order = carouselQueueOrder();
+    setPreviewHeader(`Preview · Carousel · ${order.length} slides · not queued yet`);
     if (_csCarousel.selected == null || _csCarousel.selected < 0 || _csCarousel.selected >= order.length) {
       _csCarousel.selected = 0;
     }
