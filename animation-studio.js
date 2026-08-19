@@ -150,6 +150,19 @@
   const _shotPromptDrafts = Object.create(null);
   /** Caption style draft — survives canvas remounts so Rebuild burns what you picked. */
   let _captionStyleDraft = null;
+  const ANIM_LAST_OPEN_LS = 'se_anim_last_project';
+
+  function rememberOpenProject(id) {
+    try {
+      if (id) localStorage.setItem(ANIM_LAST_OPEN_LS, String(id));
+      else localStorage.removeItem(ANIM_LAST_OPEN_LS);
+    } catch (_) { /* private mode */ }
+  }
+
+  function lastOpenProjectId() {
+    try { return String(localStorage.getItem(ANIM_LAST_OPEN_LS) || '').trim(); }
+    catch { return ''; }
+  }
 
   function formatTakeTime(iso) {
     if (!iso) return '';
@@ -861,6 +874,7 @@
         _project = null;
         _refs = [];
         stopPoll();
+        rememberOpenProject('');
       }
       if (!silent) toast('Expired project removed', 'success');
       renderCanvas();
@@ -907,6 +921,7 @@
       }
       else stopPoll();
       toast(`Opened ${projectTitle(_project)}`, 'success');
+      rememberOpenProject(_project.id);
     } catch (e) {
       await refreshRecent();
       _project = null;
@@ -1548,6 +1563,7 @@
       }),
     });
     _project = data.project;
+    rememberOpenProject(_project?.id);
     return _project;
   }
 
@@ -2180,6 +2196,7 @@
     stopPoll();
     _project = null;
     _refs = [];
+    rememberOpenProject('');
     _recentLoading = true;
     renderCanvas();
     renderChat();
@@ -2564,16 +2581,19 @@
     if (_project && projectMediaExpired(_project)) {
       toast('Some media links died after a restart — re-upload Char refs if needed.', 'warning');
     } else if (!_project && !(remixSession && remixSession.referenceUrl)) {
+      const lastId = lastOpenProjectId();
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)
         && ['developing', 'generating', 'assembling', 'brief_ready', 'character_review'].includes(p.status)
       );
-      if (inflight) {
-        // Summaries aren't full projects — open the real record.
+      const resumeId = lastId || inflight?.id;
+      if (resumeId) {
         try {
-          const data = await animFetch(`/api/animation/projects/${inflight.id}`);
+          const data = await animFetch(`/api/animation/projects/${resumeId}`);
           _project = data.project;
+          rememberOpenProject(_project.id);
         } catch (_) {
+          if (lastId && lastId === resumeId) rememberOpenProject('');
           _project = null;
         }
       }
