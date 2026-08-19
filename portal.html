@@ -8561,6 +8561,29 @@
       showToast(enabled ? 'Email notifications enabled' : 'Email notifications paused');
     }
 
+    async function toggleAutoCaption(enabled) {
+      const track = document.getElementById('auto-caption-track');
+      const thumb = document.getElementById('auto-caption-thumb');
+      if (track) track.style.background = enabled ? '#7C3AED' : 'rgba(255,255,255,0.1)';
+      if (thumb) thumb.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+      try {
+        const resp = await fetch(`${API}/api/client/auto-caption`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          body: JSON.stringify({ enabled })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          showToast(data.error || 'Could not save Auto-write captions');
+          return;
+        }
+        if (window.clientData && window.clientData.client) window.clientData.client.auto_caption = !!enabled;
+        showToast(enabled ? 'Auto-write captions on — fills blanks only' : 'Auto-write captions off');
+      } catch (e) {
+        showToast('Could not save Auto-write captions');
+      }
+    }
+
     function renderSettingsPage(data) {
       const content = document.getElementById('dash-content');
       const c = data.client;
@@ -8634,6 +8657,31 @@
             </div>
           </div>
         </div>
+
+        <!-- Captions -->
+        ${(() => {
+          const autoOn = !!c.auto_caption;
+          return `
+        <div style="background:linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65));border:1px solid rgba(255,255,255,0.06);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
+          <div style="padding:14px 22px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.01);">
+            <i data-lucide="message-square" style="width:16px;height:16px;color:var(--color-accent);flex-shrink:0;"></i>
+            <h3 style="font-family:var(--font-display);font-size:0.9375rem;font-weight:700;color:#fff;margin:0;letter-spacing:-0.01em;">Captions</h3>
+          </div>
+          <div style="padding:22px 24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+              <div>
+                <div style="font-size:0.875rem;color:#fff;font-weight:500;">Auto-write captions</div>
+                <div style="font-size:0.75rem;color:rgba(148,163,184,0.55);margin-top:2px;line-height:1.45;">Fills blank captions with Claude and learned hashtags (max 5). Never overwrites a caption you already wrote.</div>
+              </div>
+              <label style="position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0;">
+                <input type="checkbox" id="auto-caption-toggle" ${autoOn ? 'checked' : ''} style="opacity:0;width:0;height:0;" onchange="toggleAutoCaption(this.checked)">
+                <span id="auto-caption-track" style="position:absolute;inset:0;background:${autoOn ? '#7C3AED' : 'rgba(255,255,255,0.1)'};border-radius:24px;transition:0.2s;"></span>
+                <span id="auto-caption-thumb" style="position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:0.2s;${autoOn ? 'transform:translateX(20px);' : ''}"></span>
+              </label>
+            </div>
+          </div>
+        </div>`;
+        })()}
 
         <!-- Password & Security -->
         <div style="background:linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65));border:1px solid rgba(255,255,255,0.06);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
