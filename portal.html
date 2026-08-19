@@ -3876,6 +3876,7 @@
               </div>
             </div>` : `<div style="padding:8px 0;font-size:0.8rem;color:rgba(255,255,255,0.4);">${status === 'Scheduled' ? 'Scheduled for publishing' : status === 'Published' ? 'Published' : status}</div>`}
             ${(status === 'Approved' || status === 'Scheduled') && !post.scheduled_date ? `<button type="button" onclick="scheduleApprovedPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule post</button>` : ''}
+            ${post.scheduled_date && /^(Approved|Scheduled|publish_error)$/i.test(status) ? `<button type="button" onclick="closeStudioModal();_retryPublishPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Publish now</button>` : ''}
             ${status !== 'Published' ? `<button onclick="closeStudioModal();_deleteCalPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>` : ''}
           </div>`}
 
@@ -17570,7 +17571,8 @@
         <div style="font-size:0.67rem;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Caption</div>
         <div style="font-size:0.8rem;color:rgba(255,255,255,0.62);line-height:1.65;max-height:220px;overflow-y:auto;white-space:pre-wrap;">${safeCap || '<span style="color:rgba(255,255,255,0.3);">No caption</span>'}</div>
       </div>
-      <button onclick="_deleteCalPost('${String(postId).replace(/'/g, "\\'")}')" style="width:100%;margin-top:16px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>
+      ${/^(approved|scheduled|publish_error)$/i.test(String(status || '')) ? `<button onclick="_retryPublishPost('${String(postId).replace(/'/g, "\\'")}')" style="width:100%;margin-top:16px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Publish now</button>` : ''}
+      <button onclick="_deleteCalPost('${String(postId).replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>
       ${returnDate ? `<button onclick="_backToDatePanel()" style="width:100%;margin-top:10px;padding:10px 12px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;color:#E9D5FF;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">← Back to ${returnDate}</button>` : ''}
     `;
 
