@@ -3809,7 +3809,20 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               <span style="font-size:0.72rem;color:rgba(255,255,255,0.4);">Reschedule:</span>
               <input type="date" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;" onchange="reschedulePost('${post.id}',this.value)">
-            </div>` : ''}
+            </div>` : (status === 'Approved' || status === 'Scheduled') ? (() => {
+              const todayKey = (typeof window._clientTodayDateKey === 'function')
+                ? window._clientTodayDateKey()
+                : new Date().toISOString().slice(0, 10);
+              const safeId = String(post.id || '').replace(/'/g, "\\'");
+              return `<div style="margin-top:8px;padding:12px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.22);border-radius:10px;">
+                <div style="font-size:0.72rem;font-weight:700;color:#C4B5FD;margin-bottom:8px;">Schedule this post</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                  <input type="date" id="modal-sched-date-${safeId}" min="${todayKey}" value="${todayKey}" style="padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;font-size:0.75rem;font-family:var(--font-body);outline:none;">
+                  <input type="time" id="modal-sched-time-${safeId}" value="09:00" style="padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;font-size:0.75rem;font-family:var(--font-body);outline:none;">
+                  <button type="button" onclick="scheduleApprovedPost('${safeId}')" style="flex:1;min-width:110px;padding:8px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>
+                </div>
+              </div>`;
+            })() : ''}
 
           <div>
             <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -3859,9 +3872,10 @@
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
               <div>
                 <div style="font-size:0.82rem;font-weight:600;color:#7C3AED;">Approved</div>
-                <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);">Ready to schedule for publishing</div>
+                <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);">${post.scheduled_date ? 'Scheduled for publishing' : 'Pick a date above, then Schedule'}</div>
               </div>
             </div>` : `<div style="padding:8px 0;font-size:0.8rem;color:rgba(255,255,255,0.4);">${status === 'Scheduled' ? 'Scheduled for publishing' : status === 'Published' ? 'Published' : status}</div>`}
+            ${(status === 'Approved' || status === 'Scheduled') && !post.scheduled_date ? `<button type="button" onclick="scheduleApprovedPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule post</button>` : ''}
             ${status !== 'Published' ? `<button onclick="closeStudioModal();_deleteCalPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>` : ''}
           </div>`}
 
@@ -8505,21 +8519,62 @@
 
     // ━━━ Settings Page ━━━
     // ━━━ Reschedule Post ━━━
+    async function persistPostSchedule(postId, newDate, newTime) {
+      if (!postId || !newDate) return false;
+      const resp = await fetch(`${API}/api/reschedule-post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        body: JSON.stringify({
+          post_id: postId,
+          new_date: newDate,
+          ...(newTime ? { new_time: newTime } : {}),
+        })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || 'Failed to schedule');
+      const hit = (typeof studioPostsList !== 'undefined' && Array.isArray(studioPostsList))
+        ? studioPostsList.find((p) => String(p.id) === String(postId))
+        : null;
+      if (hit) {
+        hit.scheduled_date = newDate;
+        if (newTime) hit.scheduled_time = newTime;
+      }
+      if (window.__clientData?.content) {
+        const row = window.__clientData.content.find((p) => String(p.id) === String(postId));
+        if (row) {
+          row.scheduled_date = newDate;
+          if (newTime) row.scheduled_time = newTime;
+        }
+      }
+      return data;
+    }
+
     async function reschedulePost(postId, newDate) {
       if (!newDate) return;
       try {
-        const resp = await fetch(`${API}/api/reschedule-post`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
-          body: JSON.stringify({ post_id: postId, new_date: newDate })
-        });
-        if (resp.ok) {
-          showToast('Post rescheduled to ' + new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }));
-          // Refresh the content
-          setTimeout(() => document.querySelector('[data-nav=content]')?.click(), 1500);
-        } else { showToast('Failed to reschedule — try again'); }
-      } catch { showToast('Network error — try again'); }
+        await persistPostSchedule(postId, newDate);
+        showToast('Post rescheduled to ' + new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }));
+        setTimeout(() => document.querySelector('[data-nav=content]')?.click(), 800);
+      } catch { showToast('Failed to reschedule — try again'); }
     }
+
+    async function scheduleApprovedPost(postId) {
+      const dateEl = document.getElementById('modal-sched-date-' + postId);
+      const timeEl = document.getElementById('modal-sched-time-' + postId);
+      const newDate = dateEl?.value || '';
+      const newTime = timeEl?.value || '09:00';
+      if (!newDate) { showToast('Pick a date first', 'warning'); return; }
+      try {
+        await persistPostSchedule(postId, newDate, newTime);
+        showToast('Scheduled for ' + new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' }) + ' at ' + newTime);
+        if (typeof closeStudioModal === 'function') closeStudioModal();
+        setTimeout(() => document.querySelector('[data-nav=content]')?.click(), 600);
+      } catch (e) {
+        showToast(e.message || 'Could not schedule — try again', 'error');
+      }
+    }
+    window.persistPostSchedule = persistPostSchedule;
+    window.scheduleApprovedPost = scheduleApprovedPost;
 
     // ━━━ Password Change ━━━
     async function changePassword() {
@@ -15981,6 +16036,8 @@
     try { _exposeOnWindow('refreshBrandIntelligence', typeof refreshBrandIntelligence !== 'undefined' ? refreshBrandIntelligence : undefined); } catch(_){}
     try { _exposeOnWindow('regenerateVoiceContent',   typeof regenerateVoiceContent   !== 'undefined' ? regenerateVoiceContent   : undefined); } catch(_){}
     try { _exposeOnWindow('reschedulePost',           typeof reschedulePost           !== 'undefined' ? reschedulePost           : undefined); } catch(_){}
+    try { _exposeOnWindow('scheduleApprovedPost',     typeof scheduleApprovedPost     !== 'undefined' ? scheduleApprovedPost     : undefined); } catch(_){}
+    try { _exposeOnWindow('persistPostSchedule',      typeof persistPostSchedule      !== 'undefined' ? persistPostSchedule      : undefined); } catch(_){}
     try { _exposeOnWindow('retryNativeOAuth',         typeof retryNativeOAuth         !== 'undefined' ? retryNativeOAuth         : undefined); } catch(_){}
     try { _exposeOnWindow('selectVSTemplate',         typeof selectVSTemplate         !== 'undefined' ? selectVSTemplate         : undefined); } catch(_){}
     try { _exposeOnWindow('showCancellationModal',    typeof showCancellationModal    !== 'undefined' ? showCancellationModal    : undefined); } catch(_){}
@@ -17162,6 +17219,7 @@
   let _calYear         = new Date().getFullYear();
   let _calMonth        = new Date().getMonth(); // 0-indexed
   let _calPosts        = []; // scheduled / upcoming content from Airtable
+  let _calReadyPosts   = []; // Approved posts with no date yet
   let _calHistoryPosts = []; // published social posts from IG + FB
   function _getHiddenSocialIds() {
     try { return new Set(JSON.parse(localStorage.getItem('se_hidden_social_ids') || '[]')); } catch (_) { return new Set(); }
@@ -17199,6 +17257,13 @@
         const f = r.fields || r;
         return !!(f.scheduled_date || f.scheduledDate);
       });
+      _calReadyPosts = (cdData.content || []).filter(r => {
+        const f = r.fields || r;
+        const s = String(f.status || '').toLowerCase();
+        const dated = !!(f.scheduled_date || f.scheduledDate);
+        return !dated && (s === 'approved' || s === 'ready' || s === 'scheduled');
+      }).map(r => ({ ...(r.fields || r), id: r.id || (r.fields || r).id }));
+      window._calReadyPosts = _calReadyPosts;
       _calHistoryPosts = _filterHiddenSocial(histData.posts || []);
     } catch (e) {
       el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${e.message}</div>`;
@@ -17994,14 +18059,37 @@
     if (overlay) overlay.style.display = 'none';
   };
 
-  window.schedulePostToDate = function(dateStr, idx) {
-    const readyPosts = (window.__clientData?.content || []).filter(p => {
-      const status = (p.status || '').toLowerCase();
-      return (status === 'approved' || status === 'ready') && !(p.scheduled_date || p.published_date || p.date);
-    });
+  window.schedulePostToDate = async function(dateStr, idx) {
+    const readyPosts = window._calReadyPosts || [];
     const post = readyPosts[idx];
-    if (!post) return;
-    alert(`Scheduling "${(post.caption || post.title || 'Post').substring(0, 40)}" for ${dateStr}. (Connect this to your CMS API to save.)`);
+    if (!post || !post.id) {
+      if (typeof showToast === 'function') showToast('That post is no longer waiting to be scheduled', 'warning');
+      return;
+    }
+    const time = document.getElementById('quick-schedule-time')?.value || '09:00';
+    try {
+      if (typeof window.persistPostSchedule === 'function') {
+        await window.persistPostSchedule(post.id, dateStr, time);
+      } else {
+        const resp = await fetch(`${API}/api/reschedule-post`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-client-email': window.__clientEmail || window.clientEmail || '',
+            'x-client-hash': window.__clientHash || window.clientHash || '',
+          },
+          body: JSON.stringify({ post_id: post.id, new_date: dateStr, new_time: time }),
+        });
+        if (!resp.ok) throw new Error('Failed to schedule');
+      }
+      window._pendingOpenPostId = '';
+      window._calReadyPosts = (window._calReadyPosts || []).filter((p) => String(p.id) !== String(post.id));
+      if (typeof showToast === 'function') showToast('Scheduled for ' + dateStr + ' at ' + time, 'success');
+      if (typeof _loadCalendar === 'function') await _loadCalendar({ silent: true });
+      if (typeof openDatePanel === 'function') openDatePanel(dateStr);
+    } catch (e) {
+      if (typeof showToast === 'function') showToast(e.message || 'Could not schedule — try again', 'error');
+    }
   };
 
   window.submitQuickSchedule = function(dateStr) {
@@ -18103,11 +18191,7 @@
       }
     }
 
-    const readyToSchedule = isPast ? [] : (_calPosts || []).filter(p => {
-      const f = p.fields || p;
-      const s = (f.status || '').toLowerCase();
-      return (s === 'approved' || s === 'ready') && !(f.scheduled_date || f.scheduledDate);
-    }).map(p => ({ ...(p.fields || p), id: p.id }));
+    const readyToSchedule = isPast ? [] : (window._calReadyPosts || _calReadyPosts || []).slice();
 
     // Prefer Airtable content; still show batch items not yet reflected in _calPosts
     const contentKeys = new Set(contentOnDay.map(p => String(p.id)));
@@ -18503,9 +18587,10 @@
     if (!isPast && readyToSchedule.length > 0) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;padding-top:14px;">
         <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:9px;">Ready to Schedule (${readyToSchedule.length})</div>`;
-      readyToSchedule.slice(0, 4).forEach((p, idx) => {
+      readyToSchedule.slice(0, 8).forEach((p, idx) => {
         const safeCaption = (p.caption || p.full_post_text || p.title || 'Untitled').substring(0, 55).replace(/</g,'&lt;');
-        html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.12);border-radius:8px;margin-bottom:6px;">
+        const pending = String(window._pendingOpenPostId || '') === String(p.id || '');
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${pending ? 'rgba(124,58,237,0.12)' : 'rgba(34,197,94,0.05)'};border:1px solid ${pending ? 'rgba(167,139,250,0.45)' : 'rgba(34,197,94,0.12)'};border-radius:8px;margin-bottom:6px;">
           <div style="flex:1;font-size:0.78rem;color:rgba(255,255,255,0.65);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${safeCaption}</div>
           <button onclick="schedulePostToDate('${dateStr}',${idx})" style="flex-shrink:0;padding:4px 10px;font-size:0.68rem;font-weight:700;background:rgba(34,197,94,0.12);color:#86EFAC;border:1px solid rgba(34,197,94,0.2);border-radius:6px;cursor:pointer;font-family:var(--font-body);">Schedule</button>
         </div>`;
