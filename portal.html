@@ -17600,12 +17600,17 @@
       const data = await resp.json().catch(() => ({}));
       if (data.published || data.success) {
         // If we force-posted Facebook onto an IG-only row, persist platform list for the badge
-        if (platHint && /facebook/i.test(platHint) && typeof _calPosts !== 'undefined') {
+        if (platHint && typeof _calPosts !== 'undefined') {
           const hit = (_calPosts || []).find((p) => String(p.id || '') === String(postId));
           if (hit) {
             const cur = String(hit.platform || hit.fields?.platform || '');
-            if (!/facebook/i.test(cur)) {
+            if (/facebook/i.test(platHint) && !/facebook/i.test(cur)) {
               const next = cur ? `${cur},Facebook` : 'Instagram,Facebook';
+              hit.platform = next;
+              if (hit.fields) hit.fields.platform = next;
+            }
+            if (/instagram/i.test(platHint) && !/instagram/i.test(cur)) {
+              const next = cur ? `${cur},Instagram` : 'Instagram,Facebook';
               hit.platform = next;
               if (hit.fields) hit.fields.platform = next;
             }
@@ -18527,8 +18532,12 @@
         const listedIg = platStr.includes('instagram') || /\big\b/.test(platStr);
         const themeStr = String(p.theme || '').toLowerCase();
         const methodStr = String(p.publish_method || '').toLowerCase();
+        const methodHasFb = /facebook/.test(methodStr);
+        const methodHasIg = /instagram/.test(methodStr);
         const fbPartialFail = /facebook/.test(themeStr) && /publish_partial|fail/.test(themeStr);
-        const igOnlyMethod = /instagram/.test(methodStr) && !/facebook/.test(methodStr);
+        const igPartialFail = /instagram/.test(themeStr) && /publish_partial|fail/.test(themeStr);
+        const igOnlyMethod = methodHasIg && !methodHasFb;
+        const fbOnlyMethod = methodHasFb && !methodHasIg;
         const fbNativeOk = (() => {
           const c = window.__clientData?.client || window.clientData?.client || {};
           try {
@@ -18540,6 +18549,29 @@
           if (flag === 'false' || flag === '0' || flag === 'no') return false;
           return !!(c.meta_page_id && c.meta_page_token);
         })();
+        const igNativeOk = (() => {
+          const c = window.__clientData?.client || window.clientData?.client || {};
+          try {
+            if (typeof getNativeConnectionState === 'function') {
+              return !!getNativeConnectionState('instagram', c, window.__clientData?.upload_post_connection || window.clientData?.upload_post_connection)?.fullyConnected;
+            }
+          } catch (_) {}
+          return !!(c.instagram_user_id && (c.meta_page_token || c.instagram_token));
+        })();
+        const isPublishedRow = /^published$/i.test(String(p.status || ''));
+        // Published to one platform — offer the missing one. Never Retry both (that duplicates the live post).
+        const canPostFacebook = !isSocial
+          && isPublishedRow
+          && fbNativeOk
+          && p.id
+          && !methodHasFb
+          && (listedFb || fbPartialFail || (listedIg && igOnlyMethod) || (listedIg && !listedFb));
+        const canPostInstagram = !isSocial
+          && isPublishedRow
+          && igNativeOk
+          && p.id
+          && !methodHasIg
+          && (listedIg || igPartialFail || (listedFb && fbOnlyMethod) || (listedFb && !listedIg));
         // Published to IG but FB missing/failed — offer one-click Facebook push
         const canPostFacebook = !isSocial
           && /^published$/i.test(String(p.status || ''))
@@ -18559,6 +18591,7 @@
             ${caption ? `<div onclick="_datePanelView(${idx})" style="cursor:pointer;font-size:0.8rem;color:rgba(255,255,255,0.7);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${caption.replace(/</g,'&lt;')}</div>` : (isSocial ? '' : `<div style="font-size:0.78rem;color:rgba(255,255,255,0.4);margin-bottom:8px;">${isVidCard ? 'Video' : 'Post'} scheduled${p.scheduled_time ? ' · ' + p.scheduled_time : ''}${caption ? '' : ' · no caption'}</div>`)}
             ${pubErr ? `<div style="font-size:0.72rem;color:#FCA5A5;line-height:1.4;margin-bottom:8px;padding:8px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;">${pubErr.replace(/</g,'&lt;')}</div>` : ''}
             ${canPostFacebook && !listedFb ? `<div style="font-size:0.72rem;color:#FCD34D;line-height:1.4;margin-bottom:8px;padding:8px 10px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.28);border-radius:8px;">Published to Instagram only — Facebook wasn\u2019t included (or failed). Post to Facebook below.</div>` : ''}
+            ${canPostInstagram ? `<div style="font-size:0.72rem;color:#FCD34D;line-height:1.4;margin-bottom:8px;padding:8px 10px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.28);border-radius:8px;">Published to Facebook only — Instagram wasn\u2019t included (or failed). Post to Instagram below. Leave the Facebook post as-is.</div>` : ''}
             ${metrics.length > 0 ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${metrics.map(m => `<span style="font-size:0.72rem;color:rgba(255,255,255,0.45);">${m}</span>`).join('')}</div>` : (isSocial ? `<div style="font-size:0.7rem;color:rgba(255,255,255,0.25);margin-bottom:10px;">No engagement yet</div>` : '')}
             <div style="display:flex;flex-direction:column;gap:7px;">
               ${isSocial ? `<button onclick="_datePanelRepost(${idx})" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost</button>
@@ -18569,6 +18602,7 @@
               </div>` : `<button onclick="_datePanelView(${idx})" style="width:100%;padding:9px 12px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;color:#E9D5FF;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Open post</button>`}
               ${canRetry ? `<button onclick="_retryPublishPost('${String(p.id || '').replace(/'/g, "\\'")}', '${dateStr}')" style="width:100%;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Retry publish</button>` : ''}
               ${canPostFacebook ? `<button onclick="_retryPublishPost('${String(p.id || '').replace(/'/g, "\\'")}', '${dateStr}', 'Facebook')" style="width:100%;padding:9px 12px;background:#1877F2;border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post to Facebook</button>` : ''}
+              ${canPostInstagram ? `<button onclick="_retryPublishPost('${String(p.id || '').replace(/'/g, "\\'")}', '${dateStr}', 'Instagram')" style="width:100%;padding:9px 12px;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);border:none;border-radius:8px;color:#fff;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post to Instagram</button>` : ''}
               <div style="display:flex;gap:6px;">
                 <button onclick="_datePanelView(${idx})" style="flex:1;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">View</button>
                 ${!isSocial ? `<button onclick="_deleteCalPost('${String(p.id || '').replace(/'/g, "\\'")}',{returnDate:'${dateStr}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>` : `<button onclick="_deleteSocialPost('${String(p.id || '').replace(/'/g, "\\'")}', '${String(p.platform || (p._platforms || []).join('+') || '').replace(/'/g, "\\'")}', {returnDate:'${dateStr}', twinId:'${String(p._twinId || '').replace(/'/g, "\\'")}', permalink:'${String(p.permalink || '').replace(/'/g, "\\'")}'})" style="flex:1;padding:6px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);border-radius:7px;color:#FCA5A5;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>`}
