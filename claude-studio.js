@@ -2,7 +2,7 @@
  * Studio · Post — Phase 1.5
  * Reference picker (Products / Library / Uploads) → on-brand square → PNG → queue
  * Infographic upload → split into IG+FB carousel slides
- * Or upload 2–8 already-cut squares (filename order) and queue as a carousel
+ * Or upload 2–10 already-cut squares (filename order) and queue as a carousel
  */
 (function () {
   'use strict';
@@ -482,7 +482,7 @@
             <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
             <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
             <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Split into carousel</button>
-            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Split. Or pick 2–8 squares (filename order) if they are already cut.</div>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Split. Or pick 2–10 squares (filename order) if they are already cut. Instagram max is 10.</div>
           </div>
 
           <div>
@@ -517,7 +517,7 @@
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
               <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Claude Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it — or upload a tall infographic to split, or 2–8 already-cut squares as a carousel.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it — or upload a tall infographic to split, or 2–10 already-cut squares as a carousel.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
@@ -814,8 +814,8 @@
       toast('Only PNG, JPG, or WebP slides are allowed', 'warning');
       return;
     }
-    if (list.length < 2 || list.length > 8) {
-      toast('Pick 2–8 slide images', 'warning');
+    if (list.length < 2 || list.length > 10) {
+      toast('Pick 2–10 slide images (Instagram carousel max is 10)', 'warning');
       return;
     }
     if (list.some((f) => f.size > 10 * 1024 * 1024)) {
