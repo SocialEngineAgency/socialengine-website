@@ -59,13 +59,16 @@
 
   function queuePlatform() {
     const data = window.__clientData || window.clientData || window._studioClientData || {};
-    const raw = data?.client?.social_connected_platforms;
+    const c = data?.client || {};
+    const raw = c.social_connected_platforms;
     const list = Array.isArray(raw)
       ? raw
       : String(raw || '').split(',').map((s) => s.trim()).filter(Boolean);
     const lower = list.map((p) => String(p || '').toLowerCase());
-    const hasIg = lower.includes('instagram');
-    const hasFb = lower.includes('facebook');
+    const fbFlag = String(c.facebook_connected || '').toLowerCase();
+    const fbOff = fbFlag === 'false' || fbFlag === '0' || fbFlag === 'no';
+    const hasIg = lower.includes('instagram') || !!String(c.instagram_user_id || '').trim();
+    const hasFb = lower.includes('facebook') || (!fbOff && !!(c.meta_page_id && c.meta_page_token));
     if (hasIg && hasFb) return 'Instagram,Facebook';
     if (hasIg) return 'Instagram';
     if (hasFb) return 'Facebook';
