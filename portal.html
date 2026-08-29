@@ -18409,8 +18409,8 @@
           },
           body: JSON.stringify({ mode: 'insights', period: '7d', metrics }),
         });
-        const d = await res.json();
-        if (!res.ok || !d.insights?.length) throw new Error(d.error || 'No insights');
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || !d.insights?.length) throw new Error(d.error || `Analyze failed (${res.status})`);
         area.innerHTML = d.insights.map(i =>
           `<div style="padding:10px 12px;margin-bottom:8px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.18);border-radius:10px;">
             <div style="font-size:0.78rem;font-weight:700;color:#C4B5FD;margin-bottom:4px;">${String(i.title || '').replace(/</g,'&lt;')}</div>
@@ -18418,7 +18418,8 @@
           </div>`
         ).join('');
       } catch (e) {
-        area.innerHTML = `<div style="font-size:0.78rem;color:rgba(248,113,113,0.85);padding:8px 0;">Couldn\u2019t analyze right now. <button onclick="_datePanelAnalyze()" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:0.78rem;">Retry</button></div>`;
+        const why = String(e.message || 'Couldn\u2019t analyze right now').replace(/</g, '&lt;').slice(0, 160);
+        area.innerHTML = `<div style="font-size:0.78rem;color:rgba(248,113,113,0.85);padding:8px 0;">${why} <button onclick="_datePanelAnalyze()" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:0.78rem;">Retry</button></div>`;
       }
     };
 
