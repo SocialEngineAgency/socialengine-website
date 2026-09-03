@@ -333,6 +333,21 @@
     return _project?.pipeline?.i2v_model || _meta?.default_i2v_model || 'seedance';
   }
 
+  function resetComposeDefaults() {
+    const modeEl = document.getElementById('anim-mode');
+    if (modeEl) modeEl.value = 'video';
+    const lookEl = document.getElementById('anim-look');
+    if (lookEl) lookEl.value = 'stylized';
+    const motionEl = document.getElementById('anim-motion');
+    if (motionEl) motionEl.value = _meta?.default_motion_mode || 'auto';
+    const i2vEl = document.getElementById('anim-i2v');
+    if (i2vEl) i2vEl.value = _meta?.default_i2v_model || 'seedance';
+    const tplEl = document.getElementById('anim-template');
+    if (tplEl) tplEl.value = '';
+    const hint = document.getElementById('anim-motion-hint');
+    if (hint) hint.textContent = motionHint();
+  }
+
   function i2vOptions() {
     const models = _meta?.i2v_models || [
       { id: 'seedance', label: 'Seedance 2.0' },
@@ -961,8 +976,8 @@
       el.innerHTML = `
         <div class="anim-empty">
           <div class="anim-empty__title">Animation canvas</div>
-          <div class="anim-empty__desc">Pick a mode, describe what you want, and Claude will rewrite it into a production brief. Accept to generate character views, scenes, and shots here.</div>
-          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong> + <strong>Style</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
+          <div class="anim-empty__desc">Pick a mode, attach tagged refs, and describe one idea. Claude looks at the images, then writes distinct shots. Accept to generate character views, scenes, and shots here.</div>
+          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong> + <strong>Scene</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
         </div>
         ${recentHtml}`;
       el.querySelectorAll('[data-open-project]').forEach((btn) => {
@@ -1040,6 +1055,7 @@
               const regenLabel = s.status === 'generating'
                 ? 'Generating…'
                 : (s.video_url || (s.takes || []).length) ? 'Regenerate' : 'Generate';
+              const shotI2v = s.i2v_model || currentI2vModel() || 'seedance';
               return `
             <div class="anim-shot" data-scene="${esc(s.id)}">
               <div class="anim-shot__media">
@@ -1065,9 +1081,9 @@
                 <div class="anim-shot__overrides">
                   <select class="anim-select anim-shot-i2v" data-scene="${esc(s.id)}" title="I2V model" style="font-size:0.65rem;padding:4px 6px;">
                     <option value="">I2V: inherit</option>
-                    <option value="seedance" ${s.i2v_model === 'seedance' ? 'selected' : ''}>Seedance</option>
-                    <option value="kling" ${s.i2v_model === 'kling' ? 'selected' : ''}>Kling</option>
-                    <option value="auto" ${s.i2v_model === 'auto' ? 'selected' : ''}>Auto</option>
+                    <option value="seedance" ${shotI2v === 'seedance' ? 'selected' : ''}>Seedance</option>
+                    <option value="kling" ${shotI2v === 'kling' ? 'selected' : ''}>Kling</option>
+                    <option value="auto" ${shotI2v === 'auto' ? 'selected' : ''}>Auto</option>
                   </select>
                   <select class="anim-select anim-shot-template" data-scene="${esc(s.id)}" title="Motion template" style="font-size:0.65rem;padding:4px 6px;">
                     ${templateOptions(s.motion_template_id)}
@@ -1482,15 +1498,24 @@
   function renderChat() {
     const logEl = document.getElementById('anim-chat-log');
     if (!logEl) return;
-    const chat = _project?.chat || [];
+    const rawChat = _project?.chat || [];
+    const chat = [];
+    for (const m of rawChat) {
+      const role = String(m?.role || '').toLowerCase();
+      const prev = chat[chat.length - 1];
+      const sameUser = role === 'user' && prev && String(prev.role || '').toLowerCase() === 'user'
+        && String(prev.text || '').trim() === String(m.text || '').trim();
+      if (sameUser) chat[chat.length - 1] = m;
+      else chat.push(m);
+    }
     const brief = _project?.agent_brief;
     logEl.innerHTML = chat.map((m) => {
       const isAgent = m.role === 'agent' || m.role === 'system';
       return `<div class="anim-msg ${isAgent ? 'anim-msg--agent' : 'anim-msg--user'}">
-        <div class="anim-msg__role">${esc(m.role === 'agent' ? 'Claude · Art Director' : m.role)}</div>
+        <div class="anim-msg__role">${esc(m.role === 'agent' ? 'Claude · shots' : (m.role === 'user' ? 'Your idea' : m.role))}</div>
         <div class="anim-msg__text">${esc(m.text)}</div>
       </div>`;
-    }).join('') || `<div class="anim-msg anim-msg--agent"><div class="anim-msg__role">Claude · Art Director</div><div class="anim-msg__text">Tell me what to make. I’ll rewrite it into an optimized brief for ${esc(_project?.mode || 'video')} mode — then you accept or edit before anything generates.</div></div>`;
+    }).join('') || `<div class="anim-msg anim-msg--agent"><div class="anim-msg__role">Claude · shots</div><div class="anim-msg__text">Describe one idea. I’ll turn it into separate shots — not copies of your prompt. Then you accept before anything generates.</div></div>`;
 
     const actions = document.getElementById('anim-brief-actions');
     if (actions) {
@@ -1506,7 +1531,7 @@
         })();
         actions.innerHTML = `
           <div class="anim-brief-card">
-            <div class="anim-brief-card__title">Optimized brief</div>
+            <div class="anim-brief-card__title">${(brief.shots || []).length || 0} shots from your idea</div>
             ${looksRaw
               ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This still looks like your raw draft — tap <strong>Re-brief</strong> to run Claude again (it will rewrite automatically).</div>`
               : (brief._rewritten_repaired
@@ -1514,7 +1539,7 @@
                 : '')}
             <textarea id="anim-brief-edit" class="anim-brief-edit">${esc(optimized)}</textarea>
             <div class="anim-brief-shots">${(brief.shots || []).map((s, i) =>
-              `<div class="anim-brief-shot"><strong>${i + 1}. ${esc(s.title)}</strong> — ${esc((s.prompt || '').slice(0, 80))}…</div>`
+              `<div class="anim-brief-shot"><strong>Shot ${i + 1}${s.title ? ` · ${esc(s.title)}` : ''}</strong><div style="margin-top:4px;line-height:1.4;">${esc(s.prompt || '')}</div></div>`
             ).join('')}</div>
             <div class="anim-brief-btns">
               <button type="button" class="anim-btn" id="anim-accept">Accept & generate</button>
@@ -1556,6 +1581,7 @@
         mode,
         look,
         motion_mode,
+        i2v_model: document.getElementById('anim-i2v')?.value || currentI2vModel() || 'seedance',
         driving_video_url: _project?.driving_video_url || null,
         references,
         reference_urls: references.map((r) => r.url),
@@ -2198,6 +2224,7 @@
     _refs = [];
     rememberOpenProject('');
     _recentLoading = true;
+    resetComposeDefaults();
     renderCanvas();
     renderChat();
     renderRefs();
@@ -2465,7 +2492,7 @@
         <aside class="anim-chat">
           <div class="anim-chat-header">
             <h3>AI Agent</h3>
-            <p>Claude rewrites → you approve → canvas fills</p>
+            <p>One idea → Claude writes the shots → you accept</p>
           </div>
           <div class="anim-chat-body">
             <div class="anim-chat-log" id="anim-chat-log"></div>
@@ -2492,7 +2519,7 @@
                 ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
               </div>
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Char = identity. Scene = environment. fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
+              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Claude can see tagged refs (Char = identity, Scene = environment). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
               ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">VO + Generate music need ELEVENLABS_API_KEY — captions / upload music / outro still work.</div>` : ''}
               <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag every person as Char · Scene for setting · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
