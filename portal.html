@@ -17960,6 +17960,8 @@
     window._quickScheduleDraft = {
       caption: String(post.caption || post.full_post_text || '').trim(),
       platforms,
+      social_id: (/^(ig|fb)_/i.test(String(post.id || '')) ? String(post.id) : ''),
+      platform: post.platform || '',
       media_type: isVideo ? 'VIDEO' : 'IMAGE',
       image_url: isVideo ? '' : (post.image_url || post.media_url || post.thumbnail_url || ''),
       video_url: isVideo ? (post.video_url || post.media_url || '') : '',
@@ -18143,52 +18145,79 @@
     const hash = window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '';
     const btn = document.querySelector('#schedule-date-panel-content button[onclick*="submitQuickSchedule"]');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const abortTimer = ac ? setTimeout(() => ac.abort(), 28000) : null;
     try {
       let resp;
+      const hdrs = { 'x-client-email': email, 'x-client-hash': hash };
       if (file) {
         const fd = new FormData();
         fd.append('caption', caption);
         fd.append('platforms', draft.platforms || 'Instagram,Facebook');
         fd.append('scheduled_date', dateStr);
         fd.append('scheduled_time', time);
+        if (draft.social_id) fd.append('social_id', draft.social_id);
         fd.append('file', file, file.name);
         resp = await fetch(`${API}/api/studio/quick-schedule`, {
           method: 'POST',
-          headers: { 'x-client-email': email, 'x-client-hash': hash },
+          headers: hdrs,
           body: fd,
+          signal: ac ? ac.signal : undefined,
         });
       } else {
         resp = await fetch(`${API}/api/studio/quick-schedule`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-client-email': email,
-            'x-client-hash': hash,
-          },
+          headers: { ...hdrs, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             caption,
             platforms: draft.platforms || 'Instagram,Facebook',
             scheduled_date: dateStr,
             scheduled_time: time,
+            social_id: draft.social_id || '',
             image_url: draft.image_url || draft.thumbnail_url || '',
             video_url: draft.video_url || '',
             media_type: draft.media_type || '',
             thumbnail_url: draft.thumbnail_url || '',
           }),
+          signal: ac ? ac.signal : undefined,
         });
       }
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data.success) throw new Error(data.error || 'Could not save');
-      window._quickScheduleDraft = null;
-      if (typeof showToast === 'function') {
-        if (data.published) showToast('Saved and published', 'success');
-        else showToast(`Scheduled ${dateStr} at ${time}`, 'success');
+      const isVid = !!(file && file.type && file.type.startsWith('video/')) || /video|reel/i.test(String(draft.media_type || ''));
+      _calPosts = _calPosts || [];
+      if (data.recordId) {
+        _calPosts = _calPosts.filter((p) => String(p.id) !== String(data.recordId));
+        _calPosts.push({
+          id: data.recordId,
+          scheduled_date: dateStr,
+          scheduled_time: data.scheduledTime || time,
+          full_post_text: caption,
+          caption,
+          status: data.published ? 'Published' : 'Approved',
+          platform: draft.platforms || 'Instagram,Facebook',
+          content_type: isVid ? 'video' : 'image',
+          video_url: isVid ? (data.cdnUrl || '') : '',
+          image_url: !isVid ? (data.cdnUrl || draft.image_url || draft.thumbnail_url || '') : '',
+        });
       }
-      if (typeof _loadCalendar === 'function') await _loadCalendar({ silent: true });
+      window._quickScheduleDraft = null;
+      if (typeof _renderCalendar === 'function') _renderCalendar();
+      if (typeof showToast === 'function') {
+        if (data.published) showToast('Reposted to your connected channels', 'success');
+        else showToast(`Saved to calendar for ${dateStr} at ${time} — it posts at that time, not instantly`, 'success');
+      }
+      if (typeof _loadCalendar === 'function') _loadCalendar({ silent: true });
       if (typeof openDatePanel === 'function') openDatePanel(dateStr);
     } catch (e) {
-      if (typeof showToast === 'function') showToast(e.message || 'Could not schedule — try again', 'error');
-      else alert(e.message || 'Could not schedule');
+      const timedOut = e && (e.name === 'AbortError' || /abort/i.test(String(e.message || '')));
+      const msg = timedOut
+        ? 'Save timed out copying Instagram/Facebook media. Attach the file and try again.'
+        : (e.message || 'Could not schedule — try again');
+      if (typeof showToast === 'function') showToast(msg, 'error');
+      else alert(msg);
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer);
       if (btn) { btn.disabled = false; btn.textContent = 'Schedule Post'; }
     }
   };
