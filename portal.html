@@ -17950,17 +17950,40 @@
     }
   }
 
+    function _stashQuickScheduleDraft(post) {
+    if (!post) return;
+    const type = String(post.content_type || post.media_type || '').toLowerCase();
+    const isVideo = /video|reel/.test(type) || /\.(mp4|mov|webm)(\?|$)/i.test(String(post.video_url || post.media_url || ''));
+    const platforms = (post._platforms && post._platforms.length)
+      ? post._platforms.join(',')
+      : (Array.isArray(post.platforms) ? post.platforms.join(',') : (post.platform || 'Instagram,Facebook'));
+    window._quickScheduleDraft = {
+      caption: String(post.caption || post.full_post_text || '').trim(),
+      platforms,
+      media_type: isVideo ? 'VIDEO' : 'IMAGE',
+      image_url: isVideo ? '' : (post.image_url || post.media_url || post.thumbnail_url || ''),
+      video_url: isVideo ? (post.video_url || post.media_url || '') : '',
+      thumbnail_url: post.thumbnail_url || '',
+    };
+  }
+  window._stashQuickScheduleDraft = _stashQuickScheduleDraft;
+
     function _repostSocialPost(postId) {
     const post = _calHistoryPosts.find(p => p.id === postId);
     if (!post) return;
     _closeCalPanel();
+    _stashQuickScheduleDraft(post);
     // Open today's date panel with caption pre-filled
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = (typeof _clientTodayDateKey === 'function')
+      ? _clientTodayDateKey()
+      : new Date().toISOString().split('T')[0];
     if (window.openDatePanel) {
       window.openDatePanel(todayStr, window.__clientData || { content: _calPosts });
       setTimeout(function() {
         const ta = document.getElementById('quick-schedule-caption');
-        if (ta && post.caption) ta.value = post.caption;
+        if (ta && (window._quickScheduleDraft?.caption || post.caption)) {
+          ta.value = window._quickScheduleDraft?.caption || post.caption;
+        }
       }, 80);
     }
   }
@@ -18099,12 +18122,75 @@
     }
   };
 
-  window.submitQuickSchedule = function(dateStr) {
+  window.submitQuickSchedule = async function(dateStr) {
     const caption = document.getElementById('quick-schedule-caption')?.value?.trim();
     const time = document.getElementById('quick-schedule-time')?.value || '09:00';
-    if (!caption) { alert('Please write a caption first.'); return; }
-    alert(`Post scheduled for ${dateStr} at ${time}.\n\nCaption: "${caption.substring(0, 80)}${caption.length > 80 ? '…' : ''}"\n\n(Connect this to your content API to save.)`);
-    window.closeDatePanel();
+    const file = document.getElementById('quick-schedule-file')?.files?.[0];
+    const draft = window._quickScheduleDraft || {};
+    if (!caption) {
+      if (typeof showToast === 'function') showToast('Write a caption first', 'warning');
+      else alert('Write a caption first.');
+      return;
+    }
+    const hasRemote = !!(draft.image_url || draft.video_url || draft.thumbnail_url);
+    if (!file && !hasRemote) {
+      if (typeof showToast === 'function') {
+        showToast('Add a photo or video — Instagram and Facebook will not take caption-only', 'warning');
+      }
+      return;
+    }
+    const email = window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '';
+    const hash = window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '';
+    const btn = document.querySelector('#schedule-date-panel-content button[onclick*="submitQuickSchedule"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      let resp;
+      if (file) {
+        const fd = new FormData();
+        fd.append('caption', caption);
+        fd.append('platforms', draft.platforms || 'Instagram,Facebook');
+        fd.append('scheduled_date', dateStr);
+        fd.append('scheduled_time', time);
+        fd.append('file', file, file.name);
+        resp = await fetch(`${API}/api/studio/quick-schedule`, {
+          method: 'POST',
+          headers: { 'x-client-email': email, 'x-client-hash': hash },
+          body: fd,
+        });
+      } else {
+        resp = await fetch(`${API}/api/studio/quick-schedule`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-client-email': email,
+            'x-client-hash': hash,
+          },
+          body: JSON.stringify({
+            caption,
+            platforms: draft.platforms || 'Instagram,Facebook',
+            scheduled_date: dateStr,
+            scheduled_time: time,
+            image_url: draft.image_url || draft.thumbnail_url || '',
+            video_url: draft.video_url || '',
+            media_type: draft.media_type || '',
+            thumbnail_url: draft.thumbnail_url || '',
+          }),
+        });
+      }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.success) throw new Error(data.error || 'Could not save');
+      window._quickScheduleDraft = null;
+      if (typeof showToast === 'function') {
+        if (data.published) showToast('Saved and published', 'success');
+        else showToast(`Scheduled ${dateStr} at ${time}`, 'success');
+      }
+      if (typeof _loadCalendar === 'function') await _loadCalendar({ silent: true });
+      if (typeof openDatePanel === 'function') openDatePanel(dateStr);
+    } catch (e) {
+      if (typeof showToast === 'function') showToast(e.message || 'Could not schedule — try again', 'error');
+      else alert(e.message || 'Could not schedule');
+      if (btn) { btn.disabled = false; btn.textContent = 'Schedule Post'; }
+    }
   };
 
   window.openDatePanel = function(dateStr, _unused) {
@@ -18278,10 +18364,11 @@
         window.closeDatePanel();
         window._repostSocialPost && window._repostSocialPost(rawId);
       } else {
+        window._stashQuickScheduleDraft && window._stashQuickScheduleDraft(post);
         const caption = post.caption || post.full_post_text || '';
         const ta = document.getElementById('quick-schedule-caption');
         if (ta) { ta.value = caption; ta.focus(); }
-        if (typeof showToast === 'function') showToast('Caption loaded — review & schedule');
+        if (typeof showToast === 'function') showToast('Caption and media loaded — review & schedule');
       }
     };
 
@@ -18440,12 +18527,16 @@
       );
       if (!ok) return;
       window.closeDatePanel();
+      window._stashQuickScheduleDraft && window._stashQuickScheduleDraft(best);
       const todayStr = (window._calLocalDateKey || (() => new Date().toISOString().slice(0, 10)))(new Date());
       window.openDatePanel(todayStr, window.__clientData || { content: _calPosts });
       setTimeout(() => {
         const ta = document.getElementById('quick-schedule-caption');
-        if (ta && best.caption) { ta.value = best.caption; ta.focus(); }
-        if (typeof showToast === 'function') showToast('Caption loaded \u2014 review & schedule');
+        if (ta && (window._quickScheduleDraft?.caption || best.caption)) {
+          ta.value = window._quickScheduleDraft?.caption || best.caption;
+          ta.focus();
+        }
+        if (typeof showToast === 'function') showToast('Caption and media loaded \u2014 review & schedule');
       }, 120);
     };
 
@@ -18635,6 +18726,10 @@
         <div style="font-size:0.71rem;color:rgba(255,255,255,0.3);margin-bottom:8px;">Best time tip: <strong style="color:rgba(255,255,255,0.6);">${rec}</strong> on ${dayOfWeek}</div>
         <textarea id="quick-schedule-caption" rows="3" placeholder="Write your caption..." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;color:var(--color-text);font-size:0.81rem;font-family:var(--font-body);resize:vertical;outline:none;"></textarea>
         <div style="display:flex;gap:7px;margin-top:7px;align-items:center;">
+          <input type="file" id="quick-schedule-file" accept="image/*,video/*" style="flex:1;min-width:0;font-size:0.7rem;color:rgba(255,255,255,0.55);">
+        </div>
+        <div style="font-size:0.68rem;color:rgba(255,255,255,0.32);margin:6px 0 0;line-height:1.35;">Needs a photo or video. Repost keeps the original media; or attach a file here.</div>
+        <div style="display:flex;gap:7px;margin-top:7px;align-items:center;">
           <input type="time" id="quick-schedule-time" value="${window.convertTo24h(rec)}" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:6px 8px;color:var(--color-text);font-size:0.78rem;outline:none;font-family:var(--font-body);">
           <button onclick="submitQuickSchedule('${dateStr}')" style="flex:1;padding:8px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.77rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule Post</button>
         </div>
@@ -18642,6 +18737,10 @@
     }
 
     content.innerHTML = html;
+    if (window._quickScheduleDraft?.caption) {
+      const ta = document.getElementById('quick-schedule-caption');
+      if (ta && !ta.value) ta.value = window._quickScheduleDraft.caption;
+    }
     panel.style.right = '0';
     panel.style.zIndex = '1200';
     if (overlay) { overlay.style.display = 'block'; overlay.style.zIndex = '1190'; }
