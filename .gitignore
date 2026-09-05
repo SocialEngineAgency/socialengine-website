@@ -3,3 +3,9 @@ scripts/mediapipe-models/
 playwright-report/
 test-results/
 .playwright/
+# Editor scratch and backups — git already keeps every old version
+.cursor/
+*.backup
+*.backup-*
+_ads_mvp_*.js
+CURSOR_*.md
