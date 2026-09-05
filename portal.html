@@ -9,12 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400&family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
-  <script src="./claude-studio.js?v=20260818-slides11" defer></script>
+  <script src="./claude-studio.js?v=20260905-lazyexport" defer></script>
   <script src="./animation-studio.js?v=20260903-vision" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -2534,7 +2532,6 @@
 
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-<script src="https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js"></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
@@ -7586,131 +7583,6 @@
       </div>`;
     }
 
-    function generateAnalyticsPDF(data, metrics) {
-      const { jsPDF } = window.jspdf || {};
-      if (!jsPDF) { showToast('PDF library loading... try again in a moment'); return; }
-      
-      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-      const brand = data.client?.business_name || 'Client';
-      const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const w = doc.internal.pageSize.getWidth();
-      
-      // Header — dark navy bar with purple brand accent (portal-matched)
-      doc.setFillColor(6, 9, 18);
-      doc.rect(0, 0, w, 50, 'F');
-      doc.setFillColor(124, 58, 237);
-      doc.rect(0, 50, w, 1.5, 'F');
-
-      doc.setTextColor(167, 139, 250);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.text('SocialEngine', 20, 22);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(100, 116, 139);
-      doc.text('YOUR AI BRAND MARKETING DEPARTMENT', 20, 28);
-      doc.setFontSize(9);
-      doc.setTextColor(148, 163, 184);
-      doc.text('Performance Report', 20, 36);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(255, 255, 255);
-      doc.text(brand, 20, 42);
-      doc.setTextColor(148, 163, 184);
-      doc.setFontSize(8);
-      doc.text(dateStr, w - 20, 42, { align: 'right' });
-      
-      // Body
-      let y = 62;
-      doc.setTextColor(30, 30, 30);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.text('Content Overview', 20, y);
-      y += 10;
-      
-      // KPI boxes
-      const kpis = [
-        { label: 'Total Content', value: String(metrics.totalContent) },
-        { label: 'Published', value: String(metrics.postsPublished) },
-        { label: 'This Week', value: String(metrics.contentThisWeek) },
-        { label: 'Approval Rate', value: metrics.approvalRatePct + '%' }
-      ];
-      const boxW = (w - 50) / 4;
-      kpis.forEach((kpi, i) => {
-        const x = 20 + i * (boxW + 3.33);
-        doc.setFillColor(245, 247, 250);
-        doc.roundedRect(x, y, boxW, 22, 3, 3, 'F');
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(120, 130, 145);
-        doc.text(kpi.label, x + boxW/2, y + 7, { align: 'center' });
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(30, 30, 30);
-        doc.text(kpi.value, x + boxW/2, y + 18, { align: 'center' });
-      });
-      y += 32;
-      
-      // Platform breakdown
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(30, 30, 30);
-      doc.text('Platform Distribution', 20, y);
-      y += 8;
-      const totalP = Object.values(metrics.platformCounts).reduce((a,b)=>a+b,0) || 1;
-      Object.entries(metrics.platformCounts).sort((a,b)=>b[1]-a[1]).forEach(([pl, cnt]) => {
-        const pct = Math.round(cnt/totalP*100);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
-        doc.text(pl.charAt(0).toUpperCase() + pl.slice(1), 22, y);
-        doc.text(cnt + ' (' + pct + '%)', w - 22, y, { align: 'right' });
-        
-        // Bar — matches portal purple brand
-        doc.setFillColor(230, 235, 240);
-        doc.roundedRect(22, y + 2, w - 44, 3, 1.5, 1.5, 'F');
-        doc.setFillColor(124, 58, 237);
-        doc.roundedRect(22, y + 2, Math.max(3, (w-44) * pct/100), 3, 1.5, 1.5, 'F');
-        y += 12;
-      });
-      y += 8;
-      
-      // Status breakdown
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(30, 30, 30);
-      doc.text('Content Status', 20, y);
-      y += 8;
-      Object.entries(metrics.statusCounts).forEach(([st, cnt]) => {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(60, 60, 60);
-        doc.text(st, 22, y);
-        doc.text(String(cnt), w - 22, y, { align: 'right' });
-        y += 7;
-      });
-      y += 10;
-      
-      // Live Performance — only shown when social accounts connected and real data exists
-      // (No fabricated benchmark projections)
-      
-      // Footer — matches portal aesthetic
-      const footerY = 280;
-      doc.setFillColor(6, 9, 18);
-      doc.rect(0, footerY, w, 20, 'F');
-      doc.setFillColor(124, 58, 237);
-      doc.rect(0, footerY, w, 0.5, 'F');
-      doc.setTextColor(167, 139, 250);
-      doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      doc.text('SOCIALENGINE', w/2, footerY + 8, { align: 'center' });
-      doc.setTextColor(100, 116, 139);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Confidential · prepared for ' + brand + ' · socialengine.agency', w/2, footerY + 13, { align: 'center' });
-      
-      doc.save(brand.replace(/\s+/g, '-').toLowerCase() + '-performance-report.pdf');
-      showToast('Report downloaded!');
-    }
 
     // ━━━ BIS v1.1 — Brand Intelligence (SOC-7) ━━━
     let _bisVersionList = [];
@@ -16065,9 +15937,28 @@
     else console.log('[AdobeExpress]', msg);
   }
 
+  // The Adobe Express SDK is 2.3 MB. It used to load synchronously in <head>
+  // on every visit (blocking first paint of the login screen); it is now
+  // injected only when the editor is actually opened.
+  let _adobeScriptPromise = null;
+  function _loadAdobeSDKScript() {
+    if (window.CCEverywhere) return Promise.resolve();
+    if (_adobeScriptPromise) return _adobeScriptPromise;
+    _adobeScriptPromise = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = 'https://cc-embed.adobe.com/sdk/v4/CCEverywhere.js';
+      el.async = true;
+      el.onload = () => resolve();
+      el.onerror = () => { _adobeScriptPromise = null; reject(new Error('Adobe Express SDK failed to load')); };
+      document.head.appendChild(el);
+    });
+    return _adobeScriptPromise;
+  }
+
   async function _initAdobeSDK() {
     if (_adobeSDK) return _adobeSDK;
-    // Script already injected in <head>; wait up to 5 s for it to appear
+    _adobeShowStatus('Loading Adobe Express…', false);
+    await _loadAdobeSDKScript();
     for (let i = 0; i < 50 && !window.CCEverywhere; i++) {
       await new Promise(r => setTimeout(r, 100));
     }

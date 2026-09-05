@@ -1173,8 +1173,26 @@
     await generate();
   }
 
+  // html2canvas (199 KB) is only needed for export, so it is loaded on first use
+  // instead of on every portal visit.
+  let _html2canvasPromise = null;
+  function loadHtml2Canvas() {
+    if (typeof html2canvas === 'function') return Promise.resolve();
+    if (_html2canvasPromise) return _html2canvasPromise;
+    _html2canvasPromise = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      el.async = true;
+      el.onload = () => resolve();
+      el.onerror = () => { _html2canvasPromise = null; reject(new Error('Export library failed to load')); };
+      document.head.appendChild(el);
+    });
+    return _html2canvasPromise;
+  }
+
   async function rasterizePngBlob() {
     if (!_csHtml) throw new Error('No design to export');
+    await loadHtml2Canvas();
     if (typeof html2canvas !== 'function') throw new Error('html2canvas not loaded — hard refresh');
 
     const mount = document.getElementById('cs-export-mount');
