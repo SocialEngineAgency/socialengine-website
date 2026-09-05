@@ -5727,7 +5727,7 @@
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
     }
 
-    // ━━━ Tier Upgrade Polling (30s) ━━━
+    // ━━━ Tier Upgrade Polling (60s, paused while the tab is hidden) ━━━
     // Silently re-fetches client data; if tier flips Free→paid, re-renders current page instantly
     let tierPollInterval = null;
     let inboxPollInterval = null;
@@ -5736,6 +5736,7 @@
       if (tierPollInterval) return;
       tierPollInterval = setInterval(async () => {
         if (!clientEmail || !clientHash) return;
+        if (document.hidden) return; // don't poll a tab nobody is looking at
         try {
           const res = await fetch(`${API}/api/client-data`, {
             headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
@@ -5757,7 +5758,7 @@
             setTimeout(() => toast.remove(), 5000);
           }
         } catch (e) { /* silent fail */ }
-      }, 30000);
+      }, 60000);
     }
     function stopTierPolling() {
       if (tierPollInterval) { clearInterval(tierPollInterval); tierPollInterval = null; }
@@ -8202,15 +8203,21 @@
     let vwLastOutput = '';
     let vwLastProduct = '';
 
-    function initVoiceWorkshop() {
-      // Populate product dropdown from catalog
+    async function initVoiceWorkshop() {
+      // Populate product dropdown from the products endpoint (the dashboard
+      // payload no longer carries the whole catalog).
       const select = document.getElementById('vw-product-select');
       if (!select) return;
-      const products = clientData?.products || [];
+      let products = [];
+      try {
+        const r = await apiFetch('/api/studio/products?limit=100&page=1');
+        const j = r.ok ? await r.json().catch(() => ({})) : {};
+        products = Array.isArray(j.products) ? j.products : [];
+      } catch (_) { products = []; }
       if (products.length > 0) {
         products.forEach(p => {
           const opt = document.createElement('option');
-          opt.value = JSON.stringify({ title: p.title, price: p.price, type: p.product_type, image: p.image_url });
+          opt.value = JSON.stringify({ title: p.title, price: p.price, type: p.product_type, image: p.primary_image || p.image_url || '' });
           opt.textContent = p.title + (p.price ? ' — $' + p.price : '');
           select.appendChild(opt);
         });
@@ -9861,7 +9868,7 @@
           if (inboxPollInterval) { clearInterval(inboxPollInterval); inboxPollInterval = null; }
           if (data.connected) {
             inboxPollInterval = setInterval(() => {
-              if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
+              if (activeNav !== 'inbox' || !clientEmail || !clientHash || document.hidden) return;
               loadInboxData(null, { forceRefresh: true }).catch(() => {});
             }, 25000);
           }
