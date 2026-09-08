@@ -75,33 +75,6 @@ function generateIdempotencyToken() {
   }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
   revealElements.forEach((el) => revealObserver.observe(el));
 
-  // --- Count-Up Animation ---
-  const countElements = document.querySelectorAll('[data-count-to]');
-  const countObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        animateCount(entry.target);
-        countObserver.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.3 });
-  countElements.forEach((el) => countObserver.observe(el));
-
-  function animateCount(el) {
-    const target = parseInt(el.dataset.countTo, 10);
-    const suffix = el.dataset.suffix || '';
-    const duration = 1200;
-    const startTime = performance.now();
-    function step(currentTime) {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      el.textContent = Math.round(target * eased).toLocaleString() + suffix;
-      if (progress < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  }
-
   // --- Pricing Toggle ---
   const pricingToggle = document.querySelector('[data-pricing-toggle]');
   const monthlyLabel = document.querySelector('[data-billing="monthly"]');
@@ -479,7 +452,7 @@ function generateIdempotencyToken() {
           <a href="https://buy.stripe.com/fZu4gz7KP4LSfYY40vcQU05" target="_blank" rel="noopener" class="btn btn--accent btn--lg" style="width:100%;text-align:center;display:block;padding:14px;border-radius:10px;font-size:0.95rem;font-weight:700;text-decoration:none;background:linear-gradient(135deg,#FF6B35,#FF8F65);color:#fff;border:none;box-shadow:0 10px 28px -8px rgba(255,107,53,0.45);">
             Start Growth Plan &mdash; $${PLAN_CONFIG.Growth.priceMonthly}/mo &#8594;
           </a>
-          <p style="font-size:0.72rem;color:#64748B;text-align:center;margin:10px 0 0;">30-day money-back guarantee &nbsp;&bull;&nbsp; Cancel anytime</p>
+          <p style="font-size:0.72rem;color:#64748B;text-align:center;margin:10px 0 0;">Cancel anytime &nbsp;&bull;&nbsp; No contracts</p>
         </div>
 
         <!-- Revenue opportunity teaser -->
