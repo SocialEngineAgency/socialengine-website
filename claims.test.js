@@ -37,6 +37,13 @@ const BANNED_PHRASES = [
   'by the end of week one',
   'measurable traction within 30 days',
   'results speak for themselves',
+  // Timeline promises with no data behind them (FAQ + brand-voice card)
+  'within 2–3 weeks',
+  'within 2-3 weeks',
+  'indistinguishable from what you',
+  'noticeable in month one',
+  'inflection point',
+  'months 2–3',
 ];
 
 const MARKETING_FILES = ['index.html', 'signup.html', 'app.js'];
