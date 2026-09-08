@@ -5821,7 +5821,21 @@
         || /charity|cancer|hospice|foundation|non[\s-]?profit|fundraising/i.test(name);
     }
 
-    // Ads MVP session (organic → ad handoff + create wizard state)
+    // A model refusal ("I cannot generate…", "As an AI…") must never render as a
+    // client's brand voice. Mirrors AI_REFUSAL_RE in the API; applied at display
+    // time so a bad row already in Airtable cannot leak into the UI.
+    const BV_REFUSAL_RE = /^\s*(?:[#*_>\-\s]*)(?:I cannot|I can't|I can not|I'm unable|I am unable|I don't have (?:access|the ability|specific|real-time|browsing)|I do not have (?:access|the ability)|I should be direct|I should note|As an AI|As a language model|Unfortunately,? I (?:cannot|can't|don't))/im;
+    const BV_TEXT_FIELDS = ['writing_style', 'tone_adjectives', 'target_audience', 'brand_personality', 'voice_summary', 'content_pillars', 'do_not_say', 'key_messages'];
+    function scrubBrandVoice(bv) {
+      if (!bv || typeof bv !== 'object') return bv;
+      let dirty = false;
+      const out = { ...bv };
+      for (const k of BV_TEXT_FIELDS) {
+        if (typeof out[k] === 'string' && BV_REFUSAL_RE.test(out[k])) { out[k] = ''; dirty = true; }
+      }
+      if (dirty) console.warn('[brand-voice] refusal text hidden from display; regenerate the brand voice');
+      return out;
+    }
     window.__SE_AD_SESSION = window.__SE_AD_SESSION || null;
     let _adsView = 'home'; // 'home' | 'create'
     let _adsOverview = null;
@@ -7879,7 +7893,7 @@
     function renderBrandVoicePage(data) {
       const content = document.getElementById('dash-content');
       const isCharityBrand = isCharityClient(data);
-      const bv = data.brand_voice;
+      const bv = scrubBrandVoice(data.brand_voice);
       const profile = data.profile;
       const bvIsActive = !!(bv && (bv.tone_adjectives || bv.writing_style));
 
@@ -7975,9 +7989,9 @@
         ${bv ? `
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
           ${[
-            { label: 'Tone Profile', value: bv.tone_adjectives || 'Not configured', icon: '🎯' },
-            { label: 'Writing Style', value: bv.writing_style || 'Conversational', icon: '✍️' },
-            { label: 'Target Audience', value: bv.target_audience || 'Not set', icon: '👥' },
+            { label: 'Tone Profile', value: escapeHtml(bv.tone_adjectives || 'Not configured'), icon: '🎯' },
+            { label: 'Writing Style', value: escapeHtml(bv.writing_style || 'Conversational'), icon: '✍️' },
+            { label: 'Target Audience', value: escapeHtml(bv.target_audience || 'Not set'), icon: '👥' },
             { label: 'Voice Version', value: bv.version ? 'v' + bv.version + '.0' : 'v1.0', icon: '🔄' }
           ].map(s => `<div style="background:var(--color-surface);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:20px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
@@ -8661,7 +8675,7 @@
         ${(() => {
           let fp = null;
           try { if (data.brand_voice?.visual_seed) fp = typeof data.brand_voice.visual_seed === 'string' ? JSON.parse(data.brand_voice.visual_seed) : data.brand_voice.visual_seed; } catch {}
-          const bv = data.brand_voice;
+          const bv = scrubBrandVoice(data.brand_voice);
           const prof = data.profile;
           const hasStyle = fp || bv || prof;
           return `
@@ -8714,17 +8728,17 @@
                 ${bv?.tone_adjectives ? `
                 <div>
                   <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-muted);margin-bottom:var(--space-2);font-weight:600;">Tone</div>
-                  <div style="font-size:var(--text-sm);color:var(--color-text);">${bv.tone_adjectives}</div>
+                  <div style="font-size:var(--text-sm);color:var(--color-text);">${escapeHtml(bv.tone_adjectives)}</div>
                 </div>` : ''}
                 ${bv?.writing_style ? `
                 <div>
                   <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-muted);margin-bottom:var(--space-2);font-weight:600;">Writing Style</div>
-                  <div style="font-size:var(--text-sm);color:var(--color-text);">${bv.writing_style}</div>
+                  <div style="font-size:var(--text-sm);color:var(--color-text);">${escapeHtml(bv.writing_style)}</div>
                 </div>` : ''}
                 ${bv?.target_audience ? `
                 <div>
                   <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--color-text-muted);margin-bottom:var(--space-2);font-weight:600;">Target Audience</div>
-                  <div style="font-size:var(--text-sm);color:var(--color-text);">${bv.target_audience}</div>
+                  <div style="font-size:var(--text-sm);color:var(--color-text);">${escapeHtml(bv.target_audience)}</div>
                 </div>` : ''}
               </div>
 
@@ -9136,7 +9150,7 @@
       const content = document.getElementById('dash-content');
       const c = clientData?.client || {};
       const prof = clientData?.profile || {};
-      const bv = clientData?.brand_voice || {};
+      const bv = scrubBrandVoice(clientData?.brand_voice) || {};
       const posts = clientData?.content || [];
       const pendingCount = posts.filter(p => ['Ready for Review','Draft','Pending'].includes(p.status)).length;
       const totalPosts = posts.length;
@@ -9684,7 +9698,7 @@
     function renderInbox() {
       const content = document.getElementById('dash-content');
       const c = clientData?.client || {};
-      const bv = clientData?.brand_voice || {};
+      const bv = scrubBrandVoice(clientData?.brand_voice) || {};
       const plats = Array.isArray(c.social_connected_platforms)
         ? c.social_connected_platforms.map(p => String(p || '').trim().toLowerCase())
         : String(c.social_connected_platforms || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -14370,7 +14384,7 @@
       let brandVoice = '';
       try {
         if (clientData && clientData.brand_voice) {
-          const bv = clientData.brand_voice;
+          const bv = scrubBrandVoice(clientData.brand_voice);
           brandVoice = 'Brand voice: ' + (bv.voice_summary || bv.tone || '') + '. ' + (bv.key_phrases ? 'Key phrases: ' + bv.key_phrases.join(', ') : '');
         }
       } catch(e) {}
