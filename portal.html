@@ -2586,6 +2586,11 @@
       </div>
       <form id="soc5-pw-form" novalidate>
         <div class="soc5-pw-field">
+          <label for="soc5-pw-current">Temporary password (from your welcome email)</label>
+          <input id="soc5-pw-current" name="current_password" type="password" autocomplete="current-password" maxlength="200" required aria-describedby="soc5-pw-current-err">
+          <div class="soc5-pw-err" id="soc5-pw-current-err" role="alert"></div>
+        </div>
+        <div class="soc5-pw-field">
           <label for="soc5-pw-new">New password</label>
           <input id="soc5-pw-new" name="new_password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required aria-describedby="soc5-pw-new-err">
           <div class="soc5-pw-err" id="soc5-pw-new-err" role="alert"></div>
@@ -4139,8 +4144,10 @@
         const form = document.getElementById('soc5-pw-form');
         if (!modal || !form) return reject(new Error('soc5-pw-modal markup missing'));
 
+        const currentInput = document.getElementById('soc5-pw-current');
         const newInput = document.getElementById('soc5-pw-new');
         const confirmInput = document.getElementById('soc5-pw-confirm');
+        const currentErr = document.getElementById('soc5-pw-current-err');
         const newErr = document.getElementById('soc5-pw-new-err');
         const confirmErr = document.getElementById('soc5-pw-confirm-err');
         const banner = document.getElementById('soc5-pw-banner');
@@ -4148,9 +4155,10 @@
         const submitText = submitBtn.querySelector('.soc5-pw-submit-text');
 
         modal.style.display = 'flex';
-        setTimeout(() => { try { newInput.focus(); } catch (_) {} }, 80);
+        setTimeout(() => { try { (currentInput || newInput).focus(); } catch (_) {} }, 80);
 
         function clearErrors() {
+          if (currentErr) currentErr.textContent = '';
           newErr.textContent = '';
           confirmErr.textContent = '';
           banner.textContent = '';
@@ -4160,9 +4168,20 @@
         async function onSubmit(e) {
           e.preventDefault();
           clearErrors();
+          const currentPw = currentInput ? currentInput.value : '';
           const newPw = newInput.value;
           const confirmPw = confirmInput.value;
 
+          if (currentInput && !currentPw) {
+            currentErr.textContent = 'Enter the temporary password from your welcome email.';
+            currentInput.focus();
+            return;
+          }
+          if (currentPw && newPw === currentPw) {
+            newErr.textContent = 'Choose a different password — that is the temporary one from your email.';
+            newInput.focus();
+            return;
+          }
           if (!newPw || newPw.length < 8) {
             newErr.textContent = 'Password must be at least 8 characters.';
             newInput.focus();
@@ -4190,7 +4209,7 @@
                 'x-client-email': clientEmail,
                 'x-client-hash': clientHash,
               },
-              body: JSON.stringify({ new_password: newPw }),
+              body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok || body.success !== true) {
@@ -4208,7 +4227,12 @@
               window.__clientHash = clientHash;
               try {
                 if (window.sessionStorage) sessionStorage.setItem('se_hash', clientHash);
-                if (window.localStorage) localStorage.setItem('se_hash', clientHash);
+                if (window.localStorage) {
+                  localStorage.setItem('se_hash', clientHash);
+                  // Auto-login reads se_saved_hash; without this the next page
+                  // load retried the stale temp-password hash and bounced to login.
+                  if (localStorage.getItem('se_saved_hash')) localStorage.setItem('se_saved_hash', clientHash);
+                }
               } catch (_) {}
             }
             if (clientData?.client) clientData.client.must_change_password = false;
@@ -8458,24 +8482,32 @@
 
     // ━━━ Password Change ━━━
     async function changePassword() {
+      const currentPw = document.getElementById('settings-current-pw')?.value || '';
       const newPw = document.getElementById('settings-new-pw').value;
       const confirmPw = document.getElementById('settings-confirm-pw').value;
       const status = document.getElementById('pw-change-status');
-      
+
+      if (!currentPw) { status.textContent = 'Enter your current password'; status.style.color = '#f44336'; return; }
       if (!newPw || newPw.length < 8) { status.textContent = 'Password must be at least 8 characters'; status.style.color = '#f44336'; return; }
       if (newPw !== confirmPw) { status.textContent = 'Passwords do not match'; status.style.color = '#f44336'; return; }
-      
+      if (newPw === currentPw) { status.textContent = 'New password must be different from the current one'; status.style.color = '#f44336'; return; }
+
       status.textContent = 'Updating...'; status.style.color = 'var(--color-text-muted)';
       try {
+        // The server requires the current password (not just the session
+        // hash) so a stolen hash cannot be used to lock the real owner out.
         const resp = await fetch(`${API}/api/change-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
-          body: JSON.stringify({ new_password: newPw })
+          body: JSON.stringify({ current_password: currentPw, new_password: newPw })
         });
         if (resp.ok) {
           status.textContent = 'Password updated — you\'re all set.'; status.style.color = '#7C3AED';
           // Update auth hash so session stays valid
           clientHash = await sha256(newPw);
+          window._seHash = clientHash; window.__clientHash = clientHash; window.clientHash = clientHash;
+          try { localStorage.setItem('se_saved_hash', clientHash); } catch (_) {}
+          const curEl = document.getElementById('settings-current-pw'); if (curEl) curEl.value = '';
           document.getElementById('settings-new-pw').value = '';
           document.getElementById('settings-confirm-pw').value = '';
         } else {
@@ -8626,10 +8658,14 @@
           </div>
           <div style="padding:22px 24px;">
             <div id="password-change-form">
+              <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:6px;">Current Password</label>
+                <input type="password" id="settings-current-pw" autocomplete="current-password" placeholder="Enter your current password" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.875rem;font-family:var(--font-body);outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
                 <div>
                   <label style="display:block;font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:6px;">New Password</label>
-                  <input type="password" id="settings-new-pw" placeholder="Enter new password" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.875rem;font-family:var(--font-body);outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
+                  <input type="password" id="settings-new-pw" autocomplete="new-password" placeholder="Enter new password" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.875rem;font-family:var(--font-body);outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'">
                 </div>
                 <div>
                   <label style="display:block;font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:6px;">Confirm Password</label>
