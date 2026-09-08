@@ -4,7 +4,8 @@
   "description": "SocialEngine website and golden-path portal end-to-end tests",
   "main": "app.js",
   "scripts": {
-    "test": "node --test '*.test.js' 'tests/*.test.js'",
+    "test": "node --test *.test.js tests/*.test.js",
+    "build": "node scripts/build-site.js dist",
     "test:e2e": "playwright test",
     "test:e2e:golden-path": "playwright test tests/e2e/golden-path.spec.js",
     "test:e2e:headed": "playwright test --headed"

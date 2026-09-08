@@ -1,0 +1,4 @@
+# Publish only the allowlist in scripts/build-site.js, never the repo root.
+[build]
+  command = "node scripts/build-site.js dist"
+  publish = "dist"

@@ -11,4 +11,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "OK - standard Actions token"
+      # Unit tests + Netlify publish-allowlist build test (Node built-ins only, no npm install needed)
+      - run: npm test
