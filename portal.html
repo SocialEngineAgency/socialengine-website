@@ -5106,8 +5106,8 @@
         mediaHTML = isReel
           ? `<div class="studio-card__empty-media" style="display:flex;flex-direction:column;gap:6px;">
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:28px;height:28px;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-               <span style="font-size:0.72rem;font-weight:600;">Video Draft</span>
-               <span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">Create video in Marketing Studio</span>
+               <span style="font-size:0.72rem;font-weight:600;">${['Generating','Regenerating'].includes(status) ? 'Crafting your video' : (status === 'QA Failed' ? 'Video failed' : 'Video Draft')}</span>
+               <span style="font-size:0.62rem;color:rgba(255,255,255,0.25);">${['Generating','Regenerating'].includes(status) ? 'Coach is rendering this reel — it will land on this card' : (status === 'QA Failed' ? 'Generation did not finish. Reject and retry, or ask Coach again.' : 'Create video in Marketing Studio')}</span>
              </div>`
           : `<div class="studio-card__empty-media"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg><span>Image pending</span></div>`;
       }
@@ -6882,7 +6882,7 @@
     function renderContentPage(data) {
       const content = document.getElementById('dash-content');
       const posts = data.content || [];
-      const pending = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
+      const pending = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
       const approved = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
       const rejected = posts.filter(p => p.status === 'Rejected');
       const published = posts.filter(p => /^published$/i.test(String(p.status || '')));
@@ -6967,7 +6967,7 @@
           let filtered;
           const allPosts = window._studioPosts || posts;
           if (f === 'all') filtered = allPosts;
-          else if (f === 'pending') filtered = allPosts.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
+          else if (f === 'pending') filtered = allPosts.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
           else if (f === 'approved') filtered = allPosts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
           else if (f === 'published') filtered = allPosts.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
           else if (f === 'video') filtered = allPosts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
@@ -7017,7 +7017,7 @@
             const active = document.querySelector('#studio-filters .studio-filter.active');
             const f = active?.dataset?.filter || 'all';
             let filtered = merged;
-            if (f === 'pending') filtered = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
+            if (f === 'pending') filtered = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
             else if (f === 'approved') filtered = merged.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
             else if (f === 'published') filtered = merged.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
             else if (f === 'video') filtered = merged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live);
@@ -7030,7 +7030,7 @@
             if (pubCount) pubCount.textContent = String(merged.filter(p => /^published$/i.test(String(p.status || '')) || p._live).length);
             const sub = document.querySelector('.studio-header__left p');
             if (sub) {
-              const pendN = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status)).length;
+              const pendN = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status)).length;
               const vidN = merged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live).length;
               sub.textContent = `${merged.length} pieces · ${pendN} need review · ${vidN} videos`;
             }
@@ -7096,7 +7096,7 @@
       const f = activeFilter?.dataset.filter || 'all';
       const posts = clientData?.content || [];
       let filtered = posts;
-      if (f === 'pending') filtered = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating'].includes(p.status));
+      if (f === 'pending') filtered = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
       else if (f === 'approved') filtered = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
       else if (f === 'published') filtered = posts.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
       else if (f === 'video') filtered = posts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
