@@ -55,10 +55,41 @@ if (missing.length) {
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
+// _headers serves *.js / *.css as `immutable, max-age=31536000`. A browser will
+// not re-check an immutable URL for a year, so the URL has to change whenever
+// the content does. Stamp every local JS/CSS reference in the published HTML
+// with ?v=<sha256 prefix of the file>. Source files in the repo are not touched.
+const crypto = require('node:crypto');
+const hashCache = new Map();
+function contentHash(file) {
+  if (!hashCache.has(file)) {
+    hashCache.set(file, crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, file))).digest('hex').slice(0, 10));
+  }
+  return hashCache.get(file);
+}
+const ASSET_REF = /((?:src|href)=")(\.?\/?)([A-Za-z0-9_./-]+\.(?:js|css))(?:\?[^"#]*)?(#[^"]*)?"/g;
+function versionAssetRefs(html) {
+  let stamped = 0;
+  const out = html.replace(ASSET_REF, (whole, attr, prefix, file, hash = '') => {
+    const rel = file.replace(/^\//, '');
+    if (!ALLOWLIST.includes(rel)) return whole; // not ours (or not published) — leave it
+    stamped++;
+    return `${attr}${prefix}${file}?v=${contentHash(rel)}${hash}"`;
+  });
+  return { out, stamped };
+}
+
+let stampedTotal = 0;
 for (const file of ALLOWLIST) {
   const dest = path.join(outDir, file);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.copyFileSync(path.join(ROOT, file), dest);
+  if (file.endsWith('.html')) {
+    const { out, stamped } = versionAssetRefs(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+    fs.writeFileSync(dest, out);
+    stampedTotal += stamped;
+  } else {
+    fs.copyFileSync(path.join(ROOT, file), dest);
+  }
 }
 
-console.log(`build-site: copied ${ALLOWLIST.length} files to ${outDir}`);
+console.log(`build-site: copied ${ALLOWLIST.length} files to ${outDir} (${stampedTotal} asset references versioned)`);

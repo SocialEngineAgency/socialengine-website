@@ -136,6 +136,41 @@ test('forbidden files are not published', () => {
   assert.deepEqual(leaked, [], `must not be published: ${leaked.join(', ')}`);
 });
 
+// _headers serves *.js and *.css as `immutable, max-age=31536000`. That is only
+// safe when the URL changes with the content, so the build must stamp every
+// local JS/CSS reference in the published HTML with a hash of the file it
+// points at. Without this, returning visitors kept a year-old app.js.
+test('published HTML references local JS/CSS with a content-hash version', () => {
+  const { outDir } = buildOnce();
+  const crypto = require('node:crypto');
+  const problems = [];
+  let checked = 0;
+  for (const rel of walk(outDir)) {
+    if (!rel.endsWith('.html')) continue;
+    const html = fs.readFileSync(path.join(outDir, rel), 'utf8');
+    const re = /(?:src|href)="(\.?\/?[A-Za-z0-9_./-]+\.(?:js|css))(?:\?([^"#]*))?(?:#[^"]*)?"/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      checked++;
+      const target = normalizeRef(m[1]);
+      const file = path.join(outDir, target);
+      if (!fs.existsSync(file)) continue; // covered by the missing-reference test
+      const expected = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 10);
+      const query = m[2] || '';
+      const v = new URLSearchParams(query).get('v');
+      if (v !== expected) problems.push(`${rel}: ${m[0]} (expected ?v=${expected})`);
+    }
+  }
+  assert.ok(checked > 0, 'no JS/CSS references found in built HTML; regex is probably broken');
+  assert.deepEqual(problems, [], `unversioned or stale asset references:\n  ${problems.join('\n  ')}`);
+});
+
+test('source HTML is left untouched by the build (versioning happens only in the output)', () => {
+  buildOnce();
+  const src = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.match(src, /src="\.\/app\.js"/, 'index.html in the repo must keep the plain reference');
+});
+
 test('_headers is published with the security header set and CSP stays report-only', () => {
   const { outDir } = buildOnce();
   const headersPath = path.join(outDir, '_headers');
