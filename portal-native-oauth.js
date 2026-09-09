@@ -84,15 +84,9 @@
   //   instagram -> /api/auth/instagram   (Meta Login)
   //   facebook  -> /api/auth/facebook    (Meta Login)
   //   tiktok    -> /api/auth/tiktok      (TikTok OAuth)
-  // These read `client_email` / `client_hash` query params and write the
-  // native analytics fields (meta_page_token, instagram_user_id, etc.).
-  function buildNativeOAuthUrl(apiBase, platform, email, hash) {
-    const target = normalizePlatform(platform);
-    const base = String(apiBase || '').replace(/\/+$/, '');
-    const emailParam = encodeURIComponent(String(email || ''));
-    const hashParam = encodeURIComponent(String(hash || ''));
-    return `${base}/api/auth/${encodeURIComponent(target)}?client_email=${emailParam}&client_hash=${hashParam}`;
-  }
+  // They are opened through window.seApi.startOAuth(platform), which fetches a
+  // one-time ?start= nonce from POST /api/auth/oauth-start; no credential is
+  // ever placed in a URL.
 
   function getPlatformConnectionState(platform, clientRecord, uploadPostSnapshot) {
     const target = normalizePlatform(platform);
@@ -153,7 +147,6 @@
 
   const api = {
     PLATFORM_META,
-    buildNativeOAuthUrl,
     getPlatformConnectionState,
     getNativeOAuthFailureMessage,
     isNativeConnected,

@@ -27,11 +27,11 @@
     return `<span style="color:${color}">${arrow} ${val}</span>`;
   }
 
+  // Session headers come from the portal (deps.seApi / window.seApi); this
+  // script never sees a credential.
   function authHeaders() {
-    return {
-      'x-client-email': _deps.email || global.__clientEmail || global.clientEmail || '',
-      'x-client-hash': _deps.hash || global.__clientHash || global.clientHash || '',
-    };
+    const api = _deps.seApi || global.seApi;
+    return (api && typeof api.headers === 'function') ? api.headers() : {};
   }
 
   function apiBase() {

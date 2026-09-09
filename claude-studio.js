@@ -23,20 +23,16 @@
   function apiBase() {
     return (typeof window.API !== 'undefined' && window.API) || window._seAPI || '';
   }
+  // Session headers come from the portal (window.seApi, set up in portal.html);
+  // this script never sees a credential.
+  function seHeaders() {
+    return (window.seApi && typeof window.seApi.headers === 'function') ? window.seApi.headers() : {};
+  }
   function authHeaders() {
-    const email = window.clientEmail || window.__clientEmail || '';
-    const hash = window.clientHash || window.__clientHash || '';
-    return {
-      'Content-Type': 'application/json',
-      'x-client-email': email,
-      'x-client-hash': hash,
-    };
+    return Object.assign({ 'Content-Type': 'application/json' }, seHeaders());
   }
   function authHeadersMultipart() {
-    return {
-      'x-client-email': window.clientEmail || window.__clientEmail || '',
-      'x-client-hash': window.clientHash || window.__clientHash || '',
-    };
+    return seHeaders();
   }
   function escapeHtml(str) {
     const d = document.createElement('div');
