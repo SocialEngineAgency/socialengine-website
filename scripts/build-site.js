@@ -18,6 +18,7 @@ const ALLOWLIST = [
   'admin.html',
   'privacy.html',
   'terms.html',
+  'deletion-status.html',
   // Styles (shared by index, portal, signup)
   'base.css',
   'style.css',
