@@ -8,7 +8,8 @@
     "build": "node scripts/build-site.js dist",
     "test:e2e": "playwright test",
     "test:e2e:golden-path": "playwright test tests/e2e/golden-path.spec.js",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:sessions": "playwright test tests/e2e/sessions.spec.js"
   },
   "repository": {
     "type": "git",

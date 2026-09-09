@@ -2882,11 +2882,100 @@
     if (togglePw) togglePw.addEventListener('click', () => { pwInput.type = pwInput.type === 'password' ? 'text' : 'password'; });
 
     // ━━━ Auth State ━━━
+    // clientToken is a server-issued session token (POST /api/auth/login). The
+    // portal never sees or stores a password hash any more.
     let clientEmail = '';
-    let clientHash = '';
+    let clientToken = '';
     let clientData = null;
     let nativeOAuthStatus = {};
     let _videoRegenSelectedByPost = {};
+
+    const SESSION_KEY = 'se_session';
+    const LEGACY_AUTH_KEYS = ['se_saved_hash', 'se_hash'];
+
+    function saveSession(token, email) {
+      try {
+        localStorage.setItem(SESSION_KEY, token);
+        localStorage.setItem('se_saved_email', email);
+        for (const k of LEGACY_AUTH_KEYS) { localStorage.removeItem(k); sessionStorage.removeItem(k); }
+      } catch (_) {}
+    }
+    function clearSession() {
+      clientToken = '';
+      try {
+        localStorage.removeItem(SESSION_KEY);
+        for (const k of LEGACY_AUTH_KEYS) { localStorage.removeItem(k); sessionStorage.removeItem(k); }
+      } catch (_) {}
+    }
+
+    // Auth headers for API calls. `extra` merges additional headers (Content-Type…).
+    function authHeaders(extra) {
+      const h = clientToken ? { Authorization: `Bearer ${clientToken}` } : {};
+      return extra ? Object.assign(h, extra) : h;
+    }
+
+    // fetch() with the session attached. A 401 whose body is exactly the
+    // middleware's { error: 'Unauthorized' } means the session is gone (expired,
+    // logged out elsewhere, password changed) → back to the login screen.
+    // Other 401s (wrong current password on change-password, wrong password on
+    // account delete) are left to the caller.
+    // Accepts an absolute URL or a path relative to the API origin.
+    let _sessionExpiredHandled = false;
+    async function apiFetch(url, init) {
+      const target = /^https?:\/\//i.test(url) ? url : `${API}${String(url || '').startsWith('/') ? '' : '/'}${url || ''}`;
+      const opts = Object.assign({}, init || {});
+      opts.headers = authHeaders(opts.headers);
+      const res = await fetch(target, opts);
+      if (res.status === 401 && clientToken) {
+        const body = await res.clone().json().catch(() => null);
+        if (body && body.error === 'Unauthorized') handleSessionExpired();
+      }
+      return res;
+    }
+
+    function handleSessionExpired() {
+      if (_sessionExpiredHandled || !clientToken) return;
+      _sessionExpiredHandled = true;
+      clearSession();
+      showLoginScreen();
+      if (typeof showToast === 'function') showToast('Your session has ended. Please sign in again.', 'info');
+      setTimeout(() => { _sessionExpiredHandled = false; }, 2000);
+    }
+
+    // Start an OAuth connect flow. The popup must be opened synchronously in the
+    // click handler (popup blockers), so open a blank window first, then point it
+    // at the one-time start URL from /api/auth/oauth-start. Returns the popup or
+    // null. With `popup: false` the current tab navigates instead.
+    async function startOAuth(platform, { engage, shop, popup = true, windowName = `${platform}_connect`, features = 'width=600,height=700,left=300,top=100' } = {}) {
+      const win = popup ? window.open('about:blank', windowName, features) : null;
+      if (popup && !win) return null;
+      try {
+        const res = await apiFetch(`${API}/api/auth/oauth-start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform, engage: engage === true, shop }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || !d.url) throw new Error(d.error || `Could not start ${platform} connection`);
+        if (win) win.location.href = d.url; else window.location.href = d.url;
+        return win || true;
+      } catch (e) {
+        if (win) win.close();
+        throw e;
+      }
+    }
+
+    // Studio / cockpit scripts live outside this closure. They get one object
+    // that knows how to authenticate, instead of raw credentials on window.
+    window.seApi = {
+      get email() { return clientEmail; },
+      headers: authHeaders,
+      fetch: apiFetch,
+      startOAuth,
+      get data() { return clientData; },
+    };
+    window.authHeaders = authHeaders;
+    window.apiFetch = apiFetch;
 
     function getNativeOAuthApi() {
       return window.SENativeOAuth || null;
@@ -3066,10 +3155,10 @@
     }
 
     async function refreshClientDataSnapshot() {
-      if (!clientEmail || !clientHash) return clientData;
+      if (!clientEmail || !clientToken) return clientData;
       try {
-        const fresh = await fetch(`${API}/api/client-data`, {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+        const fresh = await apiFetch(`${API}/api/client-data`, {
+          headers: authHeaders()
         });
         if (fresh.ok) clientData = await fresh.json();
       } catch { /* ignore */ }
@@ -3101,25 +3190,10 @@
       return connectViaUploadPost(target);
     }
 
-    /** Authenticated fetch to Railway API (same headers as client-data). */
-    function apiFetch(path, init = {}) {
-      if (!clientEmail || !clientHash) {
-        return Promise.reject(new Error('Not authenticated'));
-      }
-      const rel = (path || '').startsWith('/') ? path : `/${path}`;
-      const url = `${API}${rel}`;
-      const headers = {
-        'x-client-email': clientEmail,
-        'x-client-hash': clientHash,
-        ...(init.headers || {}),
-      };
-      return fetch(url, { ...init, headers });
-    }
-
     /** Full-page redirect to Shopify OAuth (used by Settings and onboarding). */
     let _shopifyOAuthInFlight = false;
     function redirectShopifyOAuth(domainRaw) {
-      if (!clientEmail || !clientHash) {
+      if (!clientEmail || !clientToken) {
         showToast('Please sign in again.', 'error');
         return;
       }
@@ -3139,8 +3213,12 @@
         goBtn.disabled = true;
         goBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Connecting...';
       }
-      const authUrl = `${API}/api/shopify/auth?email=${encodeURIComponent(clientEmail)}&hash=${encodeURIComponent(clientHash)}&shop=${encodeURIComponent(raw)}`;
-      window.location.href = authUrl;
+      // Same-tab redirect via a one-time nonce; the session token stays out of the URL.
+      startOAuth('shopify', { shop: raw, popup: false }).catch((err) => {
+        _shopifyOAuthInFlight = false;
+        if (goBtn) { goBtn.disabled = false; goBtn.textContent = 'Connect Shopify'; }
+        alert(err.message || 'Could not start Shopify connection. Check the store domain and try again.');
+      });
     }
 
     // ━━━ Onboarding (first video < 5 min) ━━━
@@ -3447,7 +3525,7 @@
           const r = await fetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postId: post.id, clientEmail, clientHash }),
+            body: JSON.stringify({ postId: post.id, clientEmail }),
           });
           await r.json().catch(() => ({}));
         } catch (_) {}
@@ -3979,7 +4057,7 @@
         const res = await fetch(`${API}/api/approve-post`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId, clientEmail, clientHash, editedCaption }),
+          body: JSON.stringify({ postId, clientEmail, editedCaption }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -4038,7 +4116,7 @@
         const res = await fetch(`${API}/api/approve-post`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId, clientEmail, clientHash }),
+          body: JSON.stringify({ postId, clientEmail }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -4083,7 +4161,7 @@
           await fetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postId: post.id, clientEmail, clientHash }),
+            body: JSON.stringify({ postId: post.id, clientEmail }),
           });
           post.status = 'Approved';
           approved++;
@@ -4096,8 +4174,8 @@
     // Fix 5: Sidebar credits updater
     async function updateSidebarCredits() {
       try {
-        const res = await fetch(`${API}/api/studio/credits`, {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+        const res = await apiFetch(`${API}/api/studio/credits`, {
+          headers: authHeaders()
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -4109,26 +4187,6 @@
       } catch {}
     }
 
-    async function sha256(str) {
-      try {
-        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-      } catch(e) {
-        return null;
-      }
-    }
-
-    async function magicLogin(email, password) {
-      const res = await fetch(`${API}/api/magic-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) return null;
-      const d = await res.json().catch(() => null);
-      if (!d?.success || !d?.hash) return null;
-      return d;
-    }
 
     /** SOC-5 Step 5: Forced first-login password rotation.
      *  Shows the modal, waits for a successful POST /api/change-password,
@@ -4205,13 +4263,9 @@
           submitText.textContent = 'Saving…';
 
           try {
-            const res = await fetch(`${API}/api/change-password`, {
+            const res = await apiFetch(`${API}/api/change-password`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-client-email': clientEmail,
-                'x-client-hash': clientHash,
-              },
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
               body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
             });
             const body = await res.json().catch(() => ({}));
@@ -4223,20 +4277,11 @@
               return;
             }
 
-            // Swap in-memory credentials so subsequent API calls use the new hash.
-            if (body.new_hash) {
-              clientHash = body.new_hash;
-              window._seHash = clientHash;
-              window.__clientHash = clientHash;
-              try {
-                if (window.sessionStorage) sessionStorage.setItem('se_hash', clientHash);
-                if (window.localStorage) {
-                  localStorage.setItem('se_hash', clientHash);
-                  // Auto-login reads se_saved_hash; without this the next page
-                  // load retried the stale temp-password hash and bounced to login.
-                  if (localStorage.getItem('se_saved_hash')) localStorage.setItem('se_saved_hash', clientHash);
-                }
-              } catch (_) {}
+            // A password change revokes every existing session; the response
+            // carries a fresh token for this one.
+            if (body.token) {
+              clientToken = body.token;
+              saveSession(clientToken, clientEmail);
             }
             if (clientData?.client) clientData.client.must_change_password = false;
 
@@ -4383,46 +4428,31 @@
         const pw = document.getElementById('login-password').value;
 
         try {
-          let hash = await sha256(pw);
-          let res = null;
-          if (hash) {
-            res = await fetch(`${API}/api/client-data`, {
-              headers: { 'x-client-email': email, 'x-client-hash': hash },
-            });
-          }
-          if (!res || !res.ok) {
-            const magic = await magicLogin(email, pw);
-            if (!magic) throw new Error('Auth failed');
-            hash = magic.hash;
-            res = await fetch(`${API}/api/client-data`, {
-              headers: { 'x-client-email': email, 'x-client-hash': hash },
-            });
-            if (!res.ok) throw new Error('Auth failed');
-          }
-          const data = await res.json();
+          // Server-side password check → session token. Same 401 for unknown
+          // email and wrong password, so the message below covers both.
+          const loginRes = await fetch(`${API}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pw }),
+          });
+          const login = await loginRes.json().catch(() => null);
+          if (loginRes.status === 429) throw Object.assign(new Error(login?.error || 'Too many attempts. Please wait a few minutes.'), { expose: true });
+          if (!loginRes.ok || !login?.token) throw new Error('Auth failed');
+          clientToken = login.token;
+          clientEmail = login.email || email;
+          saveSession(clientToken, clientEmail);
 
-          clientEmail = email;
-          clientHash = hash;
+          const res = await apiFetch(`${API}/api/client-data`);
+          if (!res.ok) { clearSession(); throw new Error('Auth failed'); }
+          const data = await res.json();
           clientData = data;
-          // Persist session so page refresh doesn't log out
-          try {
-            localStorage.setItem('se_saved_email', email);
-            localStorage.setItem('se_saved_hash', hash);
-          } catch (_) {}
           // Expose to window for components outside IIFE scope
           window._seAPI = API;
           window._seEmail = clientEmail;
-          window._seHash = clientHash;
-          // Creation Studio AI chat / upload auth (must be set before Studio opens)
           window.__clientEmail = clientEmail || data.email || data.fields?.Email || '';
-          window.__clientHash = clientHash || data.hash || data.fields?.Hash || '';
           window.__clientData = data;
           window.clientEmail = window.__clientEmail;
-          window.clientHash = window.__clientHash;
-          console.log('[auth] client data loaded', {
-            email: clientEmail || window.__clientEmail,
-            hasHash: !!(clientHash || window.__clientHash),
-          });
+          console.log('[auth] client data loaded', { email: clientEmail, sessionExpires: login.expires_at });
 
           // Show dashboard
           document.getElementById('portal-login-view').classList.add('hidden');
@@ -4466,8 +4496,8 @@
             const airtableWriteFailed = urlParams.get('airtable_error') === 'true';
             if (callbackEmail && clientData?.client?.contact_email && String(clientData.client.contact_email).trim().toLowerCase() === callbackEmail) {
               try {
-                const refreshed = await fetch(`${API}/api/client-data`, {
-                  headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                const refreshed = await apiFetch(`${API}/api/client-data`, {
+                  headers: authHeaders(),
                 });
                 if (refreshed.ok) clientData = await refreshed.json();
               } catch {}
@@ -4507,9 +4537,9 @@
                       retryBtn.disabled = true;
                       retryBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(252,165,165,0.4);border-top-color:#FCA5A5;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Retrying...';
                       try {
-                        const retryRes = await fetch(`${API}/api/onboard`, {
+                        const retryRes = await apiFetch(`${API}/api/onboard`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                          headers: authHeaders({ 'Content-Type': 'application/json' }),
                           body: JSON.stringify({ email: clientEmail, shopify_domain: shopName }),
                         });
                         const retryResult = await retryRes.json();
@@ -4597,25 +4627,26 @@
         } catch (err) {
           console.error('Login error:', err);
           loginBtn.classList.remove('loading');
+          const generic = 'Invalid credentials. Contact us at hello@socialengine.agency for help.';
+          loginError.textContent = err && err.expose ? err.message : generic;
           loginError.classList.add('visible');
         }
       });
     }
 
     // ━━━ Logout ━━━
-    document.getElementById('dash-logout')?.addEventListener('click', () => {
+    // Returns the UI to the login screen and forgets the session locally. Used
+    // by the logout button and by apiFetch when the server says the session is gone.
+    function showLoginScreen() {
       stopTierPolling();
       stopInboxPolling();
-      // Clear persisted session so auto-login doesn't re-authenticate
-      try { localStorage.removeItem('se_saved_email'); localStorage.removeItem('se_saved_hash'); } catch (_) {}
-      clientEmail = ''; clientHash = ''; clientData = null;
+      clearSession();
+      try { localStorage.removeItem('se_saved_email'); } catch (_) {}
+      clientEmail = ''; clientData = null;
       window.__clientEmail = '';
-      window.__clientHash = '';
       window.__clientData = null;
       window.clientEmail = '';
-      window.clientHash = '';
       window._seEmail = '';
-      window._seHash = '';
       document.getElementById('portal-login-view').classList.remove('hidden');
       document.getElementById('dashboard-view').classList.remove('active');
       document.body.classList.remove('portal-logged-in');
@@ -4626,32 +4657,41 @@
       document.getElementById('login-email').value = '';
       document.getElementById('login-password').value = '';
       window.scrollTo(0, 0);
+    }
+    document.getElementById('dash-logout')?.addEventListener('click', () => {
+      // Revoke server side first (logs out every device), then clear locally.
+      // If the request fails the token is still dropped here; it expires on its own.
+      const token = clientToken;
+      if (token) {
+        fetch(`${API}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {});
+      }
+      showLoginScreen();
     });
 
     // ━━━ Auto-login from persisted session ━━━
     (async function tryAutoLogin() {
       try {
+        // Pre-token builds stored a password hash under se_saved_hash. Those
+        // users sign in once more; the stale keys are dropped either way.
+        for (const k of LEGACY_AUTH_KEYS) { localStorage.removeItem(k); sessionStorage.removeItem(k); }
         const savedEmail = localStorage.getItem('se_saved_email');
-        const savedHash  = localStorage.getItem('se_saved_hash');
-        if (!savedEmail || !savedHash) return;
-        // Validate saved credentials are still good
-        const res = await fetch(`${API}/api/client-data`, {
-          headers: { 'x-client-email': savedEmail, 'x-client-hash': savedHash },
-        });
+        const savedToken = localStorage.getItem(SESSION_KEY);
+        if (!savedToken) return;
+        clientToken = savedToken;
+        // Validate the saved session and load the dashboard data in one call.
+        const res = await fetch(`${API}/api/client-data`, { headers: authHeaders() });
         if (!res.ok) {
-          localStorage.removeItem('se_saved_email');
-          localStorage.removeItem('se_saved_hash');
+          clearSession();
           return;
         }
         const data = await res.json();
-        clientEmail = savedEmail;
-        clientHash  = savedHash;
+        clientEmail = data?.client?.contact_email || data?.email || savedEmail || '';
         clientData  = data;
         window._seAPI = API;
-        window._seEmail = clientEmail; window._seHash = clientHash;
-        window.__clientEmail = clientEmail; window.__clientHash = clientHash;
+        window._seEmail = clientEmail;
+        window.__clientEmail = clientEmail;
         window.__clientData = data;
-        window.clientEmail = clientEmail; window.clientHash = clientHash;
+        window.clientEmail = clientEmail;
         document.getElementById('portal-login-view').classList.add('hidden');
         document.getElementById('dashboard-view').classList.add('active');
         document.body.classList.add('portal-logged-in');
@@ -4671,9 +4711,8 @@
         window.scrollTo(0, 0);
         setTimeout(() => { maybeOpenOnboardingAfterLogin(); }, 80);
       } catch (_) {
-        // Network error or bad saved creds — stay on login screen
-        localStorage.removeItem('se_saved_email');
-        localStorage.removeItem('se_saved_hash');
+        // Network error or bad saved session — stay on login screen
+        clearSession();
       }
     })();
 
@@ -4903,9 +4942,9 @@
       btn.innerHTML = '<span class="se-spinner" style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;"></span> Scanning competitors...';
       if (statusEl) statusEl.textContent = 'Pulling top posts from Instagram, TikTok, Facebook and X...';
       try {
-        const res = await fetch(`${API}/api/competitor-snipe/run`, {
+        const res = await apiFetch(`${API}/api/competitor-snipe/run`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
         });
         const d = await res.json().catch(() => ({}));
         if (d && d.success) {
@@ -5286,7 +5325,7 @@
           await fetch(`${API}/api/edit-caption`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postId, clientEmail, clientHash, caption: e.target.value }),
+            body: JSON.stringify({ postId, clientEmail, caption: e.target.value }),
           });
           // Subtle save indicator
           e.target.style.borderColor = '#4caf50';
@@ -5321,7 +5360,7 @@
         const res = await fetch(`${API}/api/reject-post`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId: rejectingPostId, clientEmail, clientHash, reason }),
+          body: JSON.stringify({ postId: rejectingPostId, clientEmail, reason }),
         });
         const data = await res.json();
         // Update the post in studioPostsList so modal + grid re-render correctly
@@ -5407,8 +5446,8 @@
           return;
         }
         try {
-          const res = await fetch(`${API}/api/client-data`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const res = await apiFetch(`${API}/api/client-data`, {
+            headers: authHeaders()
           });
           if (!res.ok) return;
           const freshData = await res.json();
@@ -5444,7 +5483,7 @@
         const res = await fetch(`${API}/api/regenerate-post-v2`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId: regenPostId, clientEmail, clientHash, direction }),
+          body: JSON.stringify({ postId: regenPostId, clientEmail, direction }),
         });
         const data = await res.json();
         // Update the post in the studio list so modal/grid reflect new status
@@ -5577,9 +5616,9 @@
       if (player) { player.pause(); }
 
       try {
-        const res = await fetch(`${API}/api/studio/regenerate-video`, {
+        const res = await apiFetch(`${API}/api/studio/regenerate-video`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             postId,
             productId: selected.productId || undefined,
@@ -5615,8 +5654,8 @@
           }
 
           try {
-            const statusRes = await fetch(`${API}/api/studio/video-status/${data.request_id}`, {
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            const statusRes = await apiFetch(`${API}/api/studio/video-status/${data.request_id}`, {
+              headers: authHeaders()
             });
             const statusData = await statusRes.json();
 
@@ -5714,7 +5753,7 @@
       }
       try { stopTierPolling(); stopInboxPolling(); } catch (_) {}
       try { Object.keys(localStorage).filter((k) => k.startsWith('se_')).forEach((k) => localStorage.removeItem(k)); } catch (_) {}
-      clientEmail = ''; clientHash = ''; clientData = null;
+      clientEmail = ''; clientToken = ''; clientData = null;
       const body = document.getElementById('delete-account-body');
       if (body) {
         const billing = data.billing === 'subscription cancelled' ? ' Your subscription has been cancelled.' : '';
@@ -5789,12 +5828,10 @@
     }
 
     async function pollEngageBadge(opts = {}) {
-      const email = window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '');
-      const hash = window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '');
-      if (!email || !hash) return;
+      if (!clientToken) return;
       try {
-        const res = await fetch(`${API}/api/inbox`, {
-          headers: { 'x-client-email': email, 'x-client-hash': hash },
+        const res = await apiFetch(`${API}/api/inbox`, {
+          headers: authHeaders(),
         });
         if (res.status === 401 || res.status === 403) { updateEngageBadge(0); return; }
         if (!res.ok) return;
@@ -5817,8 +5854,8 @@
 
     async function loadCannedResponses() {
       try {
-        const res = await fetch(`${API}/api/inbox/canned-responses`, {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        const res = await apiFetch(`${API}/api/inbox/canned-responses`, {
+          headers: authHeaders(),
         });
         if (!res.ok) { _cannedResponses = []; return; }
         const d = await res.json();
@@ -5870,11 +5907,12 @@
     // must_change_password differ from what we hold is the full /api/client-data
     // reloaded. Falls back to the full reload if the session endpoint is unavailable.
     async function pollSession() {
-      if (!clientEmail || !clientHash) return;
-      const headers = { 'x-client-email': clientEmail, 'x-client-hash': clientHash };
+      if (!clientToken) return;
       let changed = true;
-      const sres = await fetch(`${API}/api/auth/session`, { headers });
-      if (sres.status === 401) return; // credentials no longer valid; the next real request surfaces it
+      // apiFetch sends the user back to the login screen if the session is gone
+      // (expired, revoked by a logout elsewhere, or a password change).
+      const sres = await apiFetch(`${API}/api/auth/session`);
+      if (sres.status === 401) return;
       if (sres.ok) {
         const s = await sres.json();
         const cur = clientData?.client || {};
@@ -5884,7 +5922,7 @@
           || Boolean(c.must_change_password) !== Boolean(cur.must_change_password);
       }
       if (!changed) return;
-      const res = await fetch(`${API}/api/client-data`, { headers });
+      const res = await apiFetch(`${API}/api/client-data`);
       if (!res.ok) return;
       const freshData = await res.json();
       const wasGated = !clientData?.client?.is_paid;
@@ -6120,10 +6158,8 @@
         return window._unifiedVideoModels;
       }
       try {
-        const headers = {};
-        if (typeof clientEmail === 'string' && clientEmail) headers['x-client-email'] = clientEmail;
-        if (typeof clientHash === 'string' && clientHash) headers['x-client-hash'] = clientHash;
-        const resp = await fetch(`${API}/api/models?type=video`, { headers });
+        // Optional auth: with a session the catalog is tier-aware.
+        const resp = await apiFetch(`${API}/api/models?type=video`);
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
         const rows = (data.models || []).map(m => ({
@@ -6450,7 +6486,7 @@
       // Fetch live credits from API
       (async () => {
         try {
-          const res = await fetch(`${API}/api/studio/credits`, { headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash } });
+          const res = await apiFetch(`${API}/api/studio/credits`, { headers: authHeaders() });
           if (res.ok) {
             const d = await res.json();
             const liveCredits = typeof d.credits === 'number' ? d.credits : (d.credits_remaining ?? 0);
@@ -6702,8 +6738,8 @@
       try {
         const params = new URLSearchParams({ limit: '24', page: '1' });
         if (q) params.set('search', q);
-        const res = await fetch(`${API}/api/studio/products?${params}`, {
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        const res = await apiFetch(`${API}/api/studio/products?${params}`, {
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
         });
         const data = await res.json().catch(() => ({}));
         const products = Array.isArray(data.products) ? data.products : [];
@@ -6744,9 +6780,9 @@
       const formData = new FormData();
       formData.append('image', file);
       try {
-        const res = await fetch(`${API}/api/studio/upload-image`, {
+        const res = await apiFetch(`${API}/api/studio/upload-image`, {
           method: 'POST',
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders(),
           body: formData,
         });
         const data = await res.json();
@@ -6791,9 +6827,9 @@
         const enrichedPrompt = typeof buildStopScrollHookPrompt === 'function'
           ? buildStopScrollHookPrompt(basePrompt, getBrandDnaForClient())
           : basePrompt;
-        const res = await fetch(`${API}/api/studio/generate-video`, {
+        const res = await apiFetch(`${API}/api/studio/generate-video`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             imageUrl: vsUploadedImageUrl,
             productTitle: productName,
@@ -6859,8 +6895,8 @@
           return;
         }
         try {
-          const res = await fetch(`${API}/api/studio/video-status/${requestId}`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const res = await apiFetch(`${API}/api/studio/video-status/${requestId}`, {
+            headers: authHeaders()
           });
           const data = await res.json();
           if (data.status === 'completed' && data.video_url) {
@@ -6938,8 +6974,8 @@
 
     async function loadRecentGenerations() {
       try {
-        const res = await fetch(`${API}/api/studio/recent-videos`, {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+        const res = await apiFetch(`${API}/api/studio/recent-videos`, {
+          headers: authHeaders()
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -6982,9 +7018,7 @@
     function renderCreationStudio(data) {
       window.__clientData = data || window.__clientData || clientData;
       window.__clientEmail = clientEmail || window._seEmail || data?.email || data?.fields?.Email || '';
-      window.__clientHash = clientHash || window._seHash || data?.hash || data?.fields?.Hash || '';
       window.clientEmail = window.__clientEmail;
-      window.clientHash = window.__clientHash;
       window.API = typeof API !== 'undefined' ? API : window._seAPI;
       window._studioClientData = window.__clientData;
       if (typeof showToast === 'function') showToast('Studio is Video + Post now — canvas editor retired', 'info');
@@ -7095,8 +7129,7 @@
         (async () => {
           try {
             const hdrs = {
-              'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-              'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+              ...authHeaders(),
             };
             const histResp = await fetch(`${API}/api/calendar-history`, { headers: hdrs });
             if (!histResp.ok) return;
@@ -7240,7 +7273,7 @@
           ),
           api: typeof API !== 'undefined' ? API : (window.API || ''),
           email: typeof clientEmail !== 'undefined' ? clientEmail : (window.clientEmail || ''),
-          hash: typeof clientHash !== 'undefined' ? clientHash : (window.clientHash || ''),
+          seApi: window.seApi,
           lineChart: typeof growLineChart === 'function' ? growLineChart : null,
           connectIg: typeof connectInstagramOAuth === 'function' ? connectInstagramOAuth : window.connectInstagramOAuth,
           connectFb: typeof connectFacebookOAuth === 'function' ? connectFacebookOAuth : window.connectFacebookOAuth,
@@ -7395,8 +7428,8 @@
 
       let payload = null;
       try {
-        const res = await fetch(`${API}/api/client-analytics/grow?period=${growPeriod}${opts.refresh ? '&refresh=1' : ''}`, {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+        const res = await apiFetch(`${API}/api/client-analytics/grow?period=${growPeriod}${opts.refresh ? '&refresh=1' : ''}`, {
+          headers: authHeaders()
         });
         if (res.ok) payload = await res.json();
       } catch (e) { /* network */ }
@@ -7618,9 +7651,9 @@
       if (!area || !growLastPayload) return;
       area.innerHTML = '<div style="display:flex;align-items:center;gap:10px;color:var(--color-text-muted);font-size:0.82rem;padding:14px 0;"><div class="dash-loading__spinner" style="width:18px;height:18px;border-width:2px;"></div> Analyzing your metrics…</div>';
       try {
-        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+        const res = await apiFetch(`${API}/api/client-analytics/grow/ai`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ mode: 'insights', period: growPeriod, metrics: growLastPayload })
         });
         const d = await res.json();
@@ -7636,9 +7669,9 @@
       if (!growLastPayload) return;
       growModal('Growth strategy report', '<div style="display:flex;align-items:center;gap:10px;color:var(--color-text-muted);font-size:0.85rem;padding:20px 0;"><div class="dash-loading__spinner" style="width:20px;height:20px;border-width:2px;"></div> Writing your strategy report…</div>');
       try {
-        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+        const res = await apiFetch(`${API}/api/client-analytics/grow/ai`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ mode: 'strategy', period: growPeriod, metrics: growLastPayload })
         });
         const d = await res.json();
@@ -7695,9 +7728,9 @@
       const title = kind === 'why' ? 'Why did this underperform?' : 'Post analysis';
       growModal(title, '<div style="display:flex;align-items:center;gap:10px;color:var(--color-text-muted);font-size:0.85rem;padding:20px 0;"><div class="dash-loading__spinner" style="width:20px;height:20px;border-width:2px;"></div> Analyzing this post…</div>');
       try {
-        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+        const res = await apiFetch(`${API}/api/client-analytics/grow/ai`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ mode: 'post', period: growPeriod, post, metrics: growLastPayload })
         });
         const d = await res.json();
@@ -8461,9 +8494,9 @@
       btn.innerHTML = '<span style="display:inline-flex;gap:4px;align-items:center;"><span class="typing-dot" style="width:5px;height:5px;border-radius:50%;background:currentColor;opacity:0.6;animation:typingDot 1.4s ease-in-out infinite;"></span><span class="typing-dot" style="width:5px;height:5px;border-radius:50%;background:currentColor;opacity:0.6;animation:typingDot 1.4s ease-in-out 0.2s infinite;"></span><span class="typing-dot" style="width:5px;height:5px;border-radius:50%;background:currentColor;opacity:0.6;animation:typingDot 1.4s ease-in-out 0.4s infinite;"></span></span> Generating...';
 
       try {
-        const res = await fetch(API + '/api/chat/v2', {
+        const res = await apiFetch(API + '/api/chat/v2', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ message: msg })
         });
         if (!res.ok) throw new Error('API error');
@@ -8503,9 +8536,9 @@
       const feedbackInput = document.getElementById('vw-feedback-input');
       if (type === 'perfect') {
         // Send positive signal to backend
-        fetch(API + '/api/chat/v2', {
+        apiFetch(API + '/api/chat/v2', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ message: '[VOICE_FEEDBACK:POSITIVE] The client approved this copy as accurate to their brand voice: "' + vwLastOutput.substring(0, 200) + '"' })
         }).catch(() => {});
         // Show confirmation
@@ -8530,9 +8563,9 @@
       if (!text) return;
       // Send feedback to AI Coach — this trains the brand voice
       try {
-        await fetch(API + '/api/chat/v2', {
+        await apiFetch(API + '/api/chat/v2', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ message: '[VOICE_FEEDBACK:NEGATIVE] The client rejected this copy: "' + vwLastOutput.substring(0, 200) + '" — Their feedback: "' + text + '". Adjust the brand voice profile to incorporate this feedback.' })
         });
       } catch(e) {}
@@ -8552,9 +8585,9 @@
     // ━━━ Reschedule Post ━━━
     async function persistPostSchedule(postId, newDate, newTime) {
       if (!postId || !newDate) return false;
-      const resp = await fetch(`${API}/api/reschedule-post`, {
+      const resp = await apiFetch(`${API}/api/reschedule-post`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           post_id: postId,
           new_date: newDate,
@@ -8623,17 +8656,16 @@
       try {
         // The server requires the current password (not just the session
         // hash) so a stolen hash cannot be used to lock the real owner out.
-        const resp = await fetch(`${API}/api/change-password`, {
+        const resp = await apiFetch(`${API}/api/change-password`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ current_password: currentPw, new_password: newPw })
         });
         if (resp.ok) {
-          status.textContent = 'Password updated — you\'re all set.'; status.style.color = '#7C3AED';
-          // Update auth hash so session stays valid
-          clientHash = await sha256(newPw);
-          window._seHash = clientHash; window.__clientHash = clientHash; window.clientHash = clientHash;
-          try { localStorage.setItem('se_saved_hash', clientHash); } catch (_) {}
+          status.textContent = 'Password updated — other devices have been signed out.'; status.style.color = '#7C3AED';
+          // The change revoked every session; adopt the fresh token from the response.
+          const body = await resp.json().catch(() => ({}));
+          if (body.token) { clientToken = body.token; saveSession(clientToken, clientEmail); }
           const curEl = document.getElementById('settings-current-pw'); if (curEl) curEl.value = '';
           document.getElementById('settings-new-pw').value = '';
           document.getElementById('settings-confirm-pw').value = '';
@@ -8647,9 +8679,9 @@
     }
 
     function toggleNotifications(enabled) {
-      fetch(`${API}/api/notifications-preference`, {
+      apiFetch(`${API}/api/notifications-preference`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ enabled })
       }).catch(() => {});
       showToast(enabled ? 'Email notifications enabled' : 'Email notifications paused');
@@ -8661,9 +8693,9 @@
       if (track) track.style.background = enabled ? '#7C3AED' : 'rgba(255,255,255,0.1)';
       if (thumb) thumb.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
       try {
-        const resp = await fetch(`${API}/api/client/auto-caption`, {
+        const resp = await apiFetch(`${API}/api/client/auto-caption`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ enabled })
         });
         const data = await resp.json().catch(() => ({}));
@@ -9292,9 +9324,9 @@
         btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Connecting...';
         const idempotencyToken = generateIdempotencyToken();
         try {
-          const res = await fetch(`${API}/api/connect-shopify`, {
+          const res = await apiFetch(`${API}/api/connect-shopify`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ shopify_domain: domain, shopify_token: token, idempotency_token: idempotencyToken })
           });
           const result = await res.json();
@@ -9623,13 +9655,9 @@
         scrollToBottom();
 
         try {
-          const res = await fetch(`${API}/api/chat/v2`, {
+          const res = await apiFetch(`${API}/api/chat/v2`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-client-email': clientEmail,
-              'x-client-hash': clientHash
-            },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ message })
           });
 
@@ -9690,9 +9718,9 @@
                   product_name: btn.dataset.productName,
                   reason: btn.dataset.reason,
                 };
-                const r = await fetch(`${API}${endpoint}`, {
+                const r = await apiFetch(`${API}${endpoint}`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                  headers: authHeaders({ 'Content-Type': 'application/json' }),
                   body: JSON.stringify(body),
                 });
                 const d = await r.json().catch(() => ({}));
@@ -9772,7 +9800,7 @@
           let products = (window._seStudioCatalog || []);
           if (!products.length) {
             try {
-              const r = await fetch(`${API}/api/client-data`, { headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash } });
+              const r = await apiFetch(`${API}/api/client-data`, { headers: authHeaders() });
               const d = await r.json().catch(() => ({}));
               products = d?.catalog_products || [];
               window._seStudioCatalog = products;
@@ -9866,9 +9894,9 @@
           chatHistory = [];
           try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch(e) {}
           try {
-            await fetch(API + '/api/coach/clear-history', {
+            await apiFetch(API + '/api/coach/clear-history', {
               method: 'POST',
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+              headers: authHeaders()
             });
           } catch(e) {}
           renderAICoach();
@@ -9987,8 +10015,8 @@
           let data = prefetched;
           if (!data) {
             const qs = forceRefresh ? '?refresh=1' : '';
-            const res = await fetch(`${API}/api/inbox${qs}`, {
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            const res = await apiFetch(`${API}/api/inbox${qs}`, {
+              headers: authHeaders()
             });
             data = await res.json().catch(() => ({}));
             if (res.status === 403) {
@@ -10064,7 +10092,7 @@
           if (inboxPollInterval) { inboxPollInterval.stop(); inboxPollInterval = null; }
           if (data.connected) {
             inboxPollInterval = visiblePoller(() => {
-              if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
+              if (activeNav !== 'inbox' || !clientEmail || !clientToken) return;
               return loadInboxData(null, { forceRefresh: true });
             }, 25000);
           }
@@ -10127,9 +10155,9 @@
           const mode = activeMode?.dataset?.mode || 'draft';
           _saveBtn.textContent = 'Saving...';
           try {
-            await fetch(`${API}/api/inbox/settings`, {
+            await apiFetch(`${API}/api/inbox/settings`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
               body: JSON.stringify({ auto_reply_enabled: autoEnabled, auto_reply_mode: mode })
             });
             _saveBtn.textContent = 'Saved!';
@@ -10558,9 +10586,9 @@
             if (!textVal) { if (typeof showToast === 'function') showToast('Write a reply first', 'warning'); return; }
             btn.textContent = 'Saving…';
             try {
-              const res = await fetch(`${API}/api/inbox/canned-responses`, {
+              const res = await apiFetch(`${API}/api/inbox/canned-responses`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ label: textVal.slice(0, 30), text: textVal }),
               });
               const d = await res.json();
@@ -10586,9 +10614,9 @@
             btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:5px;"><span class="se-spinner" style="width:12px;height:12px;border:2px solid rgba(139,92,246,0.2);border-top-color:rgba(139,92,246,0.8);border-radius:50%;animation:spin 0.6s linear infinite;"></span> Generating...</span>';
             btn.disabled = true;
             try {
-              const res = await fetch(`${API}/api/inbox/generate-reply`, {
+              const res = await apiFetch(`${API}/api/inbox/generate-reply`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ message: item.text, username: item.username, type: item.type, postCaption: item.post_caption })
               });
               const result = await res.json().catch(() => ({}));
@@ -10628,9 +10656,9 @@
             btn.innerHTML = '<span class="se-spinner" style="width:12px;height:12px;border:2px solid rgba(10,22,40,0.3);border-top-color:#0A1628;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Sending...';
             btn.disabled = true;
             try {
-              const res = await fetch(`${API}/api/inbox/reply`, {
+              const res = await apiFetch(`${API}/api/inbox/reply`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                   itemId: item.id,
                   itemType: item.type,
@@ -10647,9 +10675,9 @@
                 const textArea = document.getElementById(`inbox-text-${idx}`);
                 const aiOriginal = textArea?.dataset?.aiGenerated;
                 if (aiOriginal && aiOriginal !== reply) {
-                  fetch(`${API}/api/inbox/reply-edited`, {
+                  apiFetch(`${API}/api/inbox/reply-edited`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ originalReply: aiOriginal, editedReply: reply, messageContext: { type: item.type, username: item.username } })
                   }).catch(() => {}); // Non-blocking
                 }
@@ -11384,14 +11412,9 @@
           }, 12000);
 
           const _seToken = localStorage.getItem('se_token') || '';
-          const res = await fetch(`${API}/api/competitor-intel`, {
+          const res = await apiFetch(`${API}/api/competitor-intel`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${_seToken}`,
-              'x-client-email': clientEmail,
-              'x-client-hash': clientHash
-            },
+            headers: authHeaders({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${_seToken}` }),
             body: JSON.stringify({ competitor_url: url, client_type: clientType }),
             signal: controller.signal
           });
@@ -11983,8 +12006,8 @@
       const tick = async () => {
         _shopifyPollCount++;
         try {
-          const r = await fetch(`${API}/api/shopify/connection-status`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          const r = await apiFetch(`${API}/api/shopify/connection-status`, {
+            headers: authHeaders(),
           });
           if (r.ok) {
             const s = await r.json();
@@ -12056,8 +12079,8 @@
       const tick = async () => {
         _socialPollCount++;
         try {
-          const r = await fetch(`${API}/api/social/connection-status`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          const r = await apiFetch(`${API}/api/social/connection-status`, {
+            headers: authHeaders(),
           });
           if (r.ok) {
             const s = await r.json().catch(() => ({}));
@@ -12068,8 +12091,8 @@
               // Refresh clientData so Settings, Inbox, Analytics views
               // all see the new connection state without a full reload.
               try {
-                const fresh = await fetch(`${API}/api/client-data`, {
-                  headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+                const fresh = await apiFetch(`${API}/api/client-data`, {
+                  headers: authHeaders(),
                 });
                 if (fresh.ok) clientData = await fresh.json();
               } catch { /* non-fatal */ }
@@ -12113,11 +12136,11 @@
     // flows continue to work unchanged — this is an additional,
     // simpler entry point for anywhere the app only cares about IG.
     async function connectInstagramViaSoc8() {
-      if (!clientEmail || !clientHash) { if (typeof showToast === 'function') showToast('Please log in first.'); return; }
+      if (!clientEmail || !clientToken) { if (typeof showToast === 'function') showToast('Please log in first.'); return; }
       try {
-        const r = await fetch(`${API}/api/social/connect/instagram`, {
+        const r = await apiFetch(`${API}/api/social/connect/instagram`, {
           method: 'POST',
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders(),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok || !data.ok || !data.connectUrl) {
@@ -12180,13 +12203,9 @@
       }
       let startResp;
       try {
-        const r = await fetch(`${API}/api/studio/generate-video-v2`, {
+        const r = await apiFetch(`${API}/api/studio/generate-video-v2`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-client-email': clientEmail,
-            'x-client-hash': clientHash,
-          },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(body),
         });
         const data = await r.json().catch(() => ({}));
@@ -12214,8 +12233,8 @@
         const timer = setInterval(async () => {
           polls++;
           try {
-            const r = await fetch(`${API}/api/studio/job/${encodeURIComponent(jobId)}`, {
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+            const r = await apiFetch(`${API}/api/studio/job/${encodeURIComponent(jobId)}`, {
+              headers: authHeaders(),
             });
             if (!r.ok) {
               if (r.status === 403 || r.status === 404) {
@@ -12252,11 +12271,11 @@
 
     /** Load first page of studio catalog after login so Content Studio regen has products without opening Marketing Studio first. */
     async function prefetchStudioCatalogSilently() {
-      if (!clientEmail || !clientHash) return;
+      if (!clientEmail || !clientToken) return;
       if (_vcProductsLoaded && Array.isArray(_vcShopifyProducts) && _vcShopifyProducts.length) return;
       try {
-        const res = await fetch(vcProductsApiUrl(1), {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        const res = await apiFetch(vcProductsApiUrl(1), {
+          headers: authHeaders(),
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -12332,8 +12351,8 @@
       if (!grid) return;
       grid.innerHTML = '<div class="vc-product-loading"><div class="vc-product-loading__spinner"></div><div style="font-size:0.75rem;color:rgba(255,255,255,0.3);font-family:var(--font-body,\'Satoshi\',sans-serif);">Loading your Shopify products...</div></div>';
       try {
-        const res = await fetch(vcProductsApiUrl(1), {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+        const res = await apiFetch(vcProductsApiUrl(1), {
+          headers: authHeaders()
         });
         if (!res.ok) throw new Error('API error');
         const data = await res.json();
@@ -12371,14 +12390,14 @@
       vcRenderProductPagination();
       const nextPage = _vcCatalogPage + 1;
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           vcProductsApiUrl(
             nextPage,
             _vcServerSearchActive ? _vcServerSearchQuery : '',
             _vcServerSearchActive ? _vcServerSearchCategory : ''
           ),
           {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          headers: authHeaders()
           }
         );
         if (!res.ok) throw new Error('API error');
@@ -12533,8 +12552,10 @@
             connectBtn.disabled = true;
             connectBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Redirecting to Shopify…';
           }
-          const authUrl = `${API}/api/shopify/auth?email=${encodeURIComponent(clientEmail)}&hash=${encodeURIComponent(clientHash)}&shop=${encodeURIComponent(raw)}`;
-          window.location.href = authUrl;
+          startOAuth('shopify', { shop: raw, popup: false }).catch((err) => {
+            if (connectBtn) { connectBtn.disabled = false; connectBtn.textContent = 'Connect Shopify'; }
+            showToast(err.message || 'Could not start Shopify connection', 'error');
+          });
         };
         connectBtn?.addEventListener('click', kickOff);
         domainInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') kickOff(); });
@@ -12619,8 +12640,8 @@
         _vcServerSearchCategory = cat;
 
         try {
-          const res = await fetch(vcProductsApiUrl(1, qRaw, cat), {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const res = await apiFetch(vcProductsApiUrl(1, qRaw, cat), {
+            headers: authHeaders()
           });
           if (!res.ok) throw new Error('search-api-error');
           const data = await res.json();
@@ -13057,9 +13078,9 @@
       if (progBar) progBar.style.width = '5%';
 
       try {
-        const res = await fetch(`${API}/api/studio/generate-video`, {
+        const res = await apiFetch(`${API}/api/studio/generate-video`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(reqBody)
         });
         const data = await res.json();
@@ -13116,8 +13137,8 @@
         if (progDetail) progDetail.textContent = remaining > 0 ? `About ${remaining} seconds left` : '';
 
         try {
-          const res = await fetch(`${API}/api/studio/video-status/${requestId}`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const res = await apiFetch(`${API}/api/studio/video-status/${requestId}`, {
+            headers: authHeaders()
           });
           const data = await res.json();
 
@@ -13219,7 +13240,7 @@
     // ━━━ CREDITS ━━━
     async function vcFetchCredits() {
       try {
-        const res = await fetch(`${API}/api/studio/credits`, { headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash } });
+        const res = await apiFetch(`${API}/api/studio/credits`, { headers: authHeaders() });
         if (res.ok) { const d = await res.json(); videoCredits = d.credits || 0; }
       } catch(e) { videoCredits = 0; }
       const numEl = document.getElementById('vc-credits-num');
@@ -13307,7 +13328,7 @@
       const r = await fetch(`${API}/api/social-disconnect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientEmail, clientHash, platform }),
+        body: JSON.stringify({ clientEmail, platform }),
       });
       const data = await r.json();
       if (data.success) {
@@ -13380,7 +13401,7 @@
     }
 
     async function connectViaUploadPost(platformLabel) {
-      if (!clientEmail || !clientHash) { showToast('Please log in first.'); return; }
+      if (!clientEmail || !clientToken) { showToast('Please log in first.'); return; }
       const w = 760, h = 780;
       const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
       const target = String(platformLabel || '').trim().toLowerCase();
@@ -13416,7 +13437,6 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             clientEmail,
-            clientHash,
             platforms: target ? [target] : ['instagram', 'facebook', 'tiktok'],
           })
         });
@@ -13457,8 +13477,8 @@
         // Refresh client-data and re-render settings.
         const refreshAfterConnect = async () => {
           try {
-            const fresh = await fetch(`${API}/api/client-data`, {
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            const fresh = await apiFetch(`${API}/api/client-data`, {
+              headers: authHeaders()
             });
             if (fresh.ok) clientData = await fresh.json();
           } catch { /* ignore */ }
@@ -13474,9 +13494,10 @@
 
           let nativePopup;
           try {
-            const nativeUrl = nativeOAuthApi.buildNativeOAuthUrl(API, target, clientEmail, clientHash);
             _seShowConnectBanner(`Publishing is connected. Finishing ${getNativePlatformLabel(target)} analytics permissions…`);
-            nativePopup = window.open(nativeUrl, `native_oauth_${target}`, `width=${w},height=${h},left=${left},top=${top},scrollbars=yes`);
+            // Follow-up popup after Upload-Post: not inside a click handler, so it
+            // may be blocked — handled below like the original window.open.
+            nativePopup = await startOAuth(target, { windowName: `native_oauth_${target}`, features: `width=${w},height=${h},left=${left},top=${top},scrollbars=yes` });
           } catch (err) {
             setNativeOAuthFailure(target, getNativeFailureMessage(target));
             rerenderCurrentPage();
@@ -13518,8 +13539,8 @@
         const poller = setInterval(async () => {
           attempts += 1;
           try {
-            const sr = await fetch(`${API}/api/social-accounts`, {
-              headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+            const sr = await apiFetch(`${API}/api/social-accounts`, {
+              headers: authHeaders()
             });
             if (!sr.ok) {
               // log but don't kill the poller on transient errors
@@ -13567,8 +13588,8 @@
             _seShowConnectBanner(`Checking ${platformLabel} connection status…`);
             // One quick probe now.
             try {
-              const sr = await fetch(`${API}/api/social-accounts`, {
-                headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+              const sr = await apiFetch(`${API}/api/social-accounts`, {
+                headers: authHeaders()
               });
               if (sr.ok) {
                 const snapshot = await sr.json().catch(() => ({}));
@@ -13591,16 +13612,19 @@
       }
     }
 
-    function connectInstagramOAuth(opts = {}) {
-      // Use native Meta OAuth if META_APP_ID is configured on the server,
-      // otherwise fall back to Upload-Post.
-      // Default engage=1 so Connect always requests the full App Review scope
-      // list (comments, DMs, ads, fundraisers) even when META_CONFIG_ID is set.
-      const email = encodeURIComponent(window.__clientEmail || clientEmail || '');
-      const hash  = encodeURIComponent(window.__clientHash  || clientHash || '');
-      const engage = opts.engage === false ? '' : '&engage=1';
-      const nativeUrl = `${API}/api/auth/instagram?client_email=${email}&client_hash=${hash}${engage}`;
-      const popup = window.open(nativeUrl, 'ig_connect', 'width=600,height=700,left=300,top=100');
+    async function connectInstagramOAuth(opts = {}) {
+      // Native Meta OAuth (server falls back to Upload-Post when META_APP_ID is
+      // unset). Default engage=1 so Connect always requests the full App Review
+      // scope list (comments, DMs, ads, fundraisers) even when META_CONFIG_ID is set.
+      // The popup is authorised by a one-time nonce from /api/auth/oauth-start;
+      // no credential travels in the URL.
+      let popup = null;
+      try {
+        popup = await startOAuth('instagram', { engage: opts.engage !== false, windowName: 'ig_connect' });
+      } catch (err) {
+        showToast(err.message || 'Could not start Instagram connection', 'error');
+        return;
+      }
       if (!popup) { connectViaUploadPost('instagram'); return; }
       const timer = setInterval(() => {
         if (popup.closed) {
@@ -13628,15 +13652,15 @@
       connectViaUploadPost('tiktok');
     }
 
-    function connectFacebookOAuth(opts = {}) {
-      // Use native Meta OAuth if META_APP_ID is configured on the server,
-      // otherwise fall back to Upload-Post.
-      // Default engage=1 — same full scope list as Instagram (App Review ready).
-      const email = encodeURIComponent(window.__clientEmail || clientEmail || '');
-      const hash  = encodeURIComponent(window.__clientHash  || clientHash || '');
-      const engage = opts.engage === false ? '' : '&engage=1';
-      const nativeUrl = `${API}/api/auth/facebook?client_email=${email}&client_hash=${hash}${engage}`;
-      const popup = window.open(nativeUrl, 'fb_connect', 'width=600,height=700,left=300,top=100');
+    async function connectFacebookOAuth(opts = {}) {
+      // Same flow as Instagram; default engage=1 (full App Review scope list).
+      let popup = null;
+      try {
+        popup = await startOAuth('facebook', { engage: opts.engage !== false, windowName: 'fb_connect' });
+      } catch (err) {
+        showToast(err.message || 'Could not start Facebook connection', 'error');
+        return;
+      }
       if (!popup) { connectViaUploadPost('facebook'); return; }
       const timer = setInterval(() => {
         if (popup.closed) {
@@ -13912,8 +13936,8 @@
         }
 
         try {
-          const res = await fetch(vcProductsApiUrl(1, query, ''), {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const res = await apiFetch(vcProductsApiUrl(1, query, ''), {
+            headers: authHeaders()
           });
           if (!res.ok) throw new Error('ad-search-api-error');
           const data = await res.json();
@@ -13949,9 +13973,9 @@
       adRenderUrlStatus();
 
       try {
-        const res = await fetch(`${API}/api/studio/product-from-url`, {
+        const res = await apiFetch(`${API}/api/studio/product-from-url`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ url: rawUrl }),
         });
         const data = await res.json().catch(() => ({}));
@@ -14350,13 +14374,11 @@
       }
       // Load products independently if not already loaded
       const _adAPI = window._seAPI || 'https://socialengine-api-production-18e0.up.railway.app';
-      const _adEmail = window._seEmail || '';
-      const _adHash = window._seHash || '';
       if (typeof _vcShopifyProducts === 'undefined' || !_vcShopifyProducts.length) {
         if (!window._adProductsLoading) {
           window._adProductsLoading = true;
-          fetch(`${_adAPI}/api/studio/products?limit=250&page=1`, {
-            headers: { 'x-client-email': _adEmail, 'x-client-hash': _adHash }
+          apiFetch(`${_adAPI}/api/studio/products?limit=250&page=1`, {
+            headers: authHeaders()
           }).then(r => r.json()).then(data => {
             _vcShopifyProducts = data.products || [];
             _vcShopifyCategories = data.categories || [];
@@ -14576,9 +14598,9 @@
         try {
           // Step 1: generate ad copy in parallel while video kicks off
           let adCopy = null;
-          const copyPromise = fetch(API + '/api/ai/generate-ad-copy', {
+          const copyPromise = apiFetch(API + '/api/ai/generate-ad-copy', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ product: _adSelectedProduct, format, platform: platform.name, tone: tone.prompt, brand_voice: brandVoice, custom_prompt: customPrompt })
           }).then(r => r.ok ? r.json() : null).catch(() => null);
 
@@ -14591,9 +14613,9 @@
           ].filter(Boolean).join('. ');
 
           // Step 3: kick off video generation
-          const vidRes = await fetch(API + '/api/studio/generate-video', {
+          const vidRes = await apiFetch(API + '/api/studio/generate-video', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               imageUrl: _adSelectedProduct.image,
               prompt: videoPrompt,
@@ -14637,9 +14659,9 @@
 
       try {
         // Generate ad copy via backend AI
-        const copyRes = await fetch(API + '/api/ai/generate-ad-copy', {
+        const copyRes = await apiFetch(API + '/api/ai/generate-ad-copy', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             product: _adSelectedProduct,
             format: format,
@@ -14793,8 +14815,8 @@
         await new Promise(r => setTimeout(r, 3000));
         polls++;
         try {
-          const r = await fetch(`${API}/api/studio/video-status/${requestId}`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const r = await apiFetch(`${API}/api/studio/video-status/${requestId}`, {
+            headers: authHeaders()
           });
           const d = await r.json().catch(() => ({}));
           const statusEl = document.getElementById('ad-video-status-text');
@@ -15063,9 +15085,9 @@
     // ━━━ DM/Comments Manager — Brand Voice Auto-Reply ━━━
     function generateAutoReply(messageText, senderName) {
       // Uses the chat/v2 endpoint with special instruction
-      return fetch(API + '/api/chat/v2', {
+      return apiFetch(API + '/api/chat/v2', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           message: '[AUTO_REPLY_DRAFT] Generate a brand-voice reply to this customer message. Be helpful, on-brand, and concise (under 50 words). Customer "' + senderName + '" says: "' + messageText + '"'
         })
@@ -15321,8 +15343,8 @@
       _hfImageProductLookupBusy = true;
       grid.innerHTML = `<div style="grid-column:1/-1;padding:18px 10px;text-align:center;color:rgba(255,255,255,0.35);font-size:0.72rem;">Loading product catalog…</div>`;
       try {
-        const res = await fetch(hfImageProductApiUrl(searchQuery), {
-          headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+        const res = await apiFetch(hfImageProductApiUrl(searchQuery), {
+          headers: authHeaders()
         });
         if (!res.ok) throw new Error(`catalog-${res.status}`);
         const data = await res.json();
@@ -15382,8 +15404,8 @@
       _hfUnifiedStatus = new Map();
       if (clientEmail) {
         try {
-          const resp = await fetch(`${API}/api/studio/features?clientEmail=${encodeURIComponent(clientEmail)}`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
+          const resp = await apiFetch(`${API}/api/studio/features`, {
+            headers: authHeaders()
           });
           const data = await resp.json();
           const featured = data?.features?.featured_tools || [];
@@ -15397,10 +15419,7 @@
       // COMING SOON / UPGRADE pills. Soft-fail — if the endpoint is down
       // we render the full catalog without status badges.
       try {
-        const headers = {};
-        if (clientEmail) headers['x-client-email'] = clientEmail;
-        if (typeof clientHash === 'string' && clientHash) headers['x-client-hash'] = clientHash;
-        const uResp = await fetch(`${API}/api/models`, { headers });
+        const uResp = await apiFetch(`${API}/api/models`);
         if (uResp.ok) {
           const uData = await uResp.json();
           for (const m of (uData.models || [])) {
@@ -15944,13 +15963,9 @@
             payload.productTitle = selectedProduct.title;
             payload.productImageUrl = selectedProduct.primary_image || '';
           }
-          resp = await fetch(`${API}/api/studio/ai-tools-generate-image`, {
+          resp = await apiFetch(`${API}/api/studio/ai-tools-generate-image`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-client-email': clientEmail,
-              'x-client-hash': clientHash
-            },
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(payload)
           });
         } else {
@@ -15974,9 +15989,9 @@
           if (style) fd.append('style', style);
           if (charName) fd.append('character_name', charName);
 
-          resp = await fetch(`${API}/api/studio/${endpoint}`, {
+          resp = await apiFetch(`${API}/api/studio/${endpoint}`, {
             method: 'POST',
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash },
+            headers: authHeaders(),
             body: fd
           });
         }
@@ -16266,8 +16281,6 @@
       const asset = Array.isArray(publishParams?.asset) ? publishParams.asset[0] : publishParams?.asset;
       if (!asset?.data) throw new Error('No asset data from Adobe Express.');
 
-      const email   = window.__clientEmail || '';
-      const hash    = window.__clientHash  || '';
       const apiBase = typeof API !== 'undefined' ? API : '';
 
       // Build the preview URL from whatever Adobe Express gave us:
@@ -16289,11 +16302,10 @@
       // We do NOT await success before updating the UI — the preview is
       // built from asset.data which we already have in memory.
       const postId = _adobePostData?.id || _adobePostData?.postId || null;
-      fetch(`${apiBase}/api/studio/save-express-design`, {
+      apiFetch(`${apiBase}/api/studio/save-express-design`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-email': email, 'x-client-hash': hash },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
-          email, hash,
           assetData:   asset.data,
           assetType:   asset.type     || 'image',
           dataType:    asset.dataType || 'base64',
@@ -16614,13 +16626,9 @@
     if (!postId || String(postId).startsWith('local-')) return;
     const platforms = _batchSelectedPlatformsCsv(item);
     try {
-      await fetch(`${API}/api/content/update-platforms`, {
+      await apiFetch(`${API}/api/content/update-platforms`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ postId, platforms }),
       });
       const hit = (_calPosts || []).find((p) => String(p.id || '') === String(postId));
@@ -17040,9 +17048,9 @@
     const btn = document.getElementById('bq-aibtn-' + idx);
     if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
     try {
-      const resp = await fetch(`${API}/api/studio/generate-caption`, {
+      const resp = await apiFetch(`${API}/api/studio/generate-caption`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-email': window.__clientEmail || '', 'x-client-hash': window.__clientHash || '' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ description: desc || 'Social media content', platform: item.platforms[0] || 'Instagram', tone: 'engaging', hashtag_count: 8 }),
       });
       const data = await resp.json();
@@ -17092,9 +17100,9 @@
       fd.append('scheduled_date', item.date);
       fd.append('scheduled_time', item.time || '09:00');
       fd.append('file', item.file, item.file.name);
-      const resp = await fetch(`${API}/api/studio/quick-schedule`, {
+      const resp = await apiFetch(`${API}/api/studio/quick-schedule`, {
         method: 'POST',
-        headers: { 'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail!=='undefined'?clientEmail:'') || '', 'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash!=='undefined'?clientHash:'') || '' },
+        headers: authHeaders(),
         body: fd,
       });
       const data = await resp.json();
@@ -17338,8 +17346,7 @@
     if (!opts.silent) el.innerHTML = '<div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div>';
     try {
       const hdrs = {
-        'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-        'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        ...authHeaders(),
       };
       const [cdResp, histResp] = await Promise.all([
         fetch(`${API}/api/client-data`,      { headers: hdrs }),
@@ -17679,13 +17686,9 @@
     const platHint = platformsOverride ? String(platformsOverride) : '';
     if (typeof showToast === 'function') showToast(platHint ? `Publishing to ${platHint}…` : 'Retrying publish…');
     try {
-      const resp = await fetch(`${API}/api/retry-publish`, {
+      const resp = await apiFetch(`${API}/api/retry-publish`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           postId,
           ...(platHint ? { platforms: platHint } : {}),
@@ -17743,13 +17746,9 @@
     if (!confirm(confirmMsg)) return;
     try {
       if (typeof showToast === 'function') showToast(both ? 'Deleting from Facebook & Instagram…' : `Deleting from ${platLabel}…`);
-      const resp = await fetch(`${API}/api/delete-social-post`, {
+      const resp = await apiFetch(`${API}/api/delete-social-post`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           postId,
           twinId: twinId || undefined,
@@ -17817,13 +17816,9 @@
     }
     if (!confirm('Delete this post from your queue? This can’t be undone.')) return;
     try {
-      const resp = await fetch(`${API}/api/delete-post`, {
+      const resp = await apiFetch(`${API}/api/delete-post`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-email': window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-          'x-client-hash': window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ postId }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -17939,13 +17934,9 @@
         views: post.views || 0,
         eng_rate: null,
       };
-      const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+      const res = await apiFetch(`${API}/api/client-analytics/grow/ai`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-          'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ mode: 'post', period: '30d', post: payload, metrics: { top_posts: [payload] } }),
       });
       const d = await res.json();
@@ -18025,13 +18016,9 @@
         comments: post.comments || 0,
         views: post.views || 0,
       };
-      const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+      const res = await apiFetch(`${API}/api/client-analytics/grow/ai`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-          'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-        },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ mode: 'remix', period: '30d', post: payload, metrics: {} }),
       });
       const d = await res.json();
@@ -18197,13 +18184,9 @@
       if (typeof window.persistPostSchedule === 'function') {
         await window.persistPostSchedule(post.id, dateStr, time);
       } else {
-        const resp = await fetch(`${API}/api/reschedule-post`, {
+        const resp = await apiFetch(`${API}/api/reschedule-post`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-client-email': window.__clientEmail || window.clientEmail || '',
-            'x-client-hash': window.__clientHash || window.clientHash || '',
-          },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ post_id: post.id, new_date: dateStr, new_time: time }),
         });
         if (!resp.ok) throw new Error('Failed to schedule');
@@ -18235,15 +18218,13 @@
       }
       return;
     }
-    const email = window.__clientEmail || window.clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '';
-    const hash = window.__clientHash || window.clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '';
     const btn = document.querySelector('#schedule-date-panel-content button[onclick*="submitQuickSchedule"]');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     const abortTimer = ac ? setTimeout(() => ac.abort(), 28000) : null;
     try {
       let resp;
-      const hdrs = { 'x-client-email': email, 'x-client-hash': hash };
+      const hdrs = { ...authHeaders() };
       if (file) {
         const fd = new FormData();
         fd.append('caption', caption);
@@ -18460,8 +18441,7 @@
     window._datePanelAuthHeaders = function() {
       return {
         'Content-Type': 'application/json',
-        'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-        'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
+        ...authHeaders(),
       };
     };
 
@@ -18610,13 +18590,9 @@
             engagement_rate: { value: null },
           },
         };
-        const res = await fetch(`${API}/api/client-analytics/grow/ai`, {
+        const res = await apiFetch(`${API}/api/client-analytics/grow/ai`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-client-email': window.__clientEmail || (typeof clientEmail !== 'undefined' ? clientEmail : '') || '',
-            'x-client-hash': window.__clientHash || (typeof clientHash !== 'undefined' ? clientHash : '') || '',
-          },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ mode: 'insights', period: '7d', metrics }),
         });
         const d = await res.json().catch(() => ({}));

@@ -40,18 +40,16 @@
   function apiBase() {
     return (typeof window.API !== 'undefined' && window.API) || window._seAPI || '';
   }
+  // Session headers come from the portal (window.seApi, set up in portal.html);
+  // this script never sees a credential.
+  function seHeaders() {
+    return (window.seApi && typeof window.seApi.headers === 'function') ? window.seApi.headers() : {};
+  }
   function authHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'x-client-email': window.clientEmail || window.__clientEmail || '',
-      'x-client-hash': window.clientHash || window.__clientHash || '',
-    };
+    return Object.assign({ 'Content-Type': 'application/json' }, seHeaders());
   }
   function authHeadersMultipart() {
-    return {
-      'x-client-email': window.clientEmail || window.__clientEmail || '',
-      'x-client-hash': window.clientHash || window.__clientHash || '',
-    };
+    return seHeaders();
   }
   function toast(msg, type) {
     if (typeof showToast === 'function') showToast(msg, type || 'info');
@@ -2265,7 +2263,6 @@
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
     window.__clientData = data || window.__clientData || window.clientData;
     window.__clientEmail = window.clientEmail || window.__clientEmail || '';
-    window.__clientHash = window.clientHash || window.__clientHash || '';
     window.API = typeof API !== 'undefined' ? API : window._seAPI;
 
     const remixSession = window.__SE_ANIM_REMIX_SESSION;

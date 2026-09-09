@@ -1,25 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const helpers = require('../portal-native-oauth.js');
 const {
-  buildNativeOAuthUrl,
   getPlatformConnectionState,
   getNativeOAuthFailureMessage,
   shouldStartNativeOAuth,
-} = require('../portal-native-oauth.js');
+} = helpers;
 
-test('buildNativeOAuthUrl targets the real native Meta route with auth params', () => {
-  const url = buildNativeOAuthUrl(
-    'https://api.socialengine.test',
-    'instagram',
-    'owner+brand@example.com',
-    'hash/with spaces'
-  );
-
-  assert.equal(
-    url,
-    'https://api.socialengine.test/api/auth/instagram?client_email=owner%2Bbrand%40example.com&client_hash=hash%2Fwith%20spaces'
-  );
+test('no helper builds an OAuth URL carrying credentials (starters go through /api/auth/oauth-start)', () => {
+  assert.equal('buildNativeOAuthUrl' in helpers, false);
+  const src = require('fs').readFileSync(require.resolve('../portal-native-oauth.js'), 'utf8');
+  assert.equal(/client_hash=/.test(src), false);
 });
 
 test('instagram publish-only connections are marked as analytics-limited', () => {
