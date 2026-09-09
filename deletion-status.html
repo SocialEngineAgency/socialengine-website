@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Data Deletion Status — SocialEngine</title>
+  <meta name="description" content="Status of a Facebook / Instagram data deletion request sent to SocialEngine.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #0A1628; --card: #111D30; --border: #1E2D45; --text: #E2E8F0; --muted: #94A3B8; --accent: #34D399; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; line-height: 1.7; min-height: 100vh; display: flex; flex-direction: column; }
+    header { border-bottom: 1px solid var(--border); }
+    .header-inner { max-width: 720px; margin: 0 auto; padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.6rem; }
+    .logo { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; }
+    .logo span span { color: var(--accent); }
+    main { flex: 1; max-width: 720px; width: 100%; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; }
+    .tag { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem; }
+    h1 { font-size: 1.6rem; line-height: 1.25; letter-spacing: -0.02em; margin-bottom: 1rem; }
+    p { color: var(--muted); margin-bottom: 1rem; }
+    .status { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; border-radius: 12px; background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.25); color: var(--text); margin: 1.25rem 0; }
+    .status svg { flex: 0 0 auto; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border); border-radius: 8px; padding: 0.15rem 0.5rem; color: var(--text); word-break: break-all; }
+    ul { color: var(--muted); padding-left: 1.25rem; margin-bottom: 1rem; }
+    li { margin-bottom: 0.4rem; }
+    a { color: var(--accent); }
+    footer { border-top: 1px solid var(--border); }
+    .footer-inner { max-width: 720px; margin: 0 auto; padding: 1.25rem 1.5rem; display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; font-size: 0.85rem; color: var(--muted); }
+    .footer-inner a { color: var(--muted); text-decoration: none; }
+    .footer-inner a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo" aria-label="SocialEngine Home">
+      <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#34D399" fill-opacity="0.15"/>
+        <circle cx="10" cy="16" r="3" fill="#34D399"/>
+        <circle cx="22" cy="9" r="3" fill="#34D399"/>
+        <circle cx="22" cy="23" r="3" fill="#34D399"/>
+        <line x1="13" y1="14.5" x2="19" y2="10.5" stroke="#34D399" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="13" y1="17.5" x2="19" y2="21.5" stroke="#34D399" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>Social<span>Engine</span></span>
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="tag">Data deletion</div>
+    <h1>Your Facebook / Instagram data deletion request</h1>
+    <p>You reached this page from Facebook or Instagram after removing the SocialEngine app or asking Meta to delete the data it shared with us.</p>
+
+    <div class="status" role="status">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      <div>
+        <strong>Completed.</strong> Deletion happens immediately when Meta notifies us; there is no queue.
+        <div id="code-line" hidden>Confirmation code: <span class="code" id="code"></span></div>
+      </div>
+    </div>
+
+    <p>What was removed from SocialEngine when the request arrived:</p>
+    <ul>
+      <li>Your Facebook user and Page access tokens and the Page they pointed at</li>
+      <li>Your Instagram business account id, username and token</li>
+      <li>Any Meta ad-account details you had linked</li>
+    </ul>
+    <p>Your SocialEngine account itself (email, generated content, brand voice) is separate from the Meta connection. To delete that too, sign in to the <a href="/portal.html">portal</a>, open Settings and choose <strong>Delete Account</strong>, or email <a href="mailto:hello@socialengine.agency">hello@socialengine.agency</a> quoting the confirmation code above.</p>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <a href="/">Home</a>
+    <a href="/privacy.html">Privacy Policy</a>
+    <a href="/terms.html">Terms of Service</a>
+    <a href="mailto:hello@socialengine.agency">Contact</a>
+  </div>
+</footer>
+
+<script>
+  // The code comes from the URL Meta sends the user to. Rendered as text, never HTML.
+  (function () {
+    var code = new URLSearchParams(location.search).get('code') || '';
+    code = code.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    if (!code) return;
+    document.getElementById('code').textContent = code;
+    document.getElementById('code-line').hidden = false;
+  })();
+</script>
+</body>
+</html>

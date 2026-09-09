@@ -5658,6 +5658,72 @@
     };
 
     // ━━━ Toast helper ━━━
+    // Settings → Delete Account. POST /api/account/delete re-checks the password and
+    // requires the literal word DELETE; on success the server has already removed the
+    // account, so the local session is cleared and the user is sent back to sign in.
+    function showDeleteAccountModal() {
+      const modal = document.getElementById('delete-account-modal');
+      if (!modal) return;
+      for (const id of ['delete-account-pw', 'delete-account-confirm']) { const el = document.getElementById(id); if (el) el.value = ''; }
+      const err = document.getElementById('delete-account-error'); if (err) err.textContent = '';
+      updateDeleteAccountButton();
+      modal.style.display = 'flex';
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      setTimeout(() => document.getElementById('delete-account-pw')?.focus(), 30);
+    }
+    function hideDeleteAccountModal() {
+      const modal = document.getElementById('delete-account-modal');
+      if (modal) modal.style.display = 'none';
+    }
+    function updateDeleteAccountButton() {
+      const pw = document.getElementById('delete-account-pw')?.value || '';
+      const confirm = document.getElementById('delete-account-confirm')?.value || '';
+      const btn = document.getElementById('delete-account-submit');
+      if (!btn) return;
+      const ready = pw.length > 0 && confirm === 'DELETE';
+      btn.disabled = !ready;
+      btn.style.opacity = ready ? '1' : '0.45';
+      btn.style.cursor = ready ? 'pointer' : 'not-allowed';
+    }
+    async function submitDeleteAccount() {
+      const btn = document.getElementById('delete-account-submit');
+      const err = document.getElementById('delete-account-error');
+      const pw = document.getElementById('delete-account-pw')?.value || '';
+      const confirm = document.getElementById('delete-account-confirm')?.value || '';
+      if (!btn || !pw || confirm !== 'DELETE') return;
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Deleting\u2026';
+      if (err) err.textContent = '';
+      let res, data = {};
+      try {
+        res = await apiFetch('/api/account/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw, confirm }),
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (_) {
+        if (err) err.textContent = 'Network error. Please check your connection and try again.';
+        btn.disabled = false; btn.textContent = label;
+        return;
+      }
+      if (!res.ok) {
+        if (err) err.textContent = data.error || ('Could not delete the account (HTTP ' + res.status + ').');
+        btn.disabled = false; btn.textContent = label;
+        return;
+      }
+      try { stopTierPolling(); stopInboxPolling(); } catch (_) {}
+      try { Object.keys(localStorage).filter((k) => k.startsWith('se_')).forEach((k) => localStorage.removeItem(k)); } catch (_) {}
+      clientEmail = ''; clientHash = ''; clientData = null;
+      const body = document.getElementById('delete-account-body');
+      if (body) {
+        const billing = data.billing === 'subscription cancelled' ? ' Your subscription has been cancelled.' : '';
+        body.innerHTML = '<p style="font-size:0.9rem;color:rgba(255,255,255,0.85);line-height:1.65;margin:0 0 18px;">Your account and its data have been deleted.' + billing + ' A confirmation email is on its way.</p>'
+          + '<a href="/portal.html" style="display:inline-flex;align-items:center;justify-content:center;width:100%;padding:11px;background:rgba(255,255,255,0.06);color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-weight:600;font-size:0.875rem;text-decoration:none;font-family:var(--font-body);box-sizing:border-box;">Back to sign in</a>';
+      }
+      setTimeout(() => window.location.replace('/portal.html'), 6000);
+    }
+
     function showCancellationModal() {
       const modal = document.getElementById('cancellation-modal');
       if (modal) {
@@ -9110,6 +9176,10 @@
                 <i data-lucide="x-circle" style="width:14px;height:14px;"></i>
                 Request Cancellation
               </button>
+              <button id="settings-delete-account-btn" onclick="showDeleteAccountModal()" style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;background:transparent;color:rgba(248,113,113,0.85);border:1px solid rgba(239,68,68,0.28);border-radius:10px;font-weight:600;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                Delete Account
+              </button>
 
               <!-- Cancellation Confirmation Modal -->
               <div id="cancellation-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
@@ -9126,6 +9196,30 @@
                     <button onclick="document.getElementById('cancellation-modal').style.display='none';showToast('Cancellation request submitted. We\u2019ll be in touch within 24 hours.');" style="flex:1;padding:11px;background:rgba(239,68,68,0.12);color:#EF4444;border:1px solid rgba(239,68,68,0.25);border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Confirm</button>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Delete Account Modal -->
+        <div id="delete-account-modal" role="dialog" aria-modal="true" aria-labelledby="delete-account-title" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
+          <div style="background:linear-gradient(135deg,#0f1a2e,#162237);border:1px solid rgba(239,68,68,0.22);border-radius:16px;padding:32px;max-width:460px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.5);">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+              <div style="width:42px;height:42px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i data-lucide="trash-2" style="width:20px;height:20px;color:#EF4444;"></i>
+              </div>
+              <h3 id="delete-account-title" style="font-family:var(--font-display);font-size:1.125rem;font-weight:700;color:#fff;margin:0;">Delete your account?</h3>
+            </div>
+            <div id="delete-account-body">
+              <p style="font-size:0.875rem;color:var(--color-text-muted);line-height:1.65;margin:0 0 18px;">This permanently deletes your account, all generated content, brand voice, inventory data and connected social accounts, and cancels any active subscription. <strong style="color:rgba(255,255,255,0.85);">This cannot be undone.</strong></p>
+              <label for="delete-account-pw" style="display:block;font-size:0.78rem;font-weight:600;color:rgba(148,163,184,0.85);margin:0 0 6px;">Your password</label>
+              <input type="password" id="delete-account-pw" autocomplete="current-password" oninput="updateDeleteAccountButton()" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#fff;font-size:0.9rem;font-family:var(--font-body);margin-bottom:14px;box-sizing:border-box;">
+              <label for="delete-account-confirm" style="display:block;font-size:0.78rem;font-weight:600;color:rgba(148,163,184,0.85);margin:0 0 6px;">Type <span style="font-family:var(--font-mono, monospace);color:#fff;">DELETE</span> to confirm</label>
+              <input type="text" id="delete-account-confirm" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="updateDeleteAccountButton()" style="width:100%;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#fff;font-size:0.9rem;font-family:var(--font-body);margin-bottom:10px;box-sizing:border-box;">
+              <p id="delete-account-error" role="alert" style="min-height:1.2em;font-size:0.8rem;color:#f87171;margin:0 0 14px;"></p>
+              <div style="display:flex;gap:10px;">
+                <button type="button" onclick="hideDeleteAccountModal()" style="flex:1;padding:11px;background:transparent;color:rgba(148,163,184,0.7);border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-weight:600;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Keep my account</button>
+                <button type="button" id="delete-account-submit" onclick="submitDeleteAccount()" disabled style="flex:1;padding:11px;background:#DC2626;color:#fff;border:1px solid rgba(239,68,68,0.5);border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Delete permanently</button>
               </div>
             </div>
           </div>
