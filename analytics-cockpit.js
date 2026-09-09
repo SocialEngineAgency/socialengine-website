@@ -249,7 +249,7 @@
       </div>` : '<div id="analytics-charts-panel" hidden></div>';
       main = `<div style="padding:28px 32px;flex:1;min-width:0">
         <div style="font-size:11px;letter-spacing:.08em;color:rgba(255,255,255,.4);margin-bottom:8px">${esc(bookLabel(_book, clientType)).toUpperCase()} · LAST ${_period.toUpperCase()}</div>
-        <h3 style="font-size:26px;font-weight:650;letter-spacing:-.03em;line-height:1.25;margin:0 0 8px;font-family:Newsreader,Georgia,serif;color:#fff">${esc(card.verdict || 'Proven posts in this book.')}</h3>
+        <h3 style="font-size:26px;font-weight:650;letter-spacing:-.03em;line-height:1.25;margin:0 0 8px;font-family:Georgia,'Times New Roman',serif;color:#fff">${esc(card.verdict || 'Proven posts in this book.')}</h3>
         <p style="color:rgba(255,255,255,.5);margin:0 0 22px;font-size:13px">Three moves. Ranked only on proven data.</p>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:22px">
           ${moveCard('analytics-scale', 'SCALE', '#4ADE80', '#166534', '#12261C', moves.scale[0])}

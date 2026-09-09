@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Client Portal — SocialEngine</title>
   <meta name="description" content="Sign in to your SocialEngine client portal. Manage your social media content, analytics, and brand voice all in one place.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,700;1,400&family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="./fonts/inter-latin-400-700-c9407645.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="./fonts/plus-jakarta-sans-latin-400-800-cd8db90c.woff2">
+  <link rel="stylesheet" href="./fonts.css">
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
@@ -2829,6 +2828,10 @@
     <div class="container">
       <div class="footer__bottom">
         <span>&copy; 2026 SocialEngine. All rights reserved.</span>
+        <nav aria-label="Legal" class="footer__legal">
+          <a href="/privacy.html">Privacy Policy</a>
+          <a href="/terms.html">Terms of Service</a>
+        </nav>
       </div>
     </div>
   </footer>
@@ -5663,12 +5666,38 @@
       }
     }
 
-    function showToast(msg) {
+    // showToast(msg, type): type is one of success | error | warning | info (default info).
+    // Uses the .toast styles in style.css; the container is a polite live region so
+    // screen readers announce the message without stealing focus.
+    const TOAST_ICONS = {
+      success: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
+      error:   '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>',
+      warning: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>',
+      info:    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+    };
+    function showToast(msg, type) {
+      const kind = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+      let host = document.getElementById('se-toast-host');
+      if (!host) {
+        host = document.createElement('div');
+        host.id = 'se-toast-host';
+        host.className = 'toast-container';
+        host.setAttribute('role', 'status');
+        host.setAttribute('aria-live', 'polite');
+        document.body.appendChild(host);
+      }
       const t = document.createElement('div');
-      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.5);transition:opacity .3s;';
-      t.textContent = msg;
-      document.body.appendChild(t);
-      setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+      t.className = `toast toast--${kind}`;
+      const icon = document.createElement('span');
+      icon.className = 'toast__icon';
+      icon.innerHTML = TOAST_ICONS[kind];
+      const text = document.createElement('span');
+      text.className = 'toast__text';
+      text.textContent = String(msg == null ? '' : msg);
+      t.append(icon, text);
+      host.appendChild(t);
+      const ttl = kind === 'error' ? 5000 : 3200;
+      setTimeout(() => { t.classList.add('toast--hiding'); setTimeout(() => t.remove(), 220); }, ttl);
     }
 
     // Onboarding flow removed per direct-access requirement.
@@ -5717,7 +5746,7 @@
     function startEngageBadgePoll() {
       if (_engageBadgePoll) return;
       pollEngageBadge();
-      _engageBadgePoll = setInterval(() => pollEngageBadge(), 5 * 60 * 1000);
+      _engageBadgePoll = visiblePoller(pollEngageBadge, 5 * 60 * 1000);
     }
 
     async function loadCannedResponses() {
@@ -5751,44 +5780,62 @@
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
     }
 
-    // ━━━ Tier Upgrade Polling (60s, paused while the tab is hidden) ━━━
-    // Silently re-fetches client data; if tier flips Free→paid, re-renders current page instantly
-    let tierPollInterval = null;
+    // ━━━ Session polling (60 s, only while the tab is visible) ━━━
+    // visiblePoller(fn, intervalMs): runs fn on the interval only while the tab is
+    // visible, and once immediately when the tab becomes visible again if the last
+    // run is older than half the interval. Returns { stop }.
+    function visiblePoller(fn, intervalMs) {
+      let last = 0, stopped = false, inflight = false;
+      const run = async () => {
+        if (stopped || inflight || document.hidden) return;
+        inflight = true; last = Date.now();
+        try { await fn(); } catch (_) { /* pollers are best-effort */ } finally { inflight = false; }
+      };
+      const id = setInterval(run, intervalMs);
+      const onVis = () => { if (!document.hidden && Date.now() - last > intervalMs / 2) run(); };
+      document.addEventListener('visibilitychange', onVis);
+      return { stop() { stopped = true; clearInterval(id); document.removeEventListener('visibilitychange', onVis); } };
+    }
+
+    let tierPoller = null;
     let inboxPollInterval = null;
     window._openInboxItemId = null; // keep Engage thread open across soft refreshes
+    // Polls the light /api/auth/session endpoint; only when tier / paid state /
+    // must_change_password differ from what we hold is the full /api/client-data
+    // reloaded. Falls back to the full reload if the session endpoint is unavailable.
+    async function pollSession() {
+      if (!clientEmail || !clientHash) return;
+      const headers = { 'x-client-email': clientEmail, 'x-client-hash': clientHash };
+      let changed = true;
+      const sres = await fetch(`${API}/api/auth/session`, { headers });
+      if (sres.status === 401) return; // credentials no longer valid; the next real request surfaces it
+      if (sres.ok) {
+        const s = await sres.json();
+        const cur = clientData?.client || {};
+        const c = s?.client || {};
+        changed = String(c.tier || '').toLowerCase() !== String(cur.tier || '').toLowerCase()
+          || Boolean(c.is_paid) !== Boolean(cur.is_paid)
+          || Boolean(c.must_change_password) !== Boolean(cur.must_change_password);
+      }
+      if (!changed) return;
+      const res = await fetch(`${API}/api/client-data`, { headers });
+      if (!res.ok) return;
+      const freshData = await res.json();
+      const wasGated = !clientData?.client?.is_paid;
+      const nowPaid = freshData?.client?.is_paid;
+      clientData = freshData;
+      rerenderCurrentPage();
+      if (wasGated && nowPaid) showToast('Upgrade unlocked — enjoy your full dashboard!', 'success');
+    }
     function startTierPolling() {
-      if (tierPollInterval) return;
-      tierPollInterval = setInterval(async () => {
-        if (!clientEmail || !clientHash) return;
-        if (document.hidden) return; // don't poll a tab nobody is looking at
-        try {
-          const res = await fetch(`${API}/api/client-data`, {
-            headers: { 'x-client-email': clientEmail, 'x-client-hash': clientHash }
-          });
-          if (!res.ok) return;
-          const freshData = await res.json();
-          const wasGated = !clientData?.client?.is_paid;
-          const nowPaid = freshData?.client?.is_paid;
-          clientData = freshData;
-          if (wasGated && nowPaid) {
-            // Tier just upgraded — re-render without logout
-            // Tier upgrade detected — refreshing portal
-            rerenderCurrentPage();
-            // Show brief toast notification
-            const toast = document.createElement('div');
-            toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,0.1);color:#fff;padding:12px 24px;border-radius:10px;font-weight:600;font-size:0.875rem;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);backdrop-filter:blur(12px);';
-            toast.textContent = '🎉 Upgrade unlocked — enjoy your full dashboard!';
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 5000);
-          }
-        } catch (e) { /* silent fail */ }
-      }, 60000);
+      if (tierPoller) return;
+      tierPoller = visiblePoller(pollSession, 60000);
     }
     function stopTierPolling() {
-      if (tierPollInterval) { clearInterval(tierPollInterval); tierPollInterval = null; }
+      if (tierPoller) { tierPoller.stop(); tierPoller = null; }
     }
     function stopInboxPolling() {
-      if (inboxPollInterval) { clearInterval(inboxPollInterval); inboxPollInterval = null; }
+      if (inboxPollInterval) { inboxPollInterval.stop(); inboxPollInterval = null; }
     }
 
     // ━━━ Page-aware greeting ━━━
@@ -5816,7 +5863,7 @@
         'fundraise': 'JustGiving + Meta fundraisers in one place'
       };
       const sub = pageSubtitles[page] || '';
-      el.innerHTML = `Good ${tod}, ${g.firstName}<div class="dash-topbar__subtitle">${sub}</div>`;
+      el.innerHTML = `Good ${tod}, ${escapeHtml(g.firstName)}<div class="dash-topbar__subtitle">${sub}</div>`;
     }
 
     // ━━━ Sidebar Nav ━━━
@@ -7147,7 +7194,7 @@
         content.innerHTML = `
           <div style="margin-bottom:var(--space-6);">
             <h2 style="font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;color:var(--color-text);margin:0 0 var(--space-1);">Analytics</h2>
-            <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin:0;">Meta growth analytics for ${data.client.business_name || 'your brand'} &mdash; <span style="color:rgba(255,200,50,0.7);font-weight:500;">connect Instagram &amp; Facebook to unlock live performance</span></p>
+            <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin:0;">Meta growth analytics for ${escapeHtml(data.client.business_name || 'your brand')} &mdash; <span style="color:rgba(255,200,50,0.7);font-weight:500;">connect Instagram &amp; Facebook to unlock live performance</span></p>
           </div>
           ${upgradeFullpageHTML(
             'trending-up',
@@ -7981,7 +8028,7 @@
               <p style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#7C3AED;margin:0 0 6px;">Brand Archetype</p>
               <h3 style="font-family:var(--font-display);font-size:2rem;font-weight:800;color:#fff;letter-spacing:-0.03em;margin:0 0 4px;">${profile.archetype}</h3>
               <p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 14px;font-weight:500;">${archInfo?.tagline || 'Your unique brand personality'}</p>
-              <p style="font-size:0.875rem;color:rgba(148,163,184,0.85);line-height:1.7;margin:0;max-width:580px;">${archInfo?.description || profile.voice_summary || 'Your AI writes in a tone that authentically matches this archetype.'}</p>
+              <p style="font-size:0.875rem;color:rgba(148,163,184,0.85);line-height:1.7;margin:0;max-width:580px;">${escapeHtml(archInfo?.description || profile.voice_summary || 'Your AI writes in a tone that authentically matches this archetype.')}</p>
             </div>
           </div>
         </div>` : ''}
@@ -8071,7 +8118,7 @@
           <div style="padding:24px;">
             <div style="position:relative;padding:20px 24px;background:rgba(124,58,237,0.03);border-left:3px solid #7C3AED;border-radius:0 12px 12px 0;">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="rgba(124,58,237,0.15)" style="position:absolute;top:12px;left:16px;"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V21z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 .001 0 .001 0 0z"/></svg>
-              <p style="font-size:0.9375rem;color:rgba(255,255,255,0.9);line-height:1.7;font-style:italic;margin:0;padding-left:12px;">"${bv.sample_caption}"</p>
+              <p style="font-size:0.9375rem;color:rgba(255,255,255,0.9);line-height:1.7;font-style:italic;margin:0;padding-left:12px;">"${escapeHtml(bv.sample_caption)}"</p>
             </div>
           </div>
         </div>` : ''}
@@ -8631,7 +8678,7 @@
           </div>
           <div style="padding:22px 24px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-              <div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:5px;">Business Name</div><div style="font-size:0.9rem;color:#fff;font-weight:500;">${c.business_name || '—'}</div></div>
+              <div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:5px;">Business Name</div><div style="font-size:0.9rem;color:#fff;font-weight:500;">${escapeHtml(c.business_name || '—')}</div></div>
               <div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:5px;">Contact</div><div style="font-size:0.9rem;color:#fff;font-weight:500;">${c.contact_name || '—'}</div></div>
               <div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:5px;">Email</div><div style="font-size:0.9rem;color:#fff;font-weight:500;">${c.contact_email || '—'}</div></div>
               <div><div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.55);margin-bottom:5px;">Website</div><div style="font-size:0.9rem;color:#fff;font-weight:500;">${c.website || '—'}</div></div>
@@ -9084,6 +9131,11 @@
           </div>
         </div>
 
+        <p style="margin:28px 0 0;font-size:0.78rem;color:rgba(148,163,184,0.6);text-align:center;">
+          <a href="/privacy.html" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;text-underline-offset:3px;">Privacy Policy</a>
+          <span aria-hidden="true" style="margin:0 10px;">·</span>
+          <a href="/terms.html" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;text-underline-offset:3px;">Terms of Service</a>
+        </p>
         </div>
       `;
 
@@ -9915,11 +9967,11 @@
             if (needReconnect) showToast(dbg.dm_info || 'Reconnect Meta to unlock Engage permissions.', 'warning');
           }
           // Auto-scrape every 25s while Engage is open
-          if (inboxPollInterval) { clearInterval(inboxPollInterval); inboxPollInterval = null; }
+          if (inboxPollInterval) { inboxPollInterval.stop(); inboxPollInterval = null; }
           if (data.connected) {
-            inboxPollInterval = setInterval(() => {
-              if (activeNav !== 'inbox' || !clientEmail || !clientHash || document.hidden) return;
-              loadInboxData(null, { forceRefresh: true }).catch(() => {});
+            inboxPollInterval = visiblePoller(() => {
+              if (activeNav !== 'inbox' || !clientEmail || !clientHash) return;
+              return loadInboxData(null, { forceRefresh: true });
             }, 25000);
           }
         } catch (e) {
@@ -10912,7 +10964,7 @@
             ${savedAnalyses.slice(0,5).map(a => `
               <button onclick="document.getElementById('ci-url').value='${a.url}';document.getElementById('ci-analyze-btn').click();" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.6);font-size:0.75rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                ${a.name || a.url.replace(/https?:\/\//, '').replace(/\/$/, '')}
+                ${escapeHtml(a.name || a.url.replace(/https?:\/\//, '').replace(/\/$/, ''))}
               </button>
             `).join('')}
           </div>
@@ -10945,7 +10997,7 @@
             ${CI_CONFIG.whatYouGet.map(item => `
               <div style="padding:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
                 <div style="width:36px;height:36px;border-radius:10px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#7C3AED;"><i data-lucide="${item.icon}" style="width:20px;height:20px;stroke:currentColor;fill:none;"></i></div>
-                <div style="font-size:0.8rem;font-weight:600;color:#fff;margin-bottom:4px;">${item.title}</div>
+                <div style="font-size:0.8rem;font-weight:600;color:#fff;margin-bottom:4px;">${escapeHtml(item.title)}</div>
                 <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);line-height:1.5;">${item.desc}</div>
               </div>
             `).join('')}
@@ -11011,7 +11063,7 @@
           <tr>
             <td style="display:flex;align-items:center;gap:12px;">
               ${p.image || p.images?.[0]?.src ? `<div style="width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);flex-shrink:0;background:#0a0a14;"><img src="${p.image || p.images?.[0]?.src}" alt="${p.title || p.name || ''}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:rgba(255,255,255,0.15);font-size:1rem;\'>📦</div>'"></div>` : `<div style="width:48px;height:48px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:rgba(255,255,255,0.15);font-size:1rem;">📦</div>`}
-              <span>${p.title || p.name || '—'}</span>
+              <span>${escapeHtml(p.title || p.name || '—')}</span>
             </td>
             <td style="font-weight:600;color:#fff;">${p.price != null ? '$' + p.price : '—'}</td>
             <td>${p.product_type || p.type || '—'}</td>
@@ -11064,7 +11116,7 @@
                 </svg>
                 <div class="ci-score-ring__number ci-score-ring__number--${compSc}">${compScore}</div>
               </div>
-              <div class="ci-score-card__sub">${r.competitor_name || 'Competitor'}</div>
+              <div class="ci-score-card__sub">${escapeHtml(r.competitor_name || 'Competitor')}</div>
             </div>
             <div class="ci-score-card ci-score-card--you">
               <div class="ci-score-card__label">Your Score</div>
@@ -11076,7 +11128,7 @@
                 </svg>
                 <div class="ci-score-ring__number ci-score-ring__number--${clientSc}">${clientScore}</div>
               </div>
-              <div class="ci-score-card__sub">${clientData?.client?.business_name || 'Your Store'}</div>
+              <div class="ci-score-card__sub">${escapeHtml(clientData?.client?.business_name || 'Your Store')}</div>
             </div>
           </div>
 
@@ -11103,7 +11155,7 @@
               <h3 class="ci-section__title">Pricing Comparison</h3>
             </div>
             <table class="ci-table">
-              <thead><tr><th>Metric</th><th>${r.competitor_name || 'Competitor'}</th><th>${clientData?.client?.business_name || 'You'}</th></tr></thead>
+              <thead><tr><th>Metric</th><th>${escapeHtml(r.competitor_name || 'Competitor')}</th><th>${escapeHtml(clientData?.client?.business_name || 'You')}</th></tr></thead>
               <tbody>
                 ${pricingRows || '<tr><td colspan="3" style="text-align:center;color:var(--color-text-faint);padding:16px">No pricing data available</td></tr>'}
                 <tr>
@@ -11174,7 +11226,7 @@
                   </div>
                   <div class="ci-idea-card__concept">${idea.concept || ''}</div>
                   ${idea.hook ? `<div class="ci-idea-card__hook">"${idea.hook}"</div>` : ''}
-                  <div class="ci-idea-card__desc">${idea.description || ''}</div>
+                  <div class="ci-idea-card__desc">${escapeHtml(idea.description || '')}</div>
                   ${idea.why_it_works ? `<div class="ci-idea-card__why"><strong>Why it works:</strong> ${idea.why_it_works}</div>` : ''}
                   ${idea.niche_reference ? `<div class="ci-idea-card__ref">Ref: ${idea.niche_reference}</div>` : ''}
                 </div>`;
@@ -14615,11 +14667,11 @@
             </div>
             <div class="ad-copy-field">
               <label>Description / Link Description</label>
-              <textarea id="ad-out-desc" rows="2">${copy.description || ''}</textarea>
+              <textarea id="ad-out-desc" rows="2">${escapeHtml(copy.description || '')}</textarea>
             </div>
             <div class="ad-copy-field">
               <label>Hashtags</label>
-              <textarea id="ad-out-hashtags" rows="1">${copy.hashtags || ''}</textarea>
+              <textarea id="ad-out-hashtags" rows="1">${escapeHtml(copy.hashtags || '')}</textarea>
             </div>
           </div>
         </div>
@@ -14727,11 +14779,11 @@
             </div>
             <div class="ad-copy-field">
               <label>Description / Link Description</label>
-              <textarea id="ad-out-desc" rows="2">${copy.description || ''}</textarea>
+              <textarea id="ad-out-desc" rows="2">${escapeHtml(copy.description || '')}</textarea>
             </div>
             <div class="ad-copy-field">
               <label>Hashtags</label>
-              <textarea id="ad-out-hashtags" rows="1">${copy.hashtags || ''}</textarea>
+              <textarea id="ad-out-hashtags" rows="1">${escapeHtml(copy.hashtags || '')}</textarea>
             </div>
           </div>
         </div>
@@ -15349,7 +15401,7 @@
       `;
       } catch(e) {
         console.error('[SE] renderAIStudio error:', e);
-        content.innerHTML = `<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.5);"><p>AI Studio failed to load. Please refresh the page.</p><pre style="font-size:0.7rem;color:rgba(255,0,0,0.5);margin-top:10px;">${e.message}</pre></div>`;
+        content.innerHTML = `<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.5);"><p>AI Studio failed to load. Please refresh the page.</p><pre style="font-size:0.7rem;color:rgba(255,0,0,0.5);margin-top:10px;">${escapeHtml(e.message)}</pre></div>`;
       }
     }
 
@@ -15877,7 +15929,7 @@
         resultArea.innerHTML = `
           <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:20px;text-align:center;">
             <div style="font-size:0.85rem;color:rgba(249,115,22,0.8);margin-bottom:12px;">Generation failed — please try again or check your inputs.</div>
-            <div style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin-bottom:16px;">${err.message}</div>
+            <div style="font-size:0.73rem;color:rgba(255,255,255,0.3);margin-bottom:16px;">${escapeHtml(err.message)}</div>
             <button onclick="hfResetModal()" style="padding:9px 20px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.2);border-radius:9px;color:#7C3AED;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Try Again</button>
           </div>`;
       }
@@ -17215,7 +17267,7 @@
       window._calReadyPosts = _calReadyPosts;
       _calHistoryPosts = _filterHiddenSocial(histData.posts || []);
     } catch (e) {
-      el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${e.message}</div>`;
+      el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${escapeHtml(e.message)}</div>`;
       return;
     }
     _renderCalendar();
@@ -17341,7 +17393,7 @@
                  cursor:pointer;transition:opacity 0.12s;"
           onmouseover="this.style.opacity='0.75'" onmouseout="this.style.opacity='1'">
           <span style="font-size:0.6rem;flex-shrink:0;">${icon}</span>
-          <span style="font-size:0.62rem;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">${text || 'No caption'}</span>
+          <span style="font-size:0.62rem;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75px;">${escapeHtml(text || 'No caption')}</span>
         </div>`;
       }).join('');
 

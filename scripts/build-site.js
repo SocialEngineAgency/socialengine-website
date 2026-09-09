@@ -21,6 +21,12 @@ const ALLOWLIST = [
   // Styles (shared by index, portal, signup)
   'base.css',
   'style.css',
+  // Self-hosted fonts (portal.html). Filenames are content-hashed; see fonts.css.
+  'fonts.css',
+  'fonts/inter-latin-400-700-c9407645.woff2',
+  'fonts/inter-latin-ext-400-700-a28eb6d3.woff2',
+  'fonts/plus-jakarta-sans-latin-400-800-cd8db90c.woff2',
+  'fonts/plus-jakarta-sans-latin-ext-400-800-0303e02b.woff2',
   // Scripts
   'app.js', // index.html
   'portal-native-oauth.js', // portal.html
