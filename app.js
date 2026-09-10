@@ -375,8 +375,9 @@ function generateIdempotencyToken() {
     const scoreColor = score >= 65 ? '#7C3AED' : score >= 40 ? '#FF6B35' : '#EF4444';
     const circumference = 2 * Math.PI * 54;
     const offset = circumference - (score / 100) * circumference;
-    const portalEmail = data.portal_access?.email || '';
-    const portalPassword = data.portal_access?.password || '';
+    // The API never returns the temp password (it is emailed); the email is
+    // interpolated into markup and an onclick attribute, so keep it to safe chars.
+    const portalEmail = String(data.portal_access?.email || '').replace(/[^\w.@+-]/g, '');
     const postCount = (audit.sample_posts || []).length;
     const strength = (audit.strengths || [])[0] || '';
     const weakness = (audit.weaknesses || [])[0] || '';
@@ -442,7 +443,7 @@ function generateIdempotencyToken() {
           <a href="/portal.html" onclick="localStorage.setItem('se_prefill_email','${portalEmail}')" class="btn btn--primary" style="width:100%;text-align:center;display:block;padding:14px;border-radius:10px;font-size:0.95rem;font-weight:700;text-decoration:none;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff;border:1px solid #7C3AED;box-shadow:0 8px 24px -8px rgba(124,58,237,0.45);">
             Open Your Free Portal &#8594;
           </a>
-          ${portalEmail ? `<p style="font-size:0.72rem;color:#64748B;text-align:center;margin:10px 0 0;">Login: <strong style="color:#94A3B8;">${portalEmail}</strong> &nbsp;&bull;&nbsp; Password: <strong style="color:#94A3B8;">${portalPassword || 'sent to your email'}</strong></p>` : ''}
+          ${portalEmail ? `<p style="font-size:0.72rem;color:#64748B;text-align:center;margin:10px 0 0;">Login: <strong style="color:#94A3B8;">${portalEmail}</strong> &nbsp;&bull;&nbsp; Password: <strong style="color:#94A3B8;">sent to your email</strong></p>` : ''}
         </div>
 
         <!-- Upgrade CTA: below free portal, above revenue teaser -->
