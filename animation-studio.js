@@ -13,6 +13,7 @@
   let _captionStudioOpen = false;
   let _captionPreviewRaf = 0;
   let _recentLoading = false;
+  let _library = [];
   let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
   let _pendingFormatTemplateId = null;
   const REF_ROLES = [
@@ -892,6 +893,49 @@
     return views.every((v) => !v.url || /\/api\/media\/[a-f0-9]+/i.test(String(v.url)));
   }
 
+  function assetHelpers() {
+    return window.SEAssets || {
+      filterKind: (list, kind) => (list || []).filter((a) => a && a.kind === kind),
+      labelOf: (a) => (a && a.name) || (a && a.kind) || 'Asset',
+      selectedId: (list, url) => ((list || []).find((a) => a && a.url === url) || {}).id || '',
+      selectedUrl: (list, id) => ((list || []).find((a) => a && a.id === id) || {}).url || '',
+      acceptFor: (kind) => (kind === 'music' ? 'audio/*,video/*' : kind === 'logo' ? 'image/*' : 'video/*'),
+    };
+  }
+
+  async function refreshLibrary({ silent } = {}) {
+    try {
+      const data = await animFetch('/api/assets');
+      _library = Array.isArray(data.assets) ? data.assets : [];
+    } catch (e) {
+      if (!silent) toast(e.message || 'Could not load the library', 'error', e.request_id);
+    }
+  }
+
+  function renderSavedPicker(kind, selectedUrl) {
+    const helpers = assetHelpers();
+    const list = helpers.filterKind(_library, kind);
+    const sel = helpers.selectedId(list, selectedUrl);
+    const heading = kind === 'music' ? 'Saved music' : 'Saved outros';
+    const preview = selectedUrl
+      ? (kind === 'music'
+        ? `<audio class="anim-lib-preview" id="anim-${kind}-preview" src="${esc(mediaSrc(selectedUrl))}" controls preload="metadata" style="height:28px;max-width:180px;"></audio>`
+        : `<video class="anim-lib-preview" id="anim-${kind}-preview" src="${esc(mediaSrc(selectedUrl))}" muted preload="metadata" style="width:64px;height:36px;object-fit:cover;border-radius:6px;background:#000;" title="Preview"></video>`)
+      : '';
+    return `
+      <label class="anim-lib" style="display:flex;align-items:center;gap:8px;font-size:0.68rem;color:rgba(255,255,255,0.72);">
+        ${heading}
+        <select id="anim-${kind}-pick" class="anim-select" style="width:auto;min-width:120px;font-size:0.68rem;" title="${esc(selectedUrl || heading)}">
+          <option value="">None</option>
+          ${list.map((a) => `<option value="${esc(a.id)}" ${a.id === sel ? 'selected' : ''} title="${esc(a.url || '')}">${esc(helpers.labelOf(a))}</option>`).join('')}
+        </select>
+      </label>
+      ${preview}
+      <input type="file" id="anim-${kind}-file" accept="${esc(helpers.acceptFor(kind))}" hidden />
+      <button type="button" class="anim-btn anim-btn--ghost" id="anim-${kind}-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">Upload new</button>
+    `;
+  }
+
   async function refreshRecent({ silent } = {}) {
     _recentLoading = true;
     try {
@@ -1251,10 +1295,8 @@
                 }).join('')}
               </select>
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
-              <input type="file" id="anim-music-file" accept="audio/*,video/*" hidden />
-              <input type="file" id="anim-outro-file" accept="video/*" hidden />
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.music_bed_url ? 'Music ✓' : 'Upload music'}</button>
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.outro_url ? 'Outro ✓' : 'Upload outro'}</button>
+              ${renderSavedPicker('music', p.music_bed_url)}
+              ${renderSavedPicker('outro', p.outro_url)}
               ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
               ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
             </div>
@@ -1438,6 +1480,18 @@
       const file = e.target.files?.[0];
       if (file) await uploadProjectAsset(file, 'outro');
       e.target.value = '';
+    });
+    document.getElementById('anim-music-pick')?.addEventListener('change', async (e) => {
+      await applyLibraryPick('music', e.target.value);
+    });
+    document.getElementById('anim-outro-pick')?.addEventListener('change', async (e) => {
+      await applyLibraryPick('outro', e.target.value);
+    });
+    ['anim-outro-preview', 'anim-music-preview'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('mouseenter', () => { try { el.play(); } catch (_) {} });
+      el.addEventListener('mouseleave', () => { try { el.pause(); el.currentTime = 0; } catch (_) {} });
     });
     document.getElementById('anim-music-clear')?.addEventListener('click', async () => {
       if (!_project) return;
@@ -1935,28 +1989,36 @@
     }
   }
 
+  async function applyLibraryPick(kind, id) {
+    if (!_project) return;
+    const url = assetHelpers().selectedUrl(assetHelpers().filterKind(_library, kind), id) || null;
+    if (kind === 'music') _project.music_bed_url = url;
+    if (kind === 'outro') _project.outro_url = url;
+    await syncMotionSettings();
+    renderCanvas();
+  }
+
   async function uploadProjectAsset(file, kind) {
     if (!_project?.id || !file) return;
     toast(`Uploading ${kind}…`, 'info');
     try {
       const fd = new FormData();
+      fd.append('kind', kind);
+      fd.append('name', String(file.name || kind).replace(/\.[^.]+$/, ''));
       fd.append('file', file);
-      fd.append('video', file);
-      const endpoint = file.type.startsWith('audio/')
-        ? `${apiBase()}/api/studio/upload-video`
-        : `${apiBase()}/api/studio/upload-video`;
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${apiBase()}/api/assets`, {
         method: 'POST',
         headers: authHeadersMultipart(),
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) throw apiError(data, res, 'Upload failed');
-      if (kind === 'music') _project.music_bed_url = data.url;
-      if (kind === 'outro') _project.outro_url = data.url;
+      if (!res.ok || !data.asset?.url) throw apiError(data, res, 'Upload failed');
+      _library = Array.isArray(data.assets) ? data.assets : _library;
+      if (kind === 'music') _project.music_bed_url = data.asset.url;
+      if (kind === 'outro') _project.outro_url = data.asset.url;
       await syncMotionSettings();
       renderCanvas();
-      toast(`${kind === 'music' ? 'Music bed' : 'Outro'} attached`, 'success');
+      toast(`${kind === 'music' ? 'Music bed' : 'Outro'} saved to the library`, 'success');
     } catch (e) {
       toast(e.message || 'Upload failed', 'error', e.request_id);
     }
@@ -2336,6 +2398,7 @@
     const recentPromise = (!_project || !_recent.length)
       ? ((_recentLoading = true), refreshRecent({ silent: true }))
       : Promise.resolve();
+    const libraryPromise = refreshLibrary({ silent: true });
 
     if (!_meta) {
       let lastErr = null;
@@ -2656,7 +2719,7 @@
       renderChat();
     }
 
-    await recentPromise;
+    await Promise.all([recentPromise, libraryPromise]);
 
     // Auto-resume in-flight work. Never auto-delete on expired media.
     if (_project && projectMediaExpired(_project)) {

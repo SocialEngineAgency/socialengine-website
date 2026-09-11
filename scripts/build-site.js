@@ -31,6 +31,7 @@ const ALLOWLIST = [
   // Scripts
   'app.js', // index.html
   'portal-native-oauth.js', // portal.html
+  'portal-assets.js', // portal.html
   'analytics-cockpit.js', // portal.html
   'animation-studio.js', // portal.html
   'claude-studio.js', // portal.html
