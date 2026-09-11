@@ -55,8 +55,10 @@ function cors(extra = {}) {
 
 // Mock API. `data` is the /api/client-data payload. `onRequest(entry, route, json)`
 // may fulfil a request itself and return 'handled'.
-async function mockApi(page, base, { data = clientData(), onRequest } = {}) {
+async function mockApi(page, base, { data = clientData(), onRequest, assets = [], animProjects = [] } = {}) {
   const calls = [];
+  const library = Array.isArray(assets) ? assets.slice() : [];
+  const projects = new Map((animProjects || []).map((p) => [p.id, p]));
   const ctx = page.context();
   await ctx.route('**/*', (route) => {
     const u = route.request().url();
@@ -115,15 +117,52 @@ async function mockApi(page, base, { data = clientData(), onRequest } = {}) {
     if (url.pathname === '/api/animation/meta') {
       return json(200, { modes: [{ id: 'video', label: 'Video' }], looks: [{ id: 'stylized', label: 'Stylized' }], providers: {}, default_motion_mode: 'auto', default_i2v_model: 'seedance' });
     }
+    if (url.pathname === '/api/assets' && req.method() === 'GET') {
+      const kind = url.searchParams.get('kind');
+      const list = kind ? library.filter((a) => a.kind === kind) : library;
+      return json(200, { assets: list });
+    }
+    if (url.pathname === '/api/assets' && req.method() === 'POST') {
+      const added = { id: 'ast_new', kind: 'outro', name: 'Uploaded', url: 'https://store.test/new.mp4', bytes: 10, content_type: 'video/mp4' };
+      library.push(added);
+      return json(200, { asset: added, assets: library.slice(), deduped: false });
+    }
+    const assetMatch = url.pathname.match(/^\/api\/assets\/([^/]+)$/);
+    if (assetMatch && req.method() === 'DELETE') {
+      const i = library.findIndex((a) => a.id === assetMatch[1]);
+      if (i < 0) return json(404, { error: 'That asset is gone.', code: 'ASSET_NOT_FOUND' });
+      library.splice(i, 1);
+      return json(200, { ok: true, assets: library.slice() });
+    }
+    if (assetMatch && req.method() === 'PATCH') {
+      const i = library.findIndex((a) => a.id === assetMatch[1]);
+      if (i < 0) return json(404, { error: 'That asset is gone.', code: 'ASSET_NOT_FOUND' });
+      const name = String(JSON.parse(entry.body || '{}').name || '').trim();
+      if (!name) return json(400, { error: 'Give the asset a name.', code: 'ASSET_NAME' });
+      library[i] = { ...library[i], name };
+      return json(200, { asset: library[i], assets: library.slice() });
+    }
     if (url.pathname === '/api/animation/projects' && req.method() === 'POST') {
-      return json(200, { project: { id: 'proj_test', status: 'draft', mode: 'video', look: 'stylized' } });
+      const created = { id: 'proj_test', status: 'draft', mode: 'video', look: 'stylized' };
+      projects.set(created.id, created);
+      return json(200, { project: created });
     }
     if (url.pathname === '/api/animation/projects' && req.method() === 'GET') {
-      return json(200, { projects: [], purged: 0 });
+      return json(200, { projects: [...projects.values()], purged: 0 });
+    }
+    const projectGet = url.pathname.match(/^\/api\/animation\/projects\/([^/]+)$/);
+    if (projectGet && req.method() === 'GET') {
+      const p = projects.get(projectGet[1]);
+      if (!p) return json(404, { error: 'Project not found' });
+      return json(200, { project: p });
     }
     const settingsMatch = url.pathname.match(/^\/api\/animation\/projects\/([^/]+)\/settings$/);
     if (settingsMatch && req.method() === 'POST') {
-      return json(200, { project: { id: settingsMatch[1], status: 'draft', mode: 'video', look: 'stylized' } });
+      const prev = projects.get(settingsMatch[1]) || { id: settingsMatch[1], status: 'draft', mode: 'video', look: 'stylized' };
+      const patch = JSON.parse(entry.body || '{}');
+      const next = { ...prev, ...patch };
+      projects.set(settingsMatch[1], next);
+      return json(200, { project: next });
     }
     const briefMatch = url.pathname.match(/^\/api\/animation\/projects\/([^/]+)\/brief$/);
     if (briefMatch && req.method() === 'POST') {

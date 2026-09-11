@@ -12,7 +12,8 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./claude-studio.js?v=20260905-lazyexport" defer></script>
-  <script src="./animation-studio.js?v=20260910-qw2" defer></script>
+  <script src="./portal-assets.js?v=20260911-qw3"></script>
+  <script src="./animation-studio.js?v=20260911-qw3" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -8455,6 +8456,7 @@
         </div>
 
         <div id="bis-brand-root"></div>
+        <div id="brand-library" class="brand-library"></div>
 
         <!-- Archetype hero card — PREMIUM -->
         ${profile?.archetype ? `
@@ -9048,6 +9050,112 @@
       }
     }
 
+    async function fetchAssetLibrary() {
+      const res = await apiFetch('/api/assets');
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(d.error || 'Could not load the library');
+        err.request_id = d.request_id;
+        throw err;
+      }
+      return Array.isArray(d.assets) ? d.assets : [];
+    }
+
+    function paintBrandLibrary(root, assets) {
+      if (!root) return;
+      const helpers = window.SEAssets || {};
+      const labelOf = helpers.labelOf || ((a) => a.name || a.kind);
+      const rows = (assets || []).map((a) => `
+        <div class="brand-lib-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <span style="flex:1;color:#fff;font-size:0.875rem;">${escapeHtml(labelOf(a))}</span>
+          <span style="font-size:0.75rem;color:rgba(148,163,184,0.75);text-transform:capitalize;">${escapeHtml(a.kind || '')}</span>
+          <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
+          <button type="button" class="settings-tab" data-asset-delete="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Delete</button>
+        </div>`).join('');
+      root.innerHTML = `
+        <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Brand library</h3>
+        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Outros, music beds, intros and logos saved for this account. Animate can pick them without re-uploading.</p>
+        ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Animate or below.</p>'}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
+          <select id="brand-lib-kind" class="anim-select" style="width:auto;">
+            <option value="outro">Outro</option>
+            <option value="intro">Intro</option>
+            <option value="music">Music</option>
+            <option value="logo">Logo</option>
+          </select>
+          <input type="file" id="brand-lib-file" hidden />
+          <button type="button" id="brand-lib-upload" class="settings-tab" style="padding:6px 12px;">Upload</button>
+        </div>`;
+      const kindSel = root.querySelector('#brand-lib-kind');
+      const fileEl = root.querySelector('#brand-lib-file');
+      const acceptFor = helpers.acceptFor || (() => '*/*');
+      if (fileEl) fileEl.accept = acceptFor(kindSel?.value || 'outro');
+      kindSel?.addEventListener('change', () => { if (fileEl) fileEl.accept = acceptFor(kindSel.value); });
+      root.querySelector('#brand-lib-upload')?.addEventListener('click', () => fileEl?.click());
+      fileEl?.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('kind', kindSel?.value || 'outro');
+        fd.append('name', file.name.replace(/\.[^.]+$/, ''));
+        fd.append('file', file);
+        try {
+          const res = await apiFetch('/api/assets', { method: 'POST', body: fd });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(d.error || 'Upload failed');
+          paintBrandLibrary(root, d.assets || []);
+          if (typeof showToast === 'function') showToast('Saved to the library', 'success');
+        } catch (err) {
+          if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error', err.request_id ? { ref: err.request_id } : undefined);
+        }
+      });
+      root.querySelectorAll('[data-asset-rename]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-asset-rename');
+          const current = (assets || []).find((a) => a.id === id);
+          const name = window.prompt('Rename asset', current ? labelOf(current) : '');
+          if (name == null) return;
+          try {
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Rename failed');
+            paintBrandLibrary(root, d.assets || []);
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Rename failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-asset-delete]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-asset-delete');
+          if (!window.confirm('Remove this from the library? Existing projects keep the file they already attached.')) return;
+          try {
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id), { method: 'DELETE' });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Delete failed');
+            paintBrandLibrary(root, d.assets || []);
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Delete failed', 'error');
+          }
+        });
+      });
+    }
+
+    async function mountBrandLibrary(root) {
+      if (!root) return;
+      root.innerHTML = '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);">Loading Brand library…</p>';
+      try {
+        paintBrandLibrary(root, await fetchAssetLibrary());
+      } catch (e) {
+        root.innerHTML = `<div id="brand-library"><h3 style="color:#fff;">Brand library</h3><p style="color:#FCA5A5;font-size:0.8125rem;">${escapeHtml(e.message || 'Could not load the library')}</p></div>`;
+      }
+    }
+
     // Settings tab switcher. The Brand tab mounts the (unchanged) Brand Voice page
     // lazily into #settings-brand-panel; the other three are plain show/hide.
     function openSettingsTab(tab) {
@@ -9063,6 +9171,7 @@
         if (panel && !panel.dataset.mounted) {
           panel.dataset.mounted = '1';
           renderBrandVoicePage(clientData, panel);
+          mountBrandLibrary(panel.querySelector('#brand-library'));
         }
       }
       seWriteHash('settings/' + tab);
