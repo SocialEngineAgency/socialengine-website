@@ -12,7 +12,7 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./claude-studio.js?v=20260905-lazyexport" defer></script>
-  <script src="./animation-studio.js?v=20260910-qw1" defer></script>
+  <script src="./animation-studio.js?v=20260910-qw2" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -608,6 +608,19 @@
       font-size: 0.65rem;
     }
     .studio-card__view-btn:hover { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }
+    .studio-card__archive-btn, .studio-card__restore-btn {
+      display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px;
+      font-size: 0.68rem; font-weight: 600; border-radius: 6px; cursor: pointer;
+      font-family: var(--font-body); border: 1px solid transparent; transition: all 0.15s;
+    }
+    .studio-card__archive-btn {
+      background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.45); border-color: rgba(255,255,255,0.08);
+    }
+    .studio-card__archive-btn:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
+    .studio-card__restore-btn {
+      background: rgba(124,58,237,0.1); color: #C4B5FD; border-color: rgba(124,58,237,0.25);
+    }
+    .studio-card__restore-btn:hover { background: rgba(124,58,237,0.2); }
 
     /* Studio card enhanced info */
     .studio-card__info { padding: 14px 16px 12px; }
@@ -4046,6 +4059,7 @@
           <div class="studio-modal__actions" data-post-id="${post.id}">
             <button class="studio-modal__btn studio-modal__btn--approve" onclick="studioApprove('${post.id}', this)">Approve</button>
             <button class="studio-modal__btn studio-modal__btn--reject" onclick="openRejectModal('${post.id}')">Reject</button>
+            <button class="studio-modal__btn studio-card__archive-btn" onclick="studioArchive('${post.id}', this)">Archive</button>
             <button class="studio-modal__btn" style="background:linear-gradient(135deg,#E0005E,#FF7C00);color:#fff;border:none;" onclick="openAdobeExpressCurrentPost()">✏️ Edit in Adobe Express</button>
             ${regenLeft > 0
               ? `<button class="studio-modal__btn studio-modal__btn--regen" onclick="openRegenModal('${post.id}', ${regenLeft})">Regenerate <span style="font-size:0.68rem;opacity:0.5;">${regenLeft} left</span></button>`
@@ -4067,7 +4081,7 @@
             </div>` : `<div style="padding:8px 0;font-size:0.8rem;color:rgba(255,255,255,0.4);">${status === 'Scheduled' ? 'Scheduled for publishing' : status === 'Published' ? 'Published' : status}</div>`}
             ${(status === 'Approved' || status === 'Scheduled') && !post.scheduled_date ? `<button type="button" onclick="scheduleApprovedPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule post</button>` : ''}
             ${post.scheduled_date && /^(Approved|Scheduled|publish_error)$/i.test(status) ? `<button type="button" onclick="closeStudioModal();_retryPublishPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Publish now</button>` : ''}
-            ${status !== 'Published' ? `<button onclick="closeStudioModal();_deleteCalPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#FCA5A5;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete post</button>` : ''}
+            ${isArchivedPost(post) ? `<button type="button" class="studio-card__restore-btn" onclick="studioRestore('${String(post.id || '').replace(/'/g, "\\'")}', this)" style="width:100%;margin-top:12px;justify-content:center;">Restore</button>` : (!isLivePublishedPost(post) ? `<button type="button" class="studio-card__archive-btn" onclick="studioArchive('${String(post.id || '').replace(/'/g, "\\'")}', this)" style="width:100%;margin-top:12px;justify-content:center;">Archive</button>` : '')}
           </div>`}
 
           <div class="studio-modal__nav">
@@ -5289,7 +5303,7 @@
       }
 
       return `
-        <div class="studio-card" data-status="${status}" data-platform="${platform}">
+        <div class="studio-card" data-status="${status}" data-platform="${platform}" data-post-id="${String(post.id || '').replace(/"/g, '&quot;')}">
           <div class="studio-card__media" onclick="openStudioModal(${index})">${mediaHTML}</div>
           <div class="studio-card__info">
             <div class="studio-card__top-row">
@@ -5314,7 +5328,11 @@
             </div>
             <div class="studio-card__caption" onclick="openStudioModal(${index})" style="cursor:pointer;">${captionPreview}${captionPreview.length >= 90 ? '...' : ''}</div>
             ${hashtagPreview ? `<div style="font-size:0.65rem;color:rgba(124,58,237,0.6);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hashtagPreview}</div>` : ''}
-            ${isActionable && !isRegenerating ? `
+            ${isArchivedPost(post) ? `
+            <div class="studio-card__actions" style="display:flex;gap:6px;margin-top:10px;">
+              ${studioArchiveRestoreHtml(post)}
+              <button class="studio-card__view-btn" onclick="openStudioModal(${index})" style="margin-left:auto;">Review</button>
+            </div>` : isActionable && !isRegenerating ? `
             <div class="studio-card__actions" style="display:flex;gap:6px;margin-top:10px;">
               <button class="studio-card__approve-btn" onclick="event.stopPropagation();studioQuickApprove('${post.id}',this)">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Approve
@@ -5322,6 +5340,7 @@
               <button class="studio-card__reject-btn" onclick="event.stopPropagation();openRejectModal('${post.id}')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Reject
               </button>
+              ${studioArchiveRestoreHtml(post)}
               <button class="studio-card__view-btn" onclick="openStudioModal(${index})" style="margin-left:auto;">
                 Review
               </button>
@@ -5329,8 +5348,10 @@
             <div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;">
               <div style="width:12px;height:12px;border:1.5px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
               <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);">Regenerating...</span>
+              ${studioArchiveRestoreHtml(post)}
             </div>` : `
-            ${scheduleFooterHtml || '<div class="studio-card__footer" onclick="openStudioModal(' + index + ')" style="cursor:pointer;margin-top:8px;"><span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + (status === 'Published' ? 'Published' : 'View details') + ' →</span></div>'}`}
+            ${scheduleFooterHtml || '<div class="studio-card__footer" onclick="openStudioModal(' + index + ')" style="cursor:pointer;margin-top:8px;"><span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + (status === 'Published' ? 'Published' : 'View details') + ' →</span></div>'}
+            ${!isLivePublishedPost(post) ? '<div style="margin-top:8px;">' + studioArchiveRestoreHtml(post) + '</div>' : ''}`}
           </div>
         </div>
       `;
@@ -5360,7 +5381,7 @@
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0d0d1a;color:#555;font-size:1.2rem;">${isReel ? '🎬' : '🖼️'}</div>`;
 
       return `
-        <div class="studio-list-item" onclick="openStudioModal(${index})">
+        <div class="studio-list-item" data-post-id="${String(post.id || '').replace(/"/g, '&quot;')}" onclick="openStudioModal(${index})">
           <div class="studio-list-item__thumb">${thumbHTML}</div>
           <div class="studio-list-item__info">
             <div class="studio-list-item__title">${(() => { const t = fullText.replace(/</g,'&lt;'); if (t.length <= 80) return t || 'Untitled post'; const cut = t.substring(0, 80).replace(/\s+\S*$/, ''); return (cut || t.substring(0, 80)) + '…'; })()}</div>
@@ -5369,6 +5390,7 @@
               <span style="font-weight:600;color:${formatBadge.textColor};">${formatBadge.label}</span>
               <span>${date}</span>
               <span class="studio-card__status studio-card__status--${statusClass}" style="font-size:0.6rem;">${status === 'Ready for Review' ? 'Pending' : status}</span>
+              ${studioArchiveRestoreHtml(post)}
             </div>
           </div>
         </div>
@@ -5560,15 +5582,11 @@
           const freshData = await res.json();
           const freshPost = (freshData.content || []).find(p => p.id === postId);
           if (freshPost && freshPost.status !== 'Regenerating') {
-            // Regen complete! Update local data
             clearInterval(regenPollTimers[postId]);
             delete regenPollTimers[postId];
             clientData = freshData;
-            // Update the post in the studio list
             const idx = studioPostsList.findIndex(p => p.id === postId);
             if (idx >= 0) studioPostsList[idx] = freshPost;
-            showToast('Regeneration complete — your new content is ready for review.');
-            // Re-render if on content page or modal is open
             if (activeNav === 'content') renderContentPage(clientData);
             if (document.getElementById('studio-modal')?.classList.contains('active')) {
               renderStudioModalContent();
@@ -5782,7 +5800,7 @@
                 post.status = 'Ready for Review';
                 post.regen_count = (parseInt(post.regen_count || 0) + 1);
               }
-              showToast('New video ready. Review and approve when satisfied.');
+              if (activeNav === 'content') renderContentPage(clientData);
               // Re-show regen button for another try if needed
               setTimeout(() => {
                 if (btn) btn.style.display = 'flex';
@@ -7188,7 +7206,7 @@
           </button>
         </div>
       `;
-      showToast('Video ready: ' + label);
+      if (typeof window.refreshContentReview === 'function') window.refreshContentReview();
     }
 
     async function loadRecentGenerations() {
@@ -7245,14 +7263,113 @@
     }
 
     // ━━━ Content Studio Page ━━━
+    function isArchivedPost(p) {
+      return /^archived$/i.test(String(p?.status || ''));
+    }
+    function isLivePublishedPost(p) {
+      return !!p?._live || /^published$/i.test(String(p?.status || ''));
+    }
+    function liveContentPosts(posts) {
+      return (posts || []).filter((p) => !isArchivedPost(p));
+    }
+    function applyStudioStatusFilter(f, posts) {
+      const all = posts || [];
+      if (f === 'archived') return all.filter(isArchivedPost);
+      const live = liveContentPosts(all);
+      if (f === 'pending') return live.filter((p) => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
+      if (f === 'approved') return live.filter((p) => p.status === 'Approved' || p.status === 'Scheduled');
+      if (f === 'published') return live.filter((p) => isLivePublishedPost(p));
+      if (f === 'video') return live.filter((p) => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
+      if (f === 'rejected') return live.filter((p) => p.status === 'Rejected');
+      return live;
+    }
+    function studioArchiveRestoreHtml(post) {
+      const id = String(post.id || '').replace(/'/g, "\\'");
+      if (isArchivedPost(post)) {
+        return `<button type="button" class="studio-card__restore-btn" onclick="event.stopPropagation();studioRestore('${id}',this)">Restore</button>`;
+      }
+      if (isLivePublishedPost(post)) return '';
+      return `<button type="button" class="studio-card__archive-btn" onclick="event.stopPropagation();studioArchive('${id}',this)">Archive</button>`;
+    }
+    window.refreshContentReview = async function refreshContentReview() {
+      const btn = document.getElementById('content-refresh');
+      if (btn?.disabled) return;
+      if (btn) btn.disabled = true;
+      const scroller = document.getElementById('dash-content');
+      const y = scroller ? scroller.scrollTop : 0;
+      try {
+        const res = await apiFetch(`${API}/api/client-data`, { headers: authHeaders() });
+        if (!res.ok) { showToast('Could not refresh. Try again.'); return; }
+        clientData = await res.json();
+        if (activeNav === 'content') {
+          renderContentPage(clientData);
+          if (scroller) scroller.scrollTop = y;
+        }
+      } catch {
+        showToast('Could not refresh. Try again.');
+      } finally {
+        const b = document.getElementById('content-refresh');
+        if (b) b.disabled = false;
+      }
+    };
+    window.studioArchive = async function(postId, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        const res = await apiFetch(`${API}/api/archive-post`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(data.error || 'Could not archive', 'error', data.request_id); return; }
+        const post = (clientData?.content || []).find((p) => p.id === postId);
+        if (post) {
+          post.archived_from = data.post?.archived_from || post.status;
+          post.status = 'Archived';
+          post.archived_at = data.post?.archived_at || new Date().toISOString();
+        }
+        if (document.getElementById('studio-modal')?.classList.contains('active')) closeStudioModal();
+        if (activeNav === 'content') renderContentPage(clientData);
+      } catch {
+        showToast('Could not archive', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+    window.studioRestore = async function(postId, btn) {
+      if (btn) btn.disabled = true;
+      try {
+        const res = await apiFetch(`${API}/api/unarchive-post`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(data.error || 'Could not restore', 'error', data.request_id); return; }
+        const post = (clientData?.content || []).find((p) => p.id === postId);
+        if (post) {
+          post.status = data.post?.status || post.archived_from || 'Ready for Review';
+          post.archived_from = '';
+          post.archived_at = '';
+        }
+        if (document.getElementById('studio-modal')?.classList.contains('active')) closeStudioModal();
+        if (activeNav === 'content') renderContentPage(clientData);
+      } catch {
+        showToast('Could not restore', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
     function renderContentPage(data) {
       const content = document.getElementById('dash-content');
       const posts = data.content || [];
-      const pending = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
-      const approved = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
-      const rejected = posts.filter(p => p.status === 'Rejected');
-      const published = posts.filter(p => /^published$/i.test(String(p.status || '')));
-      const videos = posts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url);
+      const live = liveContentPosts(posts);
+      const archived = posts.filter(isArchivedPost);
+      const pending = live.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
+      const approved = live.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
+      const rejected = live.filter(p => p.status === 'Rejected');
+      const published = live.filter(p => isLivePublishedPost(p));
+      const videos = live.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url);
 
       // Store posts for modal navigation + video image picker
       studioPostsList = posts;
@@ -7261,9 +7378,9 @@
       const gridSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
       const listSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>';
 
-      // Platform counts
+      // Platform counts (live rows only — Archived has its own filter)
       const platformSet = {};
-      posts.forEach(p => { const pl = (p.platform || 'other').toLowerCase(); platformSet[pl] = (platformSet[pl]||0)+1; });
+      live.forEach(p => { const pl = (p.platform || 'other').toLowerCase(); platformSet[pl] = (platformSet[pl]||0)+1; });
       const platformFilters = Object.entries(platformSet).map(([k,v]) => 
         `<button class="studio-platform-filter" data-platform="${k}" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:rgba(255,255,255,0.5);font-size:0.68rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">${(PLATFORM_ICONS[k] || '📱')} <span style="text-transform:capitalize;">${k}</span> <span style="opacity:0.5;">${v}</span></button>`
       ).join('');
@@ -7272,9 +7389,13 @@
         <div class="studio-header">
           <div class="studio-header__left">
             <h2>Content Review</h2>
-            <p>${posts.length} pieces &middot; ${pending.length} need review &middot; ${videos.length} videos</p>
+            <p>${live.length} pieces &middot; ${pending.length} need review &middot; ${videos.length} videos</p>
           </div>
           <div class="studio-header__right" style="display:flex;align-items:center;gap:8px;">
+            <button type="button" id="content-refresh" class="studio-view-btn" style="display:flex;align-items:center;gap:6px;padding:6px 12px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Refresh
+            </button>
             <button onclick="openVideoCreator()" style="display:flex;align-items:center;gap:6px;padding:7px 16px;background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(124,58,237,0.15));border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:rgba(255,255,255,0.9);font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.2s;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.5)';this.style.background='linear-gradient(135deg,rgba(139,92,246,0.25),rgba(124,58,237,0.25))'" onmouseleave="this.style.borderColor='rgba(139,92,246,0.3)';this.style.background='linear-gradient(135deg,rgba(139,92,246,0.15),rgba(124,58,237,0.15))';"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Create Video <span id="video-credits-badge" style="background:rgba(139,92,246,0.2);padding:1px 6px;border-radius:4px;font-size:0.65rem;color:rgba(139,92,246,0.8);"></span></button>
             ${pending.length > 1 ? `<button id="bulk-approve-btn" onclick="studioBulkApprove()" style="display:flex;align-items:center;gap:5px;padding:6px 14px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.25);border-radius:8px;color:#7C3AED;font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Approve All (${pending.length})</button>` : ''}
             <div class="studio-view-toggle">
@@ -7285,12 +7406,13 @@
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
           <div class="studio-filters" id="studio-filters" style="margin-bottom:0;">
-            <button class="studio-filter active" data-filter="all">All <span class="studio-filter__count" id="studio-count-all">${posts.length}</span></button>
+            <button class="studio-filter active" data-filter="all">All <span class="studio-filter__count" id="studio-count-all">${live.length}</span></button>
             <button class="studio-filter" data-filter="pending">Pending <span class="studio-filter__count">${pending.length}</span></button>
             <button class="studio-filter" data-filter="approved">Approved <span class="studio-filter__count">${approved.length}</span></button>
             <button class="studio-filter" data-filter="published">Live <span class="studio-filter__count" id="studio-count-published">${published.length}</span></button>
             ${videos.length ? `<button class="studio-filter" data-filter="video">Video <span class="studio-filter__count">${videos.length}</span></button>` : ''}
             ${rejected.length ? `<button class="studio-filter" data-filter="rejected">Rejected <span class="studio-filter__count">${rejected.length}</span></button>` : ''}
+            <button class="studio-filter" data-filter="archived">Archived <span class="studio-filter__count">${archived.length}</span></button>
           </div>
           <div style="height:20px;width:1px;background:rgba(255,255,255,0.08);margin:0 4px;"></div>
           ${platformFilters}
@@ -7319,9 +7441,20 @@
           </select>
         </div>
         <div id="studio-content-area">
-          ${renderStudioContent(posts)}
+          ${renderStudioContent(applyStudioStatusFilter(window._studioFilter || 'all', posts))}
         </div>
       `;
+
+      const keepFilter = window._studioFilter || 'all';
+      if (keepFilter !== 'all') {
+        content.querySelectorAll('.studio-filter').forEach(b => b.classList.remove('active'));
+        content.querySelector(`.studio-filter[data-filter="${keepFilter}"]`)?.classList.add('active');
+      }
+      studioPostsList = applyStudioStatusFilter(keepFilter, window._studioPosts || posts);
+      const keepArea = document.getElementById('studio-content-area');
+      if (keepArea) keepArea.innerHTML = renderStudioContent(studioPostsList);
+
+      content.querySelector('#content-refresh')?.addEventListener('click', () => refreshContentReview());
 
       // Filter logic
       content.querySelectorAll('.studio-filter').forEach(btn => {
@@ -7330,14 +7463,8 @@
           content.querySelectorAll('.studio-platform-filter').forEach(b => b.style.borderColor = 'rgba(255,255,255,0.08)');
           btn.classList.add('active');
           const f = btn.dataset.filter;
-          let filtered;
-          const allPosts = window._studioPosts || posts;
-          if (f === 'all') filtered = allPosts;
-          else if (f === 'pending') filtered = allPosts.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
-          else if (f === 'approved') filtered = allPosts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
-          else if (f === 'published') filtered = allPosts.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
-          else if (f === 'video') filtered = allPosts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
-          else filtered = allPosts.filter(p => p.status === 'Rejected');
+          window._studioFilter = f;
+          const filtered = applyStudioStatusFilter(f, window._studioPosts || posts);
           studioPostsList = filtered;
           document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
         });
@@ -7380,24 +7507,20 @@
             if (data.content) data.content = merged;
             const area = document.getElementById('studio-content-area');
             const active = document.querySelector('#studio-filters .studio-filter.active');
-            const f = active?.dataset?.filter || 'all';
-            let filtered = merged;
-            if (f === 'pending') filtered = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
-            else if (f === 'approved') filtered = merged.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
-            else if (f === 'published') filtered = merged.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
-            else if (f === 'video') filtered = merged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live);
-            else if (f === 'rejected') filtered = merged.filter(p => p.status === 'Rejected');
+            const f = active?.dataset?.filter || window._studioFilter || 'all';
+            const filtered = applyStudioStatusFilter(f, merged);
             studioPostsList = filtered;
             if (area) area.innerHTML = renderStudioContent(filtered);
             const allCount = document.getElementById('studio-count-all');
             const pubCount = document.getElementById('studio-count-published');
-            if (allCount) allCount.textContent = String(merged.length);
-            if (pubCount) pubCount.textContent = String(merged.filter(p => /^published$/i.test(String(p.status || '')) || p._live).length);
+            const liveMerged = liveContentPosts(merged);
+            if (allCount) allCount.textContent = String(liveMerged.length);
+            if (pubCount) pubCount.textContent = String(liveMerged.filter(p => isLivePublishedPost(p)).length);
             const sub = document.querySelector('.studio-header__left p');
             if (sub) {
-              const pendN = merged.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status)).length;
-              const vidN = merged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live).length;
-              sub.textContent = `${merged.length} pieces · ${pendN} need review · ${vidN} videos`;
+              const pendN = liveMerged.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status)).length;
+              const vidN = liveMerged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live).length;
+              sub.textContent = `${liveMerged.length} pieces · ${pendN} need review · ${vidN} videos`;
             }
             const pipe = document.querySelector('.dash-greeting + p, [data-pipeline-count]');
           } catch (_) {}
@@ -7413,13 +7536,13 @@
             btn.style.borderColor = 'rgba(124,58,237,0.5)';
             btn.style.background = 'rgba(124,58,237,0.08)';
             const pl = btn.dataset.platform;
-            const filtered = posts.filter(p => (p.platform || 'other').toLowerCase() === pl);
+            const filtered = liveContentPosts(posts).filter(p => (p.platform || 'other').toLowerCase() === pl);
             studioPostsList = filtered;
             document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
             content.querySelectorAll('.studio-filter').forEach(b => b.classList.remove('active'));
           } else {
-            studioPostsList = posts;
-            document.getElementById('studio-content-area').innerHTML = renderStudioContent(posts);
+            studioPostsList = applyStudioStatusFilter(window._studioFilter || 'all', posts);
+            document.getElementById('studio-content-area').innerHTML = renderStudioContent(studioPostsList);
             content.querySelectorAll('.studio-filter').forEach(b => b.classList.remove('active'));
             content.querySelector('.studio-filter[data-filter="all"]')?.classList.add('active');
           }
@@ -7458,14 +7581,9 @@
       }
 
       const activeFilter = document.querySelector('.studio-filter.active');
-      const f = activeFilter?.dataset.filter || 'all';
+      const f = activeFilter?.dataset.filter || window._studioFilter || 'all';
       const posts = clientData?.content || [];
-      let filtered = posts;
-      if (f === 'pending') filtered = posts.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
-      else if (f === 'approved') filtered = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
-      else if (f === 'published') filtered = posts.filter(p => /^published$/i.test(String(p.status || '')) || p._live);
-      else if (f === 'video') filtered = posts.filter(p => (p.content_type || '').includes('reel') || (p.post_label || '').includes('reel') || p.video_url || p._live);
-      else if (f === 'rejected') filtered = posts.filter(p => p.status === 'Rejected');
+      let filtered = applyStudioStatusFilter(f, posts);
       studioPostsList = filtered;
       document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
     };
@@ -12765,7 +12883,8 @@
     window.studioFilterByType = function() {
       const typeVal = document.getElementById('studio-type-filter')?.value || '';
       const groupVal = document.getElementById('studio-group-filter')?.value || '';
-      const posts = clientData?.content || [];
+      window._studioFilter = 'all';
+      const posts = liveContentPosts(clientData?.content || []);
       let filtered = posts;
 
       // Type filter

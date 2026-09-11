@@ -10,7 +10,7 @@
     "test:e2e:golden-path": "playwright test tests/e2e/golden-path.spec.js",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:sessions": "playwright test tests/e2e/sessions.spec.js",
-    "test:e2e:portal": "playwright test tests/e2e/nav.spec.js tests/e2e/coach.spec.js tests/e2e/errors.spec.js"
+    "test:e2e:portal": "playwright test tests/e2e/nav.spec.js tests/e2e/coach.spec.js tests/e2e/errors.spec.js tests/e2e/content.spec.js tests/e2e/animate.spec.js"
   },
   "repository": {
     "type": "git",

@@ -158,6 +158,30 @@
   /** Caption style draft — survives canvas remounts so Rebuild burns what you picked. */
   let _captionStyleDraft = null;
   const ANIM_LAST_OPEN_LS = 'se_anim_last_project';
+  const VO_PLACEHOLDER = "Write or paste the voiceover. We'll build the shots around it.";
+  const PROMPT_PLACEHOLDER = 'Describe a character, scene, product, or full video idea…';
+
+  function animEntryKey() {
+    const email = String(window.__clientEmail || window.clientEmail || '').trim().toLowerCase();
+    return 'se_anim_entry:' + (email || 'anon');
+  }
+  function readAnimEntry() {
+    try { return localStorage.getItem(animEntryKey()) === 'prompt' ? 'prompt' : 'vo'; }
+    catch { return 'vo'; }
+  }
+  function writeAnimEntry(mode) {
+    try { localStorage.setItem(animEntryKey(), mode === 'prompt' ? 'prompt' : 'vo'); } catch (_) { /* private mode */ }
+  }
+  function applyAnimEntryUI(mode) {
+    const vo = mode !== 'prompt';
+    document.querySelectorAll('#anim-entry-mode [data-entry]').forEach((b) => {
+      const on = b.dataset.entry === (vo ? 'vo' : 'prompt');
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    const ta = document.getElementById('anim-prompt');
+    if (ta) ta.placeholder = vo ? VO_PLACEHOLDER : PROMPT_PLACEHOLDER;
+  }
 
   function rememberOpenProject(id) {
     try {
@@ -718,7 +742,7 @@
         method: 'POST',
         body: JSON.stringify(body),
       });
-      _project = data.project;
+      if (data.project) _project = data.project;
     } catch (e) {
       toast(e.message || 'Could not save motion settings', 'error', e.request_id);
     }
@@ -1615,8 +1639,9 @@
   async function sendPrompt() {
     if (_busy) return;
     const ta = document.getElementById('anim-prompt');
-    const prompt = (ta?.value || '').trim();
-    if (!prompt) return toast('Enter a prompt', 'error');
+    const entry = document.querySelector('#anim-entry-mode [data-entry].active')?.dataset.entry || readAnimEntry();
+    const text = (ta?.value || '').trim();
+    if (!text) return toast(entry === 'vo' ? 'Enter a voiceover script' : 'Enter a prompt', 'error');
     if (_refs.length && !_refs.some((r) => r.role === 'character')) {
       return toast('Tag one reference as Character (identity)', 'error');
     }
@@ -1632,18 +1657,24 @@
       _project.motion_mode = motion_mode;
       await syncMotionSettings();
       toast('Claude is rewriting your brief…', 'info');
+      const briefBody = {
+        mode,
+        look,
+        references,
+        reference_urls: references.map((r) => r.url),
+        character_ref_url: references.find((r) => r.role === 'character')?.url || null,
+        force_rewrite: true,
+        format_template_id: _pendingFormatTemplateId || undefined,
+      };
+      if (entry === 'vo') {
+        briefBody.vo_script = text;
+        briefBody.prompt = null;
+      } else {
+        briefBody.prompt = text;
+      }
       const data = await animFetch(`/api/animation/projects/${_project.id}/brief`, {
         method: 'POST',
-        body: JSON.stringify({
-          prompt,
-          mode,
-          look,
-          references,
-          reference_urls: references.map((r) => r.url),
-          character_ref_url: references.find((r) => r.role === 'character')?.url || null,
-          force_rewrite: true,
-          format_template_id: _pendingFormatTemplateId || undefined,
-        }),
+        body: JSON.stringify(briefBody),
       });
       _pendingFormatTemplateId = null;
       _project = data.project;
@@ -2258,6 +2289,8 @@
     window.__SE_ANIM_REMIX_SESSION = null;
     const modeEl = document.getElementById('anim-mode');
     if (modeEl) modeEl.value = 'video';
+    writeAnimEntry('vo');
+    applyAnimEntryUI('vo');
     _refs = [{ url: s.referenceUrl, title: 'Remix still', role: 'character' }];
     renderRefs();
     const ta = document.getElementById('anim-prompt');
@@ -2449,6 +2482,9 @@
         .anim-cap-grid input[type="range"] { width:100%; }
         .anim-cap-grid input[type="color"] { width:100%; height:28px; border:none; background:transparent; padding:0; }
         .anim-placeholder-row { font-size:0.8rem; color:rgba(255,255,255,0.4); padding:14px; border:1px dashed rgba(255,255,255,0.1); border-radius:12px; }
+        .anim-entry-mode { display:flex; gap:6px; margin:0 0 8px; }
+        .anim-entry-seg { flex:1; padding:7px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:rgba(255,255,255,0.55); font-size:0.72rem; font-weight:600; cursor:pointer; font-family:inherit; }
+        .anim-entry-seg.active { background:rgba(124,58,237,0.2); border-color:rgba(124,58,237,0.45); color:#E9D5FF; }
         .anim-brief-card { margin-top:8px; padding:12px; border-radius:12px; background:rgba(124,58,237,0.1); border:1px solid rgba(124,58,237,0.28); }
         .anim-brief-card__title { font-size:0.72rem; font-weight:700; color:#C4B5FD; margin-bottom:8px; text-transform:uppercase; }
         .anim-brief-edit { width:100%; min-height:90px; background:#0F172A; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:8px; padding:8px; font-size:0.78rem; font-family:inherit; margin-bottom:8px; }
@@ -2535,7 +2571,11 @@
                 <input type="url" id="anim-ref-url" class="anim-ref-url" placeholder="Paste image URL…" />
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-add-url" style="padding:7px 10px;font-size:0.72rem;width:auto;">Add</button>
               </div>
-              <textarea id="anim-prompt" class="anim-prompt" placeholder="Describe a character, scene, product, or full video idea…"></textarea>
+              <div id="anim-entry-mode" class="anim-entry-mode" role="tablist" aria-label="Animate input">
+                <button type="button" class="anim-entry-seg active" role="tab" data-entry="vo" aria-selected="true">Voiceover script</button>
+                <button type="button" class="anim-entry-seg" role="tab" data-entry="prompt" aria-selected="false">Describe a video</button>
+              </div>
+              <textarea id="anim-prompt" class="anim-prompt" placeholder="Write or paste the voiceover. We'll build the shots around it."></textarea>
               <button type="button" class="anim-btn" id="anim-send">Send to Claude</button>
             </div>
           </div>
@@ -2543,6 +2583,14 @@
       </div>
     `;
 
+    document.getElementById('anim-entry-mode')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-entry]');
+      if (!btn) return;
+      const mode = btn.dataset.entry === 'prompt' ? 'prompt' : 'vo';
+      writeAnimEntry(mode);
+      applyAnimEntryUI(mode);
+    });
+    applyAnimEntryUI(readAnimEntry());
     document.getElementById('anim-send')?.addEventListener('click', sendPrompt);
     document.getElementById('anim-new')?.addEventListener('click', newProject);
     document.getElementById('anim-home')?.addEventListener('click', goHome);
