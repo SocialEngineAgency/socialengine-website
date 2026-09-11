@@ -68,7 +68,7 @@ const TAB_DEFINITIONS = [
   {
     requestedName: 'Create',
     actualName: 'Create',
-    nav: 'video-studio',
+    nav: 'create',
     data: async (page) => {
       await expect(page.getByText(/Marketing Studio/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(page.locator('#ms-credits-display')).toHaveText(/^\d+\s+credits$/, { timeout: TAB_TIMEOUT_MS });
@@ -129,6 +129,7 @@ const TAB_DEFINITIONS = [
       const tierName = client.tier || 'Pro';
 
       await expect(page.getByText(/^Settings$/)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await page.click('[data-settings-tab="billing"]');
       await expect(page.getByText(/Current Plan/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(page.locator('#dash-content').getByText(new RegExp(`${escapeRegExp(tierName)}\\s+Plan`, 'i')))
         .toBeVisible({ timeout: TAB_TIMEOUT_MS });
@@ -157,7 +158,7 @@ const TAB_DEFINITIONS = [
       const posts = context.clientData.content || [];
       const headerSummary = page.locator('.studio-header__left p');
 
-      await expect(page.getByText(/Content Studio/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(page.getByText(/Content Review/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(headerSummary).toContainText(`${posts.length} pieces`, { timeout: TAB_TIMEOUT_MS });
       await expect(page.locator('#dash-content').getByText(/Newest First|Oldest First|Pending|Approved/i).first())
         .toBeVisible({ timeout: TAB_TIMEOUT_MS });
@@ -175,7 +176,7 @@ const TAB_DEFINITIONS = [
     data: async (page, context) => {
       const posts = context.clientData.content || [];
 
-      await expect(page.getByText(/Content Studio/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(page.getByText(/Content Review/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(page.locator('.studio-header__left p')).toContainText(`${posts.length} pieces`, {
         timeout: TAB_TIMEOUT_MS,
       });

@@ -51,8 +51,10 @@
   function authHeadersMultipart() {
     return seHeaders();
   }
-  function toast(msg, type) {
-    if (typeof showToast === 'function') showToast(msg, type || 'info');
+  // toast(msg, type, ref) — `ref` is the API request_id carried on errors thrown
+  // by animFetch, shown as a muted line for support (design §1).
+  function toast(msg, type, ref) {
+    if (typeof showToast === 'function') showToast(msg, type || 'info', ref ? { ref } : undefined);
   }
   function esc(s) {
     const d = document.createElement('div');
@@ -104,18 +106,25 @@
 
   function modelLine(p) {
     if (!p?.model_plan?.imageEndpoint && !projectHasCharacterRef(p)) return '';
-    const ep = p.model_plan?.imageEndpoint || 'unknown';
-    const short = ep.split('/').slice(-2).join('/');
-    const char = projectHasCharacterRef(p) ? ' · identity from Character ref' : ' · no Character ref';
+    const char = projectHasCharacterRef(p) ? 'Identity from Character ref' : 'No Character ref';
     const style = projectHasStyleRef(p) ? ' · Style ref for look' : '';
-    return `<div class="anim-model-line">Model: ${esc(short)}${char}${style}</div>`;
+    return `<div class="anim-model-line">${char}${style}</div>`;
   }
 
   async function animFetch(path, opts) {
     const resp = await fetch(apiBase() + path, Object.assign({}, opts || {}, { headers: authHeaders() }));
     const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    if (!resp.ok) throw apiError(data, resp);
     return data;
+  }
+  // Error carrying the API contract fields ({ error, code, request_id }) so the
+  // catch sites can show the sentence and the reference, never raw detail.
+  function apiError(data, resp, fallback) {
+    const err = new Error((data && data.error) || fallback || (resp && resp.statusText) || 'Request failed');
+    err.code = data && data.code;
+    err.request_id = data && data.request_id;
+    err.status = resp && resp.status;
+    return err;
   }
 
   function stopPoll() {
@@ -250,7 +259,7 @@
         else if (kind === 'shot' && sceneId && takeId) await selectTake(sceneId, takeId);
         closeExpandModal();
       } catch (e) {
-        toast(e.message || 'Could not restore', 'error');
+        toast(e.message || 'Could not restore', 'error', e.request_id);
       }
     });
   }
@@ -711,7 +720,7 @@
       });
       _project = data.project;
     } catch (e) {
-      toast(e.message || 'Could not save motion settings', 'error');
+      toast(e.message || 'Could not save motion settings', 'error', e.request_id);
     }
   }
 
@@ -747,7 +756,7 @@
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      if (!res.ok || !data.url) throw apiError(data, res, 'Upload failed');
       if (!_project?.id) {
         const created = await animFetch('/api/animation/projects', {
           method: 'POST',
@@ -769,7 +778,7 @@
       renderDriveControls();
       toast('Driving video attached', 'success');
     } catch (e) {
-      toast(e.message || 'Driving video upload failed', 'error');
+      toast(e.message || 'Driving video upload failed', 'error', e.request_id);
     }
   }
 
@@ -871,7 +880,7 @@
       // Keep prior cache on failure so a slow/flaky list doesn't wipe the home screen.
       if (!_recent.length) {
         _recent = [];
-        if (!silent) toast(e.message || 'Could not load recent projects', 'error');
+        if (!silent) toast(e.message || 'Could not load recent projects', 'error', e.request_id);
       }
     } finally {
       _recentLoading = false;
@@ -894,7 +903,7 @@
       renderChat();
       renderRefs();
     } catch (e) {
-      if (!silent) toast(e.message || 'Could not delete project', 'error');
+      if (!silent) toast(e.message || 'Could not delete project', 'error', e.request_id);
     }
   }
 
@@ -941,7 +950,7 @@
       renderCanvas();
       renderChat();
       renderRefs();
-      toast(e.message || 'Could not open project', 'error');
+      toast(e.message || 'Could not open project', 'error', e.request_id);
     }
   }
 
@@ -1217,7 +1226,7 @@
                   return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
                 }).join('')}
               </select>
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Needs ELEVENLABS_API_KEY"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
               <input type="file" id="anim-music-file" accept="audio/*,video/*" hidden />
               <input type="file" id="anim-outro-file" accept="video/*" hidden />
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.music_bed_url ? 'Music ✓' : 'Upload music'}</button>
@@ -1652,7 +1661,7 @@
         toast('Optimized brief ready — review, then Accept & generate', 'success');
       }
     } catch (e) {
-      toast(e.message || 'Brief failed', 'error');
+      toast(e.message || 'Brief failed', 'error', e.request_id);
     } finally {
       _busy = false;
     }
@@ -1675,7 +1684,7 @@
       startPoll();
       toast('Generating character sheet…', 'success');
     } catch (e) {
-      toast(e.message || 'Approve failed', 'error');
+      toast(e.message || 'Approve failed', 'error', e.request_id);
     } finally {
       _busy = false;
     }
@@ -1708,7 +1717,7 @@
         toast('Character lock saved', 'success');
       }
     } catch (e) {
-      toast(e.message || 'Character approve failed', 'error');
+      toast(e.message || 'Character approve failed', 'error', e.request_id);
     } finally {
       _busy = false;
     }
@@ -1736,7 +1745,7 @@
         ta?.focus();
       }
     } catch (e) {
-      toast(e.message || 'Add scene failed', 'error');
+      toast(e.message || 'Add scene failed', 'error', e.request_id);
     } finally {
       _busy = false;
     }
@@ -1779,7 +1788,7 @@
         if (!ok) return;
         return suggestScene(sceneId, { force: true });
       }
-      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      if (!resp.ok) throw apiError(data, resp);
       _project = data.project;
       const prompt = data.scene?.prompt || data.suggestion?.prompt || '';
       _shotPromptDrafts[sceneId] = prompt;
@@ -1788,7 +1797,7 @@
       toast('Draft prompt ready — edit or Generate', 'success');
       document.querySelector(`.anim-shot__prompt-edit[data-scene="${sceneId}"]`)?.focus();
     } catch (e) {
-      toast(e.message || 'Suggest failed', 'error');
+      toast(e.message || 'Suggest failed', 'error', e.request_id);
       if (btn) {
         btn.disabled = false;
         btn.textContent = 'Suggest';
@@ -1840,7 +1849,7 @@
       _project.scenes = [...(_project.scenes || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
       _canvasFp = '';
       renderCanvas();
-      toast(e.message || 'Reorder failed', 'error');
+      toast(e.message || 'Reorder failed', 'error', e.request_id);
     } finally {
       _busy = false;
     }
@@ -1883,7 +1892,7 @@
       startPoll();
       toast(data.started ? 'Shot regenerating — canvas will update when ready' : 'Shot updated', 'success');
     } catch (e) {
-      toast(e.message || 'Regen failed', 'error');
+      toast(e.message || 'Regen failed', 'error', e.request_id);
       // Refresh so a stuck GENERATING can clear / show the real error
       try {
         const data = await animFetch(`/api/animation/projects/${_project.id}`);
@@ -1911,21 +1920,21 @@
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      if (!res.ok || !data.url) throw apiError(data, res, 'Upload failed');
       if (kind === 'music') _project.music_bed_url = data.url;
       if (kind === 'outro') _project.outro_url = data.url;
       await syncMotionSettings();
       renderCanvas();
       toast(`${kind === 'music' ? 'Music bed' : 'Outro'} attached`, 'success');
     } catch (e) {
-      toast(e.message || 'Upload failed', 'error');
+      toast(e.message || 'Upload failed', 'error', e.request_id);
     }
   }
 
   async function generateMusicBed() {
     if (!_project?.id || _busy) return;
     if (!_meta?.providers?.elevenlabs_configured) {
-      return toast('Music generation needs ELEVENLABS_API_KEY on the API', 'error');
+      return toast("Music generation isn't enabled on this account.", 'error');
     }
     const prompt = String(document.getElementById('anim-music-prompt')?.value || '').trim();
     if (!prompt) return toast('Describe the music bed first', 'error');
@@ -1948,7 +1957,7 @@
       renderCanvas();
       toast(`Music bed ready (${Math.round((data.length_ms || lengthMs) / 1000)}s) — Rebuild final to mix it in`, 'success');
     } catch (e) {
-      toast(e.message || 'Music generation failed', 'error');
+      toast(e.message || 'Music generation failed', 'error', e.request_id);
     } finally {
       _busy = false;
       if (btn) btn.disabled = false;
@@ -2054,7 +2063,7 @@
         toast('Final updated', 'success');
       }
     } catch (e) {
-      toast(e.message || 'Assemble failed', 'error');
+      toast(e.message || 'Assemble failed', 'error', e.request_id);
       try {
         const data = await animFetch(`/api/animation/projects/${projectId}`);
         _project = data.project;
@@ -2098,7 +2107,7 @@
     try {
       await selectTake(sceneId, takes[next].id);
     } catch (e) {
-      toast(e.message || 'Could not switch take', 'error');
+      toast(e.message || 'Could not switch take', 'error', e.request_id);
     } finally {
       _busy = false;
     }
@@ -2133,7 +2142,7 @@
       renderCanvas();
       toast('Past Final restored as current', 'success');
     } catch (e) {
-      toast(e.message || 'Could not restore Final', 'error');
+      toast(e.message || 'Could not restore Final', 'error', e.request_id);
       throw e;
     } finally {
       _busy = false;
@@ -2189,16 +2198,16 @@
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      if (!res.ok || !data.url) throw apiError(data, res, 'Upload failed');
       if (data.durable === false || /\/api\/media\//i.test(String(data.url))) {
-        throw new Error('Upload did not persist to CDN. Check Atlas API key on the server, then retry.');
+        throw new Error("Upload didn't finish saving. Try again in a moment.");
       }
       const role = defaultRefRole();
       _refs.push({ url: data.url, title: file.name || 'Upload', role });
       renderRefs();
       toast(`Added as ${role}`, 'success');
     } catch (e) {
-      toast(e.message || 'Upload failed', 'error');
+      toast(e.message || 'Upload failed', 'error', e.request_id);
     }
   }
 
@@ -2517,7 +2526,7 @@
               </div>
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
               <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Claude can see tagged refs (Char = identity, Scene = environment). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
-              ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">VO + Generate music need ELEVENLABS_API_KEY — captions / upload music / outro still work.</div>` : ''}
+              ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">Voiceover and music generation aren't enabled on this account — captions, uploaded music and outros still work.</div>` : ''}
               <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag every person as Char · Scene for setting · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
