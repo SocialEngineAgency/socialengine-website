@@ -88,6 +88,49 @@ async function mockApi(page, base, { data = clientData(), onRequest } = {}) {
     if (url.pathname === '/api/auth/session') return json(200, { ok: true, client: data.client, expires_at: new Date(Date.now() + 86400e3).toISOString(), legacy_credential: false });
     if (url.pathname === '/api/models') return json(200, { models: [], count: {}, requested_tier: 'growth', source: 'authenticated' });
     if (url.pathname === '/api/onboarding/state') return json(200, { completed: true, step: 5 });
+    if (url.pathname === '/api/archive-post') {
+      const b = JSON.parse(entry.body || '{}');
+      const post = (data.content || []).find((p) => p.id === b.postId);
+      if (!post) return json(404, { error: 'Post not found', code: 'NOT_FOUND' });
+      if (/^published$/i.test(String(post.status || '')) || post._live) {
+        return json(409, { error: 'Published posts are removed from the calendar, not archived.', code: 'PUBLISHED' });
+      }
+      const from = post.status;
+      post.archived_from = from;
+      post.status = 'Archived';
+      post.archived_at = new Date().toISOString();
+      return json(200, { success: true, post: { id: post.id, status: 'Archived', archived_from: from, archived_at: post.archived_at } });
+    }
+    if (url.pathname === '/api/unarchive-post') {
+      const b = JSON.parse(entry.body || '{}');
+      const post = (data.content || []).find((p) => p.id === b.postId);
+      if (!post) return json(404, { error: 'Post not found', code: 'NOT_FOUND' });
+      if (String(post.status || '') !== 'Archived') return json(409, { error: "That post isn't archived.", code: 'NOT_ARCHIVED' });
+      const back = String(post.archived_from || '').trim() || 'Ready for Review';
+      post.status = back;
+      post.archived_from = '';
+      post.archived_at = '';
+      return json(200, { success: true, post: { id: post.id, status: back, archived_from: '', archived_at: '' } });
+    }
+    if (url.pathname === '/api/animation/meta') {
+      return json(200, { modes: [{ id: 'video', label: 'Video' }], looks: [{ id: 'stylized', label: 'Stylized' }], providers: {}, default_motion_mode: 'auto', default_i2v_model: 'seedance' });
+    }
+    if (url.pathname === '/api/animation/projects' && req.method() === 'POST') {
+      return json(200, { project: { id: 'proj_test', status: 'draft', mode: 'video', look: 'stylized' } });
+    }
+    if (url.pathname === '/api/animation/projects' && req.method() === 'GET') {
+      return json(200, { projects: [], purged: 0 });
+    }
+    const settingsMatch = url.pathname.match(/^\/api\/animation\/projects\/([^/]+)\/settings$/);
+    if (settingsMatch && req.method() === 'POST') {
+      return json(200, { project: { id: settingsMatch[1], status: 'draft', mode: 'video', look: 'stylized' } });
+    }
+    const briefMatch = url.pathname.match(/^\/api\/animation\/projects\/([^/]+)\/brief$/);
+    if (briefMatch && req.method() === 'POST') {
+      const b = JSON.parse(entry.body || '{}');
+      const rewritten = 'optimized ' + String(b.vo_script || b.prompt || 'brief');
+      return json(200, { project: { id: briefMatch[1], status: 'brief_ready', user_prompt: b.prompt || '', vo_script: b.vo_script || '', agent_brief: { rewritten_prompt: rewritten } } });
+    }
     return json(200, { success: true, items: [], posts: [], data: [], models: [], accounts: [], products: [], threads: [], features: [], projects: [], total: 0, messages: [], history: [] });
   });
   return calls;
