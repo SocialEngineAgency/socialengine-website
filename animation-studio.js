@@ -774,7 +774,6 @@
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('video', file);
       const res = await fetch(`${apiBase()}/api/studio/upload-video`, {
         method: 'POST',
         headers: authHeadersMultipart(),
@@ -2284,7 +2283,6 @@
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('image', file);
       const res = await fetch(`${apiBase()}/api/studio/upload-image`, {
         method: 'POST',
         headers: authHeadersMultipart(),
