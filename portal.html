@@ -3644,7 +3644,7 @@
           return;
         }
         try {
-          const r = await fetch(`${API}/api/approve-post`, {
+          const r = await apiFetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId: post.id, clientEmail }),
@@ -4177,7 +4177,7 @@
       btn.textContent = 'Approving...';
       btn.disabled = true;
       try {
-        const res = await fetch(`${API}/api/approve-post`, {
+        const res = await apiFetch(`${API}/api/approve-post`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId, clientEmail, editedCaption }),
@@ -4236,7 +4236,7 @@
       btn.innerHTML = '<div style="width:13px;height:13px;border:1.5px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></div>';
       btn.disabled = true;
       try {
-        const res = await fetch(`${API}/api/approve-post`, {
+        const res = await apiFetch(`${API}/api/approve-post`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId, clientEmail }),
@@ -4281,7 +4281,7 @@
       let approved = 0;
       for (const post of pendingPosts) {
         try {
-          await fetch(`${API}/api/approve-post`, {
+          await apiFetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId: post.id, clientEmail }),
@@ -5453,7 +5453,7 @@
       if (captionDebounce[postId]) clearTimeout(captionDebounce[postId]);
       captionDebounce[postId] = setTimeout(async () => {
         try {
-          await fetch(`${API}/api/edit-caption`, {
+          await apiFetch(`${API}/api/edit-caption`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, clientEmail, caption: e.target.value }),
@@ -5488,7 +5488,7 @@
       submitBtn.disabled = true;
 
       try {
-        const res = await fetch(`${API}/api/reject-post`, {
+        const res = await apiFetch(`${API}/api/reject-post`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId: rejectingPostId, clientEmail, reason }),
@@ -5607,7 +5607,7 @@
       submitBtn.disabled = true;
 
       try {
-        const res = await fetch(`${API}/api/regenerate-post-v2`, {
+        const res = await apiFetch(`${API}/api/regenerate-post-v2`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ postId: regenPostId, clientEmail, direction }),
