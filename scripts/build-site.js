@@ -35,6 +35,7 @@ const ALLOWLIST = [
   'analytics-cockpit.js', // portal.html
   'animation-studio.js', // portal.html
   'claude-studio.js', // portal.html
+  'studio-queue-ready.js', // portal.html
   // Netlify headers (caching + security)
   '_headers',
 ];

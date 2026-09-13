@@ -20,6 +20,28 @@
   let _csQueueSingleUrl = null;
   let _csSplitSeq = 0;
 
+  function queueReady() {
+    return (typeof window !== 'undefined' && window.studioQueueReady) || {
+      queueableSingleImage({ carousel, designed, imageUrl, type }) {
+        if (carousel || designed || type === 'video') return '';
+        return String(imageUrl || '').trim();
+      },
+      captionForQueue({ typedCaption, generatedCaption, brief }) {
+        return String(typedCaption || generatedCaption || brief || '').trim();
+      },
+    };
+  }
+
+  function readQueueCaption() {
+    const box = document.getElementById('cs-caption-box');
+    const typed = box && 'value' in box ? box.value : '';
+    return queueReady().captionForQueue({
+      typedCaption: typed,
+      generatedCaption: box?.dataset?.caption || '',
+      brief: document.getElementById('cs-brief')?.value || _csBrief,
+    });
+  }
+
   function apiBase() {
     return (typeof window.API !== 'undefined' && window.API) || window._seAPI || '';
   }
@@ -130,7 +152,7 @@
     if (!src) return;
     _csOriginalPreviewUrl = src;
     hidePreviewPanes();
-    setPreviewHeader('Preview · Infographic');
+    setPreviewHeader('Preview · Uploaded');
     const wrap = document.getElementById('cs-original-preview');
     const img = document.getElementById('cs-original-preview-img');
     if (img) {
@@ -166,7 +188,12 @@
         _csCarousel = null;
         clearedCarouselForNewRef = true;
         _csSplitSeq += 1;
-        _csQueueSingleUrl = _csRef.type === 'image' ? _csRef.url : null;
+      }
+      if (!_csCarousel && _csRef.type === 'image') {
+        _csHtml = '';
+        _csQueueSingleUrl = _csRef.url;
+      } else if (_csRef.type !== 'image') {
+        _csQueueSingleUrl = null;
       }
       if (prevUrl && prevUrl !== _csRef.url && _csOriginalPreviewUrl === prevUrl) {
         _csOriginalPreviewUrl = null;
@@ -176,9 +203,10 @@
     syncSplitButton();
     if (!ref || !ref.url) {
       restorePreview();
+    } else if (_csRef.type === 'image' && !_csCarousel) {
+      showOriginalPreview(_csRef.url);
     } else if (clearedCarouselForNewRef) {
-      if (_csRef.type === 'image' && _csRef.url) showOriginalPreview(_csRef.url);
-      else restorePreview();
+      restorePreview();
     }
     refreshActionButtons();
   }
@@ -498,7 +526,7 @@
 
           <div>
             <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Describe your post</div>
-            <textarea id="cs-brief" rows="5" placeholder="e.g. Bella Bustier launch — gothic elegance, shop now. Bold product-first square." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:11px 12px;color:#fff;font-size:0.82rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
+            <textarea id="cs-brief" rows="5" placeholder="Already have the graphic? Paste the caption here, then Add to Queue. Or describe a new design to generate." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:11px 12px;color:#fff;font-size:0.82rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
           </div>
 
           <div>
@@ -528,7 +556,7 @@
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
               <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Claude Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Pick a product, write a short brief, generate a branded square, queue it — or upload a tall infographic to split, or 2–10 already-cut squares as a carousel.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Upload a finished photo, paste the caption, Add to Queue — or generate a branded square, split a tall infographic, or drop 2–10 already-cut slides.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
@@ -574,7 +602,7 @@
           <button type="button" id="cs-regen" disabled style="width:100%;padding:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.8rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);text-align:left;">Regenerate</button>
           <div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 0;"></div>
           <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;">Caption</div>
-          <div id="cs-caption-box" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:10px;min-height:72px;font-size:0.75rem;color:rgba(255,255,255,0.3);">Generate a design, then write a caption.</div>
+          <textarea id="cs-caption-box" rows="5" placeholder="Paste your caption here — or Get Caption after you describe the post." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:10px;min-height:72px;font-size:0.75rem;color:rgba(255,255,255,0.75);font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
           <button type="button" id="cs-caption" disabled style="width:100%;padding:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.77rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Get Caption</button>
         </div>
       </div>
@@ -691,7 +719,14 @@
   function refreshActionButtons() {
     const carousel = hasCarousel();
     const designed = !!_csHtml;
-    const single = !!(!carousel && !designed && _csQueueSingleUrl);
+    const singleUrl = queueReady().queueableSingleImage({
+      carousel,
+      designed,
+      imageUrl: _csQueueSingleUrl || (_csRef?.type === 'image' ? _csRef.url : ''),
+      type: _csRef?.type || 'image',
+    });
+    const single = !!singleUrl;
+    if (single) _csQueueSingleUrl = singleUrl;
     setActionEnabled('cs-export', carousel || designed, { label: carousel ? 'Export ZIP' : 'Export PNG' });
     setActionEnabled('cs-queue', carousel || designed || single);
     setActionEnabled('cs-regen', designed && !carousel);
@@ -1256,8 +1291,7 @@
       const upData = await up.json().catch(() => ({}));
       if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
 
-      const captionBox = document.getElementById('cs-caption-box');
-      const captionText = captionBox?.dataset?.caption || '';
+      const captionText = readQueueCaption();
       _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
 
       const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
@@ -1289,15 +1323,19 @@
     const prev = btn?.textContent;
     if (btn) { btn.textContent = 'Queuing…'; btn.disabled = true; }
     try {
-      const captionBox = document.getElementById('cs-caption-box');
       _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
+      const caption = readQueueCaption();
+      if (!caption) {
+        toast('Paste the caption (or write it in Describe your post)', 'warning');
+        return;
+      }
       const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
           image_url: imageUrl,
           brief: _csBrief,
-          caption: captionBox?.dataset?.caption || _csBrief,
+          caption,
           platform: queuePlatform(),
           status: 'Approved',
         }),
@@ -1343,9 +1381,8 @@
         return;
       }
 
-      const captionBox = document.getElementById('cs-caption-box');
       _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
-      const captionText = captionBox?.dataset?.caption || _csBrief;
+      const captionText = readQueueCaption();
       const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
         method: 'POST',
         headers: authHeaders(),
@@ -1379,7 +1416,7 @@
       return;
     }
     if (btn) { btn.disabled = true; btn.textContent = 'Writing…'; }
-    if (box) box.innerHTML = '<span style="color:rgba(255,255,255,0.35);">Writing caption…</span>';
+    if (box && 'value' in box) box.value = 'Writing caption…';
     try {
       const res = await fetch(`${apiBase()}/api/studio/generate-caption`, {
         method: 'POST',
@@ -1391,10 +1428,11 @@
       const caption = data.caption || '';
       if (box) {
         box.dataset.caption = caption;
-        box.innerHTML = `<div style="font-size:0.77rem;color:rgba(255,255,255,0.75);line-height:1.5;white-space:pre-wrap;">${escapeHtml(caption)}</div>`;
+        if ('value' in box) box.value = caption;
       }
     } catch (e) {
-      if (box) box.innerHTML = `<span style="color:#F87171;">${escapeHtml(e.message)}</span>`;
+      toast(e.message || 'Caption failed', 'error');
+      if (box && 'value' in box && box.value === 'Writing caption…') box.value = '';
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Get Caption'; btn.style.cursor = 'pointer'; btn.style.color = 'rgba(255,255,255,0.75)'; }
     }
