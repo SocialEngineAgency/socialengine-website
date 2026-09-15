@@ -23,6 +23,22 @@ function coachCreateNav(session) {
   return session && session.destination === 'animate' ? 'animation-studio' : 'creation-studio';
 }
 
+function inferCreateActionFromReply(reply, userMessage) {
+  const t = String(reply || '').toLowerCase();
+  if (!/create this now|generate this|one-click button/.test(t)) return null;
+  const fromUser = String(userMessage || '').replace(/\s+/g, ' ').trim();
+  const fromReply = String(reply || '').replace(/\s+/g, ' ').trim();
+  const destination = (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b/.test(`${t} ${fromUser}`))
+    ? 'animate'
+    : 'studio';
+  return normalizeCoachCreateSession({
+    prompt: fromUser.length >= 12 ? fromUser : (fromReply || fromUser),
+    mode: 'video',
+    aspect_ratio: '9:16',
+    destination,
+  });
+}
+
 function applyCoachCreateFields(session, fields) {
   if (!session || !session.prompt) return { applied: false, keep: true };
   if (session.destination === 'animate') {
@@ -46,10 +62,11 @@ function applyCoachCreateFields(session, fields) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { normalizeCoachCreateSession, coachCreateNav, applyCoachCreateFields };
+  module.exports = { normalizeCoachCreateSession, coachCreateNav, applyCoachCreateFields, inferCreateActionFromReply };
 }
 if (typeof window !== 'undefined') {
   window.normalizeCoachCreateSession = normalizeCoachCreateSession;
   window.coachCreateNav = coachCreateNav;
   window.applyCoachCreateFields = applyCoachCreateFields;
+  window.inferCreateActionFromReply = inferCreateActionFromReply;
 }
