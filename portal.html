@@ -10134,8 +10134,15 @@
           const replyHtml = formatAIText(data.reply || 'Got it!');
           let actionsHtml = '';
           let coachActions = Array.isArray(data.coach_actions) ? data.coach_actions.slice() : [];
+          if (typeof window.isCoachMetaBrief === 'function') {
+            coachActions = coachActions.filter((a) => a.type !== 'create' || !window.isCoachMetaBrief(a.prompt));
+          }
           if (!coachActions.length && typeof window.inferCreateActionFromReply === 'function') {
-            const inferred = window.inferCreateActionFromReply(data.reply, message);
+            const priorTexts = (chatHistory || [])
+              .filter((m) => m && (m.role === 'assistant' || m.role === 'ai'))
+              .map((m) => String(m.text || '').replace(/<[^>]+>/g, ' '))
+              .slice(-8);
+            const inferred = window.inferCreateActionFromReply(data.reply, message, priorTexts);
             if (inferred) coachActions.push(inferred);
           }
           if (coachActions.length) {

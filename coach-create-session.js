@@ -23,16 +23,42 @@ function coachCreateNav(session) {
   return session && session.destination === 'animate' ? 'animation-studio' : 'creation-studio';
 }
 
-function inferCreateActionFromReply(reply, userMessage) {
-  const t = String(reply || '').toLowerCase();
-  if (!/create this now|generate this|one-click button/.test(t)) return null;
-  const fromUser = String(userMessage || '').replace(/\s+/g, ' ').trim();
-  const fromReply = String(reply || '').replace(/\s+/g, ' ').trim();
-  const destination = (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b/.test(`${t} ${fromUser}`))
+function isCoachMetaBrief(text) {
+  const t = String(text || '').toLowerCase();
+  if (!t.trim()) return true;
+  return /i (can't|cannot) execute|can't generate video|button that should appear|if the button still isn't|refresh your socialengine|contact your socialengine|latest version of the platform/.test(t);
+}
+
+function stripCoachButtonFiller(text) {
+  return String(text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/this should now render[^.!?\n]*[.!?]?/gi, ' ')
+    .replace(/click ["'][^"']*create this now["']\s*(and\s+)?/gi, ' ')
+    .replace(/you need to click[^.!?\n]*[.!?]?/gi, ' ')
+    .replace(/i understand[^.!?\n]*[.!?]?/gi, ' ')
+    .replace(/i (can't|cannot) execute[^.!?\n]*[.!?]?/gi, ' ')
+    .replace(/if the button still isn't[\s\S]*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function inferCreateActionFromReply(reply, userMessage, priorTexts) {
+  const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
+  if (!/create this now|generate this|one-click button/.test(blob)) return null;
+  const user = String(userMessage || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const candidates = [stripCoachButtonFiller(reply)];
+  for (const prev of priorTexts || []) candidates.push(stripCoachButtonFiller(prev));
+  if (user.length >= 20 && !isCoachMetaBrief(user)) candidates.push(user);
+  let prompt = '';
+  for (const c of candidates) {
+    if (c && c.length >= 20 && !isCoachMetaBrief(c)) { prompt = c.slice(0, 400); break; }
+  }
+  if (!prompt) return null;
+  const destination = (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b/.test(`${blob} ${prompt}`))
     ? 'animate'
     : 'studio';
   return normalizeCoachCreateSession({
-    prompt: fromUser.length >= 12 ? fromUser : (fromReply || fromUser),
+    prompt,
     mode: 'video',
     aspect_ratio: '9:16',
     destination,
@@ -62,11 +88,12 @@ function applyCoachCreateFields(session, fields) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { normalizeCoachCreateSession, coachCreateNav, applyCoachCreateFields, inferCreateActionFromReply };
+  module.exports = { normalizeCoachCreateSession, coachCreateNav, applyCoachCreateFields, inferCreateActionFromReply, isCoachMetaBrief };
 }
 if (typeof window !== 'undefined') {
   window.normalizeCoachCreateSession = normalizeCoachCreateSession;
   window.coachCreateNav = coachCreateNav;
   window.applyCoachCreateFields = applyCoachCreateFields;
   window.inferCreateActionFromReply = inferCreateActionFromReply;
+  window.isCoachMetaBrief = isCoachMetaBrief;
 }
