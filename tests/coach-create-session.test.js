@@ -26,6 +26,8 @@ test('portal deep-links Create this now instead of coach-create', () => {
   assert.match(src, /__SE_COACH_CREATE_SESSION/);
   assert.match(src, /Create this now/);
   assert.match(src, /inferCreateActionFromReply/);
+  assert.match(src, /priorTexts/);
+  assert.match(src, /isCoachMetaBrief/);
   const createClick = src.slice(src.indexOf('aiRow.querySelectorAll(\'.coach-action-btn\')'));
   assert.doesNotMatch(createClick.slice(0, 1800), /\/api\/coach-create/);
 });
@@ -37,7 +39,20 @@ test('a promised Create this now reply still yields a create action in the porta
   );
   assert.equal(action.type, 'create');
   assert.equal(action.destination, 'animate');
-  assert.match(action.prompt, /Create this now|flat vector|Reel/i);
+  assert.match(action.prompt, /flat vector|Reel/i);
+  assert.doesNotMatch(action.prompt, /one-click button|can't execute/i);
+});
+
+test('a refusal about the missing button uses the earlier brief', () => {
+  const action = inferCreateActionFromReply(
+    'I understand — but I can\'t execute the video generation myself. You need to click the "Create this now" button that should appear after my last message.',
+    'the button is not there',
+    ['Click "Create this now" and the 25-30s Reel will generate with: Flat vector animation style. UK GP appointment flow.']
+  );
+  assert.equal(action.type, 'create');
+  assert.match(action.prompt, /flat vector|UK GP/i);
+  assert.doesNotMatch(action.prompt, /can't execute/i);
+  assert.equal(action.destination, 'animate');
 });
 
 test('animation studio hydrates a coach session into the brief box', () => {
