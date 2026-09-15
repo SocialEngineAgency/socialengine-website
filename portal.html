@@ -14,6 +14,7 @@
   <script src="./studio-queue-ready.js?v=20260913-queue"></script>
   <script src="./claude-studio.js?v=20260913-queue" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
+  <script src="./coach-create-session.js?v=20260915-coach"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -6740,6 +6741,7 @@
       // Calendar Remix → Studio regenerate handoff
       setTimeout(() => {
         if (typeof applyRemixSessionIfAny === 'function') applyRemixSessionIfAny();
+        if (typeof applyCoachCreateSessionIfAny === 'function') applyCoachCreateSessionIfAny();
         try {
           if (!vsUploadedImageUrl && window._studioReference && window._studioReference.url) restoreVSReferenceIfAny();
         } catch (_) {}
@@ -6876,6 +6878,56 @@
       if (typeof switchNav === 'function') switchNav('animation-studio');
     }
     window.openAnimationFromRemix = openAnimationFromRemix;
+
+    function applyCoachCreateSessionIfAny() {
+      const s = window.__SE_COACH_CREATE_SESSION;
+      if (!s || !s.prompt || s.destination === 'animate') return false;
+      const product = document.getElementById('vs-product-name');
+      if (product && s.product_name) product.value = s.product_name;
+      const dir = document.getElementById('vs-creative-dir');
+      if (dir) dir.value = s.prompt;
+      const aspect = document.getElementById('vs-aspect');
+      if (aspect && s.aspect_ratio) aspect.value = s.aspect_ratio;
+      if (s.attached_image_url) {
+        vsUploadedImageUrl = s.attached_image_url;
+        const upload = document.getElementById('vs-upload-area');
+        const preview = document.getElementById('vs-preview');
+        const img = document.getElementById('vs-preview-img');
+        if (upload) upload.style.display = 'none';
+        if (preview) preview.style.display = 'block';
+        if (img) img.src = s.attached_image_url;
+      }
+      window.__SE_COACH_CREATE_SESSION = null;
+      if (typeof showToast === 'function') showToast('Coach brief loaded in Studio — review, then Generate.');
+      return true;
+    }
+
+    function openCreateFromCoach(action) {
+      const normalize = typeof window.normalizeCoachCreateSession === 'function'
+        ? window.normalizeCoachCreateSession
+        : null;
+      const session = normalize ? normalize(action) : action;
+      if (!session || !session.prompt) {
+        if (typeof showToast === 'function') showToast('Coach did not send a usable prompt', 'warning');
+        return false;
+      }
+      window.__SE_COACH_CREATE_SESSION = session;
+      const navName = (typeof window.coachCreateNav === 'function')
+        ? window.coachCreateNav(session)
+        : (session.destination === 'animate' ? 'animation-studio' : 'creation-studio');
+      if (typeof switchNav === 'function') switchNav(navName);
+      else if (navName === 'creation-studio' && typeof renderVideoStudio === 'function') {
+        if (typeof activeNav !== 'undefined') activeNav = 'creation-studio';
+        renderVideoStudio();
+      }
+      if (navName === 'creation-studio') {
+        setTimeout(() => applyCoachCreateSessionIfAny(), 120);
+        setTimeout(() => applyCoachCreateSessionIfAny(), 450);
+      }
+      return true;
+    }
+    window.applyCoachCreateSessionIfAny = applyCoachCreateSessionIfAny;
+    window.openCreateFromCoach = openCreateFromCoach;
     // Keep VS upload URL readable by Claude Design (separate script)
     Object.defineProperty(window, 'vsUploadedImageUrl', {
       configurable: true,
@@ -10093,45 +10145,51 @@
                   const safeProd = String(a.product_name || '').replace(/"/g, '&quot;');
                   const safeMode = (a.mode === 'image' ? 'image' : 'video');
                   const safeAR = ['9:16','1:1','16:9'].includes(a.aspect_ratio) ? a.aspect_ratio : '9:16';
-                  const label = a.product_name ? ('Create ' + safeMode + ': ' + a.product_name) : ('Create this ' + safeMode);
-                  return '<button class="coach-action-btn" data-type="create" data-prompt="' + safePrompt + '" data-product-name="' + safeProd + '" data-mode="' + safeMode + '" data-aspect-ratio="' + safeAR + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
+                  const safeDest = a.destination === 'animate' ? 'animate' : 'studio';
+                  const label = a.product_name ? ('Generate this: ' + a.product_name) : 'Generate this';
+                  return '<button class="coach-action-btn" data-type="create" data-prompt="' + safePrompt + '" data-product-name="' + safeProd + '" data-mode="' + safeMode + '" data-aspect-ratio="' + safeAR + '" data-destination="' + safeDest + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
                 }
                 return '';
               }).join('') + '</div>';
           }
           aiRow.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai">' + replyHtml + actionsHtml + '<div style="font-size:0.6rem;color:rgba(148,163,184,0.3);margin-top:6px;">' + now + '</div></div>';
           messagesEl.appendChild(aiRow);
-          // Wire action buttons (one-click regenerate OR create-in-chat)
+          // Wire action buttons: create deep-links into Studio/Animate; regenerate still queues.
           aiRow.querySelectorAll('.coach-action-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
               if (btn.dataset.busy === '1') return;
+              if (btn.dataset.type === 'create') {
+                const ok = openCreateFromCoach({
+                  prompt: btn.dataset.prompt,
+                  product_name: btn.dataset.productName,
+                  mode: btn.dataset.mode,
+                  aspect_ratio: btn.dataset.aspectRatio,
+                  destination: btn.dataset.destination,
+                  attached_image_url: window._seCoachAttachedImage || '',
+                });
+                if (ok) {
+                  btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Opened';
+                }
+                return;
+              }
               btn.dataset.busy = '1';
               const origLabel = btn.innerHTML;
               btn.innerHTML = '<span class="se-spinner" style="width:12px;height:12px;border:2px solid rgba(233,213,255,0.3);border-top-color:#E9D5FF;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;"></span> Queuing…';
               try {
-                const isCreate = btn.dataset.type === 'create';
-                const endpoint = isCreate ? '/api/coach-create' : '/api/coach-action';
-                const body = isCreate ? {
-                  prompt: btn.dataset.prompt,
-                  product_title: btn.dataset.productName,
-                  mode: btn.dataset.mode,
-                  aspect_ratio: btn.dataset.aspectRatio,
-                  attached_image_url: window._seCoachAttachedImage || '',
-                } : {
-                  action: btn.dataset.type,
-                  template_id: btn.dataset.templateId,
-                  product_name: btn.dataset.productName,
-                  reason: btn.dataset.reason,
-                };
-                const r = await apiFetch(`${API}${endpoint}`, {
+                const r = await apiFetch(`${API}/api/coach-action`, {
                   method: 'POST',
                   headers: authHeaders({ 'Content-Type': 'application/json' }),
-                  body: JSON.stringify(body),
+                  body: JSON.stringify({
+                    action: btn.dataset.type,
+                    template_id: btn.dataset.templateId,
+                    product_name: btn.dataset.productName,
+                    reason: btn.dataset.reason,
+                  }),
                 });
                 const d = await r.json().catch(() => ({}));
                 if (d && d.success) {
-                  btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> ' + (isCreate ? 'Rendering — check Content' : 'Queued — check Content');
-                  if (typeof showToast === 'function') showToast(isCreate ? 'Rendering your content. Check the Content tab in a few min.' : 'Regeneration queued. Check the Content tab.');
+                  btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Queued — check Content';
+                  if (typeof showToast === 'function') showToast('Regeneration queued. Check the Content tab.');
                 } else {
                   btn.innerHTML = '<span style="color:#F43F5E;">Failed — retry</span>';
                   btn.dataset.busy = '';

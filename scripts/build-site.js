@@ -34,6 +34,7 @@ const ALLOWLIST = [
   'portal-assets.js', // portal.html
   'analytics-cockpit.js', // portal.html
   'animation-studio.js', // portal.html
+  'coach-create-session.js', // portal.html
   'claude-studio.js', // portal.html
   'studio-queue-ready.js', // portal.html
   // Netlify headers (caching + security)
