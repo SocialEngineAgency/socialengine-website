@@ -1,7 +1,19 @@
 'use strict';
 
+const COACH_PROMPT_MAX = 8000;
+
+function normalizeCoachPrompt(text) {
+  return String(text || '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, COACH_PROMPT_MAX);
+}
+
 function normalizeCoachCreateSession(intent = {}) {
-  const prompt = String(intent.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+  const prompt = normalizeCoachPrompt(intent.prompt);
   if (!prompt) return null;
   const destination = String(intent.destination || '').trim().toLowerCase() === 'animate'
     ? 'animate'
@@ -26,35 +38,32 @@ function coachCreateNav(session) {
 function isCoachMetaBrief(text) {
   const t = String(text || '').toLowerCase();
   if (!t.trim()) return true;
-  return /i (can't|cannot) execute|can't generate video|can't press a button|cannot press a button|button that should appear|button isn't rendering|if the button still isn't|refresh your socialengine|contact your socialengine|latest version of the platform|canva\.com|canva pro|synthesia|socialengine account manager|i can only write the strategy|we're in a loop/.test(t);
+  return /i (can't|cannot) execute|can't generate video|can't press a button|cannot press a button|button that should appear|button isn't rendering|if the button still isn't|refresh your socialengine|contact your socialengine|latest version of the platform|canva\.com|canva pro|synthesia|socialengine account manager|i can only write the strategy|we're in a loop|create this now is below|opens studio or animate with the brief/.test(t);
 }
 
 function stripCoachButtonFiller(text) {
-  return String(text || '')
+  return normalizeCoachPrompt(String(text || '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/this should now render[^.!?\n]*[.!?]?/gi, ' ')
     .replace(/click ["'][^"']*create this now["']\s*(and\s+)?/gi, ' ')
     .replace(/you need to click[^.!?\n]*[.!?]?/gi, ' ')
     .replace(/i understand[^.!?\n]*[.!?]?/gi, ' ')
     .replace(/i (can't|cannot) execute[^.!?\n]*[.!?]?/gi, ' ')
-    .replace(/if the button still isn't[\s\S]*/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/if the button still isn't[\s\S]*/gi, ' '));
 }
 
 function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
   if (!/create this now|generate this|one-click button|canva\.com|canva pro|synthesia|socialengine account manager|\[create_content\]|can't press a button|cannot press a button|button isn't rendering/.test(blob)) return null;
-  const user = String(userMessage || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const user = normalizeCoachPrompt(String(userMessage || '').replace(/<[^>]+>/g, ' '));
   const candidates = [stripCoachButtonFiller(reply)];
   for (const prev of priorTexts || []) candidates.push(stripCoachButtonFiller(prev));
   if (user.length >= 20 && !isCoachMetaBrief(user)) candidates.push(user);
-  let prompt = '';
-  for (const c of candidates) {
-    if (c && c.length >= 20 && !isCoachMetaBrief(c)) { prompt = c.slice(0, 400); break; }
-  }
-  if (!prompt) return null;
-  const destination = (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b/.test(`${blob} ${prompt}`))
+  const usable = candidates.filter((c) => c && c.length >= 20 && !isCoachMetaBrief(c));
+  if (!usable.length) return null;
+  usable.sort((a, b) => b.length - a.length);
+  const prompt = usable[0];
+  const destination = (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b|\bframe\s*\d|\bshot\s*\d/.test(`${blob} ${prompt}`))
     ? 'animate'
     : 'studio';
   return normalizeCoachCreateSession({

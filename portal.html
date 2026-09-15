@@ -10145,6 +10145,7 @@
             const inferred = window.inferCreateActionFromReply(data.reply, message, priorTexts);
             if (inferred) coachActions.push(inferred);
           }
+          const coachActionPayloads = [];
           if (coachActions.length) {
             actionsHtml = '<div class="coach-actions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
               coachActions.map((a, i) => {
@@ -10156,13 +10157,11 @@
                   return '<button class="coach-action-btn" data-type="regenerate" data-template-id="' + safeTid + '" data-product-name="' + safeProd + '" data-reason="' + safeReason + '" style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.35);color:#E9D5FF;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> ' + label + '</button>';
                 }
                 if (a.type === 'create') {
-                  const safePrompt = String(a.prompt || '').replace(/"/g, '&quot;');
-                  const safeProd = String(a.product_name || '').replace(/"/g, '&quot;');
-                  const safeMode = (a.mode === 'image' ? 'image' : 'video');
-                  const safeAR = ['9:16','1:1','16:9'].includes(a.aspect_ratio) ? a.aspect_ratio : '9:16';
-                  const safeDest = a.destination === 'animate' ? 'animate' : 'studio';
+                  coachActionPayloads[i] = Object.assign({}, a, {
+                    attached_image_url: a.attached_image_url || window._seCoachAttachedImage || '',
+                  });
                   const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
-                  return '<button class="coach-action-btn" data-type="create" data-prompt="' + safePrompt + '" data-product-name="' + safeProd + '" data-mode="' + safeMode + '" data-aspect-ratio="' + safeAR + '" data-destination="' + safeDest + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
+                  return '<button class="coach-action-btn" data-type="create" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
                 }
                 return '';
               }).join('') + '</div>';
@@ -10174,14 +10173,8 @@
             btn.addEventListener('click', async () => {
               if (btn.dataset.busy === '1') return;
               if (btn.dataset.type === 'create') {
-                const ok = openCreateFromCoach({
-                  prompt: btn.dataset.prompt,
-                  product_name: btn.dataset.productName,
-                  mode: btn.dataset.mode,
-                  aspect_ratio: btn.dataset.aspectRatio,
-                  destination: btn.dataset.destination,
-                  attached_image_url: window._seCoachAttachedImage || '',
-                });
+                const payload = coachActionPayloads[Number(btn.dataset.actionIdx)] || {};
+                const ok = openCreateFromCoach(payload);
                 if (ok) {
                   btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Opened';
                 }

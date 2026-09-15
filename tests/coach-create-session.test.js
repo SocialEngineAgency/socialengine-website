@@ -55,6 +55,40 @@ test('a refusal about the missing button uses the earlier brief', () => {
   assert.equal(action.destination, 'animate');
 });
 
+test('inference keeps the longest shot list past 400 chars', () => {
+  const long = [
+    'Frame 1 (6s): receptionist greeting.',
+    'Frame 2 (6s): checklist — duration, weight loss, family history.',
+    'Frame 3 (6s): they might suggest an endoscopy — it is quick.',
+    'Frame 4 (6s): you can go home the same day.',
+    'Flat vector animation. UK GP appointment flow.',
+  ].join('\n') + '\n' + 'Detail. '.repeat(40);
+  const action = inferCreateActionFromReply(
+    'Create this now is below.',
+    'yes do it',
+    [long]
+  );
+  assert.match(action.prompt, /Frame 4/);
+  assert.match(action.prompt, /\n/);
+  assert.ok(action.prompt.length > 400);
+});
+
+test('portal stores the create action object instead of a data-prompt attribute', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /coachActionPayloads/);
+  const createBtn = src.slice(src.indexOf("if (a.type === 'create')"), src.indexOf("return '';"));
+  assert.doesNotMatch(createBtn, /data-prompt=/);
+});
+
+test('animate apply switches to Describe a video for a coach shot list', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'animation-studio.js'), 'utf8');
+  const fn = src.slice(
+    src.indexOf('async function applyAnimCoachCreateSessionIfAny'),
+    src.indexOf('window.applyAnimCoachCreateSessionIfAny')
+  );
+  assert.match(fn, /writeAnimEntry\('prompt'\)|applyAnimEntryUI\('prompt'\)/);
+});
+
 test('a Canva bounce still yields Create this now from the earlier brief', () => {
   const action = inferCreateActionFromReply(
     'Option A: Use Canva Pro at canva.com. Option B: ask your SocialEngine account manager why [CREATE_CONTENT] is missing. I can\'t press a button for you.',
