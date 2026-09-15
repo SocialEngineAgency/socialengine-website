@@ -2364,15 +2364,18 @@
 
   async function applyAnimCoachCreateSessionIfAny() {
     const s = window.__SE_COACH_CREATE_SESSION;
-    if (!s || !s.prompt || s.destination !== 'animate') return false;
-    window.__SE_COACH_CREATE_SESSION = null;
     const ta = document.getElementById('anim-prompt');
-    if (ta) ta.value = s.prompt;
-    if (s.attached_image_url) {
-      _refs = [{ url: s.attached_image_url, title: s.product_name || 'Coach ref', role: 'character' }];
+    const apply = typeof window.applyCoachCreateFields === 'function' ? window.applyCoachCreateFields : null;
+    const result = apply ? apply(s, { animPrompt: ta }) : { applied: false, keep: true };
+    if (!result.applied) return false;
+    if (!ta) return false;
+    const already = ta.value === result.animPrompt;
+    ta.value = result.animPrompt;
+    if (result.attached_image_url) {
+      _refs = [{ url: result.attached_image_url, title: (s && s.product_name) || 'Coach ref', role: 'character' }];
       renderRefs();
     }
-    toast('Coach brief loaded in Animate — review, then Send.', 'success');
+    if (!already) toast('Coach brief loaded in Animate — review, then Send.', 'success');
     return true;
   }
   window.applyAnimCoachCreateSessionIfAny = applyAnimCoachCreateSessionIfAny;

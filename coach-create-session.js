@@ -23,10 +23,33 @@ function coachCreateNav(session) {
   return session && session.destination === 'animate' ? 'animation-studio' : 'creation-studio';
 }
 
+function applyCoachCreateFields(session, fields) {
+  if (!session || !session.prompt) return { applied: false, keep: true };
+  if (session.destination === 'animate') {
+    if (!fields || !fields.animPrompt) return { applied: false, keep: true };
+    return {
+      applied: true,
+      keep: true,
+      animPrompt: session.prompt,
+      attached_image_url: session.attached_image_url || '',
+    };
+  }
+  if (!fields || !fields.dir) return { applied: false, keep: true };
+  return {
+    applied: true,
+    keep: true,
+    prompt: session.prompt,
+    product_name: session.product_name || '',
+    aspect_ratio: session.aspect_ratio || '',
+    attached_image_url: session.attached_image_url || '',
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { normalizeCoachCreateSession, coachCreateNav };
+  module.exports = { normalizeCoachCreateSession, coachCreateNav, applyCoachCreateFields };
 }
 if (typeof window !== 'undefined') {
   window.normalizeCoachCreateSession = normalizeCoachCreateSession;
   window.coachCreateNav = coachCreateNav;
+  window.applyCoachCreateFields = applyCoachCreateFields;
 }
