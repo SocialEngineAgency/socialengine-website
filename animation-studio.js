@@ -2371,6 +2371,8 @@
     if (!ta) return false;
     const already = ta.value === result.animPrompt;
     ta.value = result.animPrompt;
+    writeAnimEntry('prompt');
+    applyAnimEntryUI('prompt');
     if (result.attached_image_url) {
       _refs = [{ url: result.attached_image_url, title: (s && s.product_name) || 'Coach ref', role: 'character' }];
       renderRefs();
