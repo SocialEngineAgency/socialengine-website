@@ -26,7 +26,7 @@ function coachCreateNav(session) {
 function isCoachMetaBrief(text) {
   const t = String(text || '').toLowerCase();
   if (!t.trim()) return true;
-  return /i (can't|cannot) execute|can't generate video|button that should appear|if the button still isn't|refresh your socialengine|contact your socialengine|latest version of the platform/.test(t);
+  return /i (can't|cannot) execute|can't generate video|can't press a button|cannot press a button|button that should appear|button isn't rendering|if the button still isn't|refresh your socialengine|contact your socialengine|latest version of the platform|canva\.com|canva pro|synthesia|socialengine account manager|i can only write the strategy|we're in a loop/.test(t);
 }
 
 function stripCoachButtonFiller(text) {
@@ -44,7 +44,7 @@ function stripCoachButtonFiller(text) {
 
 function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
-  if (!/create this now|generate this|one-click button/.test(blob)) return null;
+  if (!/create this now|generate this|one-click button|canva\.com|canva pro|synthesia|socialengine account manager|\[create_content\]|can't press a button|cannot press a button|button isn't rendering/.test(blob)) return null;
   const user = String(userMessage || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   const candidates = [stripCoachButtonFiller(reply)];
   for (const prev of priorTexts || []) candidates.push(stripCoachButtonFiller(prev));

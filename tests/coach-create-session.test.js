@@ -55,6 +55,17 @@ test('a refusal about the missing button uses the earlier brief', () => {
   assert.equal(action.destination, 'animate');
 });
 
+test('a Canva bounce still yields Create this now from the earlier brief', () => {
+  const action = inferCreateActionFromReply(
+    'Option A: Use Canva Pro at canva.com. Option B: ask your SocialEngine account manager why [CREATE_CONTENT] is missing. I can\'t press a button for you.',
+    'we are in a loop',
+    ['The 25-30s Reel will generate with: Flat vector animation style. UK GP appointment flow.']
+  );
+  assert.equal(action.type, 'create');
+  assert.match(action.prompt, /flat vector|UK GP/i);
+  assert.doesNotMatch(action.prompt, /canva|account manager/i);
+});
+
 test('animation studio hydrates a coach session into the brief box', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'animation-studio.js'), 'utf8');
   assert.match(src, /__SE_COACH_CREATE_SESSION/);
