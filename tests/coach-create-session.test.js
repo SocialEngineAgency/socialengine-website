@@ -8,6 +8,10 @@ const {
   coachCreateNav,
   inferCreateActionFromReply,
   normalizeCoachCreateSession,
+  persistCoachHistoryEntry,
+  studioGenerateMode,
+  studioModelForMode,
+  titleFromCoachBrief,
 } = require('../coach-create-session');
 
 test('studio destination opens creation-studio', () => {
@@ -144,4 +148,76 @@ test('portal and animate apply do not consume the session', () => {
   );
   assert.doesNotMatch(applyAnim, /__SE_COACH_CREATE_SESSION\s*=\s*null/);
   assert.match(applyAnim, /if\s*\(\s*!ta\s*\)\s*return false/);
+});
+
+test('no still is text-to-video; a still is image-to-video', () => {
+  assert.equal(studioGenerateMode(''), 'text-to-video');
+  assert.equal(studioGenerateMode('https://cdn.example/still.jpg'), 'image-to-video');
+  assert.equal(studioGenerateMode('data:image/png;base64,abc'), 'image-to-video');
+});
+
+test('empty product name falls back to the first brief line', () => {
+  assert.equal(titleFromCoachBrief('Silk Dress', 'ignored'), 'Silk Dress');
+  assert.equal(
+    titleFromCoachBrief('', 'Frame 1 (6s): receptionist greeting.\nFrame 2: checklist.'),
+    'Frame 1 (6s): receptionist greeting.'
+  );
+});
+
+test('I2V model remaps to T2V when there is no still', () => {
+  assert.equal(studioModelForMode('atlas-seedance-2-i2v', ''), 'atlas-seedance-2-t2v');
+  assert.equal(studioModelForMode('atlas-seedance-2-i2v', 'https://cdn.example/still.jpg'), 'atlas-seedance-2-i2v');
+});
+
+test('session apply returns duration, format, and entry', () => {
+  const session = normalizeCoachCreateSession({
+    prompt: 'Frame 1 (6s): receptionist.',
+    destination: 'animate',
+    duration: 10,
+    format_template_id: 'remix-24s',
+    entry: 'prompt',
+  });
+  const result = applyCoachCreateFields(session, { animPrompt: { value: '' } });
+  assert.equal(result.applied, true);
+  assert.equal(result.duration, 10);
+  assert.equal(result.format_template_id, 'remix-24s');
+  assert.equal(result.entry, 'prompt');
+});
+
+test('assistant history keeps create actions so refresh can rebind', () => {
+  const entry = persistCoachHistoryEntry('assistant', '<p>ok</p>', {
+    actions: [{ type: 'create', prompt: 'silk dress on white', destination: 'studio' }],
+  });
+  assert.equal(entry.role, 'assistant');
+  assert.equal(entry.actions[0].prompt, 'silk dress on white');
+  const user = persistCoachHistoryEntry('user', 'make a reel');
+  assert.equal(user.actions, undefined);
+});
+
+test('portal generate does not require a still or product name', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const submit = src.slice(src.indexOf('async function submitVideoGeneration'), src.indexOf('function addGenerationToRecent'));
+  assert.doesNotMatch(submit, /Please upload a product image first/);
+  assert.doesNotMatch(submit, /Please enter the product name/);
+  assert.match(submit, /studioGenerateMode|text-to-video/);
+  assert.match(src, /add a still if you have one/i);
+});
+
+test('portal persists and restores coach_actions on refresh', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /persistCoachHistoryEntry/);
+  assert.match(src, /saveToHistory\('assistant'/);
+  const restore = src.slice(src.indexOf('// Restore previous messages'), src.indexOf('function saveToHistory'));
+  assert.match(restore, /msg\.actions|entry\.actions/);
+  assert.match(restore, /coach-action-btn/);
+});
+
+test('animate apply uses session format and entry', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'animation-studio.js'), 'utf8');
+  const fn = src.slice(
+    src.indexOf('async function applyAnimCoachCreateSessionIfAny'),
+    src.indexOf('window.applyAnimCoachCreateSessionIfAny')
+  );
+  assert.match(fn, /format_template_id/);
+  assert.match(fn, /writeAnimEntry\((result|session)\.entry|writeAnimEntry\(result\.entry/);
 });

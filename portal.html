@@ -14,7 +14,7 @@
   <script src="./studio-queue-ready.js?v=20260913-queue"></script>
   <script src="./claude-studio.js?v=20260913-queue" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
-  <script src="./coach-create-session.js?v=20260915-coach"></script>
+  <script src="./coach-create-session.js?v=20260916-t2v"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -6519,8 +6519,8 @@
                   </div>
                   <div id="vs-upload-area" style="border:2px dashed rgba(255,255,255,0.1);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.2s;background:rgba(255,255,255,0.02);" onclick="document.getElementById('vs-file-input').click();" ondragover="event.preventDefault();this.style.borderColor='rgba(124,58,237,0.4)';this.style.background='rgba(124,58,237,0.04)';" ondrop="event.preventDefault();this.style.borderColor='rgba(255,255,255,0.1)';this.style.background='rgba(255,255,255,0.02)';handleVSUpload(event.dataTransfer.files[0]);" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.background='rgba(255,255,255,0.02)';">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" style="margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    <div style="font-size:0.82rem;color:rgba(255,255,255,0.4);font-weight:500;">Drop product image or click to upload</div>
-                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.2);margin-top:4px;">PNG, JPG, WebP up to 10MB</div>
+                    <div style="font-size:0.82rem;color:rgba(255,255,255,0.4);font-weight:500;">Add a still if you have one — better lock</div>
+                    <div style="font-size:0.7rem;color:rgba(255,255,255,0.2);margin-top:4px;">Optional. PNG, JPG, WebP up to 10MB. Without a still we generate from the brief.</div>
                   </div>
                   <input type="file" id="vs-file-input" accept="image/*" style="display:none;" onchange="handleVSUpload(this.files[0]);">
                   <div id="vs-preview" style="display:none;margin-top:12px;position:relative;">
@@ -6530,8 +6530,8 @@
                 </div>
                 <!-- Right: Settings -->
                 <div>
-                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Product Name</label>
-                  <input type="text" id="vs-product-name" placeholder="e.g., Silk Evening Dress" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;" />
+                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Product Name <span style="font-weight:500;text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.35);">(optional)</span></label>
+                  <input type="text" id="vs-product-name" placeholder="or we use the first brief line" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;" />
 
                   <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Creative Direction</label>
                   
@@ -6892,6 +6892,8 @@
       dir.value = result.prompt;
       const aspect = document.getElementById('vs-aspect');
       if (aspect && result.aspect_ratio) aspect.value = result.aspect_ratio;
+      const duration = document.getElementById('vs-duration');
+      if (duration && result.duration) duration.value = String(result.duration);
       if (result.attached_image_url) {
         vsUploadedImageUrl = result.attached_image_url;
         const upload = document.getElementById('vs-upload-area');
@@ -6903,6 +6905,31 @@
       }
       if (!already && typeof showToast === 'function') showToast('Coach brief loaded in Studio — review, then Generate.');
       return true;
+    }
+
+    function coachRestoredActionsHtml(actions, payloads) {
+      if (!Array.isArray(actions) || !actions.length) return '';
+      const buttons = actions.map((a, i) => {
+        if (!a || a.type !== 'create' || !a.prompt) return '';
+        payloads[i] = a;
+        const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
+        return '<button class="coach-action-btn" data-type="create" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
+      }).join('');
+      if (!buttons) return '';
+      return '<div class="coach-actions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' + buttons + '</div>';
+    }
+
+    function bindRestoredCoachCreateButtons(root, payloads) {
+      if (!root) return;
+      root.querySelectorAll('.coach-action-btn[data-type="create"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const payload = payloads[Number(btn.dataset.actionIdx)] || {};
+          const ok = openCreateFromCoach(payload);
+          if (ok) {
+            btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Opened';
+          }
+        });
+      });
     }
 
     function openCreateFromCoach(action) {
@@ -7109,8 +7136,16 @@
       if (cameraAngle) fullCreativeDir += (fullCreativeDir ? ', ' : '') + 'Camera angle: ' + cameraAngle.replace(/_/g,' ');
       if (lighting) fullCreativeDir += (fullCreativeDir ? ', ' : '') + 'Lighting: ' + lighting.replace(/_/g,' ');
 
-      if (!vsUploadedImageUrl) { showToast('Please upload a product image first'); return; }
-      if (!productName) { showToast('Please enter the product name'); return; }
+      if (!creativeDir) { showToast('Please enter a creative brief'); return; }
+      const productTitle = (typeof titleFromCoachBrief === 'function')
+        ? titleFromCoachBrief(productName, creativeDir)
+        : (productName || creativeDir.split('\n')[0] || 'Video');
+      const generateMode = (typeof studioGenerateMode === 'function')
+        ? studioGenerateMode(vsUploadedImageUrl)
+        : (vsUploadedImageUrl ? 'image-to-video' : 'text-to-video');
+      const resolvedModel = (typeof studioModelForMode === 'function')
+        ? studioModelForMode(model, vsUploadedImageUrl)
+        : model;
 
       btn.innerHTML = '<div style="width:18px;height:18px;border:2px solid rgba(0,0,0,0.2);border-top-color:#0A1628;border-radius:50%;animation:spin 0.6s linear infinite;"></div> Generating...';
       btn.style.pointerEvents = 'none';
@@ -7125,25 +7160,25 @@
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
-            imageUrl: vsUploadedImageUrl,
-            productTitle: productName,
+            imageUrl: vsUploadedImageUrl || undefined,
+            productTitle,
             prompt: enrichedPrompt,
             vibeId: vsSelectedTemplate || undefined,
-            model: model,
+            model: resolvedModel,
             aspectRatio: aspect,
             duration: duration,
             use_flf: (window.__SE_REMIX_SESSION?.brandLocked ? true : flf),
             brandLocked: !!window.__SE_REMIX_SESSION?.brandLocked,
             remixedCaption: window.__SE_REMIX_SESSION?.remixedCaption || undefined,
             remixSourcePostId: window.__SE_REMIX_SESSION?.sourcePostId || undefined,
-            mode: 'image-to-video',
+            mode: generateMode,
           }),
         });
         const data = await res.json();
         if (data.success || data.request_id) {
           showToast(window.__SE_REMIX_SESSION ? 'Remix generation started — brand lock on. Tracking below.' : 'Video generation started — tracking progress below');
           addGenerationToRecent(data);
-          startVideoPolling(data.request_id || data.job_id, productName);
+          startVideoPolling(data.request_id || data.job_id, productTitle);
         } else {
           showToast(data.error || 'Generation failed — try again');
         }
@@ -10062,7 +10097,14 @@
           if (msg.role === 'user') {
             msgDiv.innerHTML = '<div class="chat-msg chat-msg--user">' + msg.text + '<div style="font-size:0.6rem;color:rgba(255,255,255,0.4);margin-top:4px;text-align:right;">' + (msg.time || '') + '</div></div>';
           } else {
-            msgDiv.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai">' + msg.text + '<div style="font-size:0.6rem;color:rgba(148,163,184,0.3);margin-top:4px;">' + (msg.time || '') + '</div></div>';
+            const payloads = [];
+            const actionsHtml = (typeof coachRestoredActionsHtml === 'function')
+              ? coachRestoredActionsHtml(msg.actions, payloads)
+              : (Array.isArray(msg.actions) && msg.actions.some((a) => a && a.type === 'create')
+                ? '<div class="coach-actions"><button class="coach-action-btn" data-type="create">Create this now</button></div>'
+                : '');
+            msgDiv.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai">' + msg.text + actionsHtml + '<div style="font-size:0.6rem;color:rgba(148,163,184,0.3);margin-top:4px;">' + (msg.time || '') + '</div></div>';
+            bindRestoredCoachCreateButtons(msgDiv, payloads);
           }
           messagesEl.appendChild(msgDiv);
         });
@@ -10073,10 +10115,14 @@
         scrollToBottom();
       }
 
-      function saveToHistory(role, text) {
+      function saveToHistory(role, text, extra) {
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        chatHistory.push({ role, text, time: timeStr });
+        const persist = typeof persistCoachHistoryEntry === 'function' ? persistCoachHistoryEntry : null;
+        const entry = persist
+          ? persist(role, text, Object.assign({ time: timeStr }, extra || {}))
+          : { role, text, time: timeStr };
+        chatHistory.push(entry);
         // Keep last 50 messages
         if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
         try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory)); } catch(e) {}
@@ -10211,7 +10257,7 @@
             });
           });
           scrollToBottom();
-          saveToHistory('assistant', replyHtml);
+          saveToHistory('assistant', replyHtml, { actions: coachActions });
 
           if (data.suggestions) updateSuggestions(data.suggestions);
         } catch (err) {
