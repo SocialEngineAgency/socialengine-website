@@ -1,6 +1,8 @@
 'use strict';
 
 const COACH_PROMPT_MAX = 8000;
+const STUDIO_DURATIONS = [5, 10];
+const ANIM_FORMATS = ['awareness-15s', 'mythbust-20s', 'product-demo-15s', 'remix-24s'];
 
 function normalizeCoachPrompt(text) {
   return String(text || '')
@@ -12,6 +14,38 @@ function normalizeCoachPrompt(text) {
     .slice(0, COACH_PROMPT_MAX);
 }
 
+function normalizeCoachDuration(value) {
+  const n = Number(value);
+  return STUDIO_DURATIONS.includes(n) ? n : 0;
+}
+
+function normalizeCoachFormat(value) {
+  return ANIM_FORMATS.includes(String(value || '')) ? String(value) : '';
+}
+
+function normalizeCoachEntry(value) {
+  return value === 'vo' ? 'vo' : (value === 'prompt' ? 'prompt' : '');
+}
+
+function inferCoachSessionExtras(text) {
+  const t = String(text || '').toLowerCase();
+  let duration = 0;
+  if (/\b10\s*s|\b15\s*s|\b20\s*s|\b24\s*s|\b25-?30|\b30\s*s/.test(t)) duration = 10;
+  else if (/\b5\s*s(ec|econds?)?\b/.test(t)) duration = 5;
+
+  let format_template_id = '';
+  if (/myth/.test(t)) format_template_id = 'mythbust-20s';
+  else if (/product[- ]?demo/.test(t)) format_template_id = 'product-demo-15s';
+  else if (/\b24\s*s|\b25-?30|\bremix/.test(t)) format_template_id = 'remix-24s';
+  else if (/\b15\s*s|\bawareness/.test(t)) format_template_id = 'awareness-15s';
+
+  let entry = '';
+  if (/\bframe\s*\d|\bshot\s*\d/.test(t)) entry = 'prompt';
+  else if (/\bvo\b|voice[- ]?over|script/.test(t)) entry = 'vo';
+
+  return { duration, format_template_id, entry };
+}
+
 function normalizeCoachCreateSession(intent = {}) {
   const prompt = normalizeCoachPrompt(intent.prompt);
   if (!prompt) return null;
@@ -20,6 +54,7 @@ function normalizeCoachCreateSession(intent = {}) {
     : 'studio';
   const rawUrl = String(intent.attached_image_url || '').trim();
   const attached_image_url = /^https?:\/\//i.test(rawUrl) ? rawUrl : '';
+  const extras = inferCoachSessionExtras(prompt);
   return {
     type: 'create',
     prompt,
@@ -28,6 +63,9 @@ function normalizeCoachCreateSession(intent = {}) {
     aspect_ratio: ['9:16', '1:1', '16:9'].includes(intent.aspect_ratio) ? intent.aspect_ratio : '9:16',
     destination,
     attached_image_url,
+    duration: normalizeCoachDuration(intent.duration) || extras.duration,
+    format_template_id: normalizeCoachFormat(intent.format_template_id) || extras.format_template_id,
+    entry: normalizeCoachEntry(intent.entry) || extras.entry,
   };
 }
 
@@ -74,35 +112,82 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   });
 }
 
+function sessionApplyExtras(session) {
+  return {
+    duration: session.duration || 0,
+    format_template_id: session.format_template_id || '',
+    entry: session.entry || '',
+  };
+}
+
 function applyCoachCreateFields(session, fields) {
   if (!session || !session.prompt) return { applied: false, keep: true };
   if (session.destination === 'animate') {
     if (!fields || !fields.animPrompt) return { applied: false, keep: true };
-    return {
+    return Object.assign({
       applied: true,
       keep: true,
       animPrompt: session.prompt,
       attached_image_url: session.attached_image_url || '',
-    };
+    }, sessionApplyExtras(session));
   }
   if (!fields || !fields.dir) return { applied: false, keep: true };
-  return {
+  return Object.assign({
     applied: true,
     keep: true,
     prompt: session.prompt,
     product_name: session.product_name || '',
     aspect_ratio: session.aspect_ratio || '',
     attached_image_url: session.attached_image_url || '',
-  };
+  }, sessionApplyExtras(session));
 }
 
+function hasStudioStill(imageUrl) {
+  const u = String(imageUrl || '').trim();
+  return /^https?:\/\//i.test(u) || u.startsWith('data:');
+}
+
+function studioGenerateMode(imageUrl) {
+  return hasStudioStill(imageUrl) ? 'image-to-video' : 'text-to-video';
+}
+
+function studioModelForMode(model, imageUrl) {
+  const m = String(model || '');
+  if (hasStudioStill(imageUrl)) return m;
+  return m.replace(/-i2v\b/i, '-t2v');
+}
+
+function titleFromCoachBrief(productName, prompt) {
+  const name = String(productName || '').trim();
+  if (name) return name.slice(0, 160);
+  const first = String(prompt || '').split('\n').find((l) => l.trim());
+  return (first || 'Video').replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+function persistCoachHistoryEntry(role, text, extra = {}) {
+  const entry = { role, text, time: extra.time || '' };
+  if (role === 'assistant' && Array.isArray(extra.actions) && extra.actions.length) {
+    const actions = extra.actions.filter((a) => a && a.type === 'create' && a.prompt);
+    if (actions.length) entry.actions = actions;
+  }
+  return entry;
+}
+
+const coachSessionApi = {
+  normalizeCoachCreateSession,
+  coachCreateNav,
+  applyCoachCreateFields,
+  inferCreateActionFromReply,
+  isCoachMetaBrief,
+  persistCoachHistoryEntry,
+  studioGenerateMode,
+  studioModelForMode,
+  titleFromCoachBrief,
+};
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { normalizeCoachCreateSession, coachCreateNav, applyCoachCreateFields, inferCreateActionFromReply, isCoachMetaBrief };
+  module.exports = coachSessionApi;
 }
 if (typeof window !== 'undefined') {
-  window.normalizeCoachCreateSession = normalizeCoachCreateSession;
-  window.coachCreateNav = coachCreateNav;
-  window.applyCoachCreateFields = applyCoachCreateFields;
-  window.inferCreateActionFromReply = inferCreateActionFromReply;
-  window.isCoachMetaBrief = isCoachMetaBrief;
+  Object.assign(window, coachSessionApi);
 }
