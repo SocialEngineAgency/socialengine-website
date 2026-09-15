@@ -6881,24 +6881,27 @@
 
     function applyCoachCreateSessionIfAny() {
       const s = window.__SE_COACH_CREATE_SESSION;
-      if (!s || !s.prompt || s.destination === 'animate') return false;
-      const product = document.getElementById('vs-product-name');
-      if (product && s.product_name) product.value = s.product_name;
       const dir = document.getElementById('vs-creative-dir');
-      if (dir) dir.value = s.prompt;
+      const apply = typeof window.applyCoachCreateFields === 'function' ? window.applyCoachCreateFields : null;
+      const result = apply ? apply(s, { dir }) : { applied: false, keep: true };
+      if (!result.applied) return false;
+      if (!dir) return false;
+      const product = document.getElementById('vs-product-name');
+      if (product && result.product_name) product.value = result.product_name;
+      const already = dir.value === result.prompt;
+      dir.value = result.prompt;
       const aspect = document.getElementById('vs-aspect');
-      if (aspect && s.aspect_ratio) aspect.value = s.aspect_ratio;
-      if (s.attached_image_url) {
-        vsUploadedImageUrl = s.attached_image_url;
+      if (aspect && result.aspect_ratio) aspect.value = result.aspect_ratio;
+      if (result.attached_image_url) {
+        vsUploadedImageUrl = result.attached_image_url;
         const upload = document.getElementById('vs-upload-area');
         const preview = document.getElementById('vs-preview');
         const img = document.getElementById('vs-preview-img');
         if (upload) upload.style.display = 'none';
         if (preview) preview.style.display = 'block';
-        if (img) img.src = s.attached_image_url;
+        if (img) img.src = result.attached_image_url;
       }
-      window.__SE_COACH_CREATE_SESSION = null;
-      if (typeof showToast === 'function') showToast('Coach brief loaded in Studio — review, then Generate.');
+      if (!already && typeof showToast === 'function') showToast('Coach brief loaded in Studio — review, then Generate.');
       return true;
     }
 
