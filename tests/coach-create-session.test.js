@@ -6,6 +6,7 @@ const path = require('node:path');
 const {
   applyCoachCreateFields,
   coachCreateNav,
+  inferCreateActionFromReply,
   normalizeCoachCreateSession,
 } = require('../coach-create-session');
 
@@ -19,13 +20,24 @@ test('animate destination opens animation-studio', () => {
   assert.equal(coachCreateNav({ destination: 'animate' }), 'animation-studio');
 });
 
-test('portal deep-links Generate this instead of coach-create', () => {
+test('portal deep-links Create this now instead of coach-create', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /function openCreateFromCoach/);
   assert.match(src, /__SE_COACH_CREATE_SESSION/);
-  assert.match(src, /Generate this/);
+  assert.match(src, /Create this now/);
+  assert.match(src, /inferCreateActionFromReply/);
   const createClick = src.slice(src.indexOf('aiRow.querySelectorAll(\'.coach-action-btn\')'));
   assert.doesNotMatch(createClick.slice(0, 1800), /\/api\/coach-create/);
+});
+
+test('a promised Create this now reply still yields a create action in the portal', () => {
+  const action = inferCreateActionFromReply(
+    'This should now render as a one-click button. Click "Create this now" and the 25-30s Reel will generate with flat vector animation.',
+    'yes'
+  );
+  assert.equal(action.type, 'create');
+  assert.equal(action.destination, 'animate');
+  assert.match(action.prompt, /Create this now|flat vector|Reel/i);
 });
 
 test('animation studio hydrates a coach session into the brief box', () => {

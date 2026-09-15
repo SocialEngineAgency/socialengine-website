@@ -10133,9 +10133,14 @@
           aiRow.className = 'chat-msg-row';
           const replyHtml = formatAIText(data.reply || 'Got it!');
           let actionsHtml = '';
-          if (Array.isArray(data.coach_actions) && data.coach_actions.length) {
+          let coachActions = Array.isArray(data.coach_actions) ? data.coach_actions.slice() : [];
+          if (!coachActions.length && typeof window.inferCreateActionFromReply === 'function') {
+            const inferred = window.inferCreateActionFromReply(data.reply, message);
+            if (inferred) coachActions.push(inferred);
+          }
+          if (coachActions.length) {
             actionsHtml = '<div class="coach-actions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
-              data.coach_actions.map((a, i) => {
+              coachActions.map((a, i) => {
                 if (a.type === 'regenerate') {
                   const safeTid = String(a.template_id || '').replace(/"/g, '&quot;');
                   const safeProd = String(a.product_name || '').replace(/"/g, '&quot;');
@@ -10149,7 +10154,7 @@
                   const safeMode = (a.mode === 'image' ? 'image' : 'video');
                   const safeAR = ['9:16','1:1','16:9'].includes(a.aspect_ratio) ? a.aspect_ratio : '9:16';
                   const safeDest = a.destination === 'animate' ? 'animate' : 'studio';
-                  const label = a.product_name ? ('Generate this: ' + a.product_name) : 'Generate this';
+                  const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
                   return '<button class="coach-action-btn" data-type="create" data-prompt="' + safePrompt + '" data-product-name="' + safeProd + '" data-mode="' + safeMode + '" data-aspect-ratio="' + safeAR + '" data-destination="' + safeDest + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
                 }
                 return '';
