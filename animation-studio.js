@@ -2362,13 +2362,33 @@
   }
   window.applyAnimRemixSessionIfAny = applyAnimRemixSessionIfAny;
 
+  async function applyAnimCoachCreateSessionIfAny() {
+    const s = window.__SE_COACH_CREATE_SESSION;
+    if (!s || !s.prompt || s.destination !== 'animate') return false;
+    window.__SE_COACH_CREATE_SESSION = null;
+    const ta = document.getElementById('anim-prompt');
+    if (ta) ta.value = s.prompt;
+    if (s.attached_image_url) {
+      _refs = [{ url: s.attached_image_url, title: s.product_name || 'Coach ref', role: 'character' }];
+      renderRefs();
+    }
+    toast('Coach brief loaded in Animate — review, then Send.', 'success');
+    return true;
+  }
+  window.applyAnimCoachCreateSessionIfAny = applyAnimCoachCreateSessionIfAny;
+
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
     window.__clientData = data || window.__clientData || window.clientData;
     window.__clientEmail = window.clientEmail || window.__clientEmail || '';
     window.API = typeof API !== 'undefined' ? API : window._seAPI;
 
     const remixSession = window.__SE_ANIM_REMIX_SESSION;
+    const coachSession = window.__SE_COACH_CREATE_SESSION;
     if (remixSession && remixSession.referenceUrl) {
+      _project = null;
+      stopPoll();
+    }
+    if (coachSession && coachSession.prompt && coachSession.destination === 'animate') {
       _project = null;
       stopPoll();
     }
@@ -2722,7 +2742,7 @@
     // Auto-resume in-flight work. Never auto-delete on expired media.
     if (_project && projectMediaExpired(_project)) {
       toast('Some media links died after a restart — re-upload Char refs if needed.', 'warning');
-    } else if (!_project && !(remixSession && remixSession.referenceUrl)) {
+    } else if (!_project && !(remixSession && remixSession.referenceUrl) && !(coachSession && coachSession.prompt && coachSession.destination === 'animate')) {
       const lastId = lastOpenProjectId();
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)
@@ -2747,6 +2767,9 @@
     }
     if (remixSession && remixSession.referenceUrl) {
       await applyAnimRemixSessionIfAny();
+    }
+    if (coachSession && coachSession.prompt && coachSession.destination === 'animate') {
+      await applyAnimCoachCreateSessionIfAny();
     }
     if (typeof lucide !== 'undefined') lucide.createIcons();
   };
