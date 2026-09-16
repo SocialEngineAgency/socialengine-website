@@ -24,6 +24,47 @@ test('animate destination opens animation-studio', () => {
   assert.equal(coachCreateNav({ destination: 'animate' }), 'animation-studio');
 });
 
+test('design destination opens Design Studio', () => {
+  const s = normalizeCoachCreateSession({
+    prompt: 'Tylosis carousel. Attach the infographic then split.',
+    destination: 'design',
+    mode: 'image',
+  });
+  assert.equal(s.destination, 'design');
+  assert.equal(coachCreateNav(s), 'design-studio');
+});
+
+test('carousel language infers design', () => {
+  const action = inferCreateActionFromReply(
+    'Create this now is below.',
+    'make a carousel infographic about how a microscope is made'
+  );
+  assert.equal(action.destination, 'design');
+  assert.equal(action.mode, 'image');
+  assert.equal(action.aspect_ratio, '1:1');
+});
+
+test('design apply fills the Post brief and keeps the session', () => {
+  const session = normalizeCoachCreateSession({
+    prompt: 'UK guide to tylosis. Upload infographic, split, caption, queue.',
+    destination: 'design',
+  });
+  const result = applyCoachCreateFields(session, { csBrief: { value: '' } });
+  assert.equal(result.applied, true);
+  assert.equal(result.keep, true);
+  assert.match(result.prompt, /tylosis/i);
+});
+
+test('portal Create this now can open Design Studio', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /nav === 'design-studio'/);
+  assert.match(src, /openClaudeDesignStudio/);
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(design, /function applyDesignCoachSession/);
+  assert.match(design, /destination !== 'design'/);
+  assert.doesNotMatch(design, /__SE_COACH_CREATE_SESSION\s*=\s*null/);
+});
+
 test('portal deep-links Create this now instead of coach-create', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /function openCreateFromCoach/);

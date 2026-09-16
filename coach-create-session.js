@@ -46,12 +46,28 @@ function inferCoachSessionExtras(text) {
   return { duration, format_template_id, entry };
 }
 
+function inferCoachDestination(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\bcarousel\b|\binfographic\b|\bslides?\b|\bslide deck\b|\bfigurelabs\b|\btall graphic\b/.test(t)) {
+    return 'design';
+  }
+  if (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b|\bframe\s*\d|\bshot\s*\d/.test(t)) {
+    return 'animate';
+  }
+  return 'studio';
+}
+
+function normalizeCoachDestination(value, text) {
+  const d = String(value || '').trim().toLowerCase();
+  if (d === 'animate' || d === 'design' || d === 'studio') return d;
+  if (d === 'carousel' || d === 'post') return 'design';
+  return inferCoachDestination(text);
+}
+
 function normalizeCoachCreateSession(intent = {}) {
   const prompt = normalizeCoachPrompt(intent.prompt);
   if (!prompt) return null;
-  const destination = String(intent.destination || '').trim().toLowerCase() === 'animate'
-    ? 'animate'
-    : 'studio';
+  const destination = normalizeCoachDestination(intent.destination, prompt);
   const rawUrl = String(intent.attached_image_url || '').trim();
   const attached_image_url = /^https?:\/\//i.test(rawUrl) ? rawUrl : '';
   const extras = inferCoachSessionExtras(prompt);
@@ -70,7 +86,10 @@ function normalizeCoachCreateSession(intent = {}) {
 }
 
 function coachCreateNav(session) {
-  return session && session.destination === 'animate' ? 'animation-studio' : 'creation-studio';
+  if (!session) return 'creation-studio';
+  if (session.destination === 'animate') return 'animation-studio';
+  if (session.destination === 'design') return 'design-studio';
+  return 'creation-studio';
 }
 
 function isCoachMetaBrief(text) {
@@ -101,13 +120,11 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   if (!usable.length) return null;
   usable.sort((a, b) => b.length - a.length);
   const prompt = usable[0];
-  const destination = (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b|\bframe\s*\d|\bshot\s*\d/.test(`${blob} ${prompt}`))
-    ? 'animate'
-    : 'studio';
+  const destination = inferCoachDestination(`${blob} ${prompt}`);
   return normalizeCoachCreateSession({
     prompt,
-    mode: 'video',
-    aspect_ratio: '9:16',
+    mode: destination === 'design' ? 'image' : 'video',
+    aspect_ratio: destination === 'design' ? '1:1' : '9:16',
     destination,
   });
 }
@@ -122,6 +139,16 @@ function sessionApplyExtras(session) {
 
 function applyCoachCreateFields(session, fields) {
   if (!session || !session.prompt) return { applied: false, keep: true };
+  if (session.destination === 'design') {
+    if (!fields || !fields.csBrief) return { applied: false, keep: true };
+    return {
+      applied: true,
+      keep: true,
+      prompt: session.prompt,
+      product_name: session.product_name || '',
+      attached_image_url: session.attached_image_url || '',
+    };
+  }
   if (session.destination === 'animate') {
     if (!fields || !fields.animPrompt) return { applied: false, keep: true };
     return Object.assign({
@@ -176,6 +203,7 @@ function persistCoachHistoryEntry(role, text, extra = {}) {
 const coachSessionApi = {
   normalizeCoachCreateSession,
   coachCreateNav,
+  inferCoachDestination,
   applyCoachCreateFields,
   inferCreateActionFromReply,
   isCoachMetaBrief,
