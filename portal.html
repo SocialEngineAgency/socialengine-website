@@ -6326,13 +6326,18 @@
     // no longer have a sidebar button (creation-studio, animation-studio, brand-voice).
     window.switchNav = function(nav) {
       if (nav === 'design-studio') {
+        window.__SE_CREATE_SURFACE = 'design';
         seWriteHash('create/' + CREATE_SEGMENT_SLUG['creation-studio']);
-        const el = document.querySelector('[data-nav="create"]');
-        if (el) el.click(); else renderCreatePage('creation-studio');
-        setTimeout(() => {
-          const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
-          if (typeof open === 'function') open();
-        }, 80);
+        showIf(true, document.getElementById('create-segments'));
+        const createBtn = document.querySelector('[data-nav="create"]');
+        if (createBtn) {
+          document.querySelectorAll('.dash-nav-item').forEach((n) => n.classList.remove('active'));
+          createBtn.classList.add('active');
+        }
+        activeNav = 'creation-studio';
+        const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
+        if (typeof open === 'function') open();
+        else renderCreatePage('creation-studio');
         return;
       }
       if (nav === 'creation-studio' || nav === 'video-studio' || nav === 'animation-studio') {
@@ -6461,6 +6466,7 @@
         // Cold start — render once with whatever we have (probably empty),
         // fire the fetch, then re-render as soon as it returns.
         loadUnifiedVideoModels(true).then(rows => {
+          if (window.__SE_CREATE_SURFACE === 'design') return;
           if (rows.length && typeof activeNav === 'string' && (activeNav === 'video-studio' || activeNav === 'creation-studio')) {
             renderVideoStudio();
           }
@@ -6487,7 +6493,7 @@
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
                 <div style="display:inline-flex;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;gap:2px;">
-                  <button type="button" onclick="renderVideoStudio()" style="padding:7px 12px;border:none;border-radius:8px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Video</button>
+                  <button type="button" onclick="window.__SE_CREATE_SURFACE='video'; renderVideoStudio()" style="padding:7px 12px;border:none;border-radius:8px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Video</button>
                   <button type="button" onclick="(typeof openClaudeDesignStudio==='function'?openClaudeDesignStudio:renderClaudeStudio)()" style="padding:7px 12px;border:none;border-radius:8px;background:transparent;color:rgba(255,255,255,0.5);font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post</button>
                 </div>
                 <div style="padding:8px 16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;display:flex;align-items:center;gap:8px;">

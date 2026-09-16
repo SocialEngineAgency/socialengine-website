@@ -65,6 +65,33 @@ test('portal Create this now can open Design Studio', () => {
   assert.doesNotMatch(design, /__SE_COACH_CREATE_SESSION\s*=\s*null/);
 });
 
+test('a 25-30s reel brief cannot land in Design Studio', () => {
+  const s = normalizeCoachCreateSession({
+    prompt: 'Idea 3: "What Happens at Your GP Appointment" (25-30s Reel)\nPerfect — shorter = higher completion rate on Reels anyway.',
+    destination: 'design',
+    mode: 'image',
+  });
+  assert.notEqual(s.destination, 'design');
+  assert.equal(s.destination, 'animate');
+  assert.equal(coachCreateNav(s), 'animation-studio');
+});
+
+test('design-studio nav opens Post without a Video remount race', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const start = src.indexOf("if (nav === 'design-studio')");
+  assert.ok(start >= 0);
+  const block = src.slice(start, start + 700);
+  assert.match(block, /__SE_CREATE_SURFACE\s*=\s*'design'/);
+  assert.doesNotMatch(block, /setTimeout/);
+  assert.match(src, /__SE_CREATE_SURFACE === 'design'/);
+  assert.match(src, /onclick="window\.__SE_CREATE_SURFACE='video';\s*renderVideoStudio\(\)"/);
+  const gen = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const useVideo = gen.match(/if \(data\.code === 'USE_VIDEO_STUDIO'\) \{[\s\S]*?\n        \}/);
+  assert.ok(useVideo);
+  assert.match(useVideo[0], /return;/);
+  assert.doesNotMatch(useVideo[0], /throw new Error/);
+});
+
 test('portal deep-links Create this now instead of coach-create', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /function openCreateFromCoach/);
