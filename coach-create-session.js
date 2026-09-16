@@ -50,18 +50,35 @@ function isCoachVideoBrief(text) {
   return /\b(animate|animation|8\s*second|seconds?\s+video|\breels?\b|image-to-video|i2v|motion\s+along|poses?\s+and\s+moves|voice[- ]?over|multi[- ]?shot|frame\s*\d|shot\s*\d|25\s*[-–]?\s*30\s*s)\b/i.test(String(text || ''));
 }
 
-function inferCoachDestination(text) {
+function isCoachDesignAsk(text) {
+  return /\bcarousel\b|\binfographic\b|\bslides?\b|\bslide deck\b|\bfigurelabs\b|\btall graphic\b/.test(String(text || '').toLowerCase());
+}
+
+function coachUserStatedNewBrief(userMessage) {
+  return /\b(make|create|generate|render|shoot)\b.{0,80}\b(reel|video|clip|post|carousel|infographic|slides?)\b/.test(String(userMessage || '').toLowerCase());
+}
+
+function inferCoachDestinationFromText(text) {
   const t = String(text || '').toLowerCase();
-  if (isCoachVideoBrief(t)) {
+  const design = isCoachDesignAsk(t);
+  const video = isCoachVideoBrief(t);
+  if (design && !video) return 'design';
+  if (video) {
     if (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b|\bframe\s*\d|\bshot\s*\d|\b25\s*[-–]?\s*30|\b15\s*s|\b20\s*s|\b24\s*s/.test(t)) {
       return 'animate';
     }
     return 'studio';
   }
-  if (/\bcarousel\b|\binfographic\b|\bslides?\b|\bslide deck\b|\bfigurelabs\b|\btall graphic\b/.test(t)) {
-    return 'design';
-  }
+  if (design) return 'design';
   return 'studio';
+}
+
+function inferCoachDestination(text, userMessage) {
+  if (coachUserStatedNewBrief(userMessage)) {
+    if (isCoachDesignAsk(userMessage)) return 'design';
+    return inferCoachDestinationFromText(userMessage);
+  }
+  return inferCoachDestinationFromText(text);
 }
 
 function normalizeCoachDestination(value, text) {
@@ -125,6 +142,15 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
   if (!/create this now|generate this|one-click button|canva\.com|canva pro|synthesia|socialengine account manager|\[create_content\]|can't press a button|cannot press a button|button isn't rendering/.test(blob)) return null;
   const user = normalizeCoachPrompt(String(userMessage || '').replace(/<[^>]+>/g, ' '));
+  if (coachUserStatedNewBrief(userMessage) && user.length >= 20 && !isCoachMetaBrief(user)) {
+    const destination = inferCoachDestination(userMessage, userMessage);
+    return normalizeCoachCreateSession({
+      prompt: user,
+      mode: destination === 'design' ? 'image' : 'video',
+      aspect_ratio: destination === 'design' ? '1:1' : '9:16',
+      destination,
+    });
+  }
   const candidates = [stripCoachButtonFiller(reply)];
   for (const prev of priorTexts || []) candidates.push(stripCoachButtonFiller(prev));
   if (user.length >= 20 && !isCoachMetaBrief(user)) candidates.push(user);
