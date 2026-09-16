@@ -6325,6 +6325,16 @@
     // Programmatic nav used by Fundraise/Ads/Coach handoffs and the old ids that
     // no longer have a sidebar button (creation-studio, animation-studio, brand-voice).
     window.switchNav = function(nav) {
+      if (nav === 'design-studio') {
+        seWriteHash('create/' + CREATE_SEGMENT_SLUG['creation-studio']);
+        const el = document.querySelector('[data-nav="create"]');
+        if (el) el.click(); else renderCreatePage('creation-studio');
+        setTimeout(() => {
+          const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
+          if (typeof open === 'function') open();
+        }, 80);
+        return;
+      }
       if (nav === 'creation-studio' || nav === 'video-studio' || nav === 'animation-studio') {
         const seg = nav === 'animation-studio' ? 'animation-studio' : 'creation-studio';
         seWriteHash('create/' + CREATE_SEGMENT_SLUG[seg]);
@@ -6944,9 +6954,12 @@
       window.__SE_COACH_CREATE_SESSION = session;
       const navName = (typeof window.coachCreateNav === 'function')
         ? window.coachCreateNav(session)
-        : (session.destination === 'animate' ? 'animation-studio' : 'creation-studio');
+        : (session.destination === 'animate' ? 'animation-studio'
+          : (session.destination === 'design' ? 'design-studio' : 'creation-studio'));
       if (typeof switchNav === 'function') switchNav(navName);
-      else if (navName === 'creation-studio' && typeof renderVideoStudio === 'function') {
+      else if (navName === 'design-studio' && typeof window.openClaudeDesignStudio === 'function') {
+        window.openClaudeDesignStudio();
+      } else if (navName === 'creation-studio' && typeof renderVideoStudio === 'function') {
         if (typeof activeNav !== 'undefined') activeNav = 'creation-studio';
         renderVideoStudio();
       }

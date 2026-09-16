@@ -472,6 +472,28 @@
     toast('URL set as reference', 'success');
   }
 
+  function applyDesignCoachSession() {
+    const s = window.__SE_COACH_CREATE_SESSION;
+    if (!s || s.destination !== 'design' || !s.prompt) return;
+    const apply = typeof window.applyCoachCreateFields === 'function' ? window.applyCoachCreateFields : null;
+    const briefEl = document.getElementById('cs-brief');
+    const result = apply
+      ? apply(s, { csBrief: briefEl })
+      : { applied: !!briefEl, keep: true, prompt: s.prompt, attached_image_url: s.attached_image_url };
+    if (!result.applied) return;
+    if (briefEl) briefEl.value = result.prompt;
+    _csBrief = result.prompt;
+    if (result.attached_image_url) {
+      setReference({
+        url: result.attached_image_url,
+        type: 'image',
+        title: s.product_name || 'Coach still',
+        source: 'coach',
+      });
+    }
+    toast('Coach brief loaded — upload the infographic, Split, Get Caption, Add to Queue.', 'success');
+  }
+
   function renderClaudeStudio() {
     const content = document.getElementById('dash-content');
     if (!content) return;
@@ -687,6 +709,8 @@
     document.getElementById('cs-tab-products')?.addEventListener('click', () => setPickerTab('products'));
     document.getElementById('cs-tab-library')?.addEventListener('click', () => setPickerTab('library'));
     document.getElementById('cs-tab-uploads')?.addEventListener('click', () => setPickerTab('uploads'));
+
+    applyDesignCoachSession();
 
     let searchTimer = null;
     document.getElementById('cs-product-search')?.addEventListener('input', (e) => {
