@@ -34,6 +34,17 @@ test('design destination opens Design Studio', () => {
   assert.equal(coachCreateNav(s), 'design-studio');
 });
 
+test('this-turn infographic ask does not reuse a prior reel brief', () => {
+  const action = inferCreateActionFromReply(
+    'Create this now is below.',
+    'create a gastric cancer infographic for OPA',
+    ['Idea 3: What Happens at Your GP Appointment (25-30s Reel). Perfect — shorter = higher completion rate on Reels anyway.']
+  );
+  assert.equal(action.destination, 'design');
+  assert.match(action.prompt, /gastric cancer infographic/i);
+  assert.doesNotMatch(action.prompt, /GP Appointment/);
+});
+
 test('carousel language infers design', () => {
   const action = inferCreateActionFromReply(
     'Create this now is below.',
