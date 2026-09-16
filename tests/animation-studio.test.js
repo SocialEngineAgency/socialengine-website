@@ -51,3 +51,16 @@ test('chat shows a working line while Claude writes shots', () => {
   assert.match(chat, /anim-working/);
   assert.match(chat, /Claude is writing|writing the shots/i);
 });
+
+test('after /brief returns, briefing is cleared and the canvas re-renders', () => {
+  const fn = fnSlice('async function sendPrompt', 'async function acceptBrief');
+  const finallyAt = fn.indexOf('finally');
+  assert.ok(finallyAt > 0, 'sendPrompt must have a finally');
+  const after = fn.slice(finallyAt);
+  const cleared = after.indexOf('_briefing = false');
+  assert.ok(cleared >= 0, 'finally must clear _briefing');
+  const renderAfter = after.indexOf('renderCanvas()', cleared);
+  const chatAfter = after.indexOf('renderChat()', cleared);
+  assert.ok(renderAfter > cleared, 'must re-render canvas after clearing _briefing or Accept never appears');
+  assert.ok(chatAfter > cleared, 'must re-render chat after clearing _briefing or Accept never appears');
+});
