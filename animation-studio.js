@@ -1793,6 +1793,8 @@
         sendBtn.disabled = false;
         sendBtn.textContent = 'Send to Claude';
       }
+      renderCanvas();
+      renderChat();
     }
   }
 
