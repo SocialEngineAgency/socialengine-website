@@ -64,3 +64,24 @@ test('after /brief returns, briefing is cleared and the canvas re-renders', () =
   assert.ok(renderAfter > cleared, 'must re-render canvas after clearing _briefing or Accept never appears');
   assert.ok(chatAfter > cleared, 'must re-render chat after clearing _briefing or Accept never appears');
 });
+
+test('Claude shots sit in a sidebar scroller; compose stays pinned', () => {
+  const asideAt = src.indexOf('<aside class="anim-chat">');
+  assert.ok(asideAt >= 0, 'missing anim-chat aside');
+  const aside = src.slice(asideAt, src.indexOf('</aside>', asideAt));
+  const from = aside.indexOf('<div class="anim-chat-body">');
+  const at = aside.indexOf('<div class="anim-chat-compose">');
+  assert.ok(from >= 0 && at > from, 'chat-body and compose must both exist');
+  let depth = 0;
+  const slice = aside.slice(from, at);
+  const re = /<\/?div\b[^>]*>/g;
+  let m;
+  while ((m = re.exec(slice))) {
+    if (m[0].startsWith('</')) depth -= 1;
+    else depth += 1;
+  }
+  assert.equal(depth, 0, 'compose must sit outside the chat-body scroller or Scene 3+ stays clipped');
+  assert.match(src, /\.anim-chat-body\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(src, /\.anim-chat-body\s*\{[^}]*min-height:\s*0/);
+  assert.match(src, /anim-chat-body::-webkit-scrollbar/, 'shots list needs a visible side scrollbar');
+});
