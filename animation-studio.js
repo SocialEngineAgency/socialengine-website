@@ -2527,10 +2527,13 @@
         .anim-chat-header { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-chat-header h3 { margin:0 0 4px; font-size:0.95rem; color:#E2E8F0; }
         .anim-chat-header p { margin:0; font-size:0.72rem; color:rgba(255,255,255,0.4); }
-        /* One scroll region for log + brief + compose (compose used to be pinned and clipped). */
-        .anim-chat-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:flex; flex-direction:column; }
+        /* Shots list scrolls; compose stays pinned (Coach pattern). */
+        .anim-chat-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:flex; flex-direction:column; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:rgba(167,139,250,0.55) rgba(255,255,255,0.06); }
+        .anim-chat-body::-webkit-scrollbar { width:8px; }
+        .anim-chat-body::-webkit-scrollbar-track { background:rgba(255,255,255,0.06); border-radius:8px; }
+        .anim-chat-body::-webkit-scrollbar-thumb { background:rgba(167,139,250,0.45); border-radius:8px; }
         .anim-chat-log { flex:0 0 auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
-        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); flex:0 0 auto; }
+        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); flex:0 1 auto; min-height:0; max-height:46vh; overflow-y:auto; }
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
@@ -2691,7 +2694,8 @@
           <div class="anim-chat-body">
             <div class="anim-chat-log" id="anim-chat-log"></div>
             <div id="anim-brief-actions" style="padding:0 14px;"></div>
-            <div class="anim-chat-compose">
+          </div>
+          <div class="anim-chat-compose">
               <div class="anim-row">
                 <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
                 <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
@@ -2729,7 +2733,6 @@
               </div>
               <textarea id="anim-prompt" class="anim-prompt" placeholder="Write or paste the voiceover. We'll build the shots around it."></textarea>
               <button type="button" class="anim-btn" id="anim-send">Send to Claude</button>
-            </div>
           </div>
         </aside>
       </div>
