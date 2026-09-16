@@ -29,7 +29,14 @@
       captionForQueue({ typedCaption, generatedCaption, brief }) {
         return String(typedCaption || generatedCaption || brief || '').trim();
       },
+      queueReviewStatus() { return 'Pending'; },
+      openContentReviewAfterQueue() { return false; },
     };
+  }
+
+  function afterQueued() {
+    toast('Added to content queue', 'success');
+    queueReady().openContentReviewAfterQueue();
   }
 
   function readQueueCaption() {
@@ -1326,12 +1333,12 @@
           brief: _csBrief,
           caption: captionText || _csBrief,
           platform: queuePlatform(),
-          status: 'Approved',
+          status: queueReady().queueReviewStatus(),
         }),
       });
       const qData = await q.json().catch(() => ({}));
       if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
-      toast('Added to content queue', 'success');
+      afterQueued();
       if (btn) btn.textContent = 'Added ✓';
       setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
     } catch (e) {
@@ -1361,12 +1368,12 @@
           brief: _csBrief,
           caption,
           platform: queuePlatform(),
-          status: 'Approved',
+          status: queueReady().queueReviewStatus(),
         }),
       });
       const qData = await q.json().catch(() => ({}));
       if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
-      toast('Added to content queue', 'success');
+      afterQueued();
       if (btn) btn.textContent = 'Added ✓';
       setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
     } catch (e) {
@@ -1415,12 +1422,12 @@
           brief: _csBrief,
           caption: captionText || _csBrief,
           platform: queuePlatform(),
-          status: 'Approved',
+          status: queueReady().queueReviewStatus(),
         }),
       });
       const qData = await q.json().catch(() => ({}));
       if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
-      toast('Added to content queue', 'success');
+      afterQueued();
       if (btn) btn.textContent = 'Added ✓';
       setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
     } catch (e) {

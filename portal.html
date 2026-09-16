@@ -11,8 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20260913-queue"></script>
-  <script src="./claude-studio.js?v=20260913-queue" defer></script>
+  <script src="./studio-queue-ready.js?v=20260916-queue-review"></script>
+  <script src="./claude-studio.js?v=20260916-queue-review" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
@@ -3901,7 +3901,10 @@
       const hookLine = post.hook_line || '';
       const formatKey = contentFormatKey(post);
       const isReel = formatKey === 'reel' || formatKey === 'video';
-      const imageUrl = resolveImageUrl(post);
+      const rawImage = resolveImageUrl(post);
+      const imageUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
+        ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
+        : rawImage;
       const hasImage = !!imageUrl;
       const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
       const hasVideo = !!videoUrl;
@@ -4900,7 +4903,9 @@
       const tod = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
       // Count posts by status (must come before greeting subtitle)
-      const posts = data.content || [];
+      const posts = (window.studioQueueReady && typeof window.studioQueueReady.sortPostsForReview === 'function')
+        ? window.studioQueueReady.sortPostsForReview(data.content || [])
+        : (data.content || []);
       const pending = posts.filter(p => p.status === 'Pending' || p.status === 'Draft' || p.status === 'Ready for Review');
       const approved = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
       const totalPosts = posts.length;
@@ -5231,7 +5236,10 @@
       const status = post.status || 'Draft';
       const formatKey = contentFormatKey(post);
       const isReel = formatKey === 'reel' || formatKey === 'video';
-      const imageUrl = resolveImageUrl(post);
+      const rawImage = resolveImageUrl(post);
+      const imageUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
+        ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
+        : rawImage;
       const hasImage = !!imageUrl;
       const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
       const hasVideo = !!videoUrl;
@@ -5365,7 +5373,10 @@
       const status = post.status || 'Draft';
       const formatKey = contentFormatKey(post);
       const isReel = formatKey === 'reel' || formatKey === 'video';
-      const imageUrl = resolveImageUrl(post);
+      const rawImage = resolveImageUrl(post);
+      const imageUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
+        ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
+        : rawImage;
       const hasImage = !!imageUrl;
       const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
       const hasVideo = !!videoUrl;
@@ -7473,7 +7484,9 @@
     };
     function renderContentPage(data) {
       const content = document.getElementById('dash-content');
-      const posts = data.content || [];
+      const posts = (window.studioQueueReady && typeof window.studioQueueReady.sortPostsForReview === 'function')
+        ? window.studioQueueReady.sortPostsForReview(data.content || [])
+        : (data.content || []);
       const live = liveContentPosts(posts);
       const archived = posts.filter(isArchivedPost);
       const pending = live.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status));
@@ -7682,8 +7695,16 @@
           const val = sortSelect.value;
           const area = document.getElementById('studio-content-area');
           let sorted = [...studioPostsList];
-          if (val === 'date-desc') sorted.sort((a, b) => (b.scheduled_date || '').localeCompare(a.scheduled_date || ''));
-          else if (val === 'date-asc') sorted.sort((a, b) => (a.scheduled_date || '').localeCompare(b.scheduled_date || ''));
+          if (val === 'date-desc') {
+            sorted = (window.studioQueueReady && typeof window.studioQueueReady.sortPostsForReview === 'function')
+              ? window.studioQueueReady.sortPostsForReview(sorted)
+              : sorted.sort((a, b) => (b.scheduled_date || '').localeCompare(a.scheduled_date || ''));
+          }
+          else if (val === 'date-asc') {
+            sorted = (window.studioQueueReady && typeof window.studioQueueReady.sortPostsForReview === 'function')
+              ? window.studioQueueReady.sortPostsForReview(sorted).reverse()
+              : sorted.sort((a, b) => (a.scheduled_date || '').localeCompare(b.scheduled_date || ''));
+          }
           else if (val === 'status') sorted.sort((a, b) => (a.status || '').localeCompare(b.status || ''));
           else if (val === 'platform') sorted.sort((a, b) => (a.platform || '').localeCompare(b.platform || ''));
           studioPostsList = sorted;
