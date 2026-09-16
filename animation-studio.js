@@ -10,6 +10,7 @@
   let _recent = []; // project list for home screen
   let _pollTimer = null;
   let _busy = false;
+  let _briefing = false;
   let _captionStudioOpen = false;
   let _captionPreviewRaf = 0;
   let _recentLoading = false;
@@ -1177,14 +1178,23 @@
               ${addReason ? `<div class="anim-add-scene-hint">${esc(addReason)}</div>` : ''}
             </div>`;
           })() : `
-            <div class="anim-placeholder-row">${p.status === 'character_review'
+            <div class="anim-placeholder-row">${
+              _briefing || p.status === 'briefing'
+              ? 'Claude is writing the shots — stay here. This can take a minute.'
+              : (p.status === 'failed' || p.error)
+              ? (p.error || 'Generation stopped. Upload a Char still on the right, then Retry.')
+              : p.status === 'developing'
+              ? 'Building the character sheet…'
+              : p.status === 'generating'
+              ? 'Generating shots…'
+              : p.status === 'character_review'
               ? 'Shots wait until you Approve character lock.'
               : brief?.shots?.length
               ? `Ready to generate ${brief.shots.length} shots — accept the brief, then approve the character lock.`
               : 'Shot cards will land on this timeline.'}</div>
             ${brief?.shots?.length ? `<div class="anim-timeline anim-timeline--ghost">${brief.shots.map((s) => `
               <div class="anim-shot anim-shot--ghost"><div class="anim-shot__media">${
-                ['developing', 'generating', 'assembling'].includes(p.status)
+                _briefing || ['briefing', 'developing', 'generating', 'assembling'].includes(p.status)
                   ? tileMedia(null, '', 'generating')
                   : `<div class="anim-tile__ph">${esc(s.title || s.id)}</div>`
               }</div></div>`).join('')}</div>` : ''}
@@ -1603,7 +1613,19 @@
 
     const actions = document.getElementById('anim-brief-actions');
     if (actions) {
-      if (_project?.status === 'brief_ready' && brief) {
+      if (_briefing || _project?.status === 'briefing') {
+        actions.innerHTML = `<div class="anim-working" aria-busy="true">Claude is writing the shots — stay here. This can take a minute.</div>`;
+      } else if (_project?.status === 'failed' || _project?.error) {
+        actions.innerHTML = `
+          <div class="anim-brief-card">
+            <div class="anim-brief-card__title">Needs a Char still</div>
+            <div class="anim-brief-shot">${esc(_project.error || 'Upload a Character reference, tag it Char, then retry.')}</div>
+            <div class="anim-brief-btns">
+              <button type="button" class="anim-btn" id="anim-retry-generate">Retry</button>
+            </div>
+          </div>`;
+        document.getElementById('anim-retry-generate')?.addEventListener('click', acceptBrief);
+      } else if (_project?.status === 'brief_ready' && brief) {
         const optimized = String(brief.rewritten_prompt || '').trim()
           || (brief.shots || []).map((s, i) => `${i + 1}. ${s.title || `Shot ${i + 1}`}: ${s.prompt || ''}`).join('\n\n');
         const looksRaw = (() => {
@@ -1699,8 +1721,26 @@
       return toast('Tag one reference as Character (identity)', 'error');
     }
     _busy = true;
+    _briefing = true;
+    _project = Object.assign({}, _project || {}, {
+      status: 'briefing',
+      user_prompt: (_project && _project.user_prompt) || text,
+      chat: ((_project && _project.chat) || []).concat([{ role: 'user', text, ts: new Date().toISOString() }]),
+      agent_brief: (_project && _project.agent_brief) || { title: 'Writing shots…', shots: [] },
+      scenes: (_project && _project.scenes) || [],
+    });
+    const sendBtn = document.getElementById('anim-send');
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending…';
+    }
+    renderCanvas();
+    renderChat();
     try {
       await ensureProject();
+      _project = Object.assign({}, _project, { status: 'briefing' });
+      renderCanvas();
+      renderChat();
       const mode = document.getElementById('anim-mode')?.value || 'video';
       const look = document.getElementById('anim-look')?.value || 'stylized';
       const motion_mode = document.getElementById('anim-motion')?.value || currentMotionMode();
@@ -1747,13 +1787,30 @@
     } catch (e) {
       toast(e.message || 'Brief failed', 'error', e.request_id);
     } finally {
+      _briefing = false;
       _busy = false;
+      if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send to Claude';
+      }
     }
   }
 
   async function acceptBrief() {
     if (_busy || !_project?.id) return;
     _busy = true;
+    _briefing = false;
+    const hasChar = !!(_refs.some((r) => r.role === 'character')
+      || (_project.references || []).some((r) => r && r.role === 'character')
+      || _project.character_ref_url);
+    _project = Object.assign({}, _project, {
+      status: hasChar ? 'developing' : 'generating',
+      error: null,
+      identity_source: hasChar ? 'upload' : 't2v',
+    });
+    renderCanvas();
+    renderChat();
+    startPoll();
     try {
       const edited = document.getElementById('anim-brief-edit')?.value;
       const agent_brief = { ...(_project.agent_brief || {}) };
@@ -1766,7 +1823,7 @@
       renderCanvas();
       renderChat();
       startPoll();
-      toast('Generating character sheet…', 'success');
+      toast(hasChar ? 'Generating character sheet…' : 'Generating shots as text-to-video…', 'success');
     } catch (e) {
       toast(e.message || 'Approve failed', 'error', e.request_id);
     } finally {
@@ -2318,6 +2375,7 @@
 
   async function goHome() {
     stopPoll();
+    _briefing = false;
     _project = null;
     _refs = [];
     rememberOpenProject('');
