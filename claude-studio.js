@@ -234,7 +234,7 @@
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.78rem;font-weight:700;color:#fff;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(_csRef.title)}</div>
           <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);margin-top:3px;text-transform:uppercase;letter-spacing:0.06em;">${escapeHtml(_csRef.source)} · ${_csRef.type}</div>
-          ${_csRef.type === 'video' && !_csRef.poster_url ? '<div style="font-size:0.68rem;color:#FBBF24;margin-top:4px;">Video selected — Claude Design needs a still. Upload a frame or open Video Studio.</div>' : ''}
+          ${_csRef.type === 'video' && !_csRef.poster_url ? '<div style="font-size:0.68rem;color:#FBBF24;margin-top:4px;">Video selected — Design Studio needs a still. Upload a frame or open Video Studio.</div>' : ''}
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px;">
@@ -356,7 +356,7 @@
               poster_url: '',
             });
             closePicker();
-            toast('Video needs a still for Claude Design — upload a frame or use Video Studio', 'warning');
+            toast('Video needs a still for Design Studio — upload a frame or use Video Studio', 'warning');
             return;
           }
           if (!url) { toast('No usable image on that item', 'warning'); return; }
@@ -385,7 +385,7 @@
       ? `<button type="button" id="cs-use-vs-upload" style="margin-top:10px;width:100%;padding:10px;border-radius:9px;border:1px solid rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#6EE7B7;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Use Video Studio upload</button>`
       : '';
     sess.innerHTML = `
-      <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);line-height:1.45;margin-bottom:12px;">Upload an image (preferred). Videos need a still frame for Claude Design.</div>
+      <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);line-height:1.45;margin-bottom:12px;">Upload an image (preferred). Videos need a still frame for Design Studio.</div>
       <div id="cs-drop" style="border:2px dashed rgba(255,255,255,0.12);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.02);">
         <div style="font-size:0.85rem;font-weight:600;color:rgba(255,255,255,0.7);">Drop image here or click</div>
         <div style="font-size:0.7rem;color:rgba(255,255,255,0.3);margin-top:6px;">PNG / JPG / WEBP · max 10MB</div>
@@ -555,7 +555,7 @@
           <div id="cs-preview-header" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:rgba(255,255,255,0.35);">Preview · Instagram Square 1:1</div>
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
-              <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Claude Design Studio</div>
+              <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Design Studio</div>
               <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Upload a finished photo, paste the caption, Add to Queue — or generate a branded square, split a tall infographic, or drop 2–10 already-cut slides.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">

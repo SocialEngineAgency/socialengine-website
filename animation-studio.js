@@ -1051,7 +1051,7 @@
       el.innerHTML = `
         <div class="anim-empty">
           <div class="anim-empty__title">Animation canvas</div>
-          <div class="anim-empty__desc">Pick a mode, attach tagged refs, and describe one idea. Claude looks at the images, then writes distinct shots. Accept to generate character views, scenes, and shots here.</div>
+          <div class="anim-empty__desc">Pick a mode, attach tagged refs, and describe one idea. AI looks at the images, then writes distinct shots. Accept to generate character views, scenes, and shots here.</div>
           <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong> + <strong>Scene</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
         </div>
         ${recentHtml}`;
@@ -1180,7 +1180,7 @@
           })() : `
             <div class="anim-placeholder-row">${
               _briefing || p.status === 'briefing'
-              ? 'Claude is writing the shots — stay here. This can take a minute.'
+              ? 'AI is writing the shots — stay here. This can take a minute.'
               : (p.status === 'failed' || p.error)
               ? (p.error || 'Generation stopped. Upload a Char still on the right, then Retry.')
               : p.status === 'developing'
@@ -1606,15 +1606,15 @@
     logEl.innerHTML = chat.map((m) => {
       const isAgent = m.role === 'agent' || m.role === 'system';
       return `<div class="anim-msg ${isAgent ? 'anim-msg--agent' : 'anim-msg--user'}">
-        <div class="anim-msg__role">${esc(m.role === 'agent' ? 'Claude · shots' : (m.role === 'user' ? 'Your idea' : m.role))}</div>
+        <div class="anim-msg__role">${esc(m.role === 'agent' ? 'AI · shots' : (m.role === 'user' ? 'Your idea' : m.role))}</div>
         <div class="anim-msg__text">${esc(m.text)}</div>
       </div>`;
-    }).join('') || `<div class="anim-msg anim-msg--agent"><div class="anim-msg__role">Claude · shots</div><div class="anim-msg__text">Describe one idea. I’ll turn it into separate shots — not copies of your prompt. Then you accept before anything generates.</div></div>`;
+    }).join('') || `<div class="anim-msg anim-msg--agent"><div class="anim-msg__role">AI · shots</div><div class="anim-msg__text">Describe one idea. I’ll turn it into separate shots — not copies of your prompt. Then you accept before anything generates.</div></div>`;
 
     const actions = document.getElementById('anim-brief-actions');
     if (actions) {
       if (_briefing || _project?.status === 'briefing') {
-        actions.innerHTML = `<div class="anim-working" aria-busy="true">Claude is writing the shots — stay here. This can take a minute.</div>`;
+        actions.innerHTML = `<div class="anim-working" aria-busy="true">AI is writing the shots — stay here. This can take a minute.</div>`;
       } else if (_project?.status === 'failed' || _project?.error) {
         actions.innerHTML = `
           <div class="anim-brief-card">
@@ -1639,7 +1639,7 @@
           <div class="anim-brief-card">
             <div class="anim-brief-card__title">${(brief.shots || []).length || 0} shots from your idea</div>
             ${looksRaw
-              ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This still looks like your raw draft — tap <strong>Re-brief</strong> to run Claude again (it will rewrite automatically).</div>`
+              ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This still looks like your raw draft — tap <strong>Re-brief</strong> to run it again (it will rewrite automatically).</div>`
               : (brief._rewritten_repaired
                 ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:0 0 8px;line-height:1.35;">Recovered from shot plan — tap Re-brief if you want a fuller Art Director rewrite.</div>`
                 : '')}
@@ -1707,7 +1707,7 @@
     const prompt = String(ta?.value || prior || '').trim();
     if (!prompt) return toast('Enter a prompt to re-brief', 'error');
     if (ta) ta.value = prompt;
-    toast('Re-briefing with Claude Art Director…', 'info');
+    toast('Re-briefing with the Art Director…', 'info');
     await sendPrompt();
   }
 
@@ -1749,7 +1749,7 @@
       _project.look = look;
       _project.motion_mode = motion_mode;
       await syncMotionSettings();
-      toast('Claude is rewriting your brief…', 'info');
+      toast('AI is rewriting your brief…', 'info');
       const briefBody = {
         mode,
         look,
@@ -1791,7 +1791,7 @@
       _busy = false;
       if (sendBtn) {
         sendBtn.disabled = false;
-        sendBtn.textContent = 'Send to Claude';
+        sendBtn.textContent = 'Write shots';
       }
       renderCanvas();
       renderChat();
@@ -2466,6 +2466,7 @@
 
     const root = document.getElementById('dash-content');
     if (!root) return;
+    root.classList.add('dash-content--animate');
 
     // If Animate is already mounted with an open project, don't wipe the canvas
     // (nav re-entry / parent re-render used to bounce Rebuild → Home).
@@ -2518,7 +2519,8 @@
 
     root.innerHTML = `
       <style>
-        .anim-shell { display:grid; grid-template-columns: 1fr minmax(320px,380px); gap:0; height:calc(100vh - 120px); min-height:560px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; overflow:hidden; background:#0B1220; }
+        #dash-content.dash-content--animate { padding-bottom: 12px; }
+        .anim-shell { display:grid; grid-template-columns: 1fr minmax(320px,380px); gap:0; height:calc(100vh - 240px); min-height:400px; max-height:calc(100vh - 200px); border:1px solid rgba(255,255,255,0.08); border-radius:16px; overflow:hidden; background:#0B1220; }
         .anim-canvas { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.08); background:radial-gradient(1200px 600px at 10% 0%, rgba(124,58,237,0.12), transparent 55%), #0B1220; }
         .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-canvas-header h2 { margin:0; font-size:1.05rem; color:#F8FAFC; font-weight:700; }
@@ -2533,7 +2535,9 @@
         .anim-chat-body::-webkit-scrollbar-track { background:rgba(255,255,255,0.06); border-radius:8px; }
         .anim-chat-body::-webkit-scrollbar-thumb { background:rgba(167,139,250,0.45); border-radius:8px; }
         .anim-chat-log { flex:0 0 auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
-        .anim-chat-compose { padding:12px 14px 16px; border-top:1px solid rgba(255,255,255,0.06); flex:0 1 auto; min-height:0; max-height:46vh; overflow-y:auto; }
+        .anim-chat-compose { padding:12px 14px 12px; border-top:1px solid rgba(255,255,255,0.06); flex:0 1 auto; min-height:0; max-height:min(280px, 38vh); overflow:hidden; display:flex; flex-direction:column; }
+        .anim-chat-compose-fields { flex:1 1 auto; min-height:0; overflow-y:auto; }
+        .anim-chat-send { flex:0 0 auto; padding-top:8px; }
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
@@ -2689,13 +2693,14 @@
         <aside class="anim-chat">
           <div class="anim-chat-header">
             <h3>AI Agent</h3>
-            <p>One idea → Claude writes the shots → you accept</p>
+            <p>One idea → AI writes the shots → you accept</p>
           </div>
           <div class="anim-chat-body">
             <div class="anim-chat-log" id="anim-chat-log"></div>
             <div id="anim-brief-actions" style="padding:0 14px;"></div>
           </div>
           <div class="anim-chat-compose">
+              <div class="anim-chat-compose-fields">
               <div class="anim-row">
                 <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
                 <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
@@ -2717,7 +2722,7 @@
                 ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
               </div>
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">Claude can see tagged refs (Char = identity, Scene = environment). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
+              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">AI can see tagged refs (Char = identity, Scene = environment). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
               ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">Voiceover and music generation aren't enabled on this account — captions, uploaded music and outros still work.</div>` : ''}
               <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag every person as Char · Scene for setting · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
@@ -2732,7 +2737,10 @@
                 <button type="button" class="anim-entry-seg" role="tab" data-entry="prompt" aria-selected="false">Describe a video</button>
               </div>
               <textarea id="anim-prompt" class="anim-prompt" placeholder="Write or paste the voiceover. We'll build the shots around it."></textarea>
-              <button type="button" class="anim-btn" id="anim-send">Send to Claude</button>
+              </div>
+              <div class="anim-chat-send">
+                <button type="button" class="anim-btn" id="anim-send">Write shots</button>
+              </div>
           </div>
         </aside>
       </div>
