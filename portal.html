@@ -6958,7 +6958,7 @@
     }
     window.applyCoachCreateSessionIfAny = applyCoachCreateSessionIfAny;
     window.openCreateFromCoach = openCreateFromCoach;
-    // Keep VS upload URL readable by Claude Design (separate script)
+    // Keep VS upload URL readable by Design Studio (separate script)
     Object.defineProperty(window, 'vsUploadedImageUrl', {
       configurable: true,
       get() { return typeof vsUploadedImageUrl !== 'undefined' ? vsUploadedImageUrl : null; },
@@ -7691,7 +7691,7 @@
           upgradeHTML: isPaid() ? '' : upgradeFullpageHTML(
             'trending-up',
             'Grow — Performance Analytics',
-            'See exactly what\'s working. Track reach, impressions, engagement rate, and follower growth across Instagram &amp; Facebook — plus AI insights powered by Claude.',
+            'See exactly what\'s working. Track reach, impressions, engagement rate, and follower growth across Instagram &amp; Facebook — plus AI insights.',
             [
               'Reach &amp; impressions over time',
               'Engagement rate &amp; follower growth',
@@ -7727,7 +7727,7 @@
           ${upgradeFullpageHTML(
             'trending-up',
             'Grow — Performance Analytics',
-            'See exactly what\'s working. Track reach, impressions, engagement rate, and follower growth across Instagram &amp; Facebook — plus AI insights powered by Claude.',
+            'See exactly what\'s working. Track reach, impressions, engagement rate, and follower growth across Instagram &amp; Facebook — plus AI insights.',
             [
               'Reach &amp; impressions over time',
               'Engagement rate &amp; follower growth',
@@ -7995,7 +7995,7 @@
           <div class="analytics-card">
             <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;">
               <h3 class="analytics-card__title" style="display:flex;align-items:center;gap:8px;"><i data-lucide="sparkles" style="width:16px;height:16px;color:#A855F7;"></i> AI insights</h3>
-              <span class="grow-claude-badge"><i data-lucide="sparkles" style="width:11px;height:11px;"></i> Powered by Claude</span>
+              <span class="grow-claude-badge"><i data-lucide="sparkles" style="width:11px;height:11px;"></i> AI insights</span>
             </div>
             <div class="analytics-card__body">
               <div id="grow-insights-area">
@@ -9448,7 +9448,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
               <div>
                 <div style="font-size:0.875rem;color:#fff;font-weight:500;">Auto-write captions</div>
-                <div style="font-size:0.75rem;color:rgba(148,163,184,0.55);margin-top:2px;line-height:1.45;">Fills blank captions with Claude and learned hashtags (max 5). Never overwrites a caption you already wrote.</div>
+                <div style="font-size:0.75rem;color:rgba(148,163,184,0.55);margin-top:2px;line-height:1.45;">Fills blank captions with AI and learned hashtags (max 5). Never overwrites a caption you already wrote.</div>
               </div>
               <label style="position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0;">
                 <input type="checkbox" id="auto-caption-toggle" ${autoOn ? 'checked' : ''} style="opacity:0;width:0;height:0;" onchange="toggleAutoCaption(this.checked)">

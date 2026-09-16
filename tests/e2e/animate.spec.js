@@ -48,6 +48,29 @@ test('Describe a video keeps the old prompt path and is remembered per client', 
   await expect(page.locator('#anim-entry-mode [data-entry="prompt"]')).toHaveClass(/active/);
 });
 
+test('AI shots list scrolls in the sidebar while compose stays on screen', async ({ page }) => {
+  await openAnimate(page);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => {
+    const log = document.getElementById('anim-chat-log');
+    const scenes = Array.from({ length: 6 }, (_, i) => `SCENE ${i + 1} — ${'copy '.repeat(40)}`).join('\n\n');
+    log.innerHTML = `<div class="anim-msg anim-msg--agent"><div class="anim-msg__role">AI · shots</div><div class="anim-msg__text">${scenes}</div></div>`;
+  });
+  const info = await page.evaluate(() => {
+    const body = document.querySelector('.anim-chat-body');
+    const compose = document.querySelector('.anim-chat-compose');
+    return {
+      composeOutside: !!(body && compose && !body.contains(compose)),
+      scrollable: !!(body && body.scrollHeight > body.clientHeight + 8),
+      overflow: body ? getComputedStyle(body).overflowY : '',
+    };
+  });
+  expect(info.composeOutside, 'compose must stay pinned outside the shots scroller').toBe(true);
+  expect(info.scrollable, 'six scenes must overflow the shots pane').toBe(true);
+  expect(info.overflow).toMatch(/auto|scroll/);
+  await expect(page.locator('#anim-send')).toBeInViewport();
+});
+
 test('remix session sends via the VO path', async ({ page }) => {
   const calls = await mockApi(page, srv.base, { data: clientData() });
   await login(page, srv.base);
