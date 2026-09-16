@@ -46,22 +46,34 @@ function inferCoachSessionExtras(text) {
   return { duration, format_template_id, entry };
 }
 
+function isCoachVideoBrief(text) {
+  return /\b(animate|animation|8\s*second|seconds?\s+video|\breels?\b|image-to-video|i2v|motion\s+along|poses?\s+and\s+moves|voice[- ]?over|multi[- ]?shot|frame\s*\d|shot\s*\d|25\s*[-–]?\s*30\s*s)\b/i.test(String(text || ''));
+}
+
 function inferCoachDestination(text) {
   const t = String(text || '').toLowerCase();
+  if (isCoachVideoBrief(t)) {
+    if (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b|\bframe\s*\d|\bshot\s*\d|\b25\s*[-–]?\s*30|\b15\s*s|\b20\s*s|\b24\s*s/.test(t)) {
+      return 'animate';
+    }
+    return 'studio';
+  }
   if (/\bcarousel\b|\binfographic\b|\bslides?\b|\bslide deck\b|\bfigurelabs\b|\btall graphic\b/.test(t)) {
     return 'design';
-  }
-  if (/\banimat|\bvoice[- ]?over\b|\bmulti[- ]?shot\b|\bframe\s*\d|\bshot\s*\d/.test(t)) {
-    return 'animate';
   }
   return 'studio';
 }
 
 function normalizeCoachDestination(value, text) {
+  const inferred = inferCoachDestination(text);
   const d = String(value || '').trim().toLowerCase();
-  if (d === 'animate' || d === 'design' || d === 'studio') return d;
-  if (d === 'carousel' || d === 'post') return 'design';
-  return inferCoachDestination(text);
+  let dest = (d === 'animate' || d === 'design' || d === 'studio')
+    ? d
+    : ((d === 'carousel' || d === 'post') ? 'design' : inferred);
+  if (dest === 'design' && isCoachVideoBrief(text)) {
+    dest = inferred === 'design' ? 'animate' : inferred;
+  }
+  return dest;
 }
 
 function normalizeCoachCreateSession(intent = {}) {

@@ -1198,7 +1198,7 @@
       if (!res.ok || !data.ok) {
         if (data.code === 'USE_VIDEO_STUDIO') {
           toast(data.error || 'Use Video Studio for animation', 'warning');
-          throw new Error(data.error || 'Use Video Studio');
+          return;
         }
         throw new Error(data.error || 'Generation failed');
       }
@@ -1464,6 +1464,7 @@
 
   window.renderClaudeStudio = renderClaudeStudio;
   window.openClaudeDesignStudio = function openClaudeDesignStudio() {
+    window.__SE_CREATE_SURFACE = 'design';
     try {
       const url = window.vsUploadedImageUrl || window._vsUploadedImageUrl;
       if (url && (!window._studioReference || !window._studioReference.url)) {
