@@ -10,6 +10,7 @@ const {
   openContentReviewAfterQueue,
   cardMediaSrc,
   sortPostsForReview,
+  postsForContentReview,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -87,4 +88,32 @@ test('portal cards use cardMediaSrc and sortPostsForReview', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /cardMediaSrc\(/);
   assert.match(src, /sortPostsForReview\(/);
+});
+
+test('the same stored image is one review card even if captions differ', () => {
+  const out = postsForContentReview([
+    { id: 'rec1', caption: 'Healthcare Support NPO of the Year — thank you.', image_url: 'https://store.example/opa/npo.png', created_at: '2026-09-17T12:00:00.000Z' },
+    { id: 'rec2', caption: 'Healthcare Support NPO of the Year — please donate.', image_url: 'https://store.example/opa/npo.png?w=800', created_at: '2026-09-16T12:00:00.000Z' },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'rec1');
+});
+
+test('live Meta copies of the same caption do not become extra review cards', () => {
+  const caption = 'Healthcare Support NPO of the Year — thank you for standing with patients.';
+  const out = postsForContentReview([
+    { id: 'recAAA', caption, created_at: '2026-09-16T10:00:00.000Z' },
+    { id: 'ig_111', caption, _live: true, created_at: '2026-09-17T10:00:00.000Z' },
+    { id: 'fb_222', caption, _source: 'social' },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'recAAA');
+});
+
+test('Content Review does not dump calendar-history into the queue', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /postsForContentReview\(/);
+  assert.doesNotMatch(src, /_skipLiveMerge/);
+  const reviewFn = src.slice(src.indexOf('function renderContentPage'), src.indexOf('function renderContentPage') + 9000);
+  assert.doesNotMatch(reviewFn, /calendar-history/);
 });

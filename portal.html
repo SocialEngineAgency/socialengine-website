@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20260916-queue-review"></script>
+  <script src="./studio-queue-ready.js?v=20260917-review-one-card"></script>
   <script src="./claude-studio.js?v=20260916-queue-review" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
@@ -4903,8 +4903,8 @@
       const tod = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 
       // Count posts by status (must come before greeting subtitle)
-      const posts = (window.studioQueueReady && typeof window.studioQueueReady.sortPostsForReview === 'function')
-        ? window.studioQueueReady.sortPostsForReview(data.content || [])
+      const posts = (window.studioQueueReady && typeof window.studioQueueReady.postsForContentReview === 'function')
+        ? window.studioQueueReady.postsForContentReview(data.content || [])
         : (data.content || []);
       const pending = posts.filter(p => p.status === 'Pending' || p.status === 'Draft' || p.status === 'Ready for Review');
       const approved = posts.filter(p => p.status === 'Approved' || p.status === 'Scheduled');
@@ -7484,8 +7484,8 @@
     };
     function renderContentPage(data) {
       const content = document.getElementById('dash-content');
-      const posts = (window.studioQueueReady && typeof window.studioQueueReady.sortPostsForReview === 'function')
-        ? window.studioQueueReady.sortPostsForReview(data.content || [])
+      const posts = (window.studioQueueReady && typeof window.studioQueueReady.postsForContentReview === 'function')
+        ? window.studioQueueReady.postsForContentReview(data.content || [])
         : (data.content || []);
       const live = liveContentPosts(posts);
       const archived = posts.filter(isArchivedPost);
@@ -7593,63 +7593,6 @@
           document.getElementById('studio-content-area').innerHTML = renderStudioContent(filtered);
         });
       });
-
-      // Merge live IG/FB posts (from Meta) so Content Review isn't blank after publish/delete of Airtable rows
-      if (!data._skipLiveMerge) {
-        (async () => {
-          try {
-            const hdrs = {
-              ...authHeaders(),
-            };
-            const histResp = await fetch(`${API}/api/calendar-history`, { headers: hdrs });
-            if (!histResp.ok) return;
-            const histData = await histResp.json().catch(() => ({}));
-            const live = (histData.posts || []).slice(0, 24).map((p) => ({
-              id: p.id,
-              status: 'Published',
-              platform: p.platform || 'Instagram',
-              full_post_text: p.caption || '',
-              caption: p.caption || '',
-              thumbnail_url: p.thumbnail_url || '',
-              image_url: p.thumbnail_url || '',
-              video_url: p.media_url || '',
-              content_type: /reel|video/i.test(String(p.media_type || '')) ? 'video' : 'image',
-              scheduled_date: String(p.timestamp || '').slice(0, 10),
-              permalink: p.permalink || '',
-              likes: p.likes,
-              comments: p.comments,
-              _source: 'social',
-              _live: true,
-            }));
-            if (!live.length) return;
-            const existingIds = new Set((window._studioPosts || []).map((p) => String(p.id)));
-            const extras = live.filter((p) => !existingIds.has(String(p.id)));
-            if (!extras.length) return;
-            const merged = [...(window._studioPosts || []), ...extras];
-            window._studioPosts = merged;
-            studioPostsList = merged;
-            if (data.content) data.content = merged;
-            const area = document.getElementById('studio-content-area');
-            const active = document.querySelector('#studio-filters .studio-filter.active');
-            const f = active?.dataset?.filter || window._studioFilter || 'all';
-            const filtered = applyStudioStatusFilter(f, merged);
-            studioPostsList = filtered;
-            if (area) area.innerHTML = renderStudioContent(filtered);
-            const allCount = document.getElementById('studio-count-all');
-            const pubCount = document.getElementById('studio-count-published');
-            const liveMerged = liveContentPosts(merged);
-            if (allCount) allCount.textContent = String(liveMerged.length);
-            if (pubCount) pubCount.textContent = String(liveMerged.filter(p => isLivePublishedPost(p)).length);
-            const sub = document.querySelector('.studio-header__left p');
-            if (sub) {
-              const pendN = liveMerged.filter(p => ['Pending','Draft','Ready for Review','Regenerating','Generating','QA Failed'].includes(p.status)).length;
-              const vidN = liveMerged.filter(p => (p.content_type || '').includes('reel') || p.video_url || p._live).length;
-              sub.textContent = `${liveMerged.length} pieces · ${pendN} need review · ${vidN} videos`;
-            }
-            const pipe = document.querySelector('.dash-greeting + p, [data-pipeline-count]');
-          } catch (_) {}
-        })();
-      }
 
       // Platform filter logic
       content.querySelectorAll('.studio-platform-filter').forEach(btn => {
