@@ -11,6 +11,7 @@ const {
   cardMediaSrc,
   sortPostsForReview,
   postsForContentReview,
+  homeQueuePosts,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -108,6 +109,30 @@ test('live Meta copies of the same caption do not become extra review cards', ()
   ]);
   assert.equal(out.length, 1);
   assert.equal(out[0].id, 'recAAA');
+});
+
+test('home queue hides archived posts and keeps live pending first', () => {
+  const out = homeQueuePosts([
+    { id: 'arch', status: 'Archived', caption: 'Meet the team keeping hope alive this month.', created_at: '2026-09-17T20:00:00.000Z' },
+    { id: 'live', status: 'Pending', caption: 'Healthcare Support NPO of the Year — thank you.', created_at: '2026-09-16T10:00:00.000Z' },
+  ]);
+  assert.deepEqual(out.map((p) => p.id), ['live']);
+});
+
+test('Content Review still keeps archived rows for the Archived filter', () => {
+  const out = postsForContentReview([
+    { id: 'arch', status: 'Archived', caption: 'Meet the team keeping hope alive this month.', created_at: '2026-09-17T20:00:00.000Z' },
+    { id: 'live', status: 'Pending', caption: 'A different live post about early checks.', created_at: '2026-09-16T10:00:00.000Z' },
+  ]);
+  assert.equal(out.some((p) => p.id === 'arch'), true);
+});
+
+test('home dashboard uses homeQueuePosts not the full review list', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /homeQueuePosts\(/);
+  const dash = src.slice(src.indexOf('function renderDashboard'), src.indexOf('function renderContentPage'));
+  assert.match(dash, /homeQueuePosts\(/);
+  assert.doesNotMatch(dash, /postsForContentReview\(/);
 });
 
 test('Content Review does not dump calendar-history into the queue', () => {

@@ -110,6 +110,14 @@ function postsForContentReview(posts) {
   return dedupeContentForReview(sortPostsForReview(posts));
 }
 
+function isArchivedPost(post = {}) {
+  return /^archived$/i.test(String(post.status || ''));
+}
+
+function homeQueuePosts(posts) {
+  return postsForContentReview(posts).filter((p) => !isArchivedPost(p));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     queueableSingleImage,
@@ -121,6 +129,8 @@ if (typeof module !== 'undefined' && module.exports) {
     sortPostsForReview,
     postsForContentReview,
     dedupeContentForReview,
+    isArchivedPost,
+    homeQueuePosts,
   };
 }
 if (typeof window !== 'undefined') {
@@ -134,5 +144,7 @@ if (typeof window !== 'undefined') {
     sortPostsForReview,
     postsForContentReview,
     dedupeContentForReview,
+    isArchivedPost,
+    homeQueuePosts,
   };
 }
