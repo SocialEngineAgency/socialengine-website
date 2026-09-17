@@ -47,6 +47,69 @@ function sortPostsForReview(posts) {
   ));
 }
 
+function normalizeReviewCaption(value) {
+  return String(value || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/#[\w]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, 160);
+}
+
+function isLiveSocialPost(post = {}) {
+  if (post._live || post._source === 'social') return true;
+  return /^(ig_|fb_reel_|fb_)/i.test(String(post.id || ''));
+}
+
+function reviewDedupeKeys(post = {}) {
+  const keys = [];
+  const id = String(post.id || '').trim();
+  if (id) keys.push(`id:${id}`);
+  const pubs = [post.permalink, post.platform_post_id, post.publish_post_id]
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+    .join(',')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  pubs.forEach((part) => keys.push(`pub:${part}`));
+  const caption = normalizeReviewCaption(post.caption || post.full_post_text);
+  if (caption.length >= 20) keys.push(`cap:${caption}`);
+  if (post.image_fallback !== 'shopify_catalog') {
+    const raw = String(post.image_url || post.video_url || post.thumbnail_url || '').trim();
+    if (raw) {
+      try {
+        const url = new URL(raw);
+        keys.push(`media:${url.origin}${url.pathname}`);
+      } catch {
+        keys.push(`media:${raw.split('?')[0]}`);
+      }
+    }
+  }
+  return keys;
+}
+
+function dedupeContentForReview(posts) {
+  const rows = Array.isArray(posts) ? posts : [];
+  const owned = rows.filter((p) => !isLiveSocialPost(p));
+  const live = rows.filter((p) => isLiveSocialPost(p));
+  const seen = new Set();
+  const out = [];
+  const add = (p) => {
+    const keys = reviewDedupeKeys(p);
+    if (keys.length && keys.some((k) => seen.has(k))) return;
+    keys.forEach((k) => seen.add(k));
+    out.push(p);
+  };
+  owned.forEach(add);
+  live.forEach(add);
+  return out;
+}
+
+function postsForContentReview(posts) {
+  return dedupeContentForReview(sortPostsForReview(posts));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     queueableSingleImage,
@@ -56,6 +119,8 @@ if (typeof module !== 'undefined' && module.exports) {
     cardMediaSrc,
     contentReviewWhen,
     sortPostsForReview,
+    postsForContentReview,
+    dedupeContentForReview,
   };
 }
 if (typeof window !== 'undefined') {
@@ -67,5 +132,7 @@ if (typeof window !== 'undefined') {
     cardMediaSrc,
     contentReviewWhen,
     sortPostsForReview,
+    postsForContentReview,
+    dedupeContentForReview,
   };
 }
