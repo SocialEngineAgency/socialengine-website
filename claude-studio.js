@@ -1,6 +1,6 @@
 /**
  * Studio · Post — Phase 1.5
- * Reference picker (Products / Library / Uploads) → on-brand square → PNG → queue
+ * Reference picker (Products / Library / Uploads) → on-brand 9:16 (or specified) → PNG → queue
  * Infographic upload → split into IG+FB carousel slides
  * Or upload 2–10 already-cut squares (filename order) and queue as a carousel
  */
@@ -10,7 +10,8 @@
   let _csGenerating = false;
   let _csHtml = '';
   let _csBrief = '';
-  let _csSpec = { w: 1080, h: 1080 };
+  let _csSpec = { w: 1080, h: 1920, ratio: '9:16', label: '9:16', format: 'portrait' };
+  let _csGeneratedUrl = null;
   let _csBrandName = '';
   let _csRef = null; // { url, type, title, source, product_id?, video_url?, poster_url? }
   let _csPickerTab = 'products';
@@ -141,6 +142,18 @@
     if (el) el.textContent = text;
   }
 
+  function previewLabel(spec) {
+    const ratio = (spec && (spec.ratio || spec.label)) || '9:16';
+    return `Preview · ${ratio}`;
+  }
+
+  function fitPreviewFrame(w, h) {
+    const maxW = 360;
+    const maxH = 640;
+    const scale = Math.min(maxW / (w || 1080), maxH / (h || 1920), 1);
+    return { scale, frameW: Math.round((w || 1080) * scale), frameH: Math.round((h || 1920) * scale) };
+  }
+
   function hidePreviewPanes() {
     const empty = document.getElementById('cs-empty');
     const loading = document.getElementById('cs-loading');
@@ -198,6 +211,7 @@
       }
       if (!_csCarousel && _csRef.type === 'image') {
         _csHtml = '';
+        _csGeneratedUrl = null;
         _csQueueSingleUrl = _csRef.url;
       } else if (_csRef.type !== 'image') {
         _csQueueSingleUrl = null;
@@ -498,7 +512,11 @@
         source: 'coach',
       });
     }
-    toast('Coach brief loaded — Redesign as carousel, Get Caption, Add to Queue.', 'success');
+    const aspectEl = document.getElementById('cs-aspect');
+    if (aspectEl && ['9:16', '1:1', '4:5'].includes(String(s.aspect_ratio || ''))) {
+      aspectEl.value = s.aspect_ratio;
+    }
+    toast('Coach brief loaded — Generate design, or Redesign as carousel.', 'success');
     applyRedesignedSlides();
   }
 
@@ -540,6 +558,7 @@
     const data = window._studioClientData || window.__clientData || window.clientData || {};
     _csBrandName = data?.client?.business_name || data?.business_name || 'Your Brand';
     _csHtml = '';
+    _csGeneratedUrl = null;
     _csBrief = '';
     _csCarousel = null;
     _csOriginalPreviewUrl = null;
@@ -595,6 +614,15 @@
             <input id="cs-style" type="text" placeholder="Bold typographic, dark, minimal" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
           </div>
 
+          <div>
+            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Aspect</div>
+            <select id="cs-aspect" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
+              <option value="9:16" selected>9:16 portrait</option>
+              <option value="1:1">1:1 square</option>
+              <option value="4:5">4:5 portrait</option>
+            </select>
+          </div>
+
           <details style="border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:8px 10px;">
             <summary style="font-size:0.7rem;color:rgba(255,255,255,0.35);cursor:pointer;font-weight:600;">Advanced · paste URL</summary>
             <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
@@ -613,11 +641,11 @@
         </div>
 
         <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:rgba(8,14,24,0.8);">
-          <div id="cs-preview-header" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:rgba(255,255,255,0.35);">Preview · Instagram Square 1:1</div>
+          <div id="cs-preview-header" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:rgba(255,255,255,0.35);">Preview · 9:16</div>
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
             <div id="cs-empty" style="text-align:center;max-width:420px;">
               <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Upload a finished photo, paste the caption, Add to Queue — or generate a branded square, split a tall infographic, or drop 2–10 already-cut slides.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Upload a finished photo, paste the caption, Add to Queue — or generate a 9:16 design, redesign a tall infographic as a carousel, or drop 2–10 already-cut slides.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
@@ -786,7 +814,7 @@
 
   function refreshActionButtons() {
     const carousel = hasCarousel();
-    const designed = !!_csHtml;
+    const designed = !!_csHtml || !!_csGeneratedUrl;
     const singleUrl = queueReady().queueableSingleImage({
       carousel,
       designed,
@@ -833,6 +861,10 @@
       renderCarouselPreview();
       return;
     }
+    if (_csGeneratedUrl) {
+      showGeneratedImage(_csGeneratedUrl, _csSpec);
+      return;
+    }
     if (_csHtml) {
       showDesign(_csHtml, _csSpec);
       return;
@@ -842,7 +874,7 @@
       return;
     }
     hidePreviewPanes();
-    setPreviewHeader('Preview · Instagram Square 1:1');
+    setPreviewHeader('Preview · 9:16');
     const empty = document.getElementById('cs-empty');
     if (empty) empty.style.display = 'block';
     refreshActionButtons();
@@ -863,23 +895,42 @@
 
   function showDesign(html, spec) {
     _csHtml = html;
+    _csGeneratedUrl = null;
     _csSpec = spec || _csSpec;
     _csCarousel = null;
     _csQueueSingleUrl = null;
     hidePreviewPanes();
-    setPreviewHeader('Preview · Instagram Square 1:1');
+    setPreviewHeader(previewLabel(_csSpec));
     const frame = document.getElementById('cs-frame');
     const iframe = document.getElementById('cs-iframe');
     frame.style.display = 'block';
-    const maxW = 460;
-    const scale = Math.min(maxW / _csSpec.w, 1);
+    const fit = fitPreviewFrame(_csSpec.w, _csSpec.h);
     iframe.style.width = _csSpec.w + 'px';
     iframe.style.height = _csSpec.h + 'px';
-    iframe.style.transform = `scale(${scale})`;
+    iframe.style.transform = `scale(${fit.scale})`;
     iframe.style.transformOrigin = 'top left';
-    frame.style.width = Math.round(_csSpec.w * scale) + 'px';
-    frame.style.height = Math.round(_csSpec.h * scale) + 'px';
+    frame.style.width = fit.frameW + 'px';
+    frame.style.height = fit.frameH + 'px';
     iframe.srcdoc = html;
+    refreshActionButtons();
+  }
+
+  function showGeneratedImage(url, spec) {
+    _csHtml = '';
+    _csGeneratedUrl = url;
+    _csSpec = spec || _csSpec;
+    _csCarousel = null;
+    _csQueueSingleUrl = url;
+    _csOriginalPreviewUrl = url;
+    hidePreviewPanes();
+    setPreviewHeader(previewLabel(_csSpec));
+    const wrap = document.getElementById('cs-original-preview');
+    const img = document.getElementById('cs-original-preview-img');
+    if (img) {
+      img.referrerPolicy = 'no-referrer';
+      img.src = mediaSrc(url);
+    }
+    if (wrap) wrap.style.display = 'block';
     refreshActionButtons();
   }
 
@@ -1268,11 +1319,12 @@
       return;
     }
     _csBrief = brief;
-    setBusy(true, 'Generating…');
+    setBusy(true, 'Generating… this can take a minute');
     try {
       const payload = {
         brief,
         style_hint: document.getElementById('cs-style')?.value?.trim() || undefined,
+        aspect_ratio: document.getElementById('cs-aspect')?.value || '9:16',
       };
       if (_csRef && hero) {
         payload.reference = { ..._csRef, url: hero };
@@ -1296,7 +1348,9 @@
         const pill = document.getElementById('cs-brand-pill');
         if (pill) pill.textContent = _csBrandName;
       }
-      showDesign(data.html, data.spec);
+      if (data.image_url) showGeneratedImage(data.image_url, data.spec);
+      else if (data.html) showDesign(data.html, data.spec);
+      else throw new Error('Generation failed');
       toast('Design ready', 'success');
     } catch (e) {
       toast(e.message || 'Generation failed', 'error');
@@ -1372,6 +1426,20 @@
     if (_csGenerating) return;
     if (hasCarousel()) {
       await exportCarousel(andQueue);
+      return;
+    }
+    if (!_csHtml && _csGeneratedUrl) {
+      if (andQueue) {
+        await queueSingleImage(_csGeneratedUrl);
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = mediaSrc(_csGeneratedUrl);
+      a.download = `design-${Date.now()}.png`;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.click();
+      toast('PNG opened', 'success');
       return;
     }
     if (!_csHtml && _csQueueSingleUrl && andQueue) {
