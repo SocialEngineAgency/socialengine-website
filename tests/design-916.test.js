@@ -22,6 +22,14 @@ test('a generated poster can start Redesign as carousel', () => {
   assert.match(design, /openCoachForCarouselRedesign\(url\)/);
 });
 
+test('generated posters persist across a refresh', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(design, /function persistLastDesign/);
+  assert.match(design, /function restoreLastDesign/);
+  assert.match(design, /se-design-last:/);
+  assert.match(design, /restoreLastDesign\(\)/);
+});
+
 test('Coach design sessions default to 9:16', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'coach-create-session.js'), 'utf8');
   assert.doesNotMatch(src, /destination === 'design' \? '1:1'/);
