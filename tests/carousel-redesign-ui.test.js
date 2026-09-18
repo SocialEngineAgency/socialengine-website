@@ -36,6 +36,13 @@ test('applyCarouselPlan paints slides one at a time from the canvas master', () 
   assert.match(fn, /for\s*\(|for\s+of|slides\.length/);
   assert.doesNotMatch(fn, /\$\{apiBase\(\)\}\/api\/studio\/carousel-redesign`/);
   assert.match(fn, /applyRedesignedSlides/);
+  assert.match(fn, /180_000/);
+});
+
+test('Design generate waits for FigureLabs 4K upscale', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const gen = design.slice(design.indexOf('async function generate()'), design.indexOf('function sharedCoachStorageKey'));
+  assert.match(gen, /4K upscale/);
 });
 
 test('Coach chat sends a durable image URL and can accept a redesign plan', () => {
