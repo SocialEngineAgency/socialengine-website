@@ -149,7 +149,8 @@ function stripCoachButtonFiller(text) {
 
 function isCoachCarouselConfirmAsk(userMessage) {
   const t = String(userMessage || '').toLowerCase();
-  return /\b(yes|yep|confirm|agreed|go ahead|do it|generate|apply|use these|replicate|match these)\b/.test(t);
+  if (/\b(yes|yep|confirm|agreed|go ahead|do it|generate|apply|use these|replicate|match these)\b/.test(t)) return true;
+  return /\b(create|make|paint|generate|apply)\b.{0,40}\bslides?\b/.test(t);
 }
 
 function isCoachCarouselPlanReply(reply) {
@@ -177,10 +178,14 @@ function isCoachDesignRefineAsk(userMessage, hasCanvas) {
   return /\b(bigger|smaller|darker|lighter|tweak|change|fix|remove|drop|replace|move|redo|regenerat|another|title|headline|cta|button|color|font|background|spacing|make the)\b/.test(t);
 }
 
-function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [] } = {}) {
+function usableCarouselPlan(action) {
+  return !!(action && action.type === 'carousel_redesign' && Array.isArray(action.slides) && action.slides.length >= 2);
+}
+
+function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [], lastPlan = null } = {}) {
   if (isCoachFailedReply(reply)) return { mode: 'none' };
   const list = Array.isArray(actions) ? actions : [];
-  const carousel = list.find((a) => a && a.type === 'carousel_redesign');
+  const carousel = list.find((a) => usableCarouselPlan(a)) || (usableCarouselPlan(lastPlan) ? lastPlan : null);
   if (carousel && isCoachCarouselConfirmAsk(userMessage)) {
     return { mode: 'apply_carousel', action: carousel };
   }
@@ -364,7 +369,10 @@ function formatCoachReplyHtml(text) {
 function persistCoachHistoryEntry(role, text, extra = {}) {
   const entry = { role, text, time: extra.time || '' };
   if (role === 'assistant' && Array.isArray(extra.actions) && extra.actions.length) {
-    const actions = extra.actions.filter((a) => a && a.type === 'create' && a.prompt);
+    const actions = extra.actions.filter((a) => a && (
+      (a.type === 'create' && a.prompt)
+      || (a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2)
+    ));
     if (actions.length) entry.actions = actions;
   }
   return entry;

@@ -19,6 +19,13 @@ test('Design Studio opens Coach redesign, not even-cut Split', () => {
   assert.doesNotMatch(design, /cs-slide-count[\s\S]{0,80}splitCarousel\(\{\s*slideCount/);
 });
 
+test('Design rail remembers the last carousel plan and applies it on create-the-slides', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const ask = design.slice(design.indexOf('async function designCoachAsk'), design.indexOf('// html2canvas'));
+  assert.match(ask, /__SE_CAROUSEL_PLAN/);
+  assert.match(ask, /lastPlan/);
+});
+
 test('applyCarouselPlan paints slides one at a time from the canvas master', () => {
   const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   const start = design.indexOf('async function applyCarouselPlan');

@@ -279,6 +279,23 @@ test('Design rail refines auto-apply; new poster and carousel wait for Apply', (
     hasCanvas: true,
     actions: [{ type: 'carousel_redesign', slides: [{ title: 'Hook' }, { title: 'Fact' }] }],
   }).mode, 'apply_carousel');
+  const remembered = {
+    type: 'carousel_redesign',
+    master_image_url: 'https://cdn.example/master.png',
+    slides: [{ title: 'Hook' }, { title: 'Fact' }],
+  };
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Got it — I can see the source infographic clearly. Generating all 6 slides now in your OPA house style.',
+    userMessage: 'create me the slides now',
+    hasCanvas: true,
+    lastPlan: remembered,
+  }).mode, 'apply_carousel');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Got it — generating all 6 slides now.',
+    userMessage: 'create the slides per the above conversation and instructions',
+    hasCanvas: true,
+    lastPlan: remembered,
+  }).action.master_image_url, 'https://cdn.example/master.png');
 });
 
 test('Design rail shows attached style refs and does not lock Send during generate', () => {
@@ -377,6 +394,15 @@ test('assistant history keeps create actions so refresh can rebind', () => {
   });
   assert.equal(entry.role, 'assistant');
   assert.equal(entry.actions[0].prompt, 'silk dress on white');
+  const carousel = persistCoachHistoryEntry('assistant', 'Plan ready.', {
+    actions: [{
+      type: 'carousel_redesign',
+      master_image_url: 'https://cdn.example/master.png',
+      slides: [{ title: 'Hook' }, { title: 'Fact' }],
+    }],
+  });
+  assert.equal(carousel.actions[0].type, 'carousel_redesign');
+  assert.equal(carousel.actions[0].slides.length, 2);
   const user = persistCoachHistoryEntry('user', 'make a reel');
   assert.equal(user.actions, undefined);
 });
