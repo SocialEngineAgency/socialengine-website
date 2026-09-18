@@ -1354,6 +1354,7 @@
       const res = await fetch(`${apiBase()}/api/studio/carousel-redesign/slide`, {
         method: 'POST',
         headers: authHeaders(),
+        signal: AbortSignal.timeout(180_000),
         body: JSON.stringify({
           master_image_url: master,
           session_id: pack.session_id || '',
@@ -1437,7 +1438,7 @@
       return;
     }
     _csBrief = brief;
-    setBusy(true, 'Generating… this can take a minute');
+    setBusy(true, 'Generating… FigureLabs then 4K upscale');
     try {
       const payload = {
         brief,
@@ -1621,7 +1622,7 @@
         const res = await fetch(`${apiBase()}/api/studio/carousel-redesign/slide`, {
           method: 'POST',
           headers: authHeaders(),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(180_000),
           body: JSON.stringify({
             master_image_url: master,
             session_id: sessionId,
