@@ -15,6 +15,13 @@ test('Design Studio generate is 9:16, no Learn more, and can preview a PNG', () 
   assert.doesNotMatch(design, /Learn more/);
 });
 
+test('a generated poster can start Redesign as carousel', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(design, /function masterImageUrl/);
+  assert.match(design, /source: 'generate'/);
+  assert.match(design, /openCoachForCarouselRedesign\(url\)/);
+});
+
 test('Coach design sessions default to 9:16', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'coach-create-session.js'), 'utf8');
   assert.doesNotMatch(src, /destination === 'design' \? '1:1'/);

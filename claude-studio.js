@@ -127,10 +127,16 @@
     return carouselQueueOrder().map((idx) => slides[idx]).filter(Boolean);
   }
 
+  function masterImageUrl() {
+    if (_csGeneratedUrl) return _csGeneratedUrl;
+    if (_csRef && _csRef.type === 'image' && _csRef.url) return _csRef.url;
+    return _csOriginalPreviewUrl || '';
+  }
+
   function syncSplitButton() {
     const btn = document.getElementById('cs-split-carousel');
     if (!btn) return;
-    const on = !!(_csRef && _csRef.type === 'image' && _csRef.url);
+    const on = /^https?:\/\//i.test(masterImageUrl());
     btn.disabled = !on;
     btn.style.cursor = on ? 'pointer' : 'not-allowed';
     btn.style.opacity = on ? '1' : '0.5';
@@ -762,7 +768,7 @@
       e.target.value = '';
     });
     document.getElementById('cs-split-carousel')?.addEventListener('click', () => {
-      const url = _csRef && _csRef.type === 'image' ? _csRef.url : (_csOriginalPreviewUrl || '');
+      const url = masterImageUrl();
       if (typeof window.openCoachForCarouselRedesign === 'function') {
         window.openCoachForCarouselRedesign(url);
       } else if (typeof showToast === 'function') {
@@ -931,6 +937,15 @@
       img.src = mediaSrc(url);
     }
     if (wrap) wrap.style.display = 'block';
+    _csRef = {
+      url,
+      type: 'image',
+      title: 'Generated design',
+      source: 'generate',
+    };
+    window._studioReference = { ..._csRef };
+    renderRefSummary();
+    syncSplitButton();
     refreshActionButtons();
   }
 
