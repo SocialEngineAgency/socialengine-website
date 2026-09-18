@@ -263,13 +263,22 @@ test('Design rail refines auto-apply; new poster and carousel wait for Apply', (
   assert.equal(isCoachDesignRefineAsk('change the format to match these', true), false);
   assert.equal(isCoachDesignRefineAsk('make the colours match these', true), false);
   assert.equal(isCoachDesignRefineAsk('make the title bigger', true), true);
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Generating the six slides now.',
+    userMessage: 'use these reference images to replicate the style',
+    hasCanvas: true,
+    actions: [{ type: 'carousel_redesign', slides: [{ title: 'Hook' }, { title: 'Fact' }] }],
+  }).mode, 'apply_carousel');
 });
 
 test('Design rail shows attached style refs and does not lock Send during generate', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   assert.match(src, /style references attached/);
   assert.match(src, /Could not update the preview/);
-  assert.match(src, /_csCoachSending = false;\n\s*if \(decision\.mode === 'refine'\)/);
+  assert.match(src, /_csCoachSending = false;/);
+  assert.match(src, /AbortSignal\.timeout/);
+  assert.match(src, /apply_carousel/);
+  assert.match(src, /Generating the carousel/);
 });
 
 test('animation studio hydrates a coach session into the brief box', () => {

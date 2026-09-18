@@ -1554,7 +1554,7 @@
     const wrap = document.getElementById('cs-coach-apply-wrap');
     const btn = document.getElementById('cs-coach-apply');
     if (!wrap || !btn) return;
-    if (!_csCoachPending || _csCoachPending.mode === 'none' || _csCoachPending.mode === 'refine') {
+    if (!_csCoachPending || _csCoachPending.mode === 'none' || _csCoachPending.mode === 'refine' || _csCoachPending.mode === 'apply_carousel') {
       wrap.style.display = 'none';
       return;
     }
@@ -1682,6 +1682,7 @@
       const res = await fetch(`${apiBase()}/api/chat/v2`, {
         method: 'POST',
         headers: authHeaders(),
+        signal: AbortSignal.timeout(90_000),
         body: JSON.stringify({
           message: outbound,
           attached_image_url: /^https:\/\//i.test(attached) ? attached : '',
@@ -1707,14 +1708,22 @@
       });
       setDesignCoachApply(decision);
       _csCoachSending = false;
-      if (decision.mode === 'refine') {
+      if (decision.mode === 'apply_carousel') {
+        const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
+        const ok = await applyCarouselPlan(decision.action || {});
+        if (status) status.textContent = ok ? 'Carousel ready.' : 'Could not generate the carousel.';
+        if (ok) setDesignCoachApply(null);
+      } else if (decision.mode === 'refine') {
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
         const ok = await generateFromCoach(decision.prompt || message);
         if (status) status.textContent = ok ? 'Preview updated.' : 'Could not update the preview.';
       }
     } catch (e) {
       typing.remove();
-      appendDesignCoachBubble('assistant', e.message || 'Coach error — try again.');
+      const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      appendDesignCoachBubble('assistant', timedOut
+        ? 'Coach took too long looking at those photos. Try again — if it stalls, send fewer references.'
+        : (e.message || 'Coach error — try again.'));
       setDesignCoachApply(null);
     } finally {
       _csCoachSending = false;

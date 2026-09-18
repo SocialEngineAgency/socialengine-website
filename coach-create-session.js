@@ -147,6 +147,11 @@ function stripCoachButtonFiller(text) {
     .replace(/if the button still isn't[\s\S]*/gi, ' '));
 }
 
+function isCoachCarouselConfirmAsk(userMessage) {
+  const t = String(userMessage || '').toLowerCase();
+  return /\b(yes|yep|confirm|agreed|go ahead|do it|generate|apply|use these|replicate|match these)\b/.test(t);
+}
+
 function isCoachCarouselPlanReply(reply) {
   const t = String(reply || '').toLowerCase();
   if (!/\b(slide\s*\d|\d+\s*slides?|slides?)\b/.test(t)) return false;
@@ -176,6 +181,9 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
   if (isCoachFailedReply(reply)) return { mode: 'none' };
   const list = Array.isArray(actions) ? actions : [];
   const carousel = list.find((a) => a && a.type === 'carousel_redesign');
+  if (carousel && isCoachCarouselConfirmAsk(userMessage)) {
+    return { mode: 'apply_carousel', action: carousel };
+  }
   if (carousel) return { mode: 'confirm_carousel', action: carousel };
   if (isCoachCarouselPlanReply(reply)) return { mode: 'none' };
   const create = list.find((a) => a && a.type === 'create');
