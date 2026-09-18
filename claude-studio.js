@@ -105,7 +105,7 @@
   }
 
   function isAssembledCarousel() {
-    return hasCarousel() && _csCarousel.method === 'assembled';
+    return hasCarousel() && (_csCarousel.method === 'assembled' || _csCarousel.method === 'redesign');
   }
 
   function identityQueueOrder(n) {
@@ -498,7 +498,39 @@
         source: 'coach',
       });
     }
-    toast('Coach brief loaded — upload the infographic, Split, Get Caption, Add to Queue.', 'success');
+    toast('Coach brief loaded — Redesign as carousel, Get Caption, Add to Queue.', 'success');
+    applyRedesignedSlides();
+  }
+
+  function applyRedesignedSlides() {
+    const pack = window.__SE_CAROUSEL_REDESIGN;
+    if (!pack || !Array.isArray(pack.slides) || pack.slides.length < 2) return false;
+    const slides = pack.slides.map((s, i) => ({
+      url: s.url,
+      y0: 0,
+      y1: 1,
+      title: s.title || `Slide ${i + 1}`,
+    })).filter((s) => /^https?:\/\//i.test(s.url));
+    if (slides.length < 2) return false;
+    _csCarousel = {
+      originalUrl: pack.master_image_url || slides[0].url,
+      method: 'redesign',
+      slides,
+      selected: 0,
+      queueOrder: identityQueueOrder(slides.length),
+    };
+    _csOriginalPreviewUrl = _csCarousel.originalUrl;
+    _csQueueSingleUrl = null;
+    if (pack.master_image_url) {
+      setReference({
+        url: pack.master_image_url,
+        type: 'image',
+        title: 'Carousel master',
+        source: 'coach',
+      });
+    }
+    renderCarouselPreview();
+    return true;
   }
 
   function renderClaudeStudio() {
@@ -549,8 +581,8 @@
             <input id="cs-slides-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
             <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
             <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
-            <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Split into carousel</button>
-            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Split. Or pick 2–10 squares (filename order) if they are already cut. Instagram max is 10.</div>
+            <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Redesign as carousel</button>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Coach redesigns each slide as a 1:1 frame. Or pick 2–10 squares (filename order) if they are already cut. Instagram max is 10.</div>
           </div>
 
           <div>
@@ -603,6 +635,7 @@
               <div id="cs-cut-canvas" style="margin-top:12px;"></div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
                 <button type="button" id="cs-slide-delete" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.1);color:#FCA5A5;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete selected</button>
+                <button type="button" id="cs-slide-redo" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#6EE7B7;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Redo selected</button>
                 <button type="button" id="cs-slide-left" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move left</button>
                 <button type="button" id="cs-slide-right" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move right</button>
                 <label id="cs-slide-count-wrap" style="margin-left:auto;font-size:0.72rem;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:8px;">Slides
@@ -700,15 +733,18 @@
       if (files.length) uploadSlideFiles(files);
       e.target.value = '';
     });
-    document.getElementById('cs-split-carousel')?.addEventListener('click', () => splitCarousel());
+    document.getElementById('cs-split-carousel')?.addEventListener('click', () => {
+      const url = _csRef && _csRef.type === 'image' ? _csRef.url : (_csOriginalPreviewUrl || '');
+      if (typeof window.openCoachForCarouselRedesign === 'function') {
+        window.openCoachForCarouselRedesign(url);
+      } else if (typeof showToast === 'function') {
+        showToast('Open Coach to redesign this as a carousel', 'info');
+      }
+    });
     document.getElementById('cs-slide-delete')?.addEventListener('click', () => deleteSelectedSlide());
+    document.getElementById('cs-slide-redo')?.addEventListener('click', () => redoSelectedSlide());
     document.getElementById('cs-slide-left')?.addEventListener('click', () => moveSelectedSlide(-1));
     document.getElementById('cs-slide-right')?.addEventListener('click', () => moveSelectedSlide(1));
-    document.getElementById('cs-slide-count')?.addEventListener('change', (e) => {
-      if (isAssembledCarousel()) return;
-      const n = Number(e.target.value);
-      if (n >= 3 && n <= 8) splitCarousel({ slideCount: n });
-    });
     document.getElementById('cs-picker-close')?.addEventListener('click', closePicker);
     document.getElementById('cs-picker-modal')?.addEventListener('click', (e) => {
       if (e.target && e.target.id === 'cs-picker-modal') closePicker();
@@ -718,6 +754,7 @@
     document.getElementById('cs-tab-uploads')?.addEventListener('click', () => setPickerTab('uploads'));
 
     applyDesignCoachSession();
+    applyRedesignedSlides();
 
     let searchTimer = null;
     document.getElementById('cs-product-search')?.addEventListener('input', (e) => {
@@ -1008,7 +1045,7 @@
       toast(e.message || 'Split failed', 'error');
     } finally {
       if (splitBtn && seq === _csSplitSeq) {
-        splitBtn.textContent = 'Split into carousel';
+        splitBtn.textContent = 'Redesign as carousel';
         syncSplitButton();
       }
     }
@@ -1080,7 +1117,7 @@
     const canvas = document.getElementById('cs-cut-canvas');
     if (!canvas || !hasCarousel()) return;
     if (isAssembledCarousel()) {
-      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">These slides were uploaded separately. Reorder with Move left/right, or delete a slide. Cut handles are only for a tall infographic split.</div>`;
+      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">${_csCarousel.method === 'redesign' ? 'These slides were redesigned as complete 1:1 frames. Reorder, delete, or Redo selected. Ask Coach to change the plan.' : 'These slides were uploaded separately. Reorder with Move left/right, or delete a slide.'}</div>`;
       return;
     }
     const orig = _csCarousel.originalUrl;
@@ -1127,6 +1164,51 @@
         scheduleResplitFromCuts();
       });
     });
+  }
+
+  async function redoSelectedSlide() {
+    if (!hasCarousel()) return;
+    const pack = window.__SE_CAROUSEL_REDESIGN || {};
+    const master = pack.master_image_url || _csCarousel.originalUrl;
+    const order = carouselQueueOrder();
+    const displayI = _csCarousel.selected || 0;
+    const slideI = order[displayI];
+    const current = _csCarousel.slides[slideI];
+    const brief = (pack.slides || []).find((s) => Number(s.index) === displayI + 1)
+      || { index: displayI + 1, title: current && current.title, role: 'other' };
+    if (!/^https:\/\//i.test(master)) {
+      toast('Need the stored master to redo a slide', 'warning');
+      return;
+    }
+    setBusy(true, `Redoing slide ${displayI + 1}…`);
+    try {
+      const res = await fetch(`${apiBase()}/api/studio/carousel-redesign/slide`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          master_image_url: master,
+          session_id: pack.session_id || '',
+          slide: brief,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || 'Redo failed');
+      _csCarousel.slides[slideI] = { ...current, url: data.url, title: brief.title || current.title };
+      if (window.__SE_CAROUSEL_REDESIGN) {
+        window.__SE_CAROUSEL_REDESIGN.session_id = data.session_id || pack.session_id;
+        if (Array.isArray(window.__SE_CAROUSEL_REDESIGN.slides)) {
+          window.__SE_CAROUSEL_REDESIGN.slides = window.__SE_CAROUSEL_REDESIGN.slides.map((s) => (
+            Number(s.index) === displayI + 1 ? { ...s, url: data.url } : s
+          ));
+        }
+      }
+      renderCarouselPreview();
+      toast('Slide updated', 'success');
+    } catch (e) {
+      toast(e.message || 'Redo failed', 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
   function deleteSelectedSlide() {
