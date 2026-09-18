@@ -12,9 +12,9 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
-  <script src="./claude-studio.js?v=20260918-design-coach" defer></script>
+  <script src="./claude-studio.js?v=20260918-coach-format" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
-  <script src="./coach-create-session.js?v=20260918-coach-vision"></script>
+  <script src="./coach-create-session.js?v=20260918-coach-format"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -10550,33 +10550,33 @@
       }
 
       function formatAIText(text) {
-        return text
-          // Markdown images: ![alt](url) — render as product preview cards
-          .replace(/!\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_, alt, url) =>
-            `<div style="margin:10px 0;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);background:#111;">
-              <img src="${url}" alt="${alt}" style="width:100%;max-height:260px;object-fit:cover;display:block;">
-              <div style="padding:8px 12px;font-size:0.75rem;color:#888;">${alt}</div>
-            </div>`
-          )
-          // Markdown links: [text](url) — render as styled links
-          .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#7C3AED;text-decoration:none;font-weight:500;border-bottom:1px solid rgba(124,58,237,0.3);transition:border-color 0.15s;" onmouseenter="this.style.borderColor=\'#7C3AED\'" onmouseleave="this.style.borderColor=\'rgba(124,58,237,0.3)\'">$1</a>')
-          // Bold
-          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-          // Italic
-          .replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '<em>$1</em>')
-          // Inline code
-          .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;font-size:0.85em;">$1</code>')
-          // Bullet lists
-          .replace(/^[-•] (.+)$/gm, '<li style="margin:3px 0;">$1</li>')
-          .replace(/(<li[^>]*>.*<\/li>)/s, '<ul style="margin:8px 0 8px 16px;padding:0;">$1</ul>')
-          // Numbered lists
-          .replace(/^(\d+)\. (.+)$/gm, '<li style="margin:3px 0;">$2</li>')
-          // Headings (### or ##)
-          .replace(/^### (.+)$/gm, '<div style="font-weight:600;font-size:0.9em;margin:12px 0 4px;color:#fff;">$1</div>')
-          .replace(/^## (.+)$/gm, '<div style="font-weight:700;font-size:1em;margin:14px 0 6px;color:#fff;">$1</div>')
-          // Line breaks
-          .replace(/\n\n/g, '<br><br>')
-          .replace(/\n/g, '<br>');
+        const images = [];
+        const links = [];
+        let s = String(text || '');
+        s = s.replace(/!\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_, alt, url) => {
+          const i = images.length;
+          images.push({ alt, url });
+          return `\n\n@@IMG${i}@@\n\n`;
+        });
+        s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (_, label, url) => {
+          const i = links.length;
+          links.push({ label, url });
+          return `@@LINK${i}@@`;
+        });
+        let html = (typeof formatCoachReplyHtml === 'function')
+          ? formatCoachReplyHtml(s)
+          : String(s).replace(/</g, '&lt;').replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+        images.forEach((img, i) => {
+          const alt = String(img.alt || '').replace(/</g, '&lt;');
+          const card = `<div style="margin:10px 0;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);background:#111;"><img src="${img.url}" alt="${alt}" style="width:100%;max-height:260px;object-fit:cover;display:block;"><div style="padding:8px 12px;font-size:0.75rem;color:#888;">${alt}</div></div>`;
+          html = html.replace(`@@IMG${i}@@`, card);
+        });
+        links.forEach((lnk, i) => {
+          const label = String(lnk.label || '').replace(/</g, '&lt;');
+          const a = `<a href="${lnk.url}" target="_blank" rel="noopener" style="color:#7C3AED;text-decoration:none;font-weight:500;">${label}</a>`;
+          html = html.replace(`@@LINK${i}@@`, a);
+        });
+        return html;
       }
 
       function appendMessage(text, role) {

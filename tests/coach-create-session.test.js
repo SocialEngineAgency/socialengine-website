@@ -9,6 +9,7 @@ const {
   inferCreateActionFromReply,
   normalizeCoachCreateSession,
   persistCoachHistoryEntry,
+  formatCoachReplyHtml,
   resolveDesignCoachApply,
   studioGenerateMode,
   studioModelForMode,
@@ -200,6 +201,37 @@ test('carousel redesign seed does not infer Create this now', () => {
     ['Create this now is below.']
   );
   assert.equal(action, null);
+});
+
+test('Coach replies strip raw HTML and break into readable paragraphs', () => {
+  const html = formatCoachReplyHtml([
+    'I need to clarify before I build this:<br><br><strong>OPA is an oesophageal cancer charity.</strong>',
+    'You flagged this earlier.',
+  ].join(' '));
+  assert.match(html, /<p /);
+  assert.match(html, /<strong>OPA is an oesophageal cancer charity\.<\/strong>/);
+  assert.doesNotMatch(html, /&lt;br/);
+  assert.doesNotMatch(html, /&lt;strong/);
+  assert.doesNotMatch(html, /<br><br><strong>/);
+
+  const slides = formatCoachReplyHtml([
+    '**Slide 1 — Hook**',
+    'What is Gastritis? Stomach illustration + OPA branding.',
+    '',
+    '**Slide 2 — Causes**',
+    'Five cause icons in a clean grid.',
+  ].join('\n'));
+  assert.match(slides, /<strong>Slide 1 — Hook<\/strong>/);
+  assert.doesNotMatch(slides, /\*\*Slide/);
+  assert.ok((slides.match(/<p /g) || []).length >= 2);
+});
+
+test('Design Studio Coach rail attaches a style photo and formats replies', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(src, /cs-coach-style/);
+  assert.match(src, /style_image_url/);
+  assert.match(src, /formatCoachReplyHtml/);
+  assert.match(src, /row\.innerHTML = fmt\(text\)/);
 });
 
 test('Design rail refines auto-apply; new poster and carousel wait for Apply', () => {

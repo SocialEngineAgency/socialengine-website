@@ -33,4 +33,5 @@ test('Coach chat sends a durable image URL and can accept a redesign plan', () =
   assert.match(src, /9:16 Instagram carousel/);
   assert.match(src, /no more than 10/);
   assert.doesNotMatch(src, /1:1 Instagram carousel/);
+  assert.match(src, /formatCoachReplyHtml/);
 });

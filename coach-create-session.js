@@ -272,6 +272,61 @@ function titleFromCoachBrief(productName, prompt) {
   return (first || 'Video').replace(/\s+/g, ' ').trim().slice(0, 160);
 }
 
+function unescapeCoachEntities(text) {
+  return String(text || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function coachReplyToPlain(text) {
+  let s = unescapeCoachEntities(String(text || ''));
+  if (/&lt;(\/?)\s*(br|strong|b|em|i|p|div|li|ul|ol|span|h[1-6])\b/i.test(s)) {
+    s = unescapeCoachEntities(s);
+  }
+  s = s
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/\s*(p|div|h[1-6]|li|tr)\s*>/gi, '\n')
+    .replace(/<\s*li[^>]*>/gi, '• ')
+    .replace(/<\s*(strong|b)\s*>/gi, '**')
+    .replace(/<\/\s*(strong|b)\s*>/gi, '**')
+    .replace(/<\s*(em|i)\s*>/gi, '*')
+    .replace(/<\/\s*(em|i)\s*>/gi, '*')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return s;
+}
+
+function escapeCoachHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatCoachReplyHtml(text) {
+  const plain = coachReplyToPlain(text);
+  if (!plain) return '';
+  const blocks = plain.split(/\n\n+/);
+  return blocks.map((block, i) => {
+    const lines = block.split('\n').map((line) => {
+      let e = escapeCoachHtml(line);
+      e = e.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      e = e.replace(/(^|[\s(])\*(?!\*)([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+      e = e.replace(/^[-•]\s+/, '• ');
+      return e;
+    }).join('<br>');
+    const margin = i === blocks.length - 1 ? '0' : '0 0 0.75em';
+    return `<p style="margin:${margin};line-height:1.55;">${lines}</p>`;
+  }).join('');
+}
+
 function persistCoachHistoryEntry(role, text, extra = {}) {
   const entry = { role, text, time: extra.time || '' };
   if (role === 'assistant' && Array.isArray(extra.actions) && extra.actions.length) {
@@ -293,6 +348,8 @@ const coachSessionApi = {
   resolveDesignCoachApply,
   isCoachMetaBrief,
   persistCoachHistoryEntry,
+  formatCoachReplyHtml,
+  coachReplyToPlain,
   studioGenerateMode,
   studioModelForMode,
   titleFromCoachBrief,

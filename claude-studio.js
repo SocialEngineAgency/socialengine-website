@@ -22,6 +22,7 @@
   let _csSplitSeq = 0;
   let _csCoachPending = null;
   let _csCoachSending = false;
+  let _csCoachStyleUrl = '';
 
   function queueReady() {
     return (typeof window !== 'undefined' && window.studioQueueReady) || {
@@ -745,8 +746,13 @@
             <button type="button" id="cs-coach-apply" style="width:100%;padding:10px;background:linear-gradient(135deg,#059669,#34D399);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Apply</button>
           </div>
           <div style="padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px;">
+            <div id="cs-coach-style-chip" style="display:none;align-items:center;gap:8px;padding:6px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;font-size:0.72rem;color:#E9D5FF;"></div>
+            <input id="cs-coach-style-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">
             <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;"></textarea>
-            <button type="button" id="cs-coach-send" style="padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Send</button>
+            <div style="display:flex;gap:8px;">
+              <button type="button" id="cs-coach-style" style="flex:1;padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">+ Reference photo</button>
+              <button type="button" id="cs-coach-send" style="flex:1;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Send</button>
+            </div>
           </div>
         </div>
       </div>
@@ -794,6 +800,23 @@
     document.getElementById('cs-regen')?.addEventListener('click', () => generate());
     document.getElementById('cs-export')?.addEventListener('click', () => exportPng(false));
     document.getElementById('cs-coach-send')?.addEventListener('click', () => designCoachAsk());
+    document.getElementById('cs-coach-style')?.addEventListener('click', () => {
+      document.getElementById('cs-coach-style-file')?.click();
+    });
+    document.getElementById('cs-coach-style-file')?.addEventListener('change', async (e) => {
+      const file = e.target?.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const url = await uploadStudioImage(file);
+        if (!url) throw new Error('Upload failed');
+        _csCoachStyleUrl = url;
+        renderCoachStyleChip();
+        toast('Style reference attached', 'success');
+      } catch (err) {
+        toast(err.message || 'Upload failed', 'error');
+      }
+    });
     document.getElementById('cs-coach-apply')?.addEventListener('click', () => applyPendingDesignCoach());
     document.getElementById('cs-coach-input')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1463,11 +1486,39 @@
     const mine = role === 'user';
     const row = document.createElement('div');
     row.style.cssText = mine
-      ? 'align-self:flex-end;max-width:92%;background:#7C3AED;color:#fff;border-radius:14px 14px 4px 14px;padding:8px 11px;font-size:0.78rem;line-height:1.45;white-space:pre-wrap;'
-      : 'align-self:flex-start;max-width:92%;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.86);border-radius:14px 14px 14px 4px;padding:8px 11px;font-size:0.78rem;line-height:1.45;white-space:pre-wrap;';
-    row.textContent = text;
+      ? 'align-self:flex-end;max-width:92%;background:#7C3AED;color:#fff;border-radius:14px 14px 4px 14px;padding:8px 11px;font-size:0.78rem;line-height:1.55;'
+      : 'align-self:flex-start;max-width:92%;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.86);border-radius:14px 14px 14px 4px;padding:8px 11px;font-size:0.78rem;line-height:1.55;';
+    if (mine) {
+      row.style.whiteSpace = 'pre-wrap';
+      row.textContent = text;
+    } else {
+      const fmt = typeof window.formatCoachReplyHtml === 'function' ? window.formatCoachReplyHtml : null;
+      if (fmt) row.innerHTML = fmt(text);
+      else {
+        row.style.whiteSpace = 'pre-wrap';
+        row.textContent = text;
+      }
+    }
     log.appendChild(row);
     log.scrollTop = log.scrollHeight;
+  }
+
+  function renderCoachStyleChip() {
+    const chip = document.getElementById('cs-coach-style-chip');
+    if (!chip) return;
+    if (!_csCoachStyleUrl) {
+      chip.style.display = 'none';
+      chip.innerHTML = '';
+      return;
+    }
+    chip.style.display = 'flex';
+    chip.innerHTML = `<img src="${escapeHtml(mediaSrc(_csCoachStyleUrl))}" alt="" referrerpolicy="no-referrer" style="width:28px;height:28px;border-radius:5px;object-fit:cover;background:#111;">`
+      + `<span style="flex:1;">Style reference — match this format</span>`
+      + `<button type="button" id="cs-coach-style-clear" style="background:none;border:none;color:#E9D5FF;cursor:pointer;font-size:1.1em;line-height:1;">×</button>`;
+    document.getElementById('cs-coach-style-clear')?.addEventListener('click', () => {
+      _csCoachStyleUrl = '';
+      renderCoachStyleChip();
+    });
   }
 
   function setDesignCoachApply(pending) {
@@ -1585,12 +1636,17 @@
     document.getElementById('cs-coach-log')?.appendChild(typing);
     try {
       const attached = masterImageUrl() || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '';
+      const styleUrl = /^https:\/\//i.test(_csCoachStyleUrl) ? _csCoachStyleUrl : '';
+      const outbound = styleUrl
+        ? `${message}\n\nA house-style reference photo is attached. Match that carousel / graphic format.`
+        : message;
       const res = await fetch(`${apiBase()}/api/chat/v2`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          message,
+          message: outbound,
           attached_image_url: /^https:\/\//i.test(attached) ? attached : '',
+          style_image_url: styleUrl,
           surface: 'design',
         }),
       });
