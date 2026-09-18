@@ -204,6 +204,16 @@ test('carousel redesign seed does not infer Create this now', () => {
   assert.equal(action, null);
 });
 
+test('Coach replies hide dumped carousel plan JSON', () => {
+  const html = formatCoachReplyHtml([
+    'Got it — I can see the source infographic clearly.',
+    '{"master_image_url":"https://cdn.example/master.png","slides":[{"index":0,"role":"title","title":"Gastritis can be managed","keep":"OPA logo","composition":"complete 9:16 slide"},{"index":1,"role":"fact","title":"Treatment","keep":"icon boxes","composition":"one claim"}]}',
+  ].join('\n'));
+  assert.match(html, /Got it/);
+  assert.doesNotMatch(html, /master_image_url/);
+  assert.doesNotMatch(html, /Gastritis can be managed/);
+});
+
 test('Coach replies strip raw HTML and break into readable paragraphs', () => {
   const html = formatCoachReplyHtml([
     'I need to clarify before I build this:<br><br><strong>OPA is an oesophageal cancer charity.</strong>',

@@ -333,8 +333,19 @@ function escapeCoachHtml(text) {
     .replace(/>/g, '&gt;');
 }
 
+function stripCoachPlanDump(text) {
+  let out = String(text || '');
+  const tokenAt = out.search(/\[?CAROUSEL_REDESIGN/i);
+  if (tokenAt >= 0) out = out.slice(0, tokenAt);
+  const brace = out.indexOf('{');
+  if (brace >= 0 && /"slides"\s*:/.test(out.slice(brace))) {
+    out = out.slice(0, brace);
+  }
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function formatCoachReplyHtml(text) {
-  const plain = coachReplyToPlain(text);
+  const plain = coachReplyToPlain(stripCoachPlanDump(text));
   if (!plain) return '';
   const blocks = plain.split(/\n\n+/);
   return blocks.map((block, i) => {

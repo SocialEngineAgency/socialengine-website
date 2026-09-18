@@ -19,6 +19,18 @@ test('Design Studio opens Coach redesign, not even-cut Split', () => {
   assert.doesNotMatch(design, /cs-slide-count[\s\S]{0,80}splitCarousel\(\{\s*slideCount/);
 });
 
+test('applyCarouselPlan paints slides one at a time from the canvas master', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const start = design.indexOf('async function applyCarouselPlan');
+  const end = design.indexOf('async function applyPendingDesignCoach');
+  const fn = design.slice(start, end);
+  assert.match(fn, /carousel-redesign\/slide/);
+  assert.match(fn, /masterImageUrl\(\)/);
+  assert.match(fn, /for\s*\(|for\s+of|slides\.length/);
+  assert.doesNotMatch(fn, /\$\{apiBase\(\)\}\/api\/studio\/carousel-redesign`/);
+  assert.match(fn, /applyRedesignedSlides/);
+});
+
 test('Coach chat sends a durable image URL and can accept a redesign plan', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /attached_image_url/);
