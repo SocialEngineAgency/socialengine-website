@@ -18,6 +18,8 @@ const {
   buildUploadVideoQueueBody,
   mixPreviewKey,
   mixPreviewIsCurrent,
+  applyCaptionToPost,
+  escapeCaptionForTextarea,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -208,3 +210,22 @@ test('Content Review does not dump calendar-history into the queue', () => {
   const reviewFn = src.slice(src.indexOf('function renderContentPage'), src.indexOf('function renderContentPage') + 9000);
   assert.doesNotMatch(reviewFn, /calendar-history/);
 });
+
+test('typed caption overwrites both stored caption fields', () => {
+  const next = applyCaptionToPost(
+    { id: 'rec1', caption: 'Design Studio post', full_post_text: 'Design Studio post' },
+    'Free packs are on the website'
+  );
+  assert.equal(next.caption, 'Free packs are on the website');
+  assert.equal(next.full_post_text, 'Free packs are on the website');
+  assert.equal(escapeCaptionForTextarea('A & B <c>'), 'A &amp; B &lt;c&gt;');
+});
+
+test('Approve is not Post now, and the box caption is what we send', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /pick a date to schedule/i);
+  assert.match(src, /publishNow:\s*true/);
+  assert.match(src, /applyCaptionToPost/);
+  assert.match(src, /What.s in this box is what we post/);
+});
+

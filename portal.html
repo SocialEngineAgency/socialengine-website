@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20260917-mix-preview"></script>
+  <script src="./studio-queue-ready.js?v=20260917-approve-caption"></script>
   <script src="./claude-studio.js?v=20260916-queue-review" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
@@ -3648,7 +3648,7 @@
           const r = await apiFetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postId: post.id, clientEmail }),
+            body: JSON.stringify({ postId: post.id, clientEmail, publishNow: true }),
           });
           await r.json().catch(() => ({}));
         } catch (_) {}
@@ -4041,8 +4041,8 @@
                 <button onclick="navigator.clipboard.writeText(document.querySelector('.studio-modal__caption-area').value);showToast('Caption copied!')" style="display:flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:rgba(255,255,255,0.4);font-size:0.62rem;cursor:pointer;font-family:var(--font-body);"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>
               </div>
             </div>
-            <textarea class="studio-modal__caption-area post-caption-edit" data-post-id="${post.id}" ${isRegenerating ? 'disabled' : ''} oninput="document.getElementById('modal-char-count').textContent=this.value.length+' chars'">${fullText.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
-            <div class="studio-modal__caption-hint">Edit caption above — changes save automatically</div>
+            <textarea class="studio-modal__caption-area post-caption-edit" data-post-id="${post.id}" ${isRegenerating ? 'disabled' : ''} oninput="document.getElementById('modal-char-count').textContent=this.value.length+' chars'">${(window.studioQueueReady && typeof window.studioQueueReady.escapeCaptionForTextarea === 'function') ? window.studioQueueReady.escapeCaptionForTextarea(fullText) : fullText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+            <div class="studio-modal__caption-hint">What's in this box is what we post. Edits save automatically.</div>
             ${(() => { const ht = fullText.match(/#[\w]+/g) || []; return ht.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">' + ht.map(h => '<span style="font-size:0.65rem;padding:2px 8px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.12);border-radius:4px;color:rgba(124,58,237,0.7);">' + h + '</span>').join('') + '</div>' : ''; })()}
           </div>
 
@@ -4196,12 +4196,18 @@
         const newStatus = data.status || 'Approved';
         // Update post in list
         const post = studioPostsList.find(p => p.id === postId);
-        if (post) post.status = newStatus;
+        if (post) {
+          const ready = window.studioQueueReady || {};
+          const next = typeof ready.applyCaptionToPost === 'function'
+            ? ready.applyCaptionToPost(post, editedCaption)
+            : Object.assign(post, { caption: editedCaption, full_post_text: editedCaption });
+          Object.assign(post, next, { status: newStatus });
+        }
         const pubPlat = data.publish && data.publish.platform;
         if (data.publishStarted && data.publish && data.publish.content_id) {
           startPublishStatusPoll(data.publish.content_id, pubPlat, { logicalPostId: postId });
         } else {
-          showToast(newStatus === 'Scheduled' ? '🗓️ Post scheduled!' : '✓ Post approved!');
+          showToast(newStatus === 'Scheduled' ? '🗓️ Post scheduled!' : '✓ Post approved — pick a date to schedule');
         }
         // Show success overlay before re-rendering
         const modalBody = document.getElementById('studio-modal-body');
@@ -4209,7 +4215,7 @@
         overlay.className = 'approve-success-overlay';
         const subLine = data.publishStarted
           ? `Publishing to ${_publishPlatformLabel(pubPlat)}…`
-          : 'Queued for publishing';
+          : 'Approved — pick a date to schedule';
         overlay.innerHTML = `
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round">
             <circle cx="12" cy="12" r="10" opacity="0.3"/>
@@ -5470,6 +5476,14 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ postId, clientEmail, caption: e.target.value }),
           });
+          const row = (typeof studioPostsList !== 'undefined' ? studioPostsList : []).find((p) => p.id === postId);
+          if (row) {
+            const ready = window.studioQueueReady || {};
+            const next = typeof ready.applyCaptionToPost === 'function'
+              ? ready.applyCaptionToPost(row, e.target.value)
+              : Object.assign(row, { caption: e.target.value, full_post_text: e.target.value });
+            Object.assign(row, next);
+          }
           // Subtle save indicator
           e.target.style.borderColor = '#4caf50';
           setTimeout(() => { e.target.style.borderColor = '#2a2a2a'; }, 1500);
@@ -7465,7 +7479,7 @@
           const pub = await fetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ postId: qData.record_id, clientEmail, clientHash, editedCaption: draft.caption }),
+            body: JSON.stringify({ postId: qData.record_id, clientEmail, clientHash, editedCaption: draft.caption, publishNow: true }),
           });
           const pubData = await pub.json().catch(() => ({}));
           if (!pub.ok) throw new Error(pubData.error || 'Post failed');
