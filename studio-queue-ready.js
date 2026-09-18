@@ -118,6 +118,49 @@ function homeQueuePosts(posts) {
   return postsForContentReview(posts).filter((p) => !isArchivedPost(p));
 }
 
+function videoStudioDoor(mode, { remix = false, coachSession = false } = {}) {
+  const m = String(mode || '').toLowerCase();
+  if (m === 'upload' || m === 'have' || m === 'already') return 'upload';
+  if (m === 'make' || m === 'generate') return 'make';
+  if (remix || coachSession) return 'make';
+  return 'choose';
+}
+
+function musicVolumeFromPercent(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0.28;
+  return Math.max(0, Math.min(1, n / 100));
+}
+
+function buildMixAudioBody({ videoUrl, musicUrl, musicVolumePercent, muteOriginal } = {}) {
+  return {
+    video_url: String(videoUrl || '').trim(),
+    music_url: String(musicUrl || '').trim() || undefined,
+    music_volume: musicVolumeFromPercent(musicVolumePercent),
+    mute_original: !!muteOriginal,
+  };
+}
+
+function buildUploadVideoQueueBody({ videoUrl, imageUrl, caption, platform } = {}) {
+  const video = String(videoUrl || '').trim();
+  if (!/^https?:\/\//i.test(video)) {
+    const err = new Error('Upload the video first');
+    err.code = 'VIDEO_URL';
+    throw err;
+  }
+  const body = {
+    type: 'video',
+    video_url: video,
+    caption: String(caption || ''),
+    status: queueReviewStatus(),
+  };
+  const poster = String(imageUrl || '').trim();
+  if (/^https?:\/\//i.test(poster)) body.image_url = poster;
+  const plats = String(platform || '').trim();
+  if (plats) body.platform = plats;
+  return body;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     queueableSingleImage,
@@ -131,6 +174,10 @@ if (typeof module !== 'undefined' && module.exports) {
     dedupeContentForReview,
     isArchivedPost,
     homeQueuePosts,
+    videoStudioDoor,
+    musicVolumeFromPercent,
+    buildMixAudioBody,
+    buildUploadVideoQueueBody,
   };
 }
 if (typeof window !== 'undefined') {
@@ -146,5 +193,9 @@ if (typeof window !== 'undefined') {
     dedupeContentForReview,
     isArchivedPost,
     homeQueuePosts,
+    videoStudioDoor,
+    musicVolumeFromPercent,
+    buildMixAudioBody,
+    buildUploadVideoQueueBody,
   };
 }
