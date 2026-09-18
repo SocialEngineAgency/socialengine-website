@@ -12,6 +12,10 @@ const {
   sortPostsForReview,
   postsForContentReview,
   homeQueuePosts,
+  videoStudioDoor,
+  musicVolumeFromPercent,
+  buildMixAudioBody,
+  buildUploadVideoQueueBody,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -133,6 +137,47 @@ test('home dashboard uses homeQueuePosts not the full review list', () => {
   const dash = src.slice(src.indexOf('function renderDashboard'), src.indexOf('function renderContentPage'));
   assert.match(dash, /homeQueuePosts\(/);
   assert.doesNotMatch(dash, /postsForContentReview\(/);
+});
+
+test('Video & Post starts on two doors unless remix or Coach is landing', () => {
+  assert.equal(videoStudioDoor(''), 'choose');
+  assert.equal(videoStudioDoor('upload'), 'upload');
+  assert.equal(videoStudioDoor('', { remix: true }), 'make');
+  assert.equal(videoStudioDoor('', { coachSession: true }), 'make');
+});
+
+test('upload queue body is type video and Pending', () => {
+  const body = buildUploadVideoQueueBody({
+    videoUrl: 'https://store.example/reel.mp4',
+    imageUrl: 'https://store.example/frame.jpg',
+    caption: 'Posted from Create',
+    platform: 'Instagram,Facebook',
+  });
+  assert.equal(body.type, 'video');
+  assert.equal(body.video_url, 'https://store.example/reel.mp4');
+  assert.equal(body.status, 'Pending');
+  assert.throws(() => buildUploadVideoQueueBody({ caption: 'x' }), /video/i);
+});
+
+test('mix body keeps original audio unless muted', () => {
+  const body = buildMixAudioBody({
+    videoUrl: 'https://store.example/reel.mp4',
+    musicUrl: 'https://store.example/bed.mp3',
+    musicVolumePercent: 28,
+    muteOriginal: false,
+  });
+  assert.equal(body.music_volume, 0.28);
+  assert.equal(body.mute_original, false);
+  assert.equal(musicVolumeFromPercent(50), 0.5);
+});
+
+test('Video & Post source has both doors and the music endpoints', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /I already have the video/);
+  assert.match(src, /Make one/);
+  assert.match(src, /\/api\/studio\/generate-music/);
+  assert.match(src, /\/api\/studio\/mix-audio/);
+  assert.match(src, /accept="video\//);
 });
 
 test('Content Review does not dump calendar-history into the queue', () => {
