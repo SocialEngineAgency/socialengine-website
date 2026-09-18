@@ -645,7 +645,7 @@
             <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
             <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
             <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Redesign as carousel</button>
-            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Coach redesigns each slide as a 1:1 frame. Or pick 2–10 squares (filename order) if they are already cut. Instagram max is 10.</div>
+            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Coach redesigns each slide as a 9:16 frame. Or pick 2–10 slides (filename order) if they are already cut. Instagram max is 10.</div>
           </div>
 
           <div>
@@ -718,6 +718,8 @@
                     <option value="6">6</option>
                     <option value="7">7</option>
                     <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
                   </select>
                 </label>
               </div>
@@ -1223,7 +1225,7 @@
     const canvas = document.getElementById('cs-cut-canvas');
     if (!canvas || !hasCarousel()) return;
     if (isAssembledCarousel()) {
-      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">${_csCarousel.method === 'redesign' ? 'These slides were redesigned as complete 1:1 frames. Reorder, delete, or Redo selected. Ask Coach to change the plan.' : 'These slides were uploaded separately. Reorder with Move left/right, or delete a slide.'}</div>`;
+      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">${_csCarousel.method === 'redesign' ? 'These slides were redesigned as complete 9:16 frames. Reorder, delete, or Redo selected. Ask Coach to change the plan.' : 'These slides were uploaded separately. Reorder with Move left/right, or delete a slide.'}</div>`;
       return;
     }
     const orig = _csCarousel.originalUrl;

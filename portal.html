@@ -12,7 +12,7 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
-  <script src="./claude-studio.js?v=20260918-design-keep" defer></script>
+  <script src="./claude-studio.js?v=20260918-carousel-916" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
@@ -7115,7 +7115,7 @@
       }
       window._seCoachAttachedImage = url;
       window.__SE_COACH_MASTER_IMAGE = url;
-      window.__SE_COACH_CAROUSEL_SEED = seedPrompt || 'Redesign this infographic into a 1:1 Instagram carousel. Look at the image. Propose 4–6 complete slides. Do not crop strips.';
+      window.__SE_COACH_CAROUSEL_SEED = seedPrompt || 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.';
       if (typeof switchNav === 'function') switchNav('ai-coach');
       return true;
     }
@@ -7125,7 +7125,7 @@
       const master = String((plan && plan.master_image_url) || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '').trim();
       const slides = plan && Array.isArray(plan.slides) ? plan.slides : [];
       if (!/^https:\/\//i.test(master) || slides.length < 2) {
-        if (typeof showToast === 'function') showToast('Need a stored master and a 2–8 slide plan', 'warning');
+        if (typeof showToast === 'function') showToast('Need a stored master and a 2–10 slide plan', 'warning');
         return false;
       }
       const res = await apiFetch(`${API}/api/studio/carousel-redesign`, {
@@ -7141,7 +7141,7 @@
       window.__SE_COACH_CREATE_SESSION = {
         destination: 'design',
         mode: 'image',
-        aspect_ratio: '1:1',
+        aspect_ratio: '9:16',
         prompt: (plan && plan.prompt) || 'Carousel redesign',
         attached_image_url: data.master_image_url || master,
       };
