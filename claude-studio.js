@@ -1516,6 +1516,7 @@
     }
     log.appendChild(row);
     log.scrollTop = log.scrollHeight;
+    return row;
   }
 
   function coachStyleHttpsUrls() {
@@ -1583,7 +1584,8 @@
   async function generateFromCoach(prompt) {
     const briefEl = document.getElementById('cs-brief');
     const next = String(prompt || '').trim();
-    if (!next) return;
+    if (!next) return false;
+    if (_csGenerating) return false;
     if (briefEl) {
       const current = briefEl.value.trim() || _csBrief;
       if (masterImageUrl() && current && next !== current) {
@@ -1592,7 +1594,9 @@
         briefEl.value = next;
       }
     }
+    const before = _csGeneratedUrl;
     await generate();
+    return Boolean(_csGeneratedUrl && _csGeneratedUrl !== before);
   }
 
   async function applyCarouselPlan(plan) {
@@ -1654,8 +1658,15 @@
     if (input && !preset) input.value = '';
     if (input && preset) input.value = '';
     _csCoachSending = true;
-    appendDesignCoachBubble('user', message);
-    persistSharedCoach('user', message);
+    const styleUrls = coachStyleHttpsUrls();
+    if (_csCoachStyleUrls.length && !styleUrls.length) {
+      toast('Style photos need a stored https URL — re-upload them', 'error');
+    }
+    const shown = styleUrls.length
+      ? `${message}\n\n${styleUrls.length === 1 ? '1 style reference attached.' : `${styleUrls.length} style references attached.`}`
+      : message;
+    appendDesignCoachBubble('user', shown);
+    persistSharedCoach('user', shown);
     const typing = document.createElement('div');
     typing.id = 'cs-coach-typing';
     typing.style.cssText = 'align-self:flex-start;color:rgba(255,255,255,0.4);font-size:0.72rem;';
@@ -1663,7 +1674,6 @@
     document.getElementById('cs-coach-log')?.appendChild(typing);
     try {
       const attached = masterImageUrl() || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '';
-      const styleUrls = coachStyleHttpsUrls();
       const outbound = styleUrls.length === 1
         ? `${message}\n\nA house-style reference photo is attached. Match that carousel / graphic format.`
         : styleUrls.length > 1
@@ -1696,9 +1706,11 @@
         actions: Array.isArray(data.coach_actions) ? data.coach_actions : [],
       });
       setDesignCoachApply(decision);
+      _csCoachSending = false;
       if (decision.mode === 'refine') {
-        appendDesignCoachBubble('assistant', 'Updating the preview…');
-        await generateFromCoach(decision.prompt || message);
+        const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
+        const ok = await generateFromCoach(decision.prompt || message);
+        if (status) status.textContent = ok ? 'Preview updated.' : 'Could not update the preview.';
       }
     } catch (e) {
       typing.remove();
