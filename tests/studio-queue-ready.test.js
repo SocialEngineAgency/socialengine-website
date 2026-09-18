@@ -16,6 +16,8 @@ const {
   musicVolumeFromPercent,
   buildMixAudioBody,
   buildUploadVideoQueueBody,
+  mixPreviewKey,
+  mixPreviewIsCurrent,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -171,6 +173,22 @@ test('mix body keeps original audio unless muted', () => {
   assert.equal(musicVolumeFromPercent(50), 0.5);
 });
 
+test('a mixed preview is current only for the same video, bed, volume, and mute', () => {
+  const settings = {
+    sourceVideoUrl: 'https://store.example/reel.mp4',
+    musicUrl: 'https://store.example/bed.mp3',
+    musicVolume: 0.2,
+    muteOriginal: true,
+  };
+  const draft = {
+    mixedVideoUrl: 'https://store.example/mixed.mp4',
+    mixKey: mixPreviewKey(settings),
+  };
+  assert.equal(mixPreviewIsCurrent(draft, settings), true);
+  assert.equal(mixPreviewIsCurrent(draft, { ...settings, musicVolume: 0.4 }), false);
+  assert.equal(mixPreviewIsCurrent({ mixedVideoUrl: '' }, settings), false);
+});
+
 test('Video & Post source has both doors and the music endpoints', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /I already have the video/);
@@ -178,6 +196,9 @@ test('Video & Post source has both doors and the music endpoints', () => {
   assert.match(src, /\/api\/studio\/generate-music/);
   assert.match(src, /\/api\/studio\/mix-audio/);
   assert.match(src, /accept="video\//);
+  assert.match(src, /Play with music/);
+  assert.match(src, /vs-music-bed/);
+  assert.match(src, /previewVSFinishedMix/);
 });
 
 test('Content Review does not dump calendar-history into the queue', () => {

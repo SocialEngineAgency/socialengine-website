@@ -141,6 +141,22 @@ function buildMixAudioBody({ videoUrl, musicUrl, musicVolumePercent, muteOrigina
   };
 }
 
+function mixPreviewKey({ sourceVideoUrl, musicUrl, musicVolume, muteOriginal } = {}) {
+  const vol = Number(musicVolume);
+  return [
+    String(sourceVideoUrl || '').trim(),
+    String(musicUrl || '').trim(),
+    Number.isFinite(vol) ? vol.toFixed(2) : '0.28',
+    muteOriginal ? '1' : '0',
+  ].join('|');
+}
+
+function mixPreviewIsCurrent(draft = {}, settings = {}) {
+  const mixed = String(draft.mixedVideoUrl || '').trim();
+  if (!/^https?:\/\//i.test(mixed)) return false;
+  return String(draft.mixKey || '') === mixPreviewKey(settings);
+}
+
 function buildUploadVideoQueueBody({ videoUrl, imageUrl, caption, platform } = {}) {
   const video = String(videoUrl || '').trim();
   if (!/^https?:\/\//i.test(video)) {
@@ -178,6 +194,8 @@ if (typeof module !== 'undefined' && module.exports) {
     musicVolumeFromPercent,
     buildMixAudioBody,
     buildUploadVideoQueueBody,
+    mixPreviewKey,
+    mixPreviewIsCurrent,
   };
 }
 if (typeof window !== 'undefined') {
@@ -197,5 +215,7 @@ if (typeof window !== 'undefined') {
     musicVolumeFromPercent,
     buildMixAudioBody,
     buildUploadVideoQueueBody,
+    mixPreviewKey,
+    mixPreviewIsCurrent,
   };
 }
