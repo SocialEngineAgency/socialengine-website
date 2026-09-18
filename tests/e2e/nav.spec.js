@@ -92,7 +92,7 @@ test('Create: segmented control switches between Video & Post and Animate and re
   await expect(seg).toBeVisible();
   await expect(seg.locator('[data-segment]')).toHaveText(['Video & Post', 'Animate']);
   await expect(seg.locator('[data-segment="creation-studio"]')).toHaveClass(/active/);
-  await expect(page.locator('#dash-content')).toContainText(/Video \+ Post from your catalog/i);
+  await expect(page.locator('#dash-content')).toContainText(/I already have the video/i);
   await expect(page.locator('#dash-breadcrumb-label')).toHaveText('Create');
 
   await seg.locator('[data-segment="animation-studio"]').click();
@@ -120,7 +120,7 @@ test('switchNav aliases: animation-studio lands on Create → Animate, brand-voi
 
   await page.evaluate(() => window.switchNav('creation-studio'));
   await expect(page.locator('#create-segments [data-segment="creation-studio"]')).toHaveClass(/active/);
-  await expect(page.locator('#dash-content')).toContainText(/Video \+ Post from your catalog/i);
+  await expect(page.locator('#dash-content')).toContainText(/I already have the video/i);
 
   await page.evaluate(() => window.switchNav('brand-voice'));
   await expect(page.locator('.dash-nav-item[data-nav="settings"]')).toHaveClass(/active/);
