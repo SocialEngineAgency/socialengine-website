@@ -169,6 +169,23 @@ function escapeCaptionForTextarea(value) {
     .replace(/>/g, '&gt;');
 }
 
+function cardWhenLabel({ scheduled_date, scheduled_time } = {}) {
+  const d = String(scheduled_date || '').trim().slice(0, 10);
+  if (!d) return '';
+  let dateLabel = d;
+  try {
+    dateLabel = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch (_) { /* keep ISO slice */ }
+  const m = String(scheduled_time || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return dateLabel;
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return dateLabel + ' · ' + h + ':' + min + ' ' + ap;
+}
+
 function buildUploadVideoQueueBody({ videoUrl, imageUrl, caption, platform } = {}) {
   const video = String(videoUrl || '').trim();
   if (!/^https?:\/\//i.test(video)) {
@@ -210,6 +227,7 @@ if (typeof module !== 'undefined' && module.exports) {
     mixPreviewIsCurrent,
     applyCaptionToPost,
     escapeCaptionForTextarea,
+    cardWhenLabel,
   };
 }
 if (typeof window !== 'undefined') {
@@ -233,5 +251,6 @@ if (typeof window !== 'undefined') {
     mixPreviewIsCurrent,
     applyCaptionToPost,
     escapeCaptionForTextarea,
+    cardWhenLabel,
   };
 }

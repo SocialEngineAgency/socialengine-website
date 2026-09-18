@@ -20,6 +20,7 @@ const {
   mixPreviewIsCurrent,
   applyCaptionToPost,
   escapeCaptionForTextarea,
+  cardWhenLabel,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -219,6 +220,23 @@ test('typed caption overwrites both stored caption fields', () => {
   assert.equal(next.caption, 'Free packs are on the website');
   assert.equal(next.full_post_text, 'Free packs are on the website');
   assert.equal(escapeCaptionForTextarea('A & B <c>'), 'A &amp; B &lt;c&gt;');
+});
+
+test('card when-label is a short date that does not include the year', () => {
+  assert.equal(cardWhenLabel({ scheduled_date: '2026-09-15', scheduled_time: '11:00' }), 'Sep 15 · 11:00 AM');
+  assert.equal(cardWhenLabel({ scheduled_date: '2026-09-10', scheduled_time: '20:30' }), 'Sep 10 · 8:30 PM');
+  assert.equal(cardWhenLabel({ scheduled_date: '2026-09-13' }), 'Sep 13');
+  assert.equal(cardWhenLabel({}), '');
+});
+
+test('grid cards keep the date in a reserved footer, not the header', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /studio-card__when/);
+  assert.match(src, /cardWhenLabel/);
+  assert.doesNotMatch(src, /Published →/);
+  assert.doesNotMatch(src, /View details →/);
+  const topRow = src.slice(src.indexOf('studio-card__top-row'), src.indexOf('studio-card__caption'));
+  assert.doesNotMatch(topRow, /studio-card__date/);
 });
 
 test('Approve is not Post now, and the box caption is what we send', () => {
