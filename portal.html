@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20260917-upload-post"></script>
+  <script src="./studio-queue-ready.js?v=20260917-mix-preview"></script>
   <script src="./claude-studio.js?v=20260916-queue-review" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
@@ -6506,6 +6506,14 @@
       window.__SE_VS_DOOR = vsDoor;
       const uploadDraft = window.__SE_VS_UPLOAD || {};
       const vsPlatforms = (typeof vsConnectedPlatforms === 'function') ? vsConnectedPlatforms() : ['Instagram', 'Facebook'];
+      const mixSettings = {
+        sourceVideoUrl: uploadDraft.sourceVideoUrl || uploadDraft.videoUrl || '',
+        musicUrl: uploadDraft.musicUrl || '',
+        musicVolume: uploadDraft.musicVolume == null ? 0.28 : Number(uploadDraft.musicVolume),
+        muteOriginal: !!uploadDraft.muteOriginal,
+      };
+      const mixCurrent = typeof ready.mixPreviewIsCurrent === 'function' && ready.mixPreviewIsCurrent(uploadDraft, mixSettings);
+      const playUrl = mixCurrent ? uploadDraft.mixedVideoUrl : (uploadDraft.sourceVideoUrl || uploadDraft.videoUrl || '');
 
       content.innerHTML = `
         <div style="max-width:1100px;margin:0 auto;">
@@ -6554,7 +6562,7 @@
               </div>
               <input type="file" id="vs-finished-input" accept="video/mp4,video/quicktime,video/webm,video/*" style="display:none;" onchange="handleVSFinishedVideo(this.files[0]);">
               <div id="vs-finished-preview" style="display:${uploadDraft.videoUrl ? 'block' : 'none'};margin-bottom:16px;">
-                <video id="vs-finished-video" src="${uploadDraft.videoUrl || ''}" controls playsinline style="width:100%;max-height:360px;border-radius:10px;background:#000;border:1px solid rgba(255,255,255,0.1);"></video>
+                <video id="vs-finished-video" src="${playUrl}" controls playsinline style="width:100%;max-height:360px;border-radius:10px;background:#000;border:1px solid rgba(255,255,255,0.1);"></video>
                 <div id="vs-finished-name" style="margin-top:8px;font-size:0.75rem;color:rgba(255,255,255,0.45);">${uploadDraft.filename || ''}</div>
                 <button type="button" onclick="clearVSFinishedVideo()" style="margin-top:8px;background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);text-decoration:underline;">Remove video</button>
               </div>
@@ -6573,6 +6581,10 @@
                 <button type="button" onclick="clearVSMusic()" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(255,255,255,0.45);font-size:0.68rem;cursor:pointer;font-family:var(--font-body);${uploadDraft.musicUrl ? '' : 'display:none;'}" id="vs-music-clear">Clear music</button>
               </div>
               <div id="vs-music-status" style="font-size:0.72rem;color:${uploadDraft.musicUrl ? '#6EE7B7' : 'rgba(255,255,255,0.4)'};margin-bottom:10px;">${uploadDraft.musicName || (uploadDraft.musicUrl ? 'Music ready' : 'Optional — Generate, upload, or pick Saved music.')}</div>
+              <div id="vs-music-bed-wrap" style="display:${uploadDraft.musicUrl ? 'block' : 'none'};margin-bottom:12px;">
+                <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);margin-bottom:6px;">Listen to the bed</div>
+                <audio id="vs-music-bed" src="${uploadDraft.musicUrl || ''}" controls preload="metadata" style="width:100%;height:36px;"></audio>
+              </div>
               <select id="vs-music-saved" onchange="pickVSSavedMusic(this.value)" style="width:100%;padding:8px 12px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.8rem;margin-bottom:12px;">
                 <option value="">Saved music…</option>
               </select>
@@ -6585,7 +6597,9 @@
                 <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;color:rgba(255,255,255,0.7);">
                   <input type="checkbox" id="vs-mute-original" ${uploadDraft.muteOriginal ? 'checked' : ''}> Mute original audio
                 </label>
+                <button type="button" id="vs-play-mix" onclick="previewVSFinishedMix()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(167,139,250,0.45);background:rgba(124,58,237,0.16);color:#E9D5FF;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Play with music</button>
               </div>
+              <div id="vs-mix-status" style="font-size:0.72rem;color:${mixCurrent ? '#6EE7B7' : 'rgba(255,255,255,0.4)'};margin-bottom:16px;">${mixCurrent ? 'Video player is the mix — hit play on the video.' : (uploadDraft.musicUrl ? 'Video player is still the original. Play with music to hear the final.' : '')}</div>
               <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Caption</label>
               <textarea id="vs-upload-caption" rows="4" placeholder="Write the caption for this post" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:8px;">${uploadDraft.caption || ''}</textarea>
               <button type="button" onclick="generateVSUploadCaption()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);margin-bottom:16px;">Write caption</button>
@@ -7213,6 +7227,10 @@
         draft.musicPrompt = prompt;
         draft.musicLengthMs = data.length_ms || 30000;
         draft.musicName = prompt.slice(0, 60);
+        draft.mixedVideoUrl = '';
+        draft.mixKey = '';
+        if (draft.sourceVideoUrl) draft.videoUrl = draft.sourceVideoUrl;
+        vsShowMusicBed(draft.musicUrl);
         const status = document.getElementById('vs-music-status');
         if (status) { status.textContent = 'Music ready'; status.style.color = '#6EE7B7'; }
         if (btn) btn.textContent = 'Regen music';
@@ -7241,6 +7259,10 @@
         if (!res.ok || !(data.asset?.url || data.url)) throw new Error(data.error || 'Music upload failed — your video is still here');
         draft.musicUrl = data.asset?.url || data.url;
         draft.musicName = data.asset?.name || file.name;
+        draft.mixedVideoUrl = '';
+        draft.mixKey = '';
+        if (draft.sourceVideoUrl) draft.videoUrl = draft.sourceVideoUrl;
+        vsShowMusicBed(draft.musicUrl);
         const status = document.getElementById('vs-music-status');
         if (status) { status.textContent = draft.musicName; status.style.color = '#6EE7B7'; }
         const clear = document.getElementById('vs-music-clear');
@@ -7255,6 +7277,10 @@
     function pickVSSavedMusic(url) {
       const draft = vsUploadDraft();
       draft.musicUrl = String(url || '').trim();
+      draft.mixedVideoUrl = '';
+      draft.mixKey = '';
+      if (draft.sourceVideoUrl) draft.videoUrl = draft.sourceVideoUrl;
+      vsShowMusicBed(draft.musicUrl);
       const opt = document.getElementById('vs-music-saved')?.selectedOptions?.[0];
       draft.musicName = opt && opt.value ? opt.textContent : '';
       const status = document.getElementById('vs-music-status');
@@ -7270,6 +7296,10 @@
       const draft = vsUploadDraft();
       draft.musicUrl = '';
       draft.musicName = '';
+      draft.mixedVideoUrl = '';
+      draft.mixKey = '';
+      if (draft.sourceVideoUrl) draft.videoUrl = draft.sourceVideoUrl;
+      vsShowMusicBed('');
       const sel = document.getElementById('vs-music-saved');
       if (sel) sel.value = '';
       pickVSSavedMusic('');
@@ -7311,43 +7341,109 @@
       return boxes.map((b) => b.value).join(',') || undefined;
     }
 
+    function vsReadMixSettings() {
+      const ready = window.studioQueueReady || {};
+      const draft = vsUploadDraft();
+      const musicVolume = typeof ready.musicVolumeFromPercent === 'function'
+        ? ready.musicVolumeFromPercent(document.getElementById('vs-music-volume')?.value)
+        : 0.28;
+      const muteOriginal = !!document.getElementById('vs-mute-original')?.checked;
+      draft.musicVolume = musicVolume;
+      draft.muteOriginal = muteOriginal;
+      draft.musicPrompt = document.getElementById('vs-music-prompt')?.value || draft.musicPrompt;
+      return {
+        sourceVideoUrl: draft.sourceVideoUrl || draft.videoUrl || '',
+        musicUrl: draft.musicUrl || '',
+        musicVolume,
+        muteOriginal,
+      };
+    }
+
+    function vsShowMusicBed(url) {
+      const wrap = document.getElementById('vs-music-bed-wrap');
+      const audio = document.getElementById('vs-music-bed');
+      if (wrap) wrap.style.display = url ? 'block' : 'none';
+      if (audio) audio.src = url || '';
+    }
+
+    async function vsEnsureMixedVideo() {
+      const ready = window.studioQueueReady || {};
+      const draft = vsUploadDraft();
+      const settings = vsReadMixSettings();
+      if (!settings.sourceVideoUrl) throw new Error('Upload the video first');
+      if (!settings.musicUrl) return settings.sourceVideoUrl;
+      if (typeof ready.mixPreviewIsCurrent === 'function' && ready.mixPreviewIsCurrent(draft, settings)) {
+        return draft.mixedVideoUrl;
+      }
+      const mixBody = typeof ready.buildMixAudioBody === 'function'
+        ? ready.buildMixAudioBody({
+            videoUrl: settings.sourceVideoUrl,
+            musicUrl: settings.musicUrl,
+            musicVolumePercent: document.getElementById('vs-music-volume')?.value,
+            muteOriginal: settings.muteOriginal,
+          })
+        : {
+            video_url: settings.sourceVideoUrl,
+            music_url: settings.musicUrl,
+            music_volume: settings.musicVolume,
+            mute_original: settings.muteOriginal,
+          };
+      const mixRes = await fetch(`${API}/api/studio/mix-audio`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(mixBody),
+      });
+      const mix = await mixRes.json().catch(() => ({}));
+      if (!mixRes.ok || !mix.video_url) throw new Error(mix.error || 'Music mix failed');
+      draft.mixedVideoUrl = mix.video_url;
+      draft.mixKey = typeof ready.mixPreviewKey === 'function' ? ready.mixPreviewKey(settings) : '';
+      draft.videoUrl = mix.video_url;
+      return mix.video_url;
+    }
+
+    async function previewVSFinishedMix() {
+      const btn = document.getElementById('vs-play-mix');
+      const prev = btn?.textContent;
+      if (btn) { btn.disabled = true; btn.textContent = 'Mixing…'; }
+      try {
+        const settings = vsReadMixSettings();
+        if (!settings.musicUrl) throw new Error('Add music first');
+        const mixedUrl = await vsEnsureMixedVideo();
+        const player = document.getElementById('vs-finished-video');
+        if (player) {
+          player.src = mixedUrl;
+          try { await player.play(); } catch (_) {}
+        }
+        const status = document.getElementById('vs-mix-status');
+        if (status) {
+          status.textContent = 'Video player is the mix — hit play on the video.';
+          status.style.color = '#6EE7B7';
+        }
+        showToast('Playing the mix', 'success');
+      } catch (e) {
+        showToast((e.message || 'Music mix failed') + ' — video is still here', 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = prev || 'Play with music'; }
+      }
+    }
+
     async function queueVSFinishedVideo(postNow) {
       const ready = window.studioQueueReady || {};
       const draft = vsUploadDraft();
       draft.caption = vsReadUploadCaption();
-      draft.muteOriginal = !!document.getElementById('vs-mute-original')?.checked;
-      draft.musicVolume = typeof ready.musicVolumeFromPercent === 'function'
-        ? ready.musicVolumeFromPercent(document.getElementById('vs-music-volume')?.value)
-        : 0.28;
-      draft.musicPrompt = document.getElementById('vs-music-prompt')?.value || draft.musicPrompt;
-      let videoUrl = draft.videoUrl;
+      const settings = vsReadMixSettings();
+      let videoUrl = settings.sourceVideoUrl || draft.videoUrl;
       const queueBtn = document.getElementById(postNow ? 'vs-upload-post' : 'vs-upload-queue');
       const prev = queueBtn?.textContent;
       if (queueBtn) { queueBtn.disabled = true; queueBtn.textContent = postNow ? 'Posting…' : 'Queuing…'; }
       try {
         if (!videoUrl) throw new Error('Upload the video first');
         if (draft.musicUrl) {
-          const mixBody = typeof ready.buildMixAudioBody === 'function'
-            ? ready.buildMixAudioBody({
-                videoUrl: draft.sourceVideoUrl || videoUrl,
-                musicUrl: draft.musicUrl,
-                musicVolumePercent: document.getElementById('vs-music-volume')?.value,
-                muteOriginal: draft.muteOriginal,
-              })
-            : { video_url: videoUrl, music_url: draft.musicUrl, music_volume: draft.musicVolume, mute_original: draft.muteOriginal };
           try {
-            const mixRes = await fetch(`${API}/api/studio/mix-audio`, {
-              method: 'POST',
-              headers: authHeaders({ 'Content-Type': 'application/json' }),
-              body: JSON.stringify(mixBody),
-            });
-            const mix = await mixRes.json().catch(() => ({}));
-            if (!mixRes.ok || !mix.video_url) throw new Error(mix.error || 'Music mix failed');
-            videoUrl = mix.video_url;
-            draft.videoUrl = videoUrl;
+            videoUrl = await vsEnsureMixedVideo();
           } catch (mixErr) {
             showToast((mixErr.message || 'Music mix failed') + ' — video is still here', 'error');
-            videoUrl = draft.sourceVideoUrl || draft.videoUrl;
+            videoUrl = draft.sourceVideoUrl || settings.sourceVideoUrl;
           }
         }
         const body = typeof ready.buildUploadVideoQueueBody === 'function'
@@ -7395,6 +7491,7 @@
     window.clearVSMusic = clearVSMusic;
     window.generateVSUploadCaption = generateVSUploadCaption;
     window.queueVSFinishedVideo = queueVSFinishedVideo;
+    window.previewVSFinishedMix = previewVSFinishedMix;
     window.vsHydrateUploadDoor = vsHydrateUploadDoor;
     window.vsConnectedPlatforms = vsConnectedPlatforms;
 
