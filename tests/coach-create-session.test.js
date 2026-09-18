@@ -241,7 +241,7 @@ test('Design Studio Coach rail attaches a style photo and formats replies', () =
   const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   assert.match(src, /cs-coach-style/);
   assert.match(src, /style_image_urls/);
-  assert.match(src, /CS_MAX_STYLE_REFS = 5/);
+  assert.match(src, /CS_MAX_STYLE_REFS = 10/);
   assert.match(src, /multiple/);
   assert.match(src, /formatCoachReplyHtml/);
   assert.match(src, /row\.innerHTML = fmt\(text\)/);

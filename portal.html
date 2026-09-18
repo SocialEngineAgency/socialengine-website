@@ -12,7 +12,7 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
-  <script src="./claude-studio.js?v=20260918-figurelabs-4k" defer></script>
+  <script src="./claude-studio.js?v=20260918-carousel-refs" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260918-carousel-apply"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
@@ -7115,7 +7115,7 @@
       }
       window._seCoachAttachedImage = url;
       window.__SE_COACH_MASTER_IMAGE = url;
-      const seed = seedPrompt || 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.';
+      const seed = seedPrompt || 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
       window.__SE_DESIGN_COACH_SEED = seed;
       if (typeof window.designCoachAsk === 'function' && document.getElementById('cs-coach-input')) {
         window.designCoachAsk(seed);

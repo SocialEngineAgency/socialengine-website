@@ -22,7 +22,8 @@
   let _csSplitSeq = 0;
   let _csCoachPending = null;
   let _csCoachSending = false;
-  const CS_MAX_STYLE_REFS = 5;
+  const CS_MAX_STYLE_REFS = 10;
+  const CS_CAROUSEL_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
   let _csCoachStyleUrls = [];
 
   function queueReady() {
@@ -803,7 +804,7 @@
     document.getElementById('cs-coach-send')?.addEventListener('click', () => designCoachAsk());
     document.getElementById('cs-coach-style')?.addEventListener('click', () => {
       if (_csCoachStyleUrls.length >= CS_MAX_STYLE_REFS) {
-        toast('5 reference photos max', 'error');
+        toast('10 reference photos max', 'error');
         return;
       }
       document.getElementById('cs-coach-style-file')?.click();
@@ -816,7 +817,7 @@
         let added = 0;
         for (const file of files) {
           if (_csCoachStyleUrls.length >= CS_MAX_STYLE_REFS) {
-            toast('5 reference photos max', 'error');
+            toast('10 reference photos max', 'error');
             break;
           }
           const url = await uploadStudioImage(file);
@@ -861,7 +862,7 @@
     });
     document.getElementById('cs-split-carousel')?.addEventListener('click', () => {
       const url = masterImageUrl();
-      const seed = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.';
+      const seed = CS_CAROUSEL_SEED;
       window._seCoachAttachedImage = url;
       window.__SE_COACH_MASTER_IMAGE = url;
       designCoachAsk(seed);
@@ -1524,6 +1525,25 @@
     return _csCoachStyleUrls.filter((u) => /^https:\/\//i.test(u));
   }
 
+  function alignCarouselPlanToStyleRefs(plan, styleUrls) {
+    const n = Math.min(10, (Array.isArray(styleUrls) ? styleUrls : []).filter((u) => /^https:\/\//i.test(u)).length);
+    if (!plan || !Array.isArray(plan.slides) || n < 4) return plan;
+    if (plan.slides.length >= n) return plan;
+    const slides = plan.slides.slice();
+    while (slides.length < n) {
+      const i = slides.length;
+      slides.push({
+        index: i + 1,
+        role: 'other',
+        title: `Slide ${i + 1}`,
+        keep: 'Facts from the source infographic; layout trained from the format-set references.',
+        do_not_invent: 'only facts visible on the source infographic; do not invent stats or claims',
+        composition: 'complete 9:16 slide matching the attached format set; do not crop a strip from the poster',
+      });
+    }
+    return { ...plan, slides: slides.map((s, i) => ({ ...s, index: i + 1 })) };
+  }
+
   function renderCoachStyleChip() {
     const chip = document.getElementById('cs-coach-style-chip');
     if (!chip) return;
@@ -1608,7 +1628,8 @@
     const canvasMaster = String(masterImageUrl() || window._seCoachAttachedImage || '').trim();
     const planMaster = String((plan && plan.master_image_url) || '').trim();
     const master = /^https:\/\//i.test(canvasMaster) ? canvasMaster : planMaster;
-    const slides = plan && Array.isArray(plan.slides) ? plan.slides : [];
+    const aligned = alignCarouselPlanToStyleRefs(plan, coachStyleHttpsUrls());
+    const slides = aligned && Array.isArray(aligned.slides) ? aligned.slides : [];
     if (!/^https:\/\//i.test(master) || slides.length < 2) {
       toast('Need a stored master and a 2–10 slide plan', 'warning');
       return false;
@@ -1704,15 +1725,17 @@
     document.getElementById('cs-coach-log')?.appendChild(typing);
     try {
       const attached = masterImageUrl() || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '';
-      const outbound = styleUrls.length === 1
-        ? `${message}\n\nA house-style reference photo is attached. Match that carousel / graphic format.`
-        : styleUrls.length > 1
-          ? `${message}\n\n${styleUrls.length} house-style reference photos are attached. Combine their carousel / graphic format.`
-          : message;
+      const outbound = styleUrls.length >= 4
+        ? `${message}\n\n${styleUrls.length} format-reference slides are attached. Train from their layout, color, and type. The plan must have exactly ${styleUrls.length} slides. Content comes from the source infographic.`
+        : styleUrls.length === 1
+          ? `${message}\n\nA house-style reference photo is attached. Match that carousel / graphic format.`
+          : styleUrls.length > 1
+            ? `${message}\n\n${styleUrls.length} house-style reference photos are attached. Combine their carousel / graphic format. Content comes from the source infographic.`
+            : message;
       const res = await fetch(`${apiBase()}/api/chat/v2`, {
         method: 'POST',
         headers: authHeaders(),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(styleUrls.length >= 6 ? 120_000 : 90_000),
         body: JSON.stringify({
           message: outbound,
           attached_image_url: /^https:\/\//i.test(attached) ? attached : '',

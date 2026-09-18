@@ -33,10 +33,19 @@ test('applyCarouselPlan paints slides one at a time from the canvas master', () 
   const fn = design.slice(start, end);
   assert.match(fn, /carousel-redesign\/slide/);
   assert.match(fn, /masterImageUrl\(\)/);
+  assert.match(fn, /alignCarouselPlanToStyleRefs|coachStyleHttpsUrls/);
   assert.match(fn, /for\s*\(|for\s+of|slides\.length/);
   assert.doesNotMatch(fn, /\$\{apiBase\(\)\}\/api\/studio\/carousel-redesign`/);
   assert.match(fn, /applyRedesignedSlides/);
   assert.match(fn, /180_000/);
+});
+
+test('Design rail trains from up to 10 reference slides and asks for that many', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(design, /CS_MAX_STYLE_REFS = 10/);
+  assert.match(design, /exactly \$\{styleUrls\.length\} slides|exactly \$\{n\} slides|exactly that many slides/);
+  assert.match(design, /source infographic|content comes from the (source )?infographic/i);
+  assert.doesNotMatch(design, /Propose 4–6 complete slides, no more than 10/);
 });
 
 test('Design generate waits for FigureLabs 4K upscale', () => {
@@ -57,7 +66,7 @@ test('Coach chat sends a durable image URL and can accept a redesign plan', () =
   assert.doesNotMatch(openFn, /switchNav\('ai-coach'\)/);
   assert.match(src, /Make carousel/);
   assert.match(src, /9:16 Instagram carousel/);
-  assert.match(src, /no more than 10/);
+  assert.match(src, /Instagram max 10|no more than 10/);
   assert.doesNotMatch(src, /1:1 Instagram carousel/);
   assert.match(src, /formatCoachReplyHtml/);
 });
