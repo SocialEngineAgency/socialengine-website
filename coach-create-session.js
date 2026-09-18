@@ -54,6 +54,15 @@ function isCoachDesignAsk(text) {
   return /\bcarousel\b|\binfographic\b|\bslides?\b|\bslide deck\b|\bfigurelabs\b|\btall graphic\b/.test(String(text || '').toLowerCase());
 }
 
+function isCoachFailedReply(reply) {
+  return /^\s*sorry,\s*brain freeze/i.test(String(reply || ''));
+}
+
+function isCoachCarouselRedesignAsk(userMessage) {
+  const t = String(userMessage || '').toLowerCase();
+  return /\bredesign\b/.test(t) && /\b(carousel|slides?)\b/.test(t);
+}
+
 function coachUserStatedNewBrief(userMessage) {
   return /\b(make|create|generate|render|shoot)\b.{0,80}\b(reel|video|clip|post|carousel|infographic|slides?)\b/.test(String(userMessage || '').toLowerCase());
 }
@@ -138,7 +147,41 @@ function stripCoachButtonFiller(text) {
     .replace(/if the button still isn't[\s\S]*/gi, ' '));
 }
 
+function isCoachDesignRefineAsk(userMessage, hasCanvas) {
+  if (!hasCanvas) return false;
+  if (isCoachCarouselRedesignAsk(userMessage)) return false;
+  const t = String(userMessage || '').toLowerCase();
+  if (!t.trim()) return false;
+  const asksNew = /\b(make|create|generate)\b.{0,50}\b(new |a )?(poster|graphic|infographic|carousel)\b/.test(t)
+    && !/\b(bigger|smaller|tweak|change|fix|remove|darker|lighter|title|headline)\b/.test(t);
+  if (asksNew) return false;
+  return /\b(bigger|smaller|darker|lighter|tweak|change|fix|remove|drop|replace|move|redo|regenerat|another|title|headline|cta|button|color|font|background|spacing|make the)\b/.test(t);
+}
+
+function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [] } = {}) {
+  if (isCoachFailedReply(reply)) return { mode: 'none' };
+  const list = Array.isArray(actions) ? actions : [];
+  const carousel = list.find((a) => a && a.type === 'carousel_redesign');
+  if (carousel) return { mode: 'confirm_carousel', action: carousel };
+  const create = list.find((a) => a && a.type === 'create');
+  if (create && isCoachDesignRefineAsk(userMessage, hasCanvas)) {
+    return { mode: 'refine', prompt: create.prompt || userMessage, action: create };
+  }
+  if (create && create.destination === 'design') {
+    return { mode: 'confirm_generate', prompt: create.prompt || userMessage, action: create };
+  }
+  if (isCoachDesignRefineAsk(userMessage, hasCanvas)) {
+    return { mode: 'refine', prompt: userMessage };
+  }
+  const t = String(userMessage || '').toLowerCase();
+  if (!hasCanvas && /\b(make|create|generate|design)\b/.test(t) && /\b(poster|graphic|infographic|carousel|slides?|design)\b/.test(t)) {
+    return { mode: 'confirm_generate', prompt: (create && create.prompt) || userMessage, action: create || null };
+  }
+  return { mode: 'none' };
+}
+
 function inferCreateActionFromReply(reply, userMessage, priorTexts) {
+  if (isCoachFailedReply(reply) || isCoachCarouselRedesignAsk(userMessage)) return null;
   const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
   if (!/create this now|generate this|one-click button|canva\.com|canva pro|synthesia|socialengine account manager|\[create_content\]|can't press a button|cannot press a button|button isn't rendering/.test(blob)) return null;
   const user = normalizeCoachPrompt(String(userMessage || '').replace(/<[^>]+>/g, ' '));
@@ -244,6 +287,10 @@ const coachSessionApi = {
   inferCoachDestination,
   applyCoachCreateFields,
   inferCreateActionFromReply,
+  isCoachFailedReply,
+  isCoachCarouselRedesignAsk,
+  isCoachDesignRefineAsk,
+  resolveDesignCoachApply,
   isCoachMetaBrief,
   persistCoachHistoryEntry,
   studioGenerateMode,

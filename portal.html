@@ -12,9 +12,9 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
-  <script src="./claude-studio.js?v=20260918-carousel-916" defer></script>
+  <script src="./claude-studio.js?v=20260918-design-coach" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
-  <script src="./coach-create-session.js?v=20260916-t2v"></script>
+  <script src="./coach-create-session.js?v=20260918-coach-vision"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -7115,8 +7115,17 @@
       }
       window._seCoachAttachedImage = url;
       window.__SE_COACH_MASTER_IMAGE = url;
-      window.__SE_COACH_CAROUSEL_SEED = seedPrompt || 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.';
-      if (typeof switchNav === 'function') switchNav('ai-coach');
+      const seed = seedPrompt || 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.';
+      window.__SE_DESIGN_COACH_SEED = seed;
+      if (typeof window.designCoachAsk === 'function' && document.getElementById('cs-coach-input')) {
+        window.designCoachAsk(seed);
+        return true;
+      }
+      if (typeof window.openClaudeDesignStudio === 'function') {
+        window.openClaudeDesignStudio();
+        return true;
+      }
+      if (typeof switchNav === 'function') switchNav('design-studio');
       return true;
     }
     window.openCoachForCarouselRedesign = openCoachForCarouselRedesign;
@@ -7145,6 +7154,10 @@
         prompt: (plan && plan.prompt) || 'Carousel redesign',
         attached_image_url: data.master_image_url || master,
       };
+      if (typeof window.applyRedesignedSlides === 'function' && document.getElementById('cs-carousel')) {
+        window.applyRedesignedSlides();
+        return true;
+      }
       if (typeof switchNav === 'function') switchNav('design-studio');
       else if (typeof window.openClaudeDesignStudio === 'function') window.openClaudeDesignStudio();
       return true;

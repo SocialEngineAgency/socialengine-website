@@ -20,6 +20,8 @@
   let _csCutTimer = null;
   let _csQueueSingleUrl = null;
   let _csSplitSeq = 0;
+  let _csCoachPending = null;
+  let _csCoachSending = false;
 
   function queueReady() {
     return (typeof window !== 'undefined' && window.studioQueueReady) || {
@@ -725,21 +727,27 @@
               </div>
             </div>
           </div>
-          <div id="cs-tweak-bar" style="display:none;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);align-items:center;gap:10px;">
-            <input id="cs-tweak" type="text" placeholder='Tweak: "bigger headline", "darker background"…' style="flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 12px;color:#fff;font-size:0.81rem;font-family:var(--font-body);outline:none;">
-            <button type="button" id="cs-tweak-btn" style="padding:9px 16px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);border-radius:8px;color:#C4B5FD;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Tweak</button>
+          <div id="cs-finish-bar" style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <button type="button" id="cs-export" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Export PNG</button>
+              <button type="button" id="cs-queue" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Add to Queue</button>
+              <button type="button" id="cs-regen" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Regenerate</button>
+              <button type="button" id="cs-caption" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Get Caption</button>
+            </div>
+            <textarea id="cs-caption-box" rows="3" placeholder="Paste your caption here — or Get Caption after you describe the post." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:10px;min-height:56px;font-size:0.75rem;color:rgba(255,255,255,0.75);font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
           </div>
         </div>
 
-        <div style="width:240px;min-width:240px;border-left:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:rgba(10,16,28,0.6);">
-          <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;">Actions</div>
-          <button type="button" id="cs-export" disabled style="width:100%;padding:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.8rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);text-align:left;">Export PNG</button>
-          <button type="button" id="cs-queue" disabled style="width:100%;padding:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.8rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);text-align:left;">Add to Queue</button>
-          <button type="button" id="cs-regen" disabled style="width:100%;padding:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.8rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);text-align:left;">Regenerate</button>
-          <div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 0;"></div>
-          <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;">Caption</div>
-          <textarea id="cs-caption-box" rows="5" placeholder="Paste your caption here — or Get Caption after you describe the post." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:10px;min-height:72px;font-size:0.75rem;color:rgba(255,255,255,0.75);font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
-          <button type="button" id="cs-caption" disabled style="width:100%;padding:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.77rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Get Caption</button>
+        <div id="cs-coach-rail" style="width:340px;min-width:300px;border-left:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;background:rgba(10,16,28,0.6);min-height:0;">
+          <div style="padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;">Coach</div>
+          <div id="cs-coach-log" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;"></div>
+          <div id="cs-coach-apply-wrap" style="display:none;padding:0 12px 8px;">
+            <button type="button" id="cs-coach-apply" style="width:100%;padding:10px;background:linear-gradient(135deg,#059669,#34D399);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Apply</button>
+          </div>
+          <div style="padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px;">
+            <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;"></textarea>
+            <button type="button" id="cs-coach-send" style="padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Send</button>
+          </div>
         </div>
       </div>
 
@@ -784,9 +792,15 @@
     });
     document.getElementById('cs-generate')?.addEventListener('click', () => generate());
     document.getElementById('cs-regen')?.addEventListener('click', () => generate());
-    document.getElementById('cs-tweak-btn')?.addEventListener('click', () => tweak());
-    document.getElementById('cs-tweak')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') tweak(); });
     document.getElementById('cs-export')?.addEventListener('click', () => exportPng(false));
+    document.getElementById('cs-coach-send')?.addEventListener('click', () => designCoachAsk());
+    document.getElementById('cs-coach-apply')?.addEventListener('click', () => applyPendingDesignCoach());
+    document.getElementById('cs-coach-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        designCoachAsk();
+      }
+    });
     document.getElementById('cs-queue')?.addEventListener('click', () => exportPng(true));
     document.getElementById('cs-caption')?.addEventListener('click', () => getCaption());
     document.getElementById('cs-resolve-url')?.addEventListener('click', () => resolveAdvancedUrl());
@@ -809,11 +823,10 @@
     });
     document.getElementById('cs-split-carousel')?.addEventListener('click', () => {
       const url = masterImageUrl();
-      if (typeof window.openCoachForCarouselRedesign === 'function') {
-        window.openCoachForCarouselRedesign(url);
-      } else if (typeof showToast === 'function') {
-        showToast('Open Coach to redesign this as a carousel', 'info');
-      }
+      const seed = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.';
+      window._seCoachAttachedImage = url;
+      window.__SE_COACH_MASTER_IMAGE = url;
+      designCoachAsk(seed);
     });
     document.getElementById('cs-slide-delete')?.addEventListener('click', () => deleteSelectedSlide());
     document.getElementById('cs-slide-redo')?.addEventListener('click', () => redoSelectedSlide());
@@ -830,6 +843,20 @@
     applyDesignCoachSession();
     applyRedesignedSlides();
     restoreLastDesign();
+    if (window.__SE_COACH_MASTER_IMAGE && !masterImageUrl()) {
+      setReference({
+        url: window.__SE_COACH_MASTER_IMAGE,
+        type: 'image',
+        title: 'Carousel master',
+        source: 'coach',
+      });
+    }
+    hydrateDesignCoachLog();
+    const seed = window.__SE_DESIGN_COACH_SEED;
+    if (seed) {
+      window.__SE_DESIGN_COACH_SEED = '';
+      designCoachAsk(seed);
+    }
 
     let searchTimer = null;
     document.getElementById('cs-product-search')?.addEventListener('input', (e) => {
@@ -874,8 +901,6 @@
     setActionEnabled('cs-queue', carousel || designed || single);
     setActionEnabled('cs-regen', designed && !carousel);
     setActionEnabled('cs-caption', carousel || designed || !!_csOriginalPreviewUrl || single);
-    const bar = document.getElementById('cs-tweak-bar');
-    if (bar) bar.style.display = designed && !carousel ? 'flex' : 'none';
   }
 
   function setBusy(busy, msg) {
@@ -936,8 +961,6 @@
     setActionEnabled('cs-queue', false);
     setActionEnabled('cs-regen', false);
     setActionEnabled('cs-caption', !!_csOriginalPreviewUrl || hasCarousel());
-    const bar = document.getElementById('cs-tweak-bar');
-    if (bar) bar.style.display = 'none';
   }
 
   function showDesign(html, spec) {
@@ -1416,14 +1439,188 @@
     }
   }
 
-  async function tweak() {
-    const t = document.getElementById('cs-tweak')?.value?.trim();
-    if (!t) return;
+  function sharedCoachStorageKey() {
+    const email = window.__clientEmail || window.clientEmail || window._seEmail || '';
+    return email ? 'se_chat_history_' + email : '';
+  }
+
+  function persistSharedCoach(role, text, extra) {
+    const key = sharedCoachStorageKey();
+    if (!key) return;
+    let hist = [];
+    try { hist = JSON.parse(localStorage.getItem(key) || '[]'); } catch { hist = []; }
+    const make = typeof window.persistCoachHistoryEntry === 'function'
+      ? window.persistCoachHistoryEntry
+      : (r, t, e) => ({ role: r, text: t, time: (e && e.time) || '' });
+    hist.push(make(role, text, extra || {}));
+    if (hist.length > 50) hist = hist.slice(-50);
+    try { localStorage.setItem(key, JSON.stringify(hist)); } catch {}
+  }
+
+  function appendDesignCoachBubble(role, text) {
+    const log = document.getElementById('cs-coach-log');
+    if (!log) return;
+    const mine = role === 'user';
+    const row = document.createElement('div');
+    row.style.cssText = mine
+      ? 'align-self:flex-end;max-width:92%;background:#7C3AED;color:#fff;border-radius:14px 14px 4px 14px;padding:8px 11px;font-size:0.78rem;line-height:1.45;white-space:pre-wrap;'
+      : 'align-self:flex-start;max-width:92%;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.86);border-radius:14px 14px 14px 4px;padding:8px 11px;font-size:0.78rem;line-height:1.45;white-space:pre-wrap;';
+    row.textContent = text;
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function setDesignCoachApply(pending) {
+    _csCoachPending = pending || null;
+    const wrap = document.getElementById('cs-coach-apply-wrap');
+    const btn = document.getElementById('cs-coach-apply');
+    if (!wrap || !btn) return;
+    if (!_csCoachPending || _csCoachPending.mode === 'none' || _csCoachPending.mode === 'refine') {
+      wrap.style.display = 'none';
+      return;
+    }
+    btn.textContent = _csCoachPending.mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
+    wrap.style.display = 'block';
+  }
+
+  function hydrateDesignCoachLog() {
+    const log = document.getElementById('cs-coach-log');
+    if (!log) return;
+    log.innerHTML = '';
+    const key = sharedCoachStorageKey();
+    let hist = [];
+    if (key) {
+      try { hist = JSON.parse(localStorage.getItem(key) || '[]'); } catch { hist = []; }
+    }
+    hist.slice(-12).forEach((m) => {
+      if (m && (m.role === 'user' || m.role === 'assistant' || m.role === 'ai') && m.text) {
+        appendDesignCoachBubble(m.role === 'user' ? 'user' : 'assistant', String(m.text));
+      }
+    });
+    if (!log.childElementCount) {
+      appendDesignCoachBubble('assistant', 'Stay here. Ask for a change and the preview updates in this window.');
+    }
+  }
+
+  async function generateFromCoach(prompt) {
     const briefEl = document.getElementById('cs-brief');
-    const base = briefEl?.value?.trim() || _csBrief;
-    briefEl.value = `${base} [MODIFICATION: ${t}]`;
-    document.getElementById('cs-tweak').value = '';
+    const next = String(prompt || '').trim();
+    if (!next) return;
+    if (briefEl) {
+      const current = briefEl.value.trim() || _csBrief;
+      if (masterImageUrl() && current && next !== current) {
+        briefEl.value = `${current} [MODIFICATION: ${next}]`;
+      } else {
+        briefEl.value = next;
+      }
+    }
     await generate();
+  }
+
+  async function applyCarouselPlan(plan) {
+    const master = String((plan && plan.master_image_url) || masterImageUrl() || window._seCoachAttachedImage || '').trim();
+    const slides = plan && Array.isArray(plan.slides) ? plan.slides : [];
+    if (!/^https:\/\//i.test(master) || slides.length < 2) {
+      toast('Need a stored master and a 2–10 slide plan', 'warning');
+      return false;
+    }
+    setBusy(true, 'Redesigning slides… this can take a few minutes');
+    try {
+      const res = await fetch(`${apiBase()}/api/studio/carousel-redesign`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ master_image_url: master, slides }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Carousel redesign failed');
+      window.__SE_CAROUSEL_REDESIGN = data;
+      applyRedesignedSlides();
+      toast('Carousel ready', 'success');
+      return true;
+    } catch (e) {
+      toast(e.message || 'Carousel redesign failed', 'error');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyPendingDesignCoach() {
+    const pending = _csCoachPending;
+    if (!pending) return;
+    const btn = document.getElementById('cs-coach-apply');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Applying…';
+    }
+    try {
+      if (pending.mode === 'confirm_carousel') {
+        const ok = await applyCarouselPlan(pending.action || {});
+        if (ok) setDesignCoachApply(null);
+      } else if (pending.mode === 'confirm_generate') {
+        await generateFromCoach(pending.prompt);
+        setDesignCoachApply(null);
+      }
+    } finally {
+      if (btn && _csCoachPending) {
+        btn.disabled = false;
+        btn.textContent = _csCoachPending.mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
+      }
+    }
+  }
+
+  async function designCoachAsk(preset) {
+    const input = document.getElementById('cs-coach-input');
+    const message = String(preset || input?.value || '').trim();
+    if (!message || _csCoachSending) return;
+    if (input && !preset) input.value = '';
+    if (input && preset) input.value = '';
+    _csCoachSending = true;
+    appendDesignCoachBubble('user', message);
+    persistSharedCoach('user', message);
+    const typing = document.createElement('div');
+    typing.id = 'cs-coach-typing';
+    typing.style.cssText = 'align-self:flex-start;color:rgba(255,255,255,0.4);font-size:0.72rem;';
+    typing.textContent = 'Coach is looking…';
+    document.getElementById('cs-coach-log')?.appendChild(typing);
+    try {
+      const attached = masterImageUrl() || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '';
+      const res = await fetch(`${apiBase()}/api/chat/v2`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          message,
+          attached_image_url: /^https:\/\//i.test(attached) ? attached : '',
+          surface: 'design',
+        }),
+      });
+      if (!res.ok) throw new Error('Coach error');
+      const data = await res.json().catch(() => ({}));
+      typing.remove();
+      const reply = String(data.reply || 'Got it.');
+      appendDesignCoachBubble('assistant', reply);
+      persistSharedCoach('assistant', reply, { actions: data.coach_actions });
+      const decide = typeof window.resolveDesignCoachApply === 'function'
+        ? window.resolveDesignCoachApply
+        : () => ({ mode: 'none' });
+      const decision = decide({
+        reply,
+        userMessage: message,
+        hasCanvas: !!masterImageUrl(),
+        actions: Array.isArray(data.coach_actions) ? data.coach_actions : [],
+      });
+      setDesignCoachApply(decision);
+      if (decision.mode === 'refine') {
+        appendDesignCoachBubble('assistant', 'Updating the preview…');
+        await generateFromCoach(decision.prompt || message);
+      }
+    } catch (e) {
+      typing.remove();
+      appendDesignCoachBubble('assistant', e.message || 'Coach error — try again.');
+      setDesignCoachApply(null);
+    } finally {
+      _csCoachSending = false;
+    }
   }
 
   // html2canvas (199 KB) is only needed for export, so it is loaded on first use
@@ -1677,6 +1874,8 @@
   }
 
   window.renderClaudeStudio = renderClaudeStudio;
+  window.applyRedesignedSlides = applyRedesignedSlides;
+  window.designCoachAsk = designCoachAsk;
   window.openClaudeDesignStudio = function openClaudeDesignStudio() {
     window.__SE_CREATE_SURFACE = 'design';
     try {

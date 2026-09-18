@@ -19,7 +19,7 @@ test('a generated poster can start Redesign as carousel', () => {
   const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   assert.match(design, /function masterImageUrl/);
   assert.match(design, /source: 'generate'/);
-  assert.match(design, /openCoachForCarouselRedesign\(url\)/);
+  assert.match(design, /designCoachAsk\(seed\)/);
 });
 
 test('generated posters persist across a refresh', () => {
