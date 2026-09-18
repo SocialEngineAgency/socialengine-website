@@ -12,7 +12,7 @@
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
-  <script src="./claude-studio.js?v=20260916-queue-review" defer></script>
+  <script src="./claude-studio.js?v=20260918-carousel-redesign" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
   <script src="./animation-studio.js?v=20260913-onefile" defer></script>
@@ -5353,6 +5353,7 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Reject
               </button>
               ${studioArchiveRestoreHtml(post)}
+              ${hasImage && !hasVideo && formatKey !== 'carousel' && !isReel ? `<button class="studio-card__view-btn" onclick="event.stopPropagation();openCoachForCarouselRedesign('${String(imageUrl).replace(/'/g, "\\'")}')">Make carousel</button>` : ''}
               <button class="studio-card__view-btn" onclick="openStudioModal(${index})" style="margin-left:auto;">
                 Review
               </button>
@@ -7105,6 +7106,50 @@
     }
     window.applyCoachCreateSessionIfAny = applyCoachCreateSessionIfAny;
     window.openCreateFromCoach = openCreateFromCoach;
+
+    function openCoachForCarouselRedesign(imageUrl, seedPrompt) {
+      const url = String(imageUrl || '').trim();
+      if (!/^https:\/\//i.test(url)) {
+        if (typeof showToast === 'function') showToast('Need a stored image first', 'warning');
+        return false;
+      }
+      window._seCoachAttachedImage = url;
+      window.__SE_COACH_MASTER_IMAGE = url;
+      window.__SE_COACH_CAROUSEL_SEED = seedPrompt || 'Redesign this infographic into a 1:1 Instagram carousel. Look at the image. Propose 4–6 complete slides. Do not crop strips.';
+      if (typeof switchNav === 'function') switchNav('ai-coach');
+      return true;
+    }
+    window.openCoachForCarouselRedesign = openCoachForCarouselRedesign;
+
+    async function acceptCarouselRedesign(plan) {
+      const master = String((plan && plan.master_image_url) || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '').trim();
+      const slides = plan && Array.isArray(plan.slides) ? plan.slides : [];
+      if (!/^https:\/\//i.test(master) || slides.length < 2) {
+        if (typeof showToast === 'function') showToast('Need a stored master and a 2–8 slide plan', 'warning');
+        return false;
+      }
+      const res = await apiFetch(`${API}/api/studio/carousel-redesign`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ master_image_url: master, slides }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || 'Carousel redesign failed');
+      }
+      window.__SE_CAROUSEL_REDESIGN = data;
+      window.__SE_COACH_CREATE_SESSION = {
+        destination: 'design',
+        mode: 'image',
+        aspect_ratio: '1:1',
+        prompt: (plan && plan.prompt) || 'Carousel redesign',
+        attached_image_url: data.master_image_url || master,
+      };
+      if (typeof switchNav === 'function') switchNav('design-studio');
+      else if (typeof window.openClaudeDesignStudio === 'function') window.openClaudeDesignStudio();
+      return true;
+    }
+    window.acceptCarouselRedesign = acceptCarouselRedesign;
     // Keep VS upload URL readable by Design Studio (separate script)
     Object.defineProperty(window, 'vsUploadedImageUrl', {
       configurable: true,
@@ -10629,7 +10674,26 @@
         if (window._seCoachAttachedProduct) {
           ctxParts.push('Attached product reference: "' + window._seCoachAttachedProduct + '" (use as the hero product in any content you generate).');
         }
-        if (window._seCoachAttachedImage) {
+        let attachedImageUrl = String(window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '').trim();
+        if (attachedImageUrl.startsWith('data:image/')) {
+          try {
+            const blob = await (await fetch(attachedImageUrl)).blob();
+            const fd = new FormData();
+            fd.append('file', blob, 'coach-attach.png');
+            const up = await apiFetch(`${API}/api/studio/upload-image`, { method: 'POST', headers: authHeaders(), body: fd });
+            const upData = await up.json().catch(() => ({}));
+            if (up.ok && upData.url) {
+              attachedImageUrl = upData.url;
+              window._seCoachAttachedImage = upData.url;
+            } else {
+              attachedImageUrl = '';
+            }
+          } catch {
+            attachedImageUrl = '';
+          }
+        }
+        if (!/^https:\/\//i.test(attachedImageUrl)) attachedImageUrl = '';
+        if (attachedImageUrl) {
           ctxParts.push('Attached custom image/video asset (user uploaded) — use as reference or image-to-video base.');
         }
         if (ctxParts.length) {
@@ -10651,7 +10715,7 @@
           const res = await apiFetch(`${API}/api/chat/v2`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message, attached_image_url: attachedImageUrl })
           });
 
           if (!res.ok) throw new Error('API error');
@@ -10696,6 +10760,12 @@
                   const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
                   return '<button class="coach-action-btn" data-type="create" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
                 }
+                if (a.type === 'carousel_redesign') {
+                  coachActionPayloads[i] = Object.assign({}, a, {
+                    master_image_url: a.master_image_url || attachedImageUrl || window._seCoachAttachedImage || '',
+                  });
+                  return '<button class="coach-action-btn" data-type="carousel_redesign" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#059669,#34D399);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;">Accept carousel plan</button>';
+                }
                 return '';
               }).join('') + '</div>';
           }
@@ -10710,6 +10780,26 @@
                 const ok = openCreateFromCoach(payload);
                 if (ok) {
                   btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Opened';
+                }
+                return;
+              }
+              if (btn.dataset.type === 'carousel_redesign') {
+                const payload = coachActionPayloads[Number(btn.dataset.actionIdx)] || {};
+                btn.dataset.busy = '1';
+                const origLabel = btn.innerHTML;
+                btn.innerHTML = 'Redesigning…';
+                try {
+                  const ok = await acceptCarouselRedesign(payload);
+                  if (ok) btn.innerHTML = 'Opened Design Studio';
+                  else {
+                    btn.innerHTML = origLabel;
+                    btn.dataset.busy = '';
+                  }
+                } catch (err) {
+                  btn.innerHTML = '<span style="color:#F43F5E;">Failed — retry</span>';
+                  btn.dataset.busy = '';
+                  if (typeof showToast === 'function') showToast(err.message || 'Carousel redesign failed', 'error');
+                  setTimeout(() => { btn.innerHTML = origLabel; }, 2500);
                 }
                 return;
               }
@@ -10795,6 +10885,14 @@
         bar.innerHTML = chips.join('');
       }
       window._seRenderAttachChips = _seRenderAttachChips;
+      if (window.__SE_COACH_MASTER_IMAGE && !window._seCoachAttachedImage) {
+        window._seCoachAttachedImage = window.__SE_COACH_MASTER_IMAGE;
+      }
+      if (window.__SE_COACH_CAROUSEL_SEED && inputEl && !inputEl.value) {
+        inputEl.value = window.__SE_COACH_CAROUSEL_SEED;
+        window.__SE_COACH_CAROUSEL_SEED = '';
+      }
+      _seRenderAttachChips();
 
       const attachProductBtn = document.getElementById('chat-attach-product');
       if (attachProductBtn) {
@@ -10863,14 +10961,22 @@
             if (typeof showToast === 'function') showToast('File too large — 20MB max.');
             return;
           }
-          const reader = new FileReader();
-          reader.onload = () => {
-            window._seCoachAttachedImage = reader.result;
-            window._seCoachAttachedProduct = '';
-            _seRenderAttachChips();
-            uploadInput.value = '';
-          };
-          reader.readAsDataURL(file);
+          (async () => {
+            try {
+              const fd = new FormData();
+              fd.append('file', file, file.name || 'coach-attach.png');
+              const up = await apiFetch(`${API}/api/studio/upload-image`, { method: 'POST', headers: authHeaders(), body: fd });
+              const upData = await up.json().catch(() => ({}));
+              if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
+              window._seCoachAttachedImage = upData.url;
+              window._seCoachAttachedProduct = '';
+              _seRenderAttachChips();
+            } catch (err) {
+              if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error');
+            } finally {
+              uploadInput.value = '';
+            }
+          })();
         });
       }
 
