@@ -147,9 +147,23 @@ function stripCoachButtonFiller(text) {
     .replace(/if the button still isn't[\s\S]*/gi, ' '));
 }
 
+function isCoachCarouselPlanReply(reply) {
+  const t = String(reply || '').toLowerCase();
+  if (!/\b(slide\s*\d|\d+\s*slides?|slides?)\b/.test(t)) return false;
+  return /\bcarousel\b/.test(t) || /\bconfirm\b/.test(t);
+}
+
+function isCoachStyleMatchAsk(userMessage) {
+  const t = String(userMessage || '').toLowerCase();
+  if (/\b(reference photos?|style (photo|image|ref)|house[- ]style|match these|these photos?|these images?|these references?)\b/.test(t)) return true;
+  if (/\b(carousel|slides?)\b/.test(t) && !/\b(bigger|smaller|title|headline|darker|lighter)\b/.test(t)) return true;
+  return false;
+}
+
 function isCoachDesignRefineAsk(userMessage, hasCanvas) {
   if (!hasCanvas) return false;
   if (isCoachCarouselRedesignAsk(userMessage)) return false;
+  if (isCoachStyleMatchAsk(userMessage)) return false;
   const t = String(userMessage || '').toLowerCase();
   if (!t.trim()) return false;
   const asksNew = /\b(make|create|generate)\b.{0,50}\b(new |a )?(poster|graphic|infographic|carousel)\b/.test(t)
@@ -163,6 +177,7 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
   const list = Array.isArray(actions) ? actions : [];
   const carousel = list.find((a) => a && a.type === 'carousel_redesign');
   if (carousel) return { mode: 'confirm_carousel', action: carousel };
+  if (isCoachCarouselPlanReply(reply)) return { mode: 'none' };
   const create = list.find((a) => a && a.type === 'create');
   if (create && isCoachDesignRefineAsk(userMessage, hasCanvas)) {
     return { mode: 'refine', prompt: create.prompt || userMessage, action: create };

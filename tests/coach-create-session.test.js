@@ -11,6 +11,7 @@ const {
   persistCoachHistoryEntry,
   formatCoachReplyHtml,
   resolveDesignCoachApply,
+  isCoachDesignRefineAsk,
   studioGenerateMode,
   studioModelForMode,
   titleFromCoachBrief,
@@ -253,6 +254,22 @@ test('Design rail refines auto-apply; new poster and carousel wait for Apply', (
     hasCanvas: true,
     actions: [{ type: 'carousel_redesign', slides: [{ title: 'Hook' }, { title: 'Fact' }] }],
   }).mode, 'confirm_carousel');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Happily with these 6 slides? Confirm and I will generate the full carousel now.',
+    userMessage: 'change this into a carousel using these photos',
+    hasCanvas: true,
+  }).mode, 'none');
+  assert.equal(isCoachDesignRefineAsk('change this into a carousel using these photos', true), false);
+  assert.equal(isCoachDesignRefineAsk('change the format to match these', true), false);
+  assert.equal(isCoachDesignRefineAsk('make the colours match these', true), false);
+  assert.equal(isCoachDesignRefineAsk('make the title bigger', true), true);
+});
+
+test('Design rail shows attached style refs and does not lock Send during generate', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(src, /style references attached/);
+  assert.match(src, /Could not update the preview/);
+  assert.match(src, /_csCoachSending = false;\n\s*if \(decision\.mode === 'refine'\)/);
 });
 
 test('animation studio hydrates a coach session into the brief box', () => {
