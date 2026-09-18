@@ -157,6 +157,18 @@ function mixPreviewIsCurrent(draft = {}, settings = {}) {
   return String(draft.mixKey || '') === mixPreviewKey(settings);
 }
 
+function applyCaptionToPost(post = {}, caption) {
+  const text = String(caption ?? '');
+  return { ...post, caption: text, full_post_text: text };
+}
+
+function escapeCaptionForTextarea(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function buildUploadVideoQueueBody({ videoUrl, imageUrl, caption, platform } = {}) {
   const video = String(videoUrl || '').trim();
   if (!/^https?:\/\//i.test(video)) {
@@ -196,6 +208,8 @@ if (typeof module !== 'undefined' && module.exports) {
     buildUploadVideoQueueBody,
     mixPreviewKey,
     mixPreviewIsCurrent,
+    applyCaptionToPost,
+    escapeCaptionForTextarea,
   };
 }
 if (typeof window !== 'undefined') {
@@ -217,5 +231,7 @@ if (typeof window !== 'undefined') {
     buildUploadVideoQueueBody,
     mixPreviewKey,
     mixPreviewIsCurrent,
+    applyCaptionToPost,
+    escapeCaptionForTextarea,
   };
 }
