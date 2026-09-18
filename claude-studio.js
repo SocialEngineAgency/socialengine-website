@@ -1600,28 +1600,53 @@
   }
 
   async function applyCarouselPlan(plan) {
-    const master = String((plan && plan.master_image_url) || masterImageUrl() || window._seCoachAttachedImage || '').trim();
+    const canvasMaster = String(masterImageUrl() || window._seCoachAttachedImage || '').trim();
+    const planMaster = String((plan && plan.master_image_url) || '').trim();
+    const master = /^https:\/\//i.test(canvasMaster) ? canvasMaster : planMaster;
     const slides = plan && Array.isArray(plan.slides) ? plan.slides : [];
     if (!/^https:\/\//i.test(master) || slides.length < 2) {
       toast('Need a stored master and a 2–10 slide plan', 'warning');
       return false;
     }
-    setBusy(true, 'Redesigning slides… this can take a few minutes');
+    const painted = [];
+    let sessionId = '';
+    setBusy(true, `Painting slide 1 of ${slides.length}…`);
     try {
-      const res = await fetch(`${apiBase()}/api/studio/carousel-redesign`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ master_image_url: master, slides }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Carousel redesign failed');
-      window.__SE_CAROUSEL_REDESIGN = data;
-      applyRedesignedSlides();
+      for (let i = 0; i < slides.length; i++) {
+        setBusy(true, `Painting slide ${i + 1} of ${slides.length}…`);
+        const res = await fetch(`${apiBase()}/api/studio/carousel-redesign/slide`, {
+          method: 'POST',
+          headers: authHeaders(),
+          signal: AbortSignal.timeout(120_000),
+          body: JSON.stringify({
+            master_image_url: master,
+            session_id: sessionId,
+            slide: slides[i],
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) throw new Error(data.error || `Slide ${i + 1} generate failed`);
+        sessionId = data.session_id || sessionId;
+        painted.push({
+          index: Number(data.index) || i + 1,
+          url: data.url,
+          title: data.title || slides[i].title || `Slide ${i + 1}`,
+          session_id: sessionId,
+        });
+        window.__SE_CAROUSEL_REDESIGN = {
+          ok: true,
+          master_image_url: master,
+          session_id: sessionId,
+          slides: painted,
+        };
+        if (painted.length >= 2) applyRedesignedSlides();
+      }
       toast('Carousel ready', 'success');
       return true;
     } catch (e) {
       toast(e.message || 'Carousel redesign failed', 'error');
-      return false;
+      if (painted.length >= 2) applyRedesignedSlides();
+      return painted.length >= 2;
     } finally {
       setBusy(false);
     }
