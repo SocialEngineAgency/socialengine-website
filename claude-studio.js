@@ -83,6 +83,44 @@
     return url;
   }
 
+  function designStoreKey() {
+    const data = window._studioClientData || window.__clientData || window.clientData || {};
+    const id = data?.client?.id || data?.client?.contact_email || data?.email || _csBrandName || 'client';
+    return `se-design-last:${id}`;
+  }
+
+  function persistLastDesign() {
+    try {
+      if (!_csGeneratedUrl) return;
+      localStorage.setItem(designStoreKey(), JSON.stringify({
+        image_url: _csGeneratedUrl,
+        spec: _csSpec,
+        brief: (document.getElementById('cs-brief') && document.getElementById('cs-brief').value) || _csBrief,
+        saved_at: Date.now(),
+      }));
+    } catch (_) {}
+  }
+
+  function restoreLastDesign() {
+    if (_csGeneratedUrl || _csHtml || hasCarousel() || window.__SE_CAROUSEL_REDESIGN) return false;
+    try {
+      const raw = localStorage.getItem(designStoreKey());
+      if (!raw) return false;
+      const row = JSON.parse(raw);
+      if (!row || !/^https?:\/\//i.test(row.image_url)) return false;
+      if (row.spec) _csSpec = Object.assign({}, _csSpec, row.spec);
+      if (row.brief) {
+        const briefEl = document.getElementById('cs-brief');
+        if (briefEl && !String(briefEl.value || '').trim()) briefEl.value = row.brief;
+        _csBrief = row.brief;
+      }
+      showGeneratedImage(row.image_url, row.spec);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function queuePlatform() {
     const data = window.__clientData || window.clientData || window._studioClientData || {};
     const c = data?.client || {};
@@ -789,6 +827,7 @@
 
     applyDesignCoachSession();
     applyRedesignedSlides();
+    restoreLastDesign();
 
     let searchTimer = null;
     document.getElementById('cs-product-search')?.addEventListener('input', (e) => {
@@ -947,6 +986,7 @@
     renderRefSummary();
     syncSplitButton();
     refreshActionButtons();
+    persistLastDesign();
   }
 
   async function uploadStudioImage(file) {
