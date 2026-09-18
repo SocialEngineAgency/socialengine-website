@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20260917-approve-caption"></script>
+  <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
   <script src="./claude-studio.js?v=20260916-queue-review" defer></script>
   <script src="./portal-assets.js?v=20260911-qw3"></script>
   <script src="./coach-create-session.js?v=20260916-t2v"></script>
@@ -692,12 +692,15 @@
     .studio-card__empty-media svg { width: 36px; height: 36px; opacity: 0.4; margin-bottom: 8px; }
     .studio-card__empty-media span { font-size: 0.75rem; opacity: 0.5; }
     .studio-card__info { padding: 14px 16px; }
-    .studio-card__top-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .studio-card__top-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: nowrap; min-height: 22px; }
+    .studio-card__top-row .studio-card__status { margin-left: auto; flex-shrink: 0; }
     .studio-card__platform-icon { display: flex; align-items: center; color: rgba(255,255,255,0.45); }
     .studio-card__format { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 8px; border-radius: 4px; }
-    .studio-card__date { font-size: 0.7rem; color: var(--color-text-muted); margin-left: auto; }
     .studio-card__caption { font-size: 0.8rem; color: var(--color-text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 10px; }
     .studio-card__footer { display: flex; align-items: center; justify-content: space-between; }
+    .studio-card__meta { display: flex; align-items: center; gap: 8px; min-height: 22px; margin-top: 10px; }
+    .studio-card__when { font-size: 0.7rem; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .studio-card__schedule-btn { padding: 3px 9px; font-size: 0.7rem; font-weight: 600; background: rgba(124,58,237,0.12); color: #C4B5FD; border: 1px solid rgba(124,58,237,0.25); border-radius: 6px; cursor: pointer; }
     .studio-card__status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 100px; font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
     .studio-card__status--pending { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); }
     .studio-card__status--approved { background: var(--color-accent-soft); color: var(--color-accent); }
@@ -5251,10 +5254,10 @@
       const hasVideo = !!videoUrl;
       const fullText = post.full_post_text || post.caption || '';
       const hashtags = fullText.match(/#[\w]+/g) || [];
-      const date = (() => {
-        const full = formatSchedDateTime(post.scheduled_date, resolveScheduledTime(post));
-        return full.replace(/, \d{4}/, '') || '';
-      })();
+      const ready = window.studioQueueReady || {};
+      const when = typeof ready.cardWhenLabel === 'function'
+        ? ready.cardWhenLabel({ scheduled_date: post.scheduled_date, scheduled_time: resolveScheduledTime(post) })
+        : ((formatSchedDateTime(post.scheduled_date, resolveScheduledTime(post)) || '').replace(/, \d{4}/, ''));
       const formatBadge = FORMAT_BADGE[formatKey] || FORMAT_BADGE.static;
       const icon = PLATFORM_ICONS[platform] || '📱';
       const statusClass = status.toLowerCase().replace(/\s+/g, '-').replace('ready-for-review','pending');
@@ -5300,24 +5303,17 @@
       const captionPreview = fullText.replace(/#[\w]+/g, '').replace(/</g,'&lt;').replace(/>/g,'&gt;').trim().substring(0,90);
       const hashtagPreview = hashtags.slice(0,3).join(' ');
 
-      // Pre-build schedule footer HTML (avoids triple-nested template literals)
       const isSchedulable = status === 'Approved' || status === 'Scheduled';
       const schedDate = post.scheduled_date || '';
       const safePostId = (post.id || '').replace(/'/g, "\\'");
-      const safeSchedDate = schedDate.replace(/'/g, "\\'");
-      let scheduleFooterHtml = '';
-      if (isSchedulable && schedDate) {
-        scheduleFooterHtml = '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
-          + '<span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + status + '</span>'
-          + '<span style="font-size:0.68rem;color:var(--color-text-muted);">Scheduled: ' + (formatSchedDateTime(schedDate, resolveScheduledTime(post)) || schedDate)
-          + ' <button onclick="event.stopPropagation();scheduleFromContent(\'' + safePostId + '\',\'' + safeSchedDate + '\')" style="background:none;border:none;color:#7C3AED;font-size:0.68rem;cursor:pointer;text-decoration:underline;">View in calendar</button></span>'
-          + '</div>';
-      } else if (isSchedulable) {
-        scheduleFooterHtml = '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">'
-          + '<span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + status + '</span>'
-          + '<button onclick="event.stopPropagation();scheduleFromContent(\'' + safePostId + '\',\'\')" style="padding:3px 9px;font-size:0.7rem;font-weight:600;background:rgba(124,58,237,0.12);color:#C4B5FD;border:1px solid rgba(124,58,237,0.25);border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">Schedule</button>'
-          + '</div>';
-      }
+      const scheduleBtn = (isSchedulable && !schedDate)
+        ? '<button type="button" class="studio-card__schedule-btn" onclick="event.stopPropagation();scheduleFromContent(\'' + safePostId + '\',\'\')">Schedule</button>'
+        : '';
+      const metaFooter = '<div class="studio-card__meta" onclick="openStudioModal(' + index + ')">'
+        + '<span class="studio-card__when">' + (when || '') + '</span>'
+        + scheduleBtn
+        + (!isLivePublishedPost(post) ? studioArchiveRestoreHtml(post) : '')
+        + '</div>';
 
       return `
         <div class="studio-card" data-status="${status}" data-platform="${platform}" data-post-id="${String(post.id || '').replace(/"/g, '&quot;')}">
@@ -5326,8 +5322,7 @@
             <div class="studio-card__top-row">
               <span class="studio-card__platform-icon" style="color:rgba(255,255,255,0.5);display:flex;align-items:center;">${icon}</span>
               <span class="studio-card__format" style="background:${formatBadge.color};color:${formatBadge.textColor};">${formatBadge.label}</span>
-              <span class="studio-card__date">${date}</span>
-              <span class="studio-card__status studio-card__status--${statusClass}" style="margin-left:auto;">${status === 'Regenerating' ? 'Regenerating...' : status === 'Ready for Review' ? 'Pending' : status}</span>
+              <span class="studio-card__status studio-card__status--${statusClass}">${status === 'Regenerating' ? 'Regenerating...' : status === 'Ready for Review' ? 'Pending' : status}</span>
               ${regenCount > 0 ? `<span title="${regenLeft} regeneration${regenLeft !== 1 ? 's' : ''} remaining" style="font-size:0.58rem;padding:2px 6px;border-radius:4px;background:${regenLeft > 0 ? 'rgba(124,58,237,0.1)' : 'rgba(244,67,54,0.1)'};color:${regenLeft > 0 ? '#7C3AED' : '#f44336'};font-weight:600;white-space:nowrap;cursor:help;">↻ ${regenLeft}/3</span>` : ''}
               ${(() => {
                 try {
@@ -5367,8 +5362,7 @@
               <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);">Regenerating...</span>
               ${studioArchiveRestoreHtml(post)}
             </div>` : `
-            ${scheduleFooterHtml || '<div class="studio-card__footer" onclick="openStudioModal(' + index + ')" style="cursor:pointer;margin-top:8px;"><span style="font-size:0.7rem;color:rgba(255,255,255,0.3);">' + (status === 'Published' ? 'Published' : 'View details') + ' →</span></div>'}
-            ${!isLivePublishedPost(post) ? '<div style="margin-top:8px;">' + studioArchiveRestoreHtml(post) + '</div>' : ''}`}
+            ${metaFooter}`}
           </div>
         </div>
       `;
