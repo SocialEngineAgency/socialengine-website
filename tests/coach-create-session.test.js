@@ -9,6 +9,7 @@ const {
   inferCreateActionFromReply,
   normalizeCoachCreateSession,
   persistCoachHistoryEntry,
+  resolveDesignCoachApply,
   studioGenerateMode,
   studioModelForMode,
   titleFromCoachBrief,
@@ -181,6 +182,43 @@ test('a Canva bounce still yields Create this now from the earlier brief', () =>
   assert.equal(action.type, 'create');
   assert.match(action.prompt, /flat vector|UK GP/i);
   assert.doesNotMatch(action.prompt, /canva|account manager/i);
+});
+
+test('brain freeze does not infer Create this now from an earlier brief', () => {
+  const action = inferCreateActionFromReply(
+    'Sorry, brain freeze. Try again.',
+    'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10.',
+    ['Create this now is below. It opens Design Studio with the gastritis poster brief.']
+  );
+  assert.equal(action, null);
+});
+
+test('carousel redesign seed does not infer Create this now', () => {
+  const action = inferCreateActionFromReply(
+    'I will propose complete slides.',
+    'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. Propose 4–6 complete slides, no more than 10. Do not crop strips.',
+    ['Create this now is below.']
+  );
+  assert.equal(action, null);
+});
+
+test('Design rail refines auto-apply; new poster and carousel wait for Apply', () => {
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Making the title larger.',
+    userMessage: 'make the title bigger',
+    hasCanvas: true,
+  }).mode, 'refine');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'I can build that poster.',
+    userMessage: 'create a new gastritis poster',
+    hasCanvas: false,
+  }).mode, 'confirm_generate');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Here is a 5-slide plan.',
+    userMessage: 'Redesign this infographic into a 9:16 Instagram carousel.',
+    hasCanvas: true,
+    actions: [{ type: 'carousel_redesign', slides: [{ title: 'Hook' }, { title: 'Fact' }] }],
+  }).mode, 'confirm_carousel');
 });
 
 test('animation studio hydrates a coach session into the brief box', () => {
