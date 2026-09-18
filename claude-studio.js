@@ -1575,6 +1575,10 @@
       if (m && (m.role === 'user' || m.role === 'assistant' || m.role === 'ai') && m.text) {
         appendDesignCoachBubble(m.role === 'user' ? 'user' : 'assistant', String(m.text));
       }
+      if (m && m.role !== 'user' && Array.isArray(m.actions)) {
+        const plan = m.actions.find((a) => a && a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2);
+        if (plan) window.__SE_CAROUSEL_PLAN = plan;
+      }
     });
     if (!log.childElementCount) {
       appendDesignCoachBubble('assistant', 'Stay here. Ask for a change and the preview updates in this window.');
@@ -1725,12 +1729,19 @@
       const decide = typeof window.resolveDesignCoachApply === 'function'
         ? window.resolveDesignCoachApply
         : () => ({ mode: 'none' });
+      const actions = Array.isArray(data.coach_actions) ? data.coach_actions : [];
+      const fromActions = actions.find((a) => a && a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2);
+      if (fromActions) window.__SE_CAROUSEL_PLAN = fromActions;
       const decision = decide({
         reply,
         userMessage: message,
         hasCanvas: !!masterImageUrl(),
-        actions: Array.isArray(data.coach_actions) ? data.coach_actions : [],
+        actions,
+        lastPlan: window.__SE_CAROUSEL_PLAN || null,
       });
+      if (decision.action && decision.action.type === 'carousel_redesign') {
+        window.__SE_CAROUSEL_PLAN = decision.action;
+      }
       setDesignCoachApply(decision);
       _csCoachSending = false;
       if (decision.mode === 'apply_carousel') {
