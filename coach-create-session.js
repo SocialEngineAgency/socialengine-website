@@ -147,7 +147,7 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
     return normalizeCoachCreateSession({
       prompt: user,
       mode: destination === 'design' ? 'image' : 'video',
-      aspect_ratio: destination === 'design' ? '1:1' : '9:16',
+      aspect_ratio: '9:16',
       destination,
     });
   }
@@ -162,7 +162,7 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   return normalizeCoachCreateSession({
     prompt,
     mode: destination === 'design' ? 'image' : 'video',
-    aspect_ratio: destination === 'design' ? '1:1' : '9:16',
+    aspect_ratio: '9:16',
     destination,
   });
 }

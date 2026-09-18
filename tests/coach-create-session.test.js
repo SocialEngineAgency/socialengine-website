@@ -52,7 +52,7 @@ test('carousel language infers design', () => {
   );
   assert.equal(action.destination, 'design');
   assert.equal(action.mode, 'image');
-  assert.equal(action.aspect_ratio, '1:1');
+  assert.equal(action.aspect_ratio, '9:16');
 });
 
 test('design apply fills the Post brief and keeps the session', () => {
