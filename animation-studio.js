@@ -1171,6 +1171,7 @@
                   <button type="button" class="anim-btn anim-btn--ghost anim-shot-move" data-scene="${esc(s.id)}" data-delta="1" ${timelineBusy || idx === scenes.length - 1 ? 'disabled' : ''} title="Move later" aria-label="Move shot later">↓</button>
                   <button type="button" class="anim-btn anim-btn--ghost anim-shot-suggest" data-scene="${esc(s.id)}" ${s.status === 'generating' || timelineBusy ? 'disabled' : ''}>Suggest</button>
                   <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>${regenLabel}</button>
+                  <button type="button" class="anim-btn anim-btn--ghost anim-shot-delete" data-scene="${esc(s.id)}" ${timelineBusy ? 'disabled' : ''} title="Remove this shot from the video">Delete</button>
                 </div>
               </div>
             </div>`;
@@ -1366,6 +1367,9 @@
     });
     el.querySelectorAll('.anim-shot-move').forEach((btn) => {
       btn.addEventListener('click', () => moveScene(btn.dataset.scene, Number(btn.dataset.delta) || 0));
+    });
+    el.querySelectorAll('.anim-shot-delete').forEach((btn) => {
+      btn.addEventListener('click', () => deleteScene(btn.dataset.scene));
     });
     document.getElementById('anim-add-scene')?.addEventListener('click', () => addScene());
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
@@ -1998,6 +2002,29 @@
       _canvasFp = '';
       renderCanvas();
       toast(e.message || 'Reorder failed', 'error', e.request_id);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function deleteScene(sceneId) {
+    if (!_project?.id || !sceneId || _busy) return;
+    if (projectHasBusyScenes(_project) || _project.status === 'assembling') {
+      return toast('Wait for shots to finish before deleting', 'info');
+    }
+    if (!window.confirm('Remove this shot from the video?')) return;
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${encodeURIComponent(sceneId)}`, {
+        method: 'DELETE',
+      });
+      _project = data.project;
+      delete _shotPromptDrafts[sceneId];
+      _canvasFp = '';
+      renderCanvas();
+      toast('Shot removed', 'success');
+    } catch (e) {
+      toast(e.message || 'Delete failed', 'error', e.request_id);
     } finally {
       _busy = false;
     }
