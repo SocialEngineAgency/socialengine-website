@@ -56,9 +56,12 @@ test('Post tab can start fresh, save, archive, and delete a design', () => {
   assert.match(design, /id="cs-archive-design"/);
   assert.match(design, /id="cs-delete-design"/);
   assert.match(design, /id="cs-save-template"/);
-  assert.match(design, /design-scene\/extract/);
   assert.match(design, /design-scene\/fill/);
   assert.match(design, /formatSlideHttpsUrls/);
+  assert.match(design, /sceneFromSlideImages/);
+  const saveTmpl = design.slice(design.indexOf('async function saveOpenTemplate'), design.indexOf('async function applyCarouselPlan'));
+  assert.match(saveTmpl, /sceneFromSlideImages/);
+  assert.doesNotMatch(saveTmpl, /Could not extract template/);
   const setRef = design.slice(design.indexOf('function setReference'), design.indexOf('function heroUrlForGenerate'));
   assert.match(setRef, /startFresh/);
 });
@@ -76,6 +79,7 @@ test('Coach chat sends a durable image URL and can accept a redesign plan', () =
   assert.match(src, /Accept carousel plan/);
   assert.match(src, /\/api\/studio\/carousel-redesign/);
   assert.match(src, /function openCoachForCarouselRedesign/);
+  assert.match(src, /20260919-tmpl-direct/);
   assert.match(src, /__SE_DESIGN_COACH_SEED/);
   const openFn = src.slice(src.indexOf('function openCoachForCarouselRedesign'), src.indexOf('window.openCoachForCarouselRedesign'));
   assert.doesNotMatch(openFn, /switchNav\('ai-coach'\)/);

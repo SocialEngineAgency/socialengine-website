@@ -182,6 +182,35 @@ function slideToSvg(scene, index) {
   return parts.filter(Boolean).join('');
 }
 
+function sceneFromSlideImages(urls, { name = 'Carousel format', aspect = '9:16' } = {}) {
+  const hrefs = (Array.isArray(urls) ? urls : [])
+    .map((u) => httpUrl(u))
+    .filter(Boolean)
+    .slice(0, 10);
+  if (hrefs.length < 2) return null;
+  const size = ASPECTS[aspect] || ASPECTS['9:16'];
+  return normalizeDesignScene({
+    name,
+    aspect: ASPECTS[aspect] ? aspect : '9:16',
+    slides: hrefs.map((href, i) => ({
+      index: i + 1,
+      role: i === 0 ? 'hook' : (i === hrefs.length - 1 ? 'cta' : 'fact'),
+      objects: [{
+        id: `slide-${i + 1}-art`,
+        kind: 'image',
+        slot: 'art',
+        unique: false,
+        locked: false,
+        x: 0,
+        y: 0,
+        w: size.w,
+        h: size.h,
+        href,
+      }],
+    })),
+  });
+}
+
 function applySceneCoachEdit(scene, message) {
   const t = String(message || '').toLowerCase();
   if (!/\b(hide|remove|drop|delete)\b/.test(t)) return normalizeDesignScene(scene);
@@ -197,21 +226,21 @@ function applySceneCoachEdit(scene, message) {
   return next;
 }
 
-async function extractDesignScene({ complete, raw } = {}) {
+async function extractDesignScene({ complete, raw, slideUrls } = {}) {
   if (raw) return stripUniqueSlots(normalizeDesignScene(raw));
-  if (typeof complete !== 'function') {
-    const err = new Error('Scene extract needs a model');
-    err.code = 'SCENE_EXTRACT_FAILED';
-    throw err;
+  const fallback = () => sceneFromSlideImages(slideUrls);
+  if (typeof complete === 'function') {
+    try {
+      const text = await complete();
+      const scene = parseDesignSceneJson(text);
+      if (scene && scene.slides && scene.slides.length >= 2) return stripUniqueSlots(scene);
+    } catch (_) { /* use the uploaded slides */ }
   }
-  const text = await complete();
-  const scene = parseDesignSceneJson(text);
-  if (!scene || !scene.slides || scene.slides.length < 2) {
-    const err = new Error('Could not extract a carousel template');
-    err.code = 'SCENE_EXTRACT_FAILED';
-    throw err;
-  }
-  return stripUniqueSlots(scene);
+  const fromSlides = fallback();
+  if (fromSlides) return fromSlides;
+  const err = new Error('Could not extract a carousel template');
+  err.code = 'SCENE_EXTRACT_FAILED';
+  throw err;
 }
 
 async function fillDesignScene({ scene, complete, values } = {}) {
@@ -251,6 +280,7 @@ const designSceneApi = {
   applySceneCoachEdit,
   extractDesignScene,
   fillDesignScene,
+  sceneFromSlideImages,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
