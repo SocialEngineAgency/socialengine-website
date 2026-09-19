@@ -860,6 +860,31 @@
     return '';
   }
 
+  function savedShotsHtml({ disabled } = {}) {
+    const helpers = assetHelpers();
+    const shots = helpers.filterKind(_library, 'shot');
+    if (!shots.length) return '';
+    return `
+      <div class="anim-saved-shots" id="anim-saved-shots">
+        <div class="anim-section__label">Saved shots</div>
+        <p class="anim-saved-shots__hint">Add a clip as-is, or a recipe you can regenerate. This video’s character lock does not rewrite an old clip.</p>
+        <div class="anim-saved-shots__row">
+          ${shots.map((a) => {
+            const clip = String((a.recipe && a.recipe.video_url) || a.url || '');
+            const isClip = /\.(mp4|webm|mov)(\?|$)/i.test(clip);
+            const thumb = (a.recipe && a.recipe.keyframe_url) || a.url;
+            return `
+              <button type="button" class="anim-saved-shot" data-saved-shot="${esc(a.id)}" ${disabled ? 'disabled' : ''} title="${esc(helpers.labelOf(a))}">
+                ${isClip
+                  ? `<video src="${esc(mediaSrc(clip))}" muted preload="metadata"></video>`
+                  : `<img src="${esc(mediaSrc(thumb))}" alt="" />`}
+                <span>${esc(helpers.labelOf(a))}</span>
+              </button>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
   function projectTitle(p) {
     return p?.agent_brief?.title || p?.user_prompt?.slice(0, 48) || 'Untitled project';
   }
@@ -1171,11 +1196,13 @@
                   <button type="button" class="anim-btn anim-btn--ghost anim-shot-move" data-scene="${esc(s.id)}" data-delta="1" ${timelineBusy || idx === scenes.length - 1 ? 'disabled' : ''} title="Move later" aria-label="Move shot later">↓</button>
                   <button type="button" class="anim-btn anim-btn--ghost anim-shot-suggest" data-scene="${esc(s.id)}" ${s.status === 'generating' || timelineBusy ? 'disabled' : ''}>Suggest</button>
                   <button type="button" class="anim-btn anim-btn--ghost anim-regen" data-scene="${esc(s.id)}" ${s.status === 'generating' ? 'disabled' : ''}>${regenLabel}</button>
+                  <button type="button" class="anim-btn anim-btn--ghost anim-shot-save" data-scene="${esc(s.id)}" ${timelineBusy || !(s.video_url || s.keyframe_url) ? 'disabled' : ''} title="${s.video_url || s.keyframe_url ? 'Save clip and recipe for another video' : 'Generate this shot first'}">Save</button>
                   <button type="button" class="anim-btn anim-btn--ghost anim-shot-delete" data-scene="${esc(s.id)}" ${timelineBusy ? 'disabled' : ''} title="Remove this shot from the video">Delete</button>
                 </div>
               </div>
             </div>`;
             }).join('')}
+            ${savedShotsHtml({ disabled: timelineBusy || scenes.length >= ANIM_MAX_SCENES_UI })}
             <div class="anim-add-scene-wrap">
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-add-scene" ${addReason ? 'disabled' : ''} title="${esc(addReason || 'Append a blank shot')}" style="width:100%;">+ Add scene</button>
               ${addReason ? `<div class="anim-add-scene-hint">${esc(addReason)}</div>` : ''}
@@ -1195,6 +1222,7 @@
               : brief?.shots?.length
               ? `Ready to generate ${brief.shots.length} shots — accept the brief, then approve the character lock.`
               : 'Shot cards will land on this timeline.'}</div>
+            ${savedShotsHtml({ disabled: projectHasBusyScenes(p) || p.status === 'assembling' || (p.scenes || []).length >= ANIM_MAX_SCENES_UI })}
             ${brief?.shots?.length ? `<div class="anim-timeline anim-timeline--ghost">${brief.shots.map((s) => `
               <div class="anim-shot anim-shot--ghost"><div class="anim-shot__media">${
                 _briefing || ['briefing', 'developing', 'generating', 'assembling'].includes(p.status)
@@ -1370,6 +1398,12 @@
     });
     el.querySelectorAll('.anim-shot-delete').forEach((btn) => {
       btn.addEventListener('click', () => deleteScene(btn.dataset.scene));
+    });
+    el.querySelectorAll('.anim-shot-save').forEach((btn) => {
+      btn.addEventListener('click', () => saveScene(btn.dataset.scene));
+    });
+    el.querySelectorAll('[data-saved-shot]').forEach((btn) => {
+      btn.addEventListener('click', () => addSavedShot(btn.getAttribute('data-saved-shot')));
     });
     document.getElementById('anim-add-scene')?.addEventListener('click', () => addScene());
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
@@ -2030,6 +2064,58 @@
     }
   }
 
+  async function saveScene(sceneId) {
+    if (!_project?.id || !sceneId || _busy) return;
+    const scene = (_project.scenes || []).find((s) => s.id === sceneId);
+    if (!scene) return;
+    if (!scene.video_url && !scene.keyframe_url) {
+      return toast('Generate this shot or keep a keyframe before saving', 'error');
+    }
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${encodeURIComponent(sceneId)}/save`, {
+        method: 'POST',
+        body: '{}',
+      });
+      if (Array.isArray(data.assets)) _library = data.assets;
+      else await refreshLibrary({ silent: true });
+      _canvasFp = '';
+      renderCanvas();
+      toast(data.deduped ? 'Already in Saved shots' : 'Saved — still on this video. Add it to another project from Saved shots.', 'success');
+    } catch (e) {
+      toast(e.message || 'Save failed', 'error', e.request_id);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  async function addSavedShot(assetId) {
+    if (!_project?.id || !assetId || _busy) return;
+    if (projectHasBusyScenes(_project) || _project.status === 'assembling') {
+      return toast('Wait for shots to finish before adding a saved shot', 'info');
+    }
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/from-saved`, {
+        method: 'POST',
+        body: JSON.stringify({ asset_id: assetId }),
+      });
+      _project = data.project;
+      const newId = data.scene?.id;
+      if (newId) _shotPromptDrafts[newId] = data.scene.prompt || '';
+      _canvasFp = '';
+      renderCanvas();
+      const ready = data.scene && data.scene.status === 'ready' && data.scene.video_url;
+      toast(ready
+        ? 'Saved clip added. Rebuild Final to include it. Regenerate only if you want a new take.'
+        : 'Recipe added as a draft — write or Generate. Character lock on this project applies.', 'success');
+    } catch (e) {
+      toast(e.message || 'Could not add that saved shot', 'error', e.request_id);
+    } finally {
+      _busy = false;
+    }
+  }
+
   async function regenScene(sceneId) {
     if (!_project?.id || !sceneId || _busy) return;
     const scene = (_project.scenes || []).find((s) => s.id === sceneId);
@@ -2667,6 +2753,13 @@
         .anim-shot__actions .anim-btn { width:auto; padding:6px 10px; font-size:0.72rem; }
         .anim-add-scene-wrap { margin-top:4px; }
         .anim-add-scene-hint { margin-top:6px; font-size:0.68rem; color:rgba(148,163,184,0.95); line-height:1.35; }
+        .anim-saved-shots { margin:8px 0 12px; }
+        .anim-saved-shots__hint { font-size:0.68rem; color:rgba(148,163,184,0.85); margin:0 0 8px; line-height:1.35; }
+        .anim-saved-shots__row { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+        .anim-saved-shot { width:88px; flex:0 0 auto; padding:0; border:1px solid rgba(255,255,255,0.1); border-radius:10px; background:rgba(255,255,255,0.04); color:#F1F5F9; cursor:pointer; }
+        .anim-saved-shot:disabled { opacity:0.45; cursor:not-allowed; }
+        .anim-saved-shot img, .anim-saved-shot video { width:100%; aspect-ratio:9/16; object-fit:cover; display:block; border-radius:10px 10px 0 0; background:#0F172A; }
+        .anim-saved-shot span { display:block; font-size:0.62rem; padding:5px 6px 6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .anim-assemble-panel { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
         .anim-assemble-flags { display:flex; flex-wrap:wrap; gap:12px; font-size:0.72rem; color:#CBD5E1; }
         .anim-assemble-flags label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
