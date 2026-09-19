@@ -11,6 +11,15 @@ test('portal-assets knows a saved shot', () => {
   assert.match(acceptFor('shot'), /video|image/);
 });
 
+test('Saved shots stay off the pre-approve ghost timeline', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'animation-studio.js'), 'utf8');
+  const start = src.indexOf('function savedShotsAllowed');
+  assert.ok(start > 0);
+  const fn = src.slice(start, start + 400);
+  assert.match(fn, /character_review/);
+  assert.match(fn, /briefing/);
+});
+
 test('Animate can save a shot and add it to another video without auto-Send', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'animation-studio.js'), 'utf8');
   assert.match(src, /anim-shot-save/);

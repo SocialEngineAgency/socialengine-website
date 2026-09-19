@@ -860,6 +860,12 @@
     return '';
   }
 
+  function savedShotsAllowed(p) {
+    if (!p) return false;
+    if (['briefing', 'developing', 'character_review'].includes(p.status)) return false;
+    return true;
+  }
+
   function savedShotsHtml({ disabled } = {}) {
     const helpers = assetHelpers();
     const shots = helpers.filterKind(_library, 'shot');
@@ -1202,7 +1208,7 @@
               </div>
             </div>`;
             }).join('')}
-            ${savedShotsHtml({ disabled: timelineBusy || scenes.length >= ANIM_MAX_SCENES_UI })}
+            ${savedShotsAllowed(p) ? savedShotsHtml({ disabled: timelineBusy || scenes.length >= ANIM_MAX_SCENES_UI }) : ''}
             <div class="anim-add-scene-wrap">
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-add-scene" ${addReason ? 'disabled' : ''} title="${esc(addReason || 'Append a blank shot')}" style="width:100%;">+ Add scene</button>
               ${addReason ? `<div class="anim-add-scene-hint">${esc(addReason)}</div>` : ''}
@@ -1222,7 +1228,7 @@
               : brief?.shots?.length
               ? `Ready to generate ${brief.shots.length} shots — accept the brief, then approve the character lock.`
               : 'Shot cards will land on this timeline.'}</div>
-            ${savedShotsHtml({ disabled: projectHasBusyScenes(p) || p.status === 'assembling' || (p.scenes || []).length >= ANIM_MAX_SCENES_UI })}
+            ${savedShotsAllowed(p) ? savedShotsHtml({ disabled: projectHasBusyScenes(p) || p.status === 'assembling' || (p.scenes || []).length >= ANIM_MAX_SCENES_UI }) : ''}
             ${brief?.shots?.length ? `<div class="anim-timeline anim-timeline--ghost">${brief.shots.map((s) => `
               <div class="anim-shot anim-shot--ghost"><div class="anim-shot__media">${
                 _briefing || ['briefing', 'developing', 'generating', 'assembling'].includes(p.status)
@@ -2091,6 +2097,9 @@
 
   async function addSavedShot(assetId) {
     if (!_project?.id || !assetId || _busy) return;
+    if (!savedShotsAllowed(_project)) {
+      return toast('Wait until shots are on the timeline before adding a saved shot', 'info');
+    }
     if (projectHasBusyScenes(_project) || _project.status === 'assembling') {
       return toast('Wait for shots to finish before adding a saved shot', 'info');
     }
