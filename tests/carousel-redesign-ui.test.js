@@ -61,6 +61,7 @@ test('Post tab can start fresh, save, archive, and delete a design', () => {
   assert.match(design, /sceneFromSlideImages/);
   const saveTmpl = design.slice(design.indexOf('async function saveOpenTemplate'), design.indexOf('async function applyCarouselPlan'));
   assert.match(saveTmpl, /sceneFromSlideImages/);
+  assert.match(saveTmpl, /if \(!scene\) scene = _csScene/);
   assert.doesNotMatch(saveTmpl, /Could not extract template/);
   const setRef = design.slice(design.indexOf('function setReference'), design.indexOf('function heroUrlForGenerate'));
   assert.match(setRef, /startFresh/);

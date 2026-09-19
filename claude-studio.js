@@ -1908,9 +1908,21 @@
     const api = sceneApi();
     const ws = workspaceApi();
     const formatUrls = formatSlideHttpsUrls();
-    let scene = (formatUrls.length >= 2 && typeof api.sceneFromSlideImages === 'function')
-      ? api.sceneFromSlideImages(formatUrls, { name: currentTitle() || 'Carousel format' })
-      : _csScene;
+    let scene = null;
+    if (formatUrls.length >= 2) {
+      scene = typeof api.sceneFromSlideImages === 'function'
+        ? api.sceneFromSlideImages(formatUrls, { name: currentTitle() || 'Carousel format' })
+        : {
+          type: 'design_scene',
+          name: currentTitle() || 'Carousel format',
+          aspect: '9:16',
+          slides: formatUrls.slice(0, 10).map((href, i) => ({
+            index: i + 1,
+            objects: [{ id: `slide-${i + 1}-art`, kind: 'image', slot: 'art', unique: false, href }],
+          })),
+        };
+    }
+    if (!scene) scene = _csScene;
     if (!scene) {
       toast('Upload the carousel slides or attach them as reference photos, then Save as template', 'warning');
       return false;
