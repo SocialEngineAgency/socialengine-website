@@ -1907,30 +1907,10 @@
   async function saveOpenTemplate() {
     const api = sceneApi();
     const ws = workspaceApi();
-    let scene = _csScene;
     const formatUrls = formatSlideHttpsUrls();
-    if (!scene && formatUrls.length >= 2) {
-      setBusy(true, 'Extracting template…');
-      try {
-        const res = await fetch(`${apiBase()}/api/studio/design-scene/extract`, {
-          method: 'POST',
-          headers: authHeaders(),
-          signal: AbortSignal.timeout(120_000),
-          body: JSON.stringify({
-            master_image_url: masterImageUrl() || formatUrls[0],
-            style_image_urls: formatUrls,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.scene) throw new Error(data.error || 'Could not extract template');
-        scene = data.scene;
-      } catch (e) {
-        toast(e.message || 'Could not extract template', 'error');
-        return false;
-      } finally {
-        setBusy(false);
-      }
-    }
+    let scene = (formatUrls.length >= 2 && typeof api.sceneFromSlideImages === 'function')
+      ? api.sceneFromSlideImages(formatUrls, { name: currentTitle() || 'Carousel format' })
+      : _csScene;
     if (!scene) {
       toast('Upload the carousel slides or attach them as reference photos, then Save as template', 'warning');
       return false;
@@ -1949,7 +1929,7 @@
     writeJsonStore(templateStoreKey(), items);
     renderSavedDesigns();
     renderScenePreview();
-    toast('Template saved — unique copy stripped', 'success');
+    toast(formatUrls.length >= 2 ? 'Template saved from those slides' : 'Template saved', 'success');
     return true;
   }
 
