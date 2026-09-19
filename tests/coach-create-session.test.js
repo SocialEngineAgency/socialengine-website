@@ -27,6 +27,24 @@ test('animate destination opens animation-studio', () => {
   assert.equal(coachCreateNav({ destination: 'animate' }), 'animation-studio');
 });
 
+test('a 25 second VO brief keeps duration 25 and library attachments', () => {
+  const s = normalizeCoachCreateSession({
+    prompt: 'create me a 25 second video on reflux, voiceover first, using Animation Collection and OPA Outro',
+    destination: 'animate',
+    entry: 'vo',
+    duration: 25,
+    outro_url: 'https://store.test/opa-outro.mp4',
+    music_bed_url: 'https://store.test/soft.mp3',
+    ref_image_urls: ['https://store.test/kitchen.png'],
+  });
+  assert.equal(s.duration, 25);
+  assert.equal(s.entry, 'vo');
+  assert.equal(s.outro_url, 'https://store.test/opa-outro.mp4');
+  const applied = applyCoachCreateFields(s, { animPrompt: { value: '' } });
+  assert.equal(applied.outro_url, 'https://store.test/opa-outro.mp4');
+  assert.deepEqual(applied.ref_image_urls, ['https://store.test/kitchen.png']);
+});
+
 test('design destination opens Design Studio', () => {
   const s = normalizeCoachCreateSession({
     prompt: 'Tylosis carousel. Attach the infographic then split.',
