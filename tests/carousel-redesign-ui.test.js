@@ -58,6 +58,7 @@ test('Post tab can start fresh, save, archive, and delete a design', () => {
   assert.match(design, /id="cs-save-template"/);
   assert.match(design, /design-scene\/extract/);
   assert.match(design, /design-scene\/fill/);
+  assert.match(design, /formatSlideHttpsUrls/);
   const setRef = design.slice(design.indexOf('function setReference'), design.indexOf('function heroUrlForGenerate'));
   assert.match(setRef, /startFresh/);
 });

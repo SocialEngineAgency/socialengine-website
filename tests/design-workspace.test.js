@@ -8,6 +8,7 @@ const {
   upsertLibraryItem,
   archiveLibraryItem,
   deleteLibraryItem,
+  formatSlideHttpsUrls,
 } = require('../design-workspace');
 
 test('startFresh clears the canvas and does not delete the library', () => {
@@ -39,6 +40,34 @@ test('Clear of a generated poster must not restore it from last-design', () => {
   const fresh = startFreshWorkspace({ generatedUrl: 'https://store.example/poster.png' });
   assert.equal(shouldRestoreLastDesign(fresh, { image_url: 'https://store.example/poster.png' }), false);
   assert.equal(shouldRestoreLastDesign(emptyDesignWorkspace(), { image_url: 'https://store.example/poster.png' }), true);
+});
+
+test('uploaded carousel slides are a format set even with no Coach chips', () => {
+  const uploaded = [
+    { url: 'https://store.example/s1.png' },
+    { url: 'https://store.example/s2.png' },
+    { url: 'https://store.example/s3.png' },
+  ];
+  assert.deepEqual(formatSlideHttpsUrls({ styleUrls: [], carouselSlides: uploaded }), [
+    'https://store.example/s1.png',
+    'https://store.example/s2.png',
+    'https://store.example/s3.png',
+  ]);
+  assert.deepEqual(formatSlideHttpsUrls({
+    styleUrls: ['https://store.example/chip.png'],
+    carouselSlides: uploaded,
+  }), [
+    'https://store.example/s1.png',
+    'https://store.example/s2.png',
+    'https://store.example/s3.png',
+  ]);
+  assert.deepEqual(formatSlideHttpsUrls({
+    styleUrls: ['https://store.example/a.png', 'https://store.example/b.png'],
+    carouselSlides: uploaded,
+  }), [
+    'https://store.example/a.png',
+    'https://store.example/b.png',
+  ]);
 });
 
 test('save / archive / delete are explicit and permanent delete drops the row', () => {

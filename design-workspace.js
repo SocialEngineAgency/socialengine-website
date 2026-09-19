@@ -57,6 +57,16 @@ function archiveLibraryItem(items, id) {
   ));
 }
 
+function formatSlideHttpsUrls({ styleUrls = [], carouselSlides = [] } = {}) {
+  const styles = (Array.isArray(styleUrls) ? styleUrls : [])
+    .map((u) => String(u || '').trim())
+    .filter((u) => /^https:\/\//i.test(u));
+  if (styles.length >= 2) return styles;
+  return (Array.isArray(carouselSlides) ? carouselSlides : [])
+    .map((s) => String((typeof s === 'string' ? s : s && s.url) || '').trim())
+    .filter((u) => /^https:\/\//i.test(u));
+}
+
 function deleteLibraryItem(items, id) {
   const key = String(id || '');
   return (Array.isArray(items) ? items : []).filter((it) => it && it.id !== key);
@@ -69,6 +79,7 @@ const designWorkspaceApi = {
   upsertLibraryItem,
   archiveLibraryItem,
   deleteLibraryItem,
+  formatSlideHttpsUrls,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
