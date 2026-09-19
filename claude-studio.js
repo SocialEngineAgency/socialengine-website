@@ -1791,6 +1791,20 @@
     return _csCoachStyleUrls.filter((u) => /^https:\/\//i.test(u));
   }
 
+  function formatSlideHttpsUrls() {
+    const api = workspaceApi();
+    const slides = hasCarousel() ? slidesInQueueOrder() : [];
+    if (typeof api.formatSlideHttpsUrls === 'function') {
+      return api.formatSlideHttpsUrls({
+        styleUrls: coachStyleHttpsUrls(),
+        carouselSlides: slides,
+      });
+    }
+    const styles = coachStyleHttpsUrls();
+    if (styles.length >= 2) return styles;
+    return slides.map((s) => s && s.url).filter((u) => /^https:\/\//i.test(u));
+  }
+
   function alignCarouselPlanToStyleRefs(plan, styleUrls) {
     const n = Math.min(10, (Array.isArray(styleUrls) ? styleUrls : []).filter((u) => /^https:\/\//i.test(u)).length);
     if (!plan || !Array.isArray(plan.slides) || n < 4) return plan;
@@ -1894,7 +1908,8 @@
     const api = sceneApi();
     const ws = workspaceApi();
     let scene = _csScene;
-    if (!scene && coachStyleHttpsUrls().length >= 2) {
+    const formatUrls = formatSlideHttpsUrls();
+    if (!scene && formatUrls.length >= 2) {
       setBusy(true, 'Extracting template…');
       try {
         const res = await fetch(`${apiBase()}/api/studio/design-scene/extract`, {
@@ -1902,8 +1917,8 @@
           headers: authHeaders(),
           signal: AbortSignal.timeout(120_000),
           body: JSON.stringify({
-            master_image_url: masterImageUrl(),
-            style_image_urls: coachStyleHttpsUrls(),
+            master_image_url: masterImageUrl() || formatUrls[0],
+            style_image_urls: formatUrls,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -1917,7 +1932,7 @@
       }
     }
     if (!scene) {
-      toast('Add the format slides, then Save as template', 'warning');
+      toast('Upload the carousel slides or attach them as reference photos, then Save as template', 'warning');
       return false;
     }
     scene = typeof api.stripUniqueSlots === 'function' ? api.stripUniqueSlots(scene) : scene;
