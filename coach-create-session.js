@@ -2,6 +2,7 @@
 
 const COACH_PROMPT_MAX = 8000;
 const STUDIO_DURATIONS = [5, 10];
+const ANIM_DURATIONS = [5, 10, 15, 20, 24, 25];
 const ANIM_FORMATS = ['awareness-15s', 'mythbust-20s', 'product-demo-15s', 'remix-24s'];
 
 function normalizeCoachPrompt(text) {
@@ -16,7 +17,12 @@ function normalizeCoachPrompt(text) {
 
 function normalizeCoachDuration(value) {
   const n = Number(value);
-  return STUDIO_DURATIONS.includes(n) ? n : 0;
+  return ANIM_DURATIONS.includes(n) ? n : 0;
+}
+
+function httpsUrl(value) {
+  const raw = String(value || '').trim();
+  return /^https?:\/\//i.test(raw) ? raw : '';
 }
 
 function normalizeCoachFormat(value) {
@@ -30,7 +36,8 @@ function normalizeCoachEntry(value) {
 function inferCoachSessionExtras(text) {
   const t = String(text || '').toLowerCase();
   let duration = 0;
-  if (/\b10\s*s|\b15\s*s|\b20\s*s|\b24\s*s|\b25-?30|\b30\s*s/.test(t)) duration = 10;
+  if (/\b25\s*s|\b25\s*second|\b25\s*[-–]?\s*30/.test(t)) duration = 25;
+  else if (/\b10\s*s|\b15\s*s|\b20\s*s|\b24\s*s|\b30\s*s/.test(t)) duration = 10;
   else if (/\b5\s*s(ec|econds?)?\b/.test(t)) duration = 5;
 
   let format_template_id = '';
@@ -120,6 +127,15 @@ function normalizeCoachCreateSession(intent = {}) {
     duration: normalizeCoachDuration(intent.duration) || extras.duration,
     format_template_id: normalizeCoachFormat(intent.format_template_id) || extras.format_template_id,
     entry: normalizeCoachEntry(intent.entry) || extras.entry,
+    outro_url: httpsUrl(intent.outro_url),
+    outro_asset_id: String(intent.outro_asset_id || '').slice(0, 40),
+    music_bed_url: httpsUrl(intent.music_bed_url),
+    music_asset_id: String(intent.music_asset_id || '').slice(0, 40),
+    ref_image_urls: Array.isArray(intent.ref_image_urls)
+      ? intent.ref_image_urls.map(httpsUrl).filter(Boolean).slice(0, 8)
+      : [],
+    collection: String(intent.collection || '').slice(0, 80),
+    missing_outro: String(intent.missing_outro || '').slice(0, 240),
   };
 }
 
@@ -243,6 +259,11 @@ function sessionApplyExtras(session) {
     duration: session.duration || 0,
     format_template_id: session.format_template_id || '',
     entry: session.entry || '',
+    outro_url: session.outro_url || '',
+    music_bed_url: session.music_bed_url || '',
+    ref_image_urls: Array.isArray(session.ref_image_urls) ? session.ref_image_urls.slice(0, 8) : [],
+    collection: session.collection || '',
+    missing_outro: session.missing_outro || '',
   };
 }
 

@@ -15,9 +15,9 @@
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./claude-studio.js?v=20260919-tmpl-direct" defer></script>
-  <script src="./portal-assets.js?v=20260911-qw3"></script>
-  <script src="./coach-create-session.js?v=20260918-carousel-apply"></script>
-  <script src="./animation-studio.js?v=20260913-onefile" defer></script>
+  <script src="./portal-assets.js?v=20260919-lib"></script>
+  <script src="./coach-create-session.js?v=20260919-lib"></script>
+  <script src="./animation-studio.js?v=20260919-lib" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -9699,44 +9699,119 @@
       return Array.isArray(d.assets) ? d.assets : [];
     }
 
-    function paintBrandLibrary(root, assets) {
+    let _brandLibDrafts = [];
+
+    function useLibraryStillNow(asset) {
+      const url = String(asset && asset.url || '').trim();
+      if (!/^https?:\/\//i.test(url)) {
+        if (typeof showToast === 'function') showToast('That still has no URL', 'error');
+        return;
+      }
+      const name = String((asset && asset.name) || (asset && asset.kind) || 'Library still');
+      const kind = String((asset && asset.kind) || 'scene');
+      window._studioReference = { url, type: 'image', title: name, source: 'library' };
+      window.__SE_COACH_MASTER_IMAGE = url;
+      window.__SE_ANIM_PENDING_REF = {
+        url,
+        title: name,
+        role: kind === 'character' ? 'character' : 'scene',
+      };
+      if (typeof showToast === 'function') showToast('Ready — open Design or Animate to use this still', 'success');
+    }
+
+    function paintBrandLibrary(root, assets, drafts) {
       if (!root) return;
+      if (Array.isArray(drafts)) _brandLibDrafts = drafts;
       const helpers = window.SEAssets || {};
       const labelOf = helpers.labelOf || ((a) => a.name || a.kind);
-      const rows = (assets || []).map((a) => `
-        <div class="brand-lib-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-          <span style="flex:1;color:#fff;font-size:0.875rem;">${escapeHtml(labelOf(a))}</span>
+      const isStillKind = helpers.isStillKind || ((k) => ['scene', 'character', 'plate', 'logo'].includes(String(k || '')));
+      const filterCollection = helpers.filterCollection || ((list) => list || []);
+      const prevFilter = String(root.querySelector('#brand-lib-filter')?.value || '').trim();
+      const prevCollection = String(root.querySelector('#brand-lib-collection')?.value || '').trim();
+      const prevPrompt = String(root.querySelector('#brand-lib-gen-prompt')?.value || '').trim();
+      const prevKind = String(root.querySelector('#brand-lib-kind')?.value || 'scene');
+      const prevGenKind = String(root.querySelector('#brand-lib-gen-kind')?.value || 'scene');
+      const visible = prevFilter ? filterCollection(assets || [], prevFilter) : (assets || []);
+      const rows = visible.map((a) => {
+        const summary = String((a.analysis && a.analysis.summary) || '').trim();
+        const collection = String(a.collection || (a.analysis && a.analysis.collection) || '').trim();
+        const still = isStillKind(a.kind);
+        return `
+        <div class="brand-lib-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+          ${still ? `<input type="checkbox" data-asset-select="${escapeHtml(a.id)}" style="margin-top:4px;" />` : '<span style="width:16px;"></span>'}
+          <div style="flex:1;min-width:0;">
+            <div style="color:#fff;font-size:0.875rem;">${escapeHtml(labelOf(a))}</div>
+            ${summary ? `<div style="font-size:0.75rem;color:rgba(148,163,184,0.85);margin-top:2px;">${escapeHtml(summary)}</div>` : ''}
+            ${collection ? `<div style="font-size:0.7rem;color:rgba(148,163,184,0.6);margin-top:2px;">${escapeHtml(collection)}</div>` : ''}
+          </div>
           <span style="font-size:0.75rem;color:rgba(148,163,184,0.75);text-transform:capitalize;">${escapeHtml(a.kind || '')}</span>
+          ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
           <button type="button" class="settings-tab" data-asset-delete="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Delete</button>
+        </div>`;
+      }).join('');
+      const draftCards = (_brandLibDrafts || []).map((d) => `
+        <div class="brand-lib-draft" data-draft-id="${escapeHtml(d.id || d.url)}" style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px;background:rgba(255,255,255,0.03);">
+          ${d.url ? `<img src="${escapeHtml(d.url)}" alt="" style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:8px;background:#111;" />` : ''}
+          <p style="color:#fff;font-size:0.8rem;margin:8px 0 6px;">${escapeHtml(d.name || 'Draft')}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <button type="button" class="settings-tab" data-draft-accept="${escapeHtml(d.id || d.url)}" style="padding:4px 8px;font-size:0.72rem;">Add to library</button>
+            <button type="button" class="settings-tab" data-draft-use="${escapeHtml(d.id || d.url)}" style="padding:4px 8px;font-size:0.72rem;">Use now</button>
+            <button type="button" class="settings-tab" data-draft-reject="${escapeHtml(d.id || d.url)}" style="padding:4px 8px;font-size:0.72rem;">Reject</button>
+          </div>
         </div>`).join('');
       root.innerHTML = `
         <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Brand library</h3>
-        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Outros, music beds, intros and logos saved for this account. Animate can pick them without re-uploading.</p>
+        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Stills, outros, music, and logos. Select 2–8 stills to grow a theme-matched set. Coach can only use files that are here.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
+          <input id="brand-lib-filter" type="text" placeholder="Filter collection" value="${escapeHtml(prevFilter)}" style="flex:1;min-width:160px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
+        </div>
         ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Animate or below.</p>'}
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
           <select id="brand-lib-kind" class="anim-select" style="width:auto;">
+            <option value="scene">Scene</option>
+            <option value="character">Character</option>
+            <option value="plate">Plate</option>
             <option value="outro">Outro</option>
             <option value="intro">Intro</option>
             <option value="music">Music</option>
             <option value="logo">Logo</option>
           </select>
+          <input id="brand-lib-collection" type="text" placeholder="Collection name" value="${escapeHtml(prevCollection)}" style="flex:1;min-width:140px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
           <input type="file" id="brand-lib-file" hidden />
           <button type="button" id="brand-lib-upload" class="settings-tab" style="padding:6px 12px;">Upload</button>
-        </div>`;
+        </div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 8px;">Generate from selected stills (2–8). Fashion accounts without FigureLabs get a clear error.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+            <input id="brand-lib-gen-prompt" type="text" placeholder="5 new home scenes: bedroom, living room, kitchen, garden, hallway" value="${escapeHtml(prevPrompt)}" style="flex:1;min-width:220px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
+            <select id="brand-lib-gen-kind" class="anim-select" style="width:auto;">
+              <option value="scene">Scene</option>
+              <option value="character">Character</option>
+              <option value="plate">Plate</option>
+            </select>
+            <button type="button" id="brand-lib-generate" class="settings-tab" style="padding:6px 12px;">Generate</button>
+          </div>
+        </div>
+        ${draftCards ? `<div id="brand-lib-drafts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px;">${draftCards}</div>` : ''}`;
       const kindSel = root.querySelector('#brand-lib-kind');
       const fileEl = root.querySelector('#brand-lib-file');
       const acceptFor = helpers.acceptFor || (() => '*/*');
-      if (fileEl) fileEl.accept = acceptFor(kindSel?.value || 'outro');
+      if (kindSel) kindSel.value = prevKind;
+      const genKindSel = root.querySelector('#brand-lib-gen-kind');
+      if (genKindSel) genKindSel.value = prevGenKind;
+      if (fileEl) fileEl.accept = acceptFor(kindSel?.value || 'scene');
       kindSel?.addEventListener('change', () => { if (fileEl) fileEl.accept = acceptFor(kindSel.value); });
+      root.querySelector('#brand-lib-filter')?.addEventListener('change', () => paintBrandLibrary(root, assets));
       root.querySelector('#brand-lib-upload')?.addEventListener('click', () => fileEl?.click());
       fileEl?.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         e.target.value = '';
         if (!file) return;
         const fd = new FormData();
-        fd.append('kind', kindSel?.value || 'outro');
+        fd.append('kind', kindSel?.value || 'scene');
         fd.append('name', file.name.replace(/\.[^.]+$/, ''));
+        fd.append('collection', String(root.querySelector('#brand-lib-collection')?.value || '').trim());
         fd.append('file', file);
         try {
           const res = await apiFetch('/api/assets', { method: 'POST', body: fd });
@@ -9747,6 +9822,97 @@
         } catch (err) {
           if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error', err.request_id ? { ref: err.request_id } : undefined);
         }
+      });
+      root.querySelector('#brand-lib-generate')?.addEventListener('click', async () => {
+        const ids = [...root.querySelectorAll('[data-asset-select]:checked')].map((el) => el.getAttribute('data-asset-select')).filter(Boolean);
+        if (ids.length < 2 || ids.length > 8) {
+          if (typeof showToast === 'function') showToast('Select 2–8 library stills as references.', 'error');
+          return;
+        }
+        const prompt = String(root.querySelector('#brand-lib-gen-prompt')?.value || '').trim();
+        const kind = String(root.querySelector('#brand-lib-gen-kind')?.value || 'scene');
+        const collection = String(root.querySelector('#brand-lib-collection')?.value || root.querySelector('#brand-lib-filter')?.value || '').trim();
+        const btn = root.querySelector('#brand-lib-generate');
+        if (btn) btn.disabled = true;
+        try {
+          const res = await apiFetch('/api/assets/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset_ids: ids, prompt, kind, collection }),
+          });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(d.error || 'Generate failed');
+          paintBrandLibrary(root, assets, d.drafts || []);
+          if (typeof showToast === 'function') showToast(`${(d.drafts || []).length} drafts ready — add, use, or reject`, 'success');
+        } catch (err) {
+          if (typeof showToast === 'function') showToast(err.message || 'Generate failed', 'error');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+      const findDraft = (id) => (_brandLibDrafts || []).find((d) => String(d.id || d.url) === String(id));
+      root.querySelectorAll('[data-draft-accept]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const draft = findDraft(btn.getAttribute('data-draft-accept'));
+          if (!draft) return;
+          try {
+            const res = await apiFetch('/api/assets/drafts/accept', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: draft.url,
+                name: draft.name,
+                kind: draft.kind,
+                collection: draft.collection,
+              }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not add that still');
+            _brandLibDrafts = (_brandLibDrafts || []).filter((x) => x !== draft);
+            paintBrandLibrary(root, d.assets || assets);
+            if (typeof showToast === 'function') showToast('Added to library', 'success');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Accept failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-draft-use]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const draft = findDraft(btn.getAttribute('data-draft-use'));
+          if (draft) useLibraryStillNow(draft);
+        });
+      });
+      root.querySelectorAll('[data-draft-reject]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const draft = findDraft(btn.getAttribute('data-draft-reject'));
+          if (!draft) return;
+          const reason = window.prompt('Why reject this still? (optional)', '') || '';
+          try {
+            const res = await apiFetch('/api/assets/drafts/reject', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                reason,
+                collection: draft.collection,
+                prompt: draft.prompt,
+              }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Reject failed');
+            _brandLibDrafts = (_brandLibDrafts || []).filter((x) => x !== draft);
+            paintBrandLibrary(root, assets);
+            if (typeof showToast === 'function') showToast('Rejected — that reason is remembered for the next generate', 'success');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Reject failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-asset-use]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-asset-use');
+          const current = (assets || []).find((a) => a.id === id);
+          if (current) useLibraryStillNow(current);
+        });
       });
       root.querySelectorAll('[data-asset-rename]').forEach((btn) => {
         btn.addEventListener('click', async () => {

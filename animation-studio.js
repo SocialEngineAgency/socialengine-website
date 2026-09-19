@@ -17,6 +17,8 @@
   let _library = [];
   let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
   let _pendingFormatTemplateId = null;
+  let _pendingOutroUrl = null;
+  let _pendingMusicUrl = null;
   const REF_ROLES = [
     { id: 'character', label: 'Char' },
     { id: 'style', label: 'Style' },
@@ -1695,6 +1697,9 @@
       }),
     });
     _project = data.project;
+    if (_pendingOutroUrl && !_project.outro_url) _project.outro_url = _pendingOutroUrl;
+    if (_pendingMusicUrl && !_project.music_bed_url) _project.music_bed_url = _pendingMusicUrl;
+    if (_project.outro_url || _project.music_bed_url) await syncMotionSettings();
     rememberOpenProject(_project?.id);
     return _project;
   }
@@ -2439,11 +2444,35 @@
       applyAnimEntryUI('prompt');
     }
     if (result.format_template_id) _pendingFormatTemplateId = result.format_template_id;
+    const nextRefs = [];
+    const seen = new Set();
+    const pushRef = (url, title, role) => {
+      const u = String(url || '').trim();
+      if (!u || seen.has(u)) return;
+      seen.add(u);
+      nextRefs.push({ url: u, title: title || 'Coach ref', role });
+    };
     if (result.attached_image_url) {
-      _refs = [{ url: result.attached_image_url, title: (s && s.product_name) || 'Coach ref', role: 'character' }];
+      pushRef(result.attached_image_url, (s && s.product_name) || 'Coach ref', 'character');
+    }
+    const extras = Array.isArray(result.ref_image_urls) ? result.ref_image_urls : [];
+    extras.forEach((url, i) => {
+      const role = nextRefs.some((r) => r.role === 'character') ? 'scene' : (i === 0 ? 'character' : 'scene');
+      pushRef(url, 'Collection still', role);
+    });
+    if (nextRefs.length) {
+      _refs = nextRefs.slice(0, 8);
       renderRefs();
     }
-    if (!already) toast('Coach brief loaded in Animate — review, then Send.', 'success');
+    if (result.outro_url) _pendingOutroUrl = result.outro_url;
+    if (result.music_bed_url) _pendingMusicUrl = result.music_bed_url;
+    if (_project) {
+      if (result.outro_url) _project.outro_url = result.outro_url;
+      if (result.music_bed_url) _project.music_bed_url = result.music_bed_url;
+      if (_project.id && (result.outro_url || result.music_bed_url)) await syncMotionSettings();
+    }
+    if (result.missing_outro) toast(result.missing_outro, 'error');
+    if (!already) toast('Coach brief loaded in Animate — review, then Write shots.', 'success');
     return true;
   }
   window.applyAnimCoachCreateSessionIfAny = applyAnimCoachCreateSessionIfAny;
@@ -2852,6 +2881,16 @@
     }
     if (coachSession && coachSession.prompt && coachSession.destination === 'animate') {
       await applyAnimCoachCreateSessionIfAny();
+    }
+    const pendingRef = window.__SE_ANIM_PENDING_REF;
+    if (pendingRef && pendingRef.url && !_refs.some((r) => r.url === pendingRef.url)) {
+      _refs.push({
+        url: pendingRef.url,
+        title: pendingRef.title || 'Library still',
+        role: pendingRef.role === 'character' ? 'character' : 'scene',
+      });
+      window.__SE_ANIM_PENDING_REF = null;
+      renderRefs();
     }
     if (typeof lucide !== 'undefined') lucide.createIcons();
   };

@@ -9,7 +9,11 @@ test('acceptFor and isAssetKind', () => {
   assert.equal(acceptFor('outro'), 'video/*');
   assert.equal(acceptFor('music'), 'audio/*,video/*');
   assert.equal(acceptFor('logo'), 'image/*');
+  assert.equal(acceptFor('scene'), 'image/*');
+  assert.equal(acceptFor('character'), 'image/*');
+  assert.equal(acceptFor('plate'), 'image/*');
   assert.equal(isAssetKind('outro'), true);
+  assert.equal(isAssetKind('scene'), true);
   assert.equal(isAssetKind('nope'), false);
 });
 
