@@ -2,10 +2,10 @@
 // and Animate Saved outros / music. No DOM, no fetch.
 'use strict';
 
-const ASSET_KINDS = ['outro', 'intro', 'music', 'logo', 'scene', 'character', 'plate'];
+const ASSET_KINDS = ['outro', 'intro', 'music', 'logo', 'scene', 'character', 'plate', 'shot'];
 const KIND_LABEL = {
   outro: 'Outro', intro: 'Intro', music: 'Music', logo: 'Logo',
-  scene: 'Scene', character: 'Character', plate: 'Plate',
+  scene: 'Scene', character: 'Character', plate: 'Plate', shot: 'Shot',
 };
 const KIND_ACCEPT = {
   outro: 'video/*',
@@ -15,6 +15,7 @@ const KIND_ACCEPT = {
   scene: 'image/*',
   character: 'image/*',
   plate: 'image/*',
+  shot: 'video/*,image/*',
 };
 const STILL_KINDS = ['scene', 'character', 'plate', 'logo'];
 
