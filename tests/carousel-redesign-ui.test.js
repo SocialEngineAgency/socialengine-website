@@ -48,6 +48,20 @@ test('Design rail trains from up to 10 reference slides and asks for that many',
   assert.doesNotMatch(design, /Propose 4–6 complete slides, no more than 10/);
 });
 
+test('Post tab can start fresh, save, archive, and delete a design', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(design, /function startFresh/);
+  assert.match(design, /id="cs-new-post"/);
+  assert.match(design, /id="cs-save-later"/);
+  assert.match(design, /id="cs-archive-design"/);
+  assert.match(design, /id="cs-delete-design"/);
+  assert.match(design, /id="cs-save-template"/);
+  assert.match(design, /design-scene\/extract/);
+  assert.match(design, /design-scene\/fill/);
+  const setRef = design.slice(design.indexOf('function setReference'), design.indexOf('function heroUrlForGenerate'));
+  assert.match(setRef, /startFresh/);
+});
+
 test('Design generate waits for FigureLabs 4K upscale', () => {
   const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   const gen = design.slice(design.indexOf('async function generate()'), design.indexOf('function sharedCoachStorageKey'));
@@ -69,4 +83,6 @@ test('Coach chat sends a durable image URL and can accept a redesign plan', () =
   assert.match(src, /Instagram max 10|no more than 10/);
   assert.doesNotMatch(src, /1:1 Instagram carousel/);
   assert.match(src, /formatCoachReplyHtml/);
+  assert.match(src, /design-workspace.js/);
+  assert.match(src, /design-scene.js/);
 });

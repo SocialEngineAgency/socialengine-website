@@ -25,6 +25,9 @@
   const CS_MAX_STYLE_REFS = 10;
   const CS_CAROUSEL_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
   let _csCoachStyleUrls = [];
+  let _csDesignId = null;
+  let _csWorkspaceCleared = false;
+  let _csScene = null;
 
   function queueReady() {
     return (typeof window !== 'undefined' && window.studioQueueReady) || {
@@ -96,22 +99,192 @@
 
   function persistLastDesign() {
     try {
-      if (!_csGeneratedUrl) return;
+      if (_csWorkspaceCleared || !_csGeneratedUrl) return;
       localStorage.setItem(designStoreKey(), JSON.stringify({
         image_url: _csGeneratedUrl,
         spec: _csSpec,
         brief: (document.getElementById('cs-brief') && document.getElementById('cs-brief').value) || _csBrief,
+        design_id: _csDesignId || '',
         saved_at: Date.now(),
       }));
     } catch (_) {}
   }
 
+  function libraryStoreKey() {
+    return designStoreKey().replace('se-design-last:', 'se-design-library:');
+  }
+
+  function templateStoreKey() {
+    return designStoreKey().replace('se-design-last:', 'se-design-templates:');
+  }
+
+  function readJsonStore(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function writeJsonStore(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+  }
+
+  function loadSavedDesigns() {
+    return Array.isArray(readJsonStore(libraryStoreKey(), [])) ? readJsonStore(libraryStoreKey(), []) : [];
+  }
+
+  function loadSavedTemplates() {
+    return Array.isArray(readJsonStore(templateStoreKey(), [])) ? readJsonStore(templateStoreKey(), []) : [];
+  }
+
+  function workspaceApi() {
+    return window.designWorkspaceApi || {};
+  }
+
+  function sceneApi() {
+    return window.designSceneApi || {};
+  }
+
+  function startFresh(opts = {}) {
+    const keepStyles = opts.keepStyles !== false;
+    const styles = keepStyles ? _csCoachStyleUrls.slice() : [];
+    const api = workspaceApi();
+    const next = typeof api.startFreshWorkspace === 'function'
+      ? api.startFreshWorkspace({
+        generatedUrl: _csGeneratedUrl,
+        html: _csHtml,
+        carousel: _csCarousel,
+        ref: _csRef,
+        styleUrls: styles,
+      })
+      : { generatedUrl: null, html: '', carousel: null, ref: null, cleared: true, styleUrls: styles };
+    _csGeneratedUrl = next.generatedUrl;
+    _csHtml = next.html || '';
+    _csCarousel = next.carousel;
+    _csRef = next.ref;
+    _csOriginalPreviewUrl = null;
+    _csQueueSingleUrl = null;
+    _csDesignId = null;
+    _csScene = null;
+    _csBrief = '';
+    _csWorkspaceCleared = true;
+    _csCoachStyleUrls = Array.isArray(next.styleUrls) ? next.styleUrls : styles;
+    try { localStorage.removeItem(designStoreKey()); } catch (_) {}
+    window._studioReference = null;
+    window.__SE_CAROUSEL_REDESIGN = null;
+    window.__SE_CAROUSEL_PLAN = null;
+    window._seCoachAttachedImage = '';
+    window.__SE_COACH_MASTER_IMAGE = '';
+    const briefEl = document.getElementById('cs-brief');
+    if (briefEl && !opts.keepBrief) briefEl.value = '';
+    const cap = document.getElementById('cs-caption-box');
+    if (cap) cap.value = '';
+    renderRefSummary();
+    renderCoachStyleChip();
+    renderSavedDesigns();
+    restorePreview();
+    refreshActionButtons();
+    syncSplitButton();
+    return true;
+  }
+
+  function currentTitle() {
+    const brief = (document.getElementById('cs-brief') && document.getElementById('cs-brief').value) || _csBrief;
+    return String(brief || 'Saved design').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Saved design';
+  }
+
+  function saveDesignForLater() {
+    const url = _csGeneratedUrl || masterImageUrl();
+    if (!/^https?:\/\//i.test(url)) {
+      toast('Nothing to save yet', 'warning');
+      return false;
+    }
+    const api = workspaceApi();
+    const items = typeof api.upsertLibraryItem === 'function'
+      ? api.upsertLibraryItem(loadSavedDesigns(), {
+        id: _csDesignId || `local-${Date.now()}`,
+        image_url: url,
+        title: currentTitle(),
+        status: 'saved',
+        saved_at: Date.now(),
+      })
+      : loadSavedDesigns();
+    writeJsonStore(libraryStoreKey(), items);
+    toast('Saved for later', 'success');
+    startFresh({ keepStyles: true });
+    return true;
+  }
+
+  async function archiveCurrentDesign() {
+    const id = _csDesignId;
+    const api = workspaceApi();
+    let items = loadSavedDesigns();
+    if (id && typeof api.archiveLibraryItem === 'function') items = api.archiveLibraryItem(items, id);
+    writeJsonStore(libraryStoreKey(), items);
+    if (id && /^rec/i.test(id)) {
+      try {
+        const res = await fetch(`${apiBase()}/api/archive-post`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ postId: id }),
+        });
+        if (!res.ok) throw new Error('Archive failed');
+      } catch (e) {
+        toast(e.message || 'Could not archive', 'error');
+        return false;
+      }
+    }
+    toast('Archived', 'success');
+    startFresh({ keepStyles: true });
+    return true;
+  }
+
+  async function deleteCurrentDesign() {
+    if (!masterImageUrl() && !_csGeneratedUrl && !hasCarousel()) {
+      toast('Nothing to delete', 'warning');
+      return false;
+    }
+    if (!window.confirm('Permanently delete this design from the canvas and your saved list?')) return false;
+    const id = _csDesignId;
+    const api = workspaceApi();
+    let items = loadSavedDesigns();
+    if (id && typeof api.deleteLibraryItem === 'function') items = api.deleteLibraryItem(items, id);
+    writeJsonStore(libraryStoreKey(), items);
+    try { localStorage.removeItem(designStoreKey()); } catch (_) {}
+    if (id && /^rec/i.test(id)) {
+      try {
+        const res = await fetch(`${apiBase()}/api/delete-post`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ postId: id }),
+        });
+        if (!res.ok) throw new Error('Delete failed');
+      } catch (e) {
+        toast(e.message || 'Could not delete', 'error');
+      }
+    }
+    toast('Deleted', 'success');
+    startFresh({ keepStyles: true });
+    return true;
+  }
+
   function restoreLastDesign() {
-    if (_csGeneratedUrl || _csHtml || hasCarousel() || window.__SE_CAROUSEL_REDESIGN) return false;
+    const snapshot = {
+      generatedUrl: _csGeneratedUrl,
+      html: _csHtml,
+      carousel: _csCarousel,
+      cleared: _csWorkspaceCleared,
+    };
+    if (window.__SE_CAROUSEL_REDESIGN) return false;
+    const api = workspaceApi();
     try {
       const raw = localStorage.getItem(designStoreKey());
       if (!raw) return false;
       const row = JSON.parse(raw);
+      if (typeof api.shouldRestoreLastDesign === 'function' && !api.shouldRestoreLastDesign(snapshot, row)) return false;
       if (!row || !/^https?:\/\//i.test(row.image_url)) return false;
       if (row.spec) _csSpec = Object.assign({}, _csSpec, row.spec);
       if (row.brief) {
@@ -119,11 +292,80 @@
         if (briefEl && !String(briefEl.value || '').trim()) briefEl.value = row.brief;
         _csBrief = row.brief;
       }
+      if (row.design_id) _csDesignId = row.design_id;
+      _csWorkspaceCleared = false;
       showGeneratedImage(row.image_url, row.spec);
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  function renderSavedDesigns() {
+    const box = document.getElementById('cs-saved-designs');
+    if (!box) return;
+    const items = loadSavedDesigns().filter((it) => it && it.status !== 'archived');
+    const templates = loadSavedTemplates();
+    if (!items.length && !templates.length) {
+      box.innerHTML = '<div style="font-size:0.72rem;color:rgba(255,255,255,0.32);line-height:1.4;">No saved designs yet. Save for later keeps the poster without posting it.</div>';
+      return;
+    }
+    box.innerHTML = [
+      items.map((it) => (
+        `<button type="button" data-open-design="${escapeHtml(it.id)}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:6px;margin-bottom:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#fff;cursor:pointer;font-family:var(--font-body);">`
+        + `<img src="${escapeHtml(mediaSrc(it.image_url))}" alt="" referrerpolicy="no-referrer" style="width:36px;height:36px;object-fit:cover;border-radius:6px;background:#111;">`
+        + `<span style="font-size:0.72rem;font-weight:600;">${escapeHtml(it.title || 'Saved design')}</span></button>`
+      )).join(''),
+      templates.map((it) => (
+        `<button type="button" data-open-template="${escapeHtml(it.id)}" style="display:block;width:100%;text-align:left;padding:6px 8px;margin-bottom:6px;border-radius:8px;border:1px solid rgba(124,58,237,0.28);background:rgba(124,58,237,0.08);color:#E9D5FF;cursor:pointer;font-family:var(--font-body);font-size:0.72rem;font-weight:700;">Template · ${escapeHtml(it.title || 'Format')}</button>`
+      )).join(''),
+    ].join('');
+    box.querySelectorAll('[data-open-design]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-open-design');
+        const row = loadSavedDesigns().find((it) => it.id === id);
+        if (!row || !row.image_url) return;
+        _csWorkspaceCleared = false;
+        _csDesignId = row.id;
+        showGeneratedImage(row.image_url, _csSpec);
+      });
+    });
+    box.querySelectorAll('[data-open-template]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-open-template');
+        const row = loadSavedTemplates().find((it) => it.id === id);
+        if (!row || !row.scene) return;
+        _csScene = row.scene;
+        renderScenePreview();
+        toast('Template loaded — click a box to hide it, or ask Coach to remove a piece', 'info');
+      });
+    });
+  }
+
+  function renderScenePreview() {
+    const api = sceneApi();
+    if (!_csScene || typeof api.slideToSvg !== 'function') return false;
+    hidePreviewPanes();
+    setPreviewHeader('Preview · Template');
+    const wrap = document.getElementById('cs-scene-preview');
+    const svg = api.slideToSvg(_csScene, (_csScene.slides[0] && _csScene.slides[0].index) || 1);
+    if (wrap) {
+      wrap.style.display = 'block';
+      wrap.innerHTML = `<div id="cs-scene-svg" style="width:100%;max-height:min(70vh,640px);overflow:auto;background:#fff;border-radius:8px;">${svg}</div>`
+        + `<div style="font-size:0.68rem;color:rgba(255,255,255,0.4);margin-top:8px;">Click a box to hide it. Logo stays locked.</div>`;
+      wrap.querySelectorAll('[data-object-id]').forEach((el) => {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', (e) => {
+          const id = el.getAttribute('data-object-id');
+          if (!id || id === 'logo') return;
+          e.preventDefault();
+          _csScene = api.hideObject(_csScene, id);
+          renderScenePreview();
+        });
+      });
+    }
+    refreshActionButtons();
+    return true;
   }
 
   function queuePlatform() {
@@ -209,11 +451,13 @@
     const frame = document.getElementById('cs-frame');
     const original = document.getElementById('cs-original-preview');
     const carousel = document.getElementById('cs-carousel');
+    const scene = document.getElementById('cs-scene-preview');
     if (empty) empty.style.display = 'none';
     if (loading) loading.style.display = 'none';
     if (frame) frame.style.display = 'none';
     if (original) original.style.display = 'none';
     if (carousel) carousel.style.display = 'none';
+    if (scene) scene.style.display = 'none';
   }
 
   function showOriginalPreview(url) {
@@ -236,12 +480,8 @@
     const prevUrl = _csRef?.url || '';
     let clearedCarouselForNewRef = false;
     if (!ref || !ref.url) {
-      _csRef = null;
-      window._studioReference = null;
-      _csCarousel = null;
-      _csOriginalPreviewUrl = null;
-      _csQueueSingleUrl = null;
-      _csSplitSeq += 1;
+      startFresh({ keepStyles: true, keepBrief: true });
+      return;
     } else {
       _csRef = {
         url: String(ref.url),
@@ -271,9 +511,7 @@
     }
     renderRefSummary();
     syncSplitButton();
-    if (!ref || !ref.url) {
-      restorePreview();
-    } else if (_csRef.type === 'image' && !_csCarousel) {
+    if (_csRef.type === 'image' && !_csCarousel) {
       showOriginalPreview(_csRef.url);
     } else if (clearedCarouselForNewRef) {
       restorePreview();
@@ -637,10 +875,22 @@
               <button type="button" style="padding:6px 10px;border:none;border-radius:7px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.7rem;font-weight:700;cursor:default;font-family:var(--font-body);">Post</button>
             </div>
           </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <button type="button" id="cs-new-post" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">New post</button>
+            <button type="button" id="cs-save-later" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid rgba(16,185,129,0.28);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save for later</button>
+            <button type="button" id="cs-archive-design" style="padding:7px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.55);font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Archive</button>
+            <button type="button" id="cs-delete-design" style="padding:7px 8px;border-radius:8px;border:1px solid rgba(248,113,113,0.28);background:rgba(248,113,113,0.08);color:#FCA5A5;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete</button>
+          </div>
 
           <div>
             <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Reference</div>
             <div id="cs-ref-summary" style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;"></div>
+          </div>
+
+          <div>
+            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Saved</div>
+            <div id="cs-saved-designs" style="padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;"></div>
+            <button type="button" id="cs-save-template" style="width:100%;margin-top:8px;padding:9px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.28);border-radius:9px;color:#E9D5FF;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save as template</button>
           </div>
 
           <div>
@@ -706,6 +956,7 @@
             <div id="cs-original-preview" style="display:none;max-width:min(420px,100%);text-align:center;">
               <img id="cs-original-preview-img" alt="Infographic" style="max-width:100%;max-height:min(70vh,640px);border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:#111;">
             </div>
+            <div id="cs-scene-preview" style="display:none;max-width:min(420px,100%);text-align:center;"></div>
             <div id="cs-carousel" style="display:none;width:min(640px,100%);">
               <div id="cs-slide-hero" style="display:none;margin:0 auto 16px;max-width:min(420px,100%);text-align:center;"></div>
               <div id="cs-slide-strip" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;"></div>
@@ -798,6 +1049,14 @@
         showToast('Video Studio unavailable — refresh and try again', 'error');
       }
     });
+    document.getElementById('cs-new-post')?.addEventListener('click', () => {
+      startFresh({ keepStyles: false });
+      toast('Blank post', 'info');
+    });
+    document.getElementById('cs-save-later')?.addEventListener('click', () => saveDesignForLater());
+    document.getElementById('cs-archive-design')?.addEventListener('click', () => archiveCurrentDesign());
+    document.getElementById('cs-delete-design')?.addEventListener('click', () => deleteCurrentDesign());
+    document.getElementById('cs-save-template')?.addEventListener('click', () => saveOpenTemplate());
     document.getElementById('cs-generate')?.addEventListener('click', () => generate());
     document.getElementById('cs-regen')?.addEventListener('click', () => generate());
     document.getElementById('cs-export')?.addEventListener('click', () => exportPng(false));
@@ -881,6 +1140,7 @@
 
     applyDesignCoachSession();
     applyRedesignedSlides();
+    renderSavedDesigns();
     restoreLastDesign();
     if (window.__SE_COACH_MASTER_IMAGE && !masterImageUrl()) {
       setReference({
@@ -972,6 +1232,10 @@
       renderCarouselPreview();
       return;
     }
+    if (_csScene && !_csGeneratedUrl) {
+      renderScenePreview();
+      return;
+    }
     if (_csGeneratedUrl) {
       showGeneratedImage(_csGeneratedUrl, _csSpec);
       return;
@@ -1026,6 +1290,7 @@
 
   function showGeneratedImage(url, spec) {
     _csHtml = '';
+    _csWorkspaceCleared = false;
     _csGeneratedUrl = url;
     _csSpec = spec || _csSpec;
     _csCarousel = null;
@@ -1468,6 +1733,7 @@
         const pill = document.getElementById('cs-brand-pill');
         if (pill) pill.textContent = _csBrandName;
       }
+      if (data.record_id) _csDesignId = data.record_id;
       if (data.image_url) showGeneratedImage(data.image_url, data.spec);
       else if (data.html) showDesign(data.html, data.spec);
       else throw new Error('Generation failed');
@@ -1624,10 +1890,80 @@
     return Boolean(_csGeneratedUrl && _csGeneratedUrl !== before);
   }
 
+  async function saveOpenTemplate() {
+    const api = sceneApi();
+    const ws = workspaceApi();
+    let scene = _csScene;
+    if (!scene && coachStyleHttpsUrls().length >= 2) {
+      setBusy(true, 'Extracting template…');
+      try {
+        const res = await fetch(`${apiBase()}/api/studio/design-scene/extract`, {
+          method: 'POST',
+          headers: authHeaders(),
+          signal: AbortSignal.timeout(120_000),
+          body: JSON.stringify({
+            master_image_url: masterImageUrl(),
+            style_image_urls: coachStyleHttpsUrls(),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.scene) throw new Error(data.error || 'Could not extract template');
+        scene = data.scene;
+      } catch (e) {
+        toast(e.message || 'Could not extract template', 'error');
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    }
+    if (!scene) {
+      toast('Add the format slides, then Save as template', 'warning');
+      return false;
+    }
+    scene = typeof api.stripUniqueSlots === 'function' ? api.stripUniqueSlots(scene) : scene;
+    _csScene = scene;
+    const items = typeof ws.upsertLibraryItem === 'function'
+      ? ws.upsertLibraryItem(loadSavedTemplates(), {
+        id: `tmpl-${Date.now()}`,
+        title: scene.name || currentTitle(),
+        status: 'saved',
+        scene,
+        saved_at: Date.now(),
+      })
+      : loadSavedTemplates();
+    writeJsonStore(templateStoreKey(), items);
+    renderSavedDesigns();
+    renderScenePreview();
+    toast('Template saved — unique copy stripped', 'success');
+    return true;
+  }
+
   async function applyCarouselPlan(plan) {
     const canvasMaster = String(masterImageUrl() || window._seCoachAttachedImage || '').trim();
     const planMaster = String((plan && plan.master_image_url) || '').trim();
     const master = /^https:\/\//i.test(canvasMaster) ? canvasMaster : planMaster;
+    if (_csScene) {
+      setBusy(true, 'Filling the template from the 4K poster…');
+      try {
+        const res = await fetch(`${apiBase()}/api/studio/design-scene/fill`, {
+          method: 'POST',
+          headers: authHeaders(),
+          signal: AbortSignal.timeout(120_000),
+          body: JSON.stringify({ master_image_url: master, scene: _csScene }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.scene) throw new Error(data.error || 'Could not fill template');
+        _csScene = data.scene;
+        renderScenePreview();
+        toast('Template filled from the poster — FigureLabs did not redraw the slides', 'success');
+        return true;
+      } catch (e) {
+        toast(e.message || 'Template fill failed', 'error');
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    }
     const aligned = alignCarouselPlanToStyleRefs(plan, coachStyleHttpsUrls());
     const slides = aligned && Array.isArray(aligned.slides) ? aligned.slides : [];
     if (!/^https:\/\//i.test(master) || slides.length < 2) {
@@ -1708,6 +2044,19 @@
     if (!message || _csCoachSending) return;
     if (input && !preset) input.value = '';
     if (input && preset) input.value = '';
+    if (_csScene && sceneApi().applySceneCoachEdit) {
+      const next = sceneApi().applySceneCoachEdit(_csScene, message);
+      const changed = JSON.stringify(next) !== JSON.stringify(_csScene);
+      if (changed) {
+        _csScene = next;
+        appendDesignCoachBubble('user', message);
+        persistSharedCoach('user', message);
+        appendDesignCoachBubble('assistant', 'Hidden that piece. The rest of the layout is unchanged.');
+        persistSharedCoach('assistant', 'Hidden that piece. The rest of the layout is unchanged.');
+        renderScenePreview();
+        return;
+      }
+    }
     _csCoachSending = true;
     const styleUrls = coachStyleHttpsUrls();
     if (_csCoachStyleUrls.length && !styleUrls.length) {
