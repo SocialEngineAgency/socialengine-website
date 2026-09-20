@@ -247,3 +247,21 @@ test('Approve is not Post now, and the box caption is what we send', () => {
   assert.match(src, /What.s in this box is what we post/);
 });
 
+test('Content Review reschedule includes a time when the date is already set', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const start = src.indexOf('Reschedule:');
+  assert.ok(start > 0, 'Reschedule row missing');
+  const block = src.slice(start, start + 1200);
+  assert.match(block, /type="time"/);
+  assert.match(block, /reschedule-time-/);
+});
+
+test('reschedulePost persists time with the date', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const start = src.indexOf('async function reschedulePost');
+  assert.ok(start > 0);
+  const fn = src.slice(start, start + 700);
+  assert.match(fn, /persistPostSchedule/);
+  assert.match(fn, /reschedule-time-|newTime/);
+});
+
