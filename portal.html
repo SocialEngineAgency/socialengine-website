@@ -3916,7 +3916,9 @@
       const hasVideoBrief = hookLine.includes('🎬');
       const regenCount = parseInt(post.regen_count || 0);
       const regenLeft = Math.max(0, 3 - regenCount);
-      const date = formatSchedDateTime(post.scheduled_date, resolveScheduledTime(post));
+      const storedTime = resolveScheduledTime(post);
+      const schedTime = storedTime || (post.scheduled_date ? '09:00' : '');
+      const date = formatSchedDateTime(post.scheduled_date, storedTime);
       const rescheduleHTML = post.scheduled_date ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span style="font-size:0.75rem;color:rgba(255,255,255,0.5);">Scheduled: ${date}</span><input type="date" id="reschedule-date-${post.id}" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.7rem;font-family:var(--font-body);cursor:pointer;outline:none;margin-left:auto;" onchange="reschedulePost('${post.id}',this.value)"><span style="font-size:0.6rem;color:rgba(255,255,255,0.3);">Change</span></div>` : '';
       const formatBadge = FORMAT_BADGE[formatKey] || FORMAT_BADGE.static;
       const icon = PLATFORM_ICONS[platform] || '📱';
@@ -4022,7 +4024,8 @@
             <div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               <span style="font-size:0.72rem;color:rgba(255,255,255,0.4);">Reschedule:</span>
-              <input type="date" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;" onchange="reschedulePost('${post.id}',this.value)">
+              <input type="date" id="reschedule-date-${String(post.id || '').replace(/'/g, "\\'")}" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;" onchange="reschedulePost('${String(post.id || '').replace(/'/g, "\\'")}')">
+              <input type="time" id="reschedule-time-${String(post.id || '').replace(/'/g, "\\'")}" value="${schedTime || '09:00'}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;" onchange="reschedulePost('${String(post.id || '').replace(/'/g, "\\'")}')">
             </div>` : (status === 'Approved' || status === 'Scheduled') ? (() => {
               const todayKey = (typeof window._clientTodayDateKey === 'function')
                 ? window._clientTodayDateKey()
@@ -9591,11 +9594,16 @@
       return data;
     }
 
-    async function reschedulePost(postId, newDate) {
-      if (!newDate) return;
+    async function reschedulePost(postId, newDate, newTime) {
+      const date = newDate || document.getElementById('reschedule-date-' + postId)?.value || '';
+      const time = newTime
+        || document.getElementById('reschedule-time-' + postId)?.value
+        || document.getElementById('modal-sched-time-' + postId)?.value
+        || '09:00';
+      if (!date) return;
       try {
-        await persistPostSchedule(postId, newDate);
-        showToast('Post rescheduled to ' + new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }));
+        await persistPostSchedule(postId, date, time);
+        showToast('Post rescheduled to ' + new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + ' at ' + time);
         setTimeout(() => document.querySelector('[data-nav=content]')?.click(), 800);
       } catch { showToast('Failed to reschedule — try again'); }
     }
