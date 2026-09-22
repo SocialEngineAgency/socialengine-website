@@ -1855,11 +1855,19 @@
     const wrap = document.getElementById('cs-coach-apply-wrap');
     const btn = document.getElementById('cs-coach-apply');
     if (!wrap || !btn) return;
-    if (!_csCoachPending || _csCoachPending.mode === 'none' || _csCoachPending.mode === 'refine' || _csCoachPending.mode === 'apply_carousel') {
+    const mode = _csCoachPending && _csCoachPending.mode;
+    if (!_csCoachPending || mode === 'none' || mode === 'refine' || mode === 'apply_carousel' || mode === 'apply_generate') {
       wrap.style.display = 'none';
       return;
     }
-    btn.textContent = _csCoachPending.mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
+    if (mode === 'confirm_carousel') {
+      const master = String((_csCoachPending.action && _csCoachPending.action.master_image_url) || masterImageUrl() || '');
+      if (!/^https:\/\//i.test(master)) {
+        wrap.style.display = 'none';
+        return;
+      }
+    }
+    btn.textContent = mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
     wrap.style.display = 'block';
   }
 
@@ -1889,10 +1897,19 @@
   async function generateFromCoach(prompt) {
     const briefEl = document.getElementById('cs-brief');
     const next = String(prompt || '').trim();
-    if (!next) return false;
+    const waitingAsk = typeof window.isCoachWaitingOnCreateAsk === 'function'
+      ? window.isCoachWaitingOnCreateAsk(next)
+      : /\bare you (creating|generating)\b/i.test(next);
     if (_csGenerating) return false;
-    if (briefEl) {
-      const current = briefEl.value.trim() || _csBrief;
+    const current = briefEl ? (briefEl.value.trim() || _csBrief) : _csBrief;
+    if (waitingAsk) {
+      if (!current) {
+        toast('Describe your post first', 'warning');
+        return false;
+      }
+    } else if (!next) {
+      return false;
+    } else if (briefEl) {
       if (masterImageUrl() && current && next !== current) {
         briefEl.value = `${current} [MODIFICATION: ${next}]`;
       } else {
@@ -2033,7 +2050,7 @@
       if (pending.mode === 'confirm_carousel') {
         const ok = await applyCarouselPlan(pending.action || {});
         if (ok) setDesignCoachApply(null);
-      } else if (pending.mode === 'confirm_generate') {
+      } else if (pending.mode === 'confirm_generate' || pending.mode === 'apply_generate') {
         await generateFromCoach(pending.prompt);
         setDesignCoachApply(null);
       }
@@ -2043,6 +2060,12 @@
         btn.textContent = _csCoachPending.mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
       }
     }
+  }
+
+  function setCoachInputBusy(busy) {
+    const input = document.getElementById('cs-coach-input');
+    if (!input) return;
+    input.placeholder = busy ? 'Asking your coach…' : 'Ask your coach…';
   }
 
   async function designCoachAsk(preset) {
@@ -2065,6 +2088,7 @@
       }
     }
     _csCoachSending = true;
+    setCoachInputBusy(true);
     const styleUrls = coachStyleHttpsUrls();
     if (_csCoachStyleUrls.length && !styleUrls.length) {
       toast('Style photos need a stored https URL — re-upload them', 'error');
@@ -2129,6 +2153,11 @@
         const ok = await applyCarouselPlan(decision.action || {});
         if (status) status.textContent = ok ? 'Carousel ready.' : 'Could not generate the carousel.';
         if (ok) setDesignCoachApply(null);
+      } else if (decision.mode === 'apply_generate') {
+        const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
+        const ok = await generateFromCoach(decision.prompt || '');
+        if (status) status.textContent = ok ? '4K poster ready.' : 'Could not generate the poster.';
+        if (ok) setDesignCoachApply(null);
       } else if (decision.mode === 'refine') {
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
         const ok = await generateFromCoach(decision.prompt || message);
@@ -2143,6 +2172,7 @@
       setDesignCoachApply(null);
     } finally {
       _csCoachSending = false;
+      setCoachInputBusy(false);
     }
   }
 

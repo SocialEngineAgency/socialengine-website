@@ -163,6 +163,13 @@ function stripCoachButtonFiller(text) {
     .replace(/if the button still isn't[\s\S]*/gi, ' '));
 }
 
+function isCoachWaitingOnCreateAsk(userMessage) {
+  const t = String(userMessage || '').toLowerCase();
+  if (!t.trim()) return false;
+  if (/\b(are you creating|are you generating|did you create|did you generate|where is (the )?(poster|graphic|infographic)|create it now|generate it now)\b/.test(t)) return true;
+  return /\b(creating|generating) it\b/.test(t);
+}
+
 function isCoachCarouselConfirmAsk(userMessage) {
   const t = String(userMessage || '').toLowerCase();
   if (/\b(yes|yep|confirm|agreed|go ahead|do it|generate|apply|use these|replicate|match these)\b/.test(t)) return true;
@@ -198,16 +205,26 @@ function usableCarouselPlan(action) {
   return !!(action && action.type === 'carousel_redesign' && Array.isArray(action.slides) && action.slides.length >= 2);
 }
 
+function carouselHasStoredMaster(action, hasCanvas) {
+  if (hasCanvas) return true;
+  return /^https:\/\//i.test(String((action && action.master_image_url) || ''));
+}
+
 function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [], lastPlan = null } = {}) {
   if (isCoachFailedReply(reply)) return { mode: 'none' };
   const list = Array.isArray(actions) ? actions : [];
+  const create = list.find((a) => a && a.type === 'create');
+  if (!hasCanvas && isCoachWaitingOnCreateAsk(userMessage)) {
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null };
+  }
   const carousel = list.find((a) => usableCarouselPlan(a)) || (usableCarouselPlan(lastPlan) ? lastPlan : null);
-  if (carousel && isCoachCarouselConfirmAsk(userMessage)) {
+  if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && isCoachCarouselConfirmAsk(userMessage)) {
     return { mode: 'apply_carousel', action: carousel };
   }
-  if (carousel) return { mode: 'confirm_carousel', action: carousel };
+  if (carousel && carouselHasStoredMaster(carousel, hasCanvas)) {
+    return { mode: 'confirm_carousel', action: carousel };
+  }
   if (isCoachCarouselPlanReply(reply)) return { mode: 'none' };
-  const create = list.find((a) => a && a.type === 'create');
   if (create && isCoachDesignRefineAsk(userMessage, hasCanvas)) {
     return { mode: 'refine', prompt: create.prompt || userMessage, action: create };
   }
@@ -361,13 +378,19 @@ function escapeCoachHtml(text) {
 
 function stripCoachPlanDump(text) {
   let out = String(text || '');
+  const createAt = out.search(/\[?CREATE_CONTENT/i);
+  if (createAt >= 0) out = out.slice(0, createAt);
   const tokenAt = out.search(/\[?CAROUSEL_REDESIGN/i);
   if (tokenAt >= 0) out = out.slice(0, tokenAt);
   const brace = out.indexOf('{');
   if (brace >= 0 && /"slides"\s*:/.test(out.slice(brace))) {
     out = out.slice(0, brace);
   }
-  return out.replace(/\n{3,}/g, '\n\n').trim();
+  return out
+    .replace(/^\s*}\]\s*$/gm, '')
+    .replace(/^\s*--+\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function formatCoachReplyHtml(text) {
@@ -407,6 +430,7 @@ const coachSessionApi = {
   inferCreateActionFromReply,
   isCoachFailedReply,
   isCoachCarouselRedesignAsk,
+  isCoachWaitingOnCreateAsk,
   isCoachDesignRefineAsk,
   resolveDesignCoachApply,
   isCoachMetaBrief,

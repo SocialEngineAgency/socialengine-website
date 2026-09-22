@@ -222,6 +222,14 @@ test('carousel redesign seed does not infer Create this now', () => {
   assert.equal(action, null);
 });
 
+test('Coach replies hide leftover CREATE_CONTENT debris', () => {
+  const html = formatCoachReplyHtml('On it.\n}]\n--\nClick "Create this now" above.');
+  assert.match(html, /On it/);
+  assert.match(html, /Create this now/);
+  assert.doesNotMatch(html, /}\]/);
+  assert.doesNotMatch(html, /--/);
+});
+
 test('Coach replies hide dumped carousel plan JSON', () => {
   const html = formatCoachReplyHtml([
     'Got it — I can see the source infographic clearly.',
@@ -314,6 +322,21 @@ test('Design rail refines auto-apply; new poster and carousel wait for Apply', (
     hasCanvas: true,
     lastPlan: remembered,
   }).action.master_image_url, 'https://cdn.example/master.png');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Yes — but I need to emit the full token properly. Here it is now:',
+    userMessage: 'are you creating it?',
+    hasCanvas: false,
+    actions: [
+      { type: 'carousel_redesign', slides: [{ title: 'Hook' }, { title: 'Fact' }] },
+      { type: 'create', destination: 'design', prompt: 'H. pylori [OPA] 9:16 poster' },
+    ],
+  }).mode, 'apply_generate');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Here is a 5-slide plan.',
+    userMessage: 'ok',
+    hasCanvas: false,
+    actions: [{ type: 'carousel_redesign', slides: [{ title: 'Hook' }, { title: 'Fact' }] }],
+  }).mode, 'none');
 });
 
 test('Design rail shows attached style refs and does not lock Send during generate', () => {
@@ -324,6 +347,10 @@ test('Design rail shows attached style refs and does not lock Send during genera
   assert.match(src, /AbortSignal\.timeout/);
   assert.match(src, /apply_carousel/);
   assert.match(src, /Generating the carousel/);
+  assert.match(src, /apply_generate/);
+  assert.match(src, /Generating the 4K poster/);
+  assert.match(src, /Asking your coach/);
+  assert.match(src, /Ask your coach/);
 });
 
 test('animation studio hydrates a coach session into the brief box', () => {
