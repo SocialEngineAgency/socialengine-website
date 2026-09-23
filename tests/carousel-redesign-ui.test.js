@@ -7,7 +7,7 @@ const path = require('node:path');
 test('Design Studio opens Coach redesign, not even-cut Split', () => {
   const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   assert.match(design, /Redesign as carousel/);
-  assert.doesNotMatch(design, /Split into carousel/);
+  assert.match(design, /Split into carousel/);
   assert.match(design, /function designCoachAsk/);
   assert.match(design, /cs-coach-rail/);
   assert.match(design, /cs-finish-bar/);

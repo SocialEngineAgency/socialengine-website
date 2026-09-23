@@ -21,6 +21,7 @@
   let _csQueueSingleUrl = null;
   let _csSplitSeq = 0;
   let _csCoachPending = null;
+  let _csCoachJob = null;
   let _csCoachSending = false;
   const CS_MAX_STYLE_REFS = 10;
   const CS_CAROUSEL_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
@@ -178,6 +179,8 @@
     window.__SE_CAROUSEL_PLAN = null;
     window._seCoachAttachedImage = '';
     window.__SE_COACH_MASTER_IMAGE = '';
+    _csCoachJob = null;
+    setDesignCoachApply(null);
     const briefEl = document.getElementById('cs-brief');
     if (briefEl && !opts.keepBrief) briefEl.value = '';
     const cap = document.getElementById('cs-caption-box');
@@ -1860,6 +1863,16 @@
       wrap.style.display = 'none';
       return;
     }
+    if (mode === 'offer_split') {
+      btn.textContent = (typeof window.SPLIT_LABEL === 'string' && window.SPLIT_LABEL) || 'Split into carousel';
+      wrap.style.display = 'block';
+      return;
+    }
+    if (mode === 'offer_caption') {
+      btn.textContent = (typeof window.CAPTION_LABEL === 'string' && window.CAPTION_LABEL) || 'Write caption and queue';
+      wrap.style.display = 'block';
+      return;
+    }
     if (mode === 'confirm_carousel') {
       const master = String((_csCoachPending.action && _csCoachPending.action.master_image_url) || masterImageUrl() || '');
       if (!/^https:\/\//i.test(master)) {
@@ -2049,17 +2062,74 @@
     try {
       if (pending.mode === 'confirm_carousel') {
         const ok = await applyCarouselPlan(pending.action || {});
-        if (ok) setDesignCoachApply(null);
-      } else if (pending.mode === 'confirm_generate' || pending.mode === 'apply_generate') {
-        await generateFromCoach(pending.prompt);
+        if (ok) {
+          _csCoachJob = typeof window.advanceCoachJob === 'function'
+            ? window.advanceCoachJob(_csCoachJob || pending.job, 'split')
+            : _csCoachJob;
+          offerNextCoachJobChip();
+        }
+      } else if (pending.mode === 'offer_split') {
+        const plan = window.__SE_CAROUSEL_PLAN;
+        const usable = plan && Array.isArray(plan.slides) && plan.slides.length >= 2;
+        if (usable && /^https:\/\//i.test(masterImageUrl())) {
+          const ok = await applyCarouselPlan(plan);
+          if (ok) {
+            _csCoachJob = typeof window.advanceCoachJob === 'function'
+              ? window.advanceCoachJob(_csCoachJob || pending.job, 'split')
+              : _csCoachJob;
+            offerNextCoachJobChip();
+          }
+        } else {
+          setDesignCoachApply(null);
+          await designCoachAsk(CS_CAROUSEL_SEED);
+        }
+      } else if (pending.mode === 'offer_caption') {
+        await getCaption();
+        _csCoachJob = typeof window.advanceCoachJob === 'function'
+          ? window.advanceCoachJob(_csCoachJob || pending.job, 'captioned')
+          : _csCoachJob;
         setDesignCoachApply(null);
+      } else if (pending.mode === 'confirm_generate' || pending.mode === 'apply_generate') {
+        const ok = await generateFromCoach(pending.prompt);
+        if (ok) {
+          _csCoachJob = typeof window.advanceCoachJob === 'function'
+            ? window.advanceCoachJob(_csCoachJob || pending.job, 'generated')
+            : _csCoachJob;
+          offerNextCoachJobChip();
+        } else {
+          setDesignCoachApply(null);
+        }
       }
     } finally {
       if (btn && _csCoachPending) {
         btn.disabled = false;
-        btn.textContent = _csCoachPending.mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
+        btn.textContent = _csCoachPending.mode === 'offer_split'
+          ? ((typeof window.SPLIT_LABEL === 'string' && window.SPLIT_LABEL) || 'Split into carousel')
+          : _csCoachPending.mode === 'offer_caption'
+            ? ((typeof window.CAPTION_LABEL === 'string' && window.CAPTION_LABEL) || 'Write caption and queue')
+            : _csCoachPending.mode === 'confirm_carousel' ? 'Apply carousel plan' : 'Apply design';
       }
     }
+  }
+
+  function offerNextCoachJobChip() {
+    const job = typeof window.normalizeCoachJob === 'function'
+      ? window.normalizeCoachJob(_csCoachJob)
+      : _csCoachJob;
+    _csCoachJob = job;
+    if (!job) {
+      setDesignCoachApply(null);
+      return;
+    }
+    if (job.stage === 'split' && /^https:\/\//i.test(masterImageUrl())) {
+      setDesignCoachApply({ mode: 'offer_split', job });
+      return;
+    }
+    if (job.stage === 'caption') {
+      setDesignCoachApply({ mode: 'offer_caption', job });
+      return;
+    }
+    setDesignCoachApply(null);
   }
 
   function setCoachInputBusy(busy) {
@@ -2142,7 +2212,9 @@
         hasCanvas: !!masterImageUrl(),
         actions,
         lastPlan: window.__SE_CAROUSEL_PLAN || null,
+        lastJob: _csCoachJob,
       });
+      if (decision.job) _csCoachJob = decision.job;
       if (decision.action && decision.action.type === 'carousel_redesign') {
         window.__SE_CAROUSEL_PLAN = decision.action;
       }
@@ -2152,12 +2224,22 @@
         const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
         const ok = await applyCarouselPlan(decision.action || {});
         if (status) status.textContent = ok ? 'Carousel ready.' : 'Could not generate the carousel.';
-        if (ok) setDesignCoachApply(null);
+        if (ok) {
+          _csCoachJob = typeof window.advanceCoachJob === 'function'
+            ? window.advanceCoachJob(_csCoachJob || decision.job, 'split')
+            : _csCoachJob;
+          offerNextCoachJobChip();
+        }
       } else if (decision.mode === 'apply_generate') {
         const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
         const ok = await generateFromCoach(decision.prompt || '');
         if (status) status.textContent = ok ? '4K poster ready.' : 'Could not generate the poster.';
-        if (ok) setDesignCoachApply(null);
+        if (ok) {
+          _csCoachJob = typeof window.advanceCoachJob === 'function'
+            ? window.advanceCoachJob(_csCoachJob || decision.job, 'generated')
+            : _csCoachJob;
+          offerNextCoachJobChip();
+        }
       } else if (decision.mode === 'refine') {
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
         const ok = await generateFromCoach(decision.prompt || message);

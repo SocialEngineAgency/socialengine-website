@@ -210,35 +210,107 @@ function carouselHasStoredMaster(action, hasCanvas) {
   return /^https:\/\//i.test(String((action && action.master_image_url) || ''));
 }
 
-function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [], lastPlan = null } = {}) {
+const SPLIT_LABEL = 'Split into carousel';
+const CAPTION_LABEL = 'Write caption and queue';
+const REDESIGN_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
+
+function nextCoachActionFor(type, stage) {
+  if (stage === 'produce') return { kind: 'generate', label: 'Generating the 4K poster…' };
+  if (stage === 'split') return { kind: 'split', label: SPLIT_LABEL };
+  if (stage === 'caption') return { kind: 'caption', label: CAPTION_LABEL };
+  return { kind: 'none', label: '' };
+}
+
+function normalizeCoachJob(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const type = raw.type === 'design.carousel' || raw.type === 'design.still' ? raw.type : '';
+  const stage = ['produce', 'split', 'caption', 'done'].includes(raw.stage) ? raw.stage : '';
+  if (!type || !stage) return null;
+  const goal = String(raw.goal || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  return { type, goal, stage, next_action: nextCoachActionFor(type, stage) };
+}
+
+function inferDesignJob({ userMessage = '', hasCanvas = false, lastJob = null } = {}) {
+  const t = String(userMessage || '').toLowerCase();
+  if (!t.trim()) return normalizeCoachJob(lastJob);
+  const wantsCarousel = /\b(carousel|slides?|split)\b/.test(t);
+  const wantsStill = /\b(infographic|poster|graphic)\b/.test(t) || (/\bdesign\b/.test(t) && /\b(make|create|generate)\b/.test(t));
+  if (hasCanvas && wantsCarousel) {
+    return normalizeCoachJob({ type: 'design.carousel', goal: userMessage, stage: 'split' });
+  }
+  if (!hasCanvas && wantsCarousel) {
+    return normalizeCoachJob({ type: 'design.carousel', goal: userMessage, stage: 'produce' });
+  }
+  const asksNewStill = wantsStill && !wantsCarousel
+    && /\b(make|create|generate)\b.{0,50}\b(new |a )?(poster|graphic|infographic)\b/.test(t)
+    && !/\b(bigger|smaller|tweak|change|fix|remove|darker|lighter|title|headline)\b/.test(t);
+  if (!hasCanvas && wantsStill && !wantsCarousel) {
+    return normalizeCoachJob({ type: 'design.still', goal: userMessage, stage: 'produce' });
+  }
+  if (hasCanvas && asksNewStill) {
+    return normalizeCoachJob({ type: 'design.still', goal: userMessage, stage: 'produce' });
+  }
+  return normalizeCoachJob(lastJob);
+}
+
+function advanceCoachJob(job, event) {
+  const cur = normalizeCoachJob(job);
+  if (!cur) return null;
+  if (event === 'generated' && cur.stage === 'produce') {
+    return normalizeCoachJob({
+      ...cur,
+      stage: cur.type === 'design.carousel' ? 'split' : 'caption',
+    });
+  }
+  if (event === 'split' && cur.stage === 'split') {
+    return normalizeCoachJob({ ...cur, stage: 'caption' });
+  }
+  if (event === 'captioned' || event === 'queued') {
+    return normalizeCoachJob({ ...cur, stage: 'done' });
+  }
+  return cur;
+}
+
+function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [], lastPlan = null, lastJob = null } = {}) {
   if (isCoachFailedReply(reply)) return { mode: 'none' };
+  const job = inferDesignJob({ userMessage, hasCanvas, lastJob: normalizeCoachJob(lastJob) });
   const list = Array.isArray(actions) ? actions : [];
   const create = list.find((a) => a && a.type === 'create');
   if (!hasCanvas && isCoachWaitingOnCreateAsk(userMessage)) {
-    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null };
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
+  }
+  if (!hasCanvas && job && job.stage === 'produce') {
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
   }
   const carousel = list.find((a) => usableCarouselPlan(a)) || (usableCarouselPlan(lastPlan) ? lastPlan : null);
-  if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && isCoachCarouselConfirmAsk(userMessage)) {
-    return { mode: 'apply_carousel', action: carousel };
+  const askedSplit = !!(job && job.stage === 'split') || isCoachCarouselRedesignAsk(userMessage);
+  if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && (isCoachCarouselConfirmAsk(userMessage) || askedSplit)) {
+    return { mode: 'apply_carousel', action: carousel, job };
   }
   if (carousel && carouselHasStoredMaster(carousel, hasCanvas)) {
-    return { mode: 'confirm_carousel', action: carousel };
+    return { mode: 'confirm_carousel', action: carousel, job };
   }
-  if (isCoachCarouselPlanReply(reply)) return { mode: 'none' };
+  if (isCoachCarouselPlanReply(reply)) return { mode: 'none', job };
   if (create && isCoachDesignRefineAsk(userMessage, hasCanvas)) {
-    return { mode: 'refine', prompt: create.prompt || userMessage, action: create };
+    return { mode: 'refine', prompt: create.prompt || userMessage, action: create, job };
+  }
+  if (job && job.stage === 'produce') {
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
   }
   if (create && create.destination === 'design') {
-    return { mode: 'confirm_generate', prompt: create.prompt || userMessage, action: create };
+    if (!hasCanvas) {
+      return { mode: 'apply_generate', prompt: create.prompt || userMessage, action: create, job };
+    }
+    return { mode: 'confirm_generate', prompt: create.prompt || userMessage, action: create, job };
   }
   if (isCoachDesignRefineAsk(userMessage, hasCanvas)) {
-    return { mode: 'refine', prompt: userMessage };
+    return { mode: 'refine', prompt: userMessage, job };
   }
   const t = String(userMessage || '').toLowerCase();
   if (!hasCanvas && /\b(make|create|generate|design)\b/.test(t) && /\b(poster|graphic|infographic|carousel|slides?|design)\b/.test(t)) {
-    return { mode: 'confirm_generate', prompt: (create && create.prompt) || userMessage, action: create || null };
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
   }
-  return { mode: 'none' };
+  return { mode: 'none', job };
 }
 
 function inferCreateActionFromReply(reply, userMessage, priorTexts) {
@@ -433,6 +505,12 @@ const coachSessionApi = {
   isCoachWaitingOnCreateAsk,
   isCoachDesignRefineAsk,
   resolveDesignCoachApply,
+  inferDesignJob,
+  normalizeCoachJob,
+  advanceCoachJob,
+  SPLIT_LABEL,
+  CAPTION_LABEL,
+  REDESIGN_SEED,
   isCoachMetaBrief,
   persistCoachHistoryEntry,
   formatCoachReplyHtml,
