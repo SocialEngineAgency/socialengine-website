@@ -7533,7 +7533,7 @@
         const qData = await q.json().catch(() => ({}));
         if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
         if (postNow && qData.record_id) {
-          const pub = await fetch(`${API}/api/approve-post`, {
+          const pub = await apiFetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ postId: qData.record_id, clientEmail, clientHash, editedCaption: draft.caption, publishNow: true }),
