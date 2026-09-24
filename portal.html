@@ -3894,6 +3894,84 @@
       }
     });
 
+    function pinnedCommentPlatformsForPost(post) {
+      const map = { instagram: 'instagram', ig: 'instagram', insta: 'instagram', facebook: 'facebook', fb: 'facebook', tiktok: 'tiktok', tt: 'tiktok' };
+      const fromPost = String((post && post.platform) || '').split(/[,+/|]/);
+      const client = (window.__clientData || window.clientData || {}).client || {};
+      const raw = client.social_connected_platforms;
+      const connected = Array.isArray(raw) ? raw : String(raw || '').split(',');
+      const keys = [];
+      for (const p of fromPost.concat(connected)) {
+        const k = map[String(p || '').toLowerCase().trim()];
+        if (k && !keys.includes(k)) keys.push(k);
+      }
+      return keys.length ? keys : ['instagram'];
+    }
+
+    function pinnedCommentsFromPost(post) {
+      let json = post && (post.pinned_comments || post.pinned_comments_json);
+      if (typeof json === 'string') {
+        try { json = JSON.parse(json); } catch { json = {}; }
+      }
+      const shared = String((post && post.first_comment) || '').trim();
+      const kit = {};
+      for (const p of ['instagram', 'facebook', 'tiktok']) {
+        const row = json && json[p] ? json[p] : {};
+        kit[p] = { text: String(row.text != null ? row.text : shared), pin: row.pin !== false };
+      }
+      return kit;
+    }
+
+    function renderPinnedCommentEditor(post, disabled) {
+      const labels = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok' };
+      const kit = pinnedCommentsFromPost(post);
+      const platforms = pinnedCommentPlatformsForPost(post);
+      const esc = (window.studioQueueReady && typeof window.studioQueueReady.escapeCaptionForTextarea === 'function')
+        ? window.studioQueueReady.escapeCaptionForTextarea
+        : (t) => String(t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div style="margin-top:14px;">'
+        + '<div class="studio-modal__caption-label">Pinned comment</div>'
+        + '<div class="studio-modal__caption-hint">Posted as the first comment when the post goes live. Pin is TikTok-only via the API.</div>'
+        + platforms.map((p) => {
+          const row = kit[p] || { text: '', pin: true };
+          const canPin = p === 'tiktok';
+          return '<div style="margin-top:10px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;">'
+            + `<div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:6px;">${labels[p]}</div>`
+            + `<textarea class="studio-modal__caption-area post-pinned-comment" data-post-id="${post.id}" data-platform="${p}" ${disabled ? 'disabled' : ''} rows="3" placeholder="Optional first comment on ${labels[p]}">${esc(row.text || '')}</textarea>`
+            + `<label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.7rem;color:rgba(255,255,255,0.55);">`
+            + `<input type="checkbox" class="post-pinned-comment-pin" data-post-id="${post.id}" data-platform="${p}" ${row.pin !== false ? 'checked' : ''} ${disabled || !canPin ? 'disabled' : ''}>`
+            + (canPin ? 'Pin this comment' : 'First comment (pin not available on this platform)')
+            + '</label></div>';
+        }).join('')
+        + '</div>';
+    }
+
+    function collectPinnedCommentPayload(postId) {
+      const platforms = {};
+      document.querySelectorAll(`.post-pinned-comment[data-post-id="${postId}"]`).forEach((el) => {
+        const p = el.getAttribute('data-platform');
+        if (!p) return;
+        const pinEl = document.querySelector(`.post-pinned-comment-pin[data-post-id="${postId}"][data-platform="${p}"]`);
+        platforms[p] = { text: el.value, pin: !!(pinEl && pinEl.checked) };
+      });
+      const first = Object.values(platforms).map((r) => String(r.text || '').trim()).find(Boolean) || '';
+      return { first_comment: first, platforms };
+    }
+
+    async function savePinnedComments(postId) {
+      const payload = collectPinnedCommentPayload(postId);
+      await apiFetch(`${API}/api/edit-pinned-comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, clientEmail, ...payload }),
+      });
+      const row = (typeof studioPostsList !== 'undefined' ? studioPostsList : []).find((p) => p.id === postId);
+      if (row) {
+        row.first_comment = payload.first_comment;
+        row.pinned_comments = payload.platforms;
+      }
+    }
+
     function renderStudioModalContent() {
       const post = studioPostsList[studioCurrentIndex];
       if (!post) return;
@@ -4052,6 +4130,7 @@
             <textarea class="studio-modal__caption-area post-caption-edit" data-post-id="${post.id}" ${isRegenerating ? 'disabled' : ''} oninput="document.getElementById('modal-char-count').textContent=this.value.length+' chars'">${(window.studioQueueReady && typeof window.studioQueueReady.escapeCaptionForTextarea === 'function') ? window.studioQueueReady.escapeCaptionForTextarea(fullText) : fullText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
             <div class="studio-modal__caption-hint">What's in this box is what we post. Edits save automatically.</div>
             ${(() => { const ht = fullText.match(/#[\w]+/g) || []; return ht.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">' + ht.map(h => '<span style="font-size:0.65rem;padding:2px 8px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.12);border-radius:4px;color:rgba(124,58,237,0.7);">' + h + '</span>').join('') + '</div>' : ''; })()}
+            ${renderPinnedCommentEditor(post, isRegenerating)}
           </div>
 
           ${regenPicker}
@@ -5465,7 +5544,23 @@
 
     // Auto-save caption on change (debounced)
     const captionDebounce = {};
+    const pinnedDebounce = {};
+    document.addEventListener('change', (e) => {
+      if (!e.target.classList.contains('post-pinned-comment-pin')) return;
+      const postId = e.target.dataset.postId;
+      if (!postId) return;
+      savePinnedComments(postId).catch(() => {});
+    });
     document.addEventListener('input', (e) => {
+      if (e.target.classList.contains('post-pinned-comment')) {
+        const postId = e.target.dataset.postId;
+        if (!postId) return;
+        if (pinnedDebounce[postId]) clearTimeout(pinnedDebounce[postId]);
+        pinnedDebounce[postId] = setTimeout(() => {
+          savePinnedComments(postId).catch(() => {});
+        }, 1200);
+        return;
+      }
       if (!e.target.classList.contains('post-caption-edit')) return;
       const postId = e.target.dataset.postId;
       if (captionDebounce[postId]) clearTimeout(captionDebounce[postId]);

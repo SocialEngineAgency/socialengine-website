@@ -12,6 +12,7 @@ const SESSION_ROUTES = [
   '/api/approve-post',
   '/api/reject-post',
   '/api/edit-caption',
+  '/api/edit-pinned-comments',
   '/api/regenerate-post-v2',
 ];
 
