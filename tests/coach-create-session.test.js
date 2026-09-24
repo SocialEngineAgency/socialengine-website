@@ -111,6 +111,29 @@ test('a 25-30s reel brief cannot land in Design Studio', () => {
   assert.equal(coachCreateNav(s), 'animation-studio');
 });
 
+test('infographic then carousel stays in Design Studio even if ideas also mention a reel', () => {
+  const s = normalizeCoachCreateSession({
+    prompt: 'OPA alcohol awareness infographic then a 9:16 carousel. Other ideas included a short Reel.',
+    destination: 'design',
+    mode: 'image',
+  });
+  assert.equal(s.destination, 'design');
+  assert.equal(coachCreateNav(s), 'design-studio');
+});
+
+test('Coach and Design rail accept several image and video references', () => {
+  const portal = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(portal, /id="chat-upload-input"[^>]*multiple/);
+  assert.match(portal, /id="chat-upload-input"[^>]*accept="[^"]*video/);
+  assert.match(portal, /_seCoachAttachedMedia/);
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(design, /id="cs-coach-style-file"[^>]*multiple/);
+  assert.match(design, /id="cs-coach-style-file"[^>]*accept="[^"]*video/);
+  assert.match(design, /upload-video/);
+  assert.match(design, /Generating the 4K poster/);
+  assert.match(design, /autostarted|__SE_DESIGN_AUTOSTART/);
+});
+
 test('design-studio nav opens Post without a Video remount race', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   const start = src.indexOf("if (nav === 'design-studio')");
