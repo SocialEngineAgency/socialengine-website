@@ -14,9 +14,9 @@
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
-  <script src="./claude-studio.js?v=20260919-tmpl-direct" defer></script>
+  <script src="./claude-studio.js?v=20260924-status" defer></script>
   <script src="./portal-assets.js?v=20260919-saved-shots"></script>
-  <script src="./coach-create-session.js?v=20260922-job"></script>
+  <script src="./coach-create-session.js?v=20260924-status"></script>
   <script src="./animation-studio.js?v=20260919-saved-shots" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -10796,7 +10796,7 @@
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 + Upload image/video
               </button>
-              <input type="file" id="chat-upload-input" accept="image/*,video/*" style="display:none;">
+              <input type="file" id="chat-upload-input" accept="image/*,video/*" multiple style="display:none;">
             </div>
             <div class="chat-input-bar">
               <textarea class="chat-input" id="chat-input" placeholder="Ask your coach…" rows="1"></textarea>
@@ -10947,7 +10947,8 @@
 
       async function sendMessage() {
         const userText = inputEl.value.trim();
-        if (!userText && !window._seCoachAttachedProduct && !window._seCoachAttachedImage) return;
+        const attachedMedia = Array.isArray(window._seCoachAttachedMedia) ? window._seCoachAttachedMedia : [];
+        if (!userText && !window._seCoachAttachedProduct && !window._seCoachAttachedImage && !attachedMedia.length) return;
         inputEl.value = '';
         inputEl.style.height = 'auto';
         sendBtn.disabled = true;
@@ -10959,7 +10960,8 @@
         if (window._seCoachAttachedProduct) {
           ctxParts.push('Attached product reference: "' + window._seCoachAttachedProduct + '" (use as the hero product in any content you generate).');
         }
-        let attachedImageUrl = String(window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '').trim();
+        const mediaUrls = attachedMedia.map((m) => String((m && m.url) || '').trim()).filter((u) => /^https:\/\//i.test(u));
+        let attachedImageUrl = mediaUrls[0] || String(window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '').trim();
         if (attachedImageUrl.startsWith('data:image/')) {
           try {
             const blob = await (await fetch(attachedImageUrl)).blob();
@@ -10978,7 +10980,9 @@
           }
         }
         if (!/^https:\/\//i.test(attachedImageUrl)) attachedImageUrl = '';
-        if (attachedImageUrl) {
+        if (mediaUrls.length > 1) {
+          ctxParts.push(mediaUrls.length + ' custom image/video assets attached — use as references.');
+        } else if (attachedImageUrl) {
           ctxParts.push('Attached custom image/video asset (user uploaded) — use as reference or image-to-video base.');
         }
         if (ctxParts.length) {
@@ -11000,7 +11004,11 @@
           const res = await apiFetch(`${API}/api/chat/v2`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ message, attached_image_url: attachedImageUrl })
+            body: JSON.stringify({
+              message,
+              attached_image_url: attachedImageUrl,
+              style_image_urls: mediaUrls.slice(1),
+            })
           });
 
           if (!res.ok) throw new Error('API error');
@@ -11146,7 +11154,14 @@
 
       // ━━━ Coach attach toolbar: reference product + upload image/video ━━━
       window._seCoachAttachedProduct = window._seCoachAttachedProduct || '';
+      window._seCoachAttachedMedia = Array.isArray(window._seCoachAttachedMedia) ? window._seCoachAttachedMedia : [];
       window._seCoachAttachedImage = window._seCoachAttachedImage || '';
+
+      function _seSyncCoachAttachedImage() {
+        const media = Array.isArray(window._seCoachAttachedMedia) ? window._seCoachAttachedMedia : [];
+        window._seCoachAttachedImage = (media[0] && media[0].url) || '';
+      }
+      window._seSyncCoachAttachedImage = _seSyncCoachAttachedImage;
 
       function _seRenderAttachChips() {
         const bar = document.getElementById('chat-attachment-chips');
@@ -11159,7 +11174,17 @@
             ' <button onclick="window._seCoachAttachedProduct=\'\';_seRenderAttachChips();" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
             '</span>');
         }
-        if (window._seCoachAttachedImage) {
+        const media = Array.isArray(window._seCoachAttachedMedia) ? window._seCoachAttachedMedia : [];
+        media.forEach((item, i) => {
+          const safeUrl = String((item && item.url) || '').replace(/[<>]/g, '');
+          const label = (item && item.kind) === 'video' ? 'Video ' + (i + 1) : 'Image ' + (i + 1);
+          chips.push('<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#E9D5FF;font-size:0.7rem;font-weight:600;padding:4px 10px;border-radius:20px;">' +
+            (item && item.kind === 'video' ? '' : '<img src="' + safeUrl + '" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;">') +
+            label +
+            ' <button onclick="window._seCoachAttachedMedia.splice(' + i + ',1);window._seSyncCoachAttachedImage();_seRenderAttachChips();" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
+            '</span>');
+        });
+        if (!media.length && window._seCoachAttachedImage) {
           const safeUrl = String(window._seCoachAttachedImage).replace(/[<>]/g, '');
           chips.push('<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#E9D5FF;font-size:0.7rem;font-weight:600;padding:4px 10px;border-radius:20px;">' +
             '<img src="' + safeUrl + '" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;">' +
@@ -11172,6 +11197,9 @@
       window._seRenderAttachChips = _seRenderAttachChips;
       if (window.__SE_COACH_MASTER_IMAGE && !window._seCoachAttachedImage) {
         window._seCoachAttachedImage = window.__SE_COACH_MASTER_IMAGE;
+        if (!window._seCoachAttachedMedia.length) {
+          window._seCoachAttachedMedia = [{ url: window.__SE_COACH_MASTER_IMAGE, kind: 'image' }];
+        }
       }
       if (window.__SE_COACH_CAROUSEL_SEED && inputEl && !inputEl.value) {
         inputEl.value = window.__SE_COACH_CAROUSEL_SEED;
@@ -11223,6 +11251,7 @@
               card.addEventListener('click', () => {
                 window._seCoachAttachedProduct = card.dataset.title;
                 window._seCoachAttachedImage = '';
+                window._seCoachAttachedMedia = [];
                 _seRenderAttachChips();
                 document.body.removeChild(overlay);
               });
@@ -11240,26 +11269,39 @@
       if (attachUploadBtn && uploadInput) {
         attachUploadBtn.addEventListener('click', () => uploadInput.click());
         uploadInput.addEventListener('change', () => {
-          const file = uploadInput.files?.[0];
-          if (!file) return;
-          if (file.size > 20 * 1024 * 1024) {
-            if (typeof showToast === 'function') showToast('File too large — 20MB max.');
-            return;
-          }
+          const files = Array.from(uploadInput.files || []);
+          uploadInput.value = '';
+          if (!files.length) return;
           (async () => {
             try {
-              const fd = new FormData();
-              fd.append('file', file, file.name || 'coach-attach.png');
-              const up = await apiFetch(`${API}/api/studio/upload-image`, { method: 'POST', headers: authHeaders(), body: fd });
-              const upData = await up.json().catch(() => ({}));
-              if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
-              window._seCoachAttachedImage = upData.url;
+              window._seCoachAttachedMedia = Array.isArray(window._seCoachAttachedMedia) ? window._seCoachAttachedMedia : [];
+              let added = 0;
+              for (const file of files) {
+                if (window._seCoachAttachedMedia.length >= 10) {
+                  if (typeof showToast === 'function') showToast('10 references max', 'warning');
+                  break;
+                }
+                const isVid = String(file.type || '').startsWith('video/');
+                const max = isVid ? 80 * 1024 * 1024 : 20 * 1024 * 1024;
+                if (file.size > max) {
+                  if (typeof showToast === 'function') showToast(isVid ? 'Video too large — 80MB max.' : 'File too large — 20MB max.');
+                  continue;
+                }
+                const fd = new FormData();
+                fd.append('file', file, file.name || (isVid ? 'coach-attach.mp4' : 'coach-attach.png'));
+                const endpoint = isVid ? '/api/studio/upload-video' : '/api/studio/upload-image';
+                const up = await apiFetch(`${API}${endpoint}`, { method: 'POST', headers: authHeaders(), body: fd });
+                const upData = await up.json().catch(() => ({}));
+                if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
+                window._seCoachAttachedMedia.push({ url: upData.url, kind: isVid ? 'video' : 'image' });
+                added += 1;
+              }
               window._seCoachAttachedProduct = '';
+              _seSyncCoachAttachedImage();
               _seRenderAttachChips();
+              if (added > 1 && typeof showToast === 'function') showToast(added + ' references attached', 'success');
             } catch (err) {
               if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error');
-            } finally {
-              uploadInput.value = '';
             }
           })();
         });

@@ -806,7 +806,14 @@
     if (aspectEl && ['9:16', '1:1', '4:5'].includes(String(s.aspect_ratio || ''))) {
       aspectEl.value = s.aspect_ratio;
     }
-    toast('Coach brief loaded — Generate design, or Redesign as carousel.', 'success');
+    if (!s.autostarted) {
+      s.autostarted = true;
+      toast('Creating the 4K poster…', 'info');
+      appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
+      generate();
+    } else {
+      toast('Coach brief loaded — Generate design, or Redesign as carousel.', 'success');
+    }
     applyRedesignedSlides();
   }
 
@@ -1003,10 +1010,10 @@
           </div>
           <div style="padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px;">
             <div id="cs-coach-style-chip" style="display:none;flex-direction:column;gap:6px;"></div>
-            <input id="cs-coach-style-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
+            <input id="cs-coach-style-file" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm" multiple style="display:none;">
             <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;"></textarea>
             <div style="display:flex;gap:8px;">
-              <button type="button" id="cs-coach-style" style="flex:1;padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">+ Reference photo</button>
+              <button type="button" id="cs-coach-style" style="flex:1;padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">+ Reference</button>
               <button type="button" id="cs-coach-send" style="flex:1;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Send</button>
             </div>
           </div>
@@ -1066,7 +1073,7 @@
     document.getElementById('cs-coach-send')?.addEventListener('click', () => designCoachAsk());
     document.getElementById('cs-coach-style')?.addEventListener('click', () => {
       if (_csCoachStyleUrls.length >= CS_MAX_STYLE_REFS) {
-        toast('10 reference photos max', 'error');
+        toast('10 references max', 'error');
         return;
       }
       document.getElementById('cs-coach-style-file')?.click();
@@ -1079,10 +1086,12 @@
         let added = 0;
         for (const file of files) {
           if (_csCoachStyleUrls.length >= CS_MAX_STYLE_REFS) {
-            toast('10 reference photos max', 'error');
+            toast('10 references max', 'error');
             break;
           }
-          const url = await uploadStudioImage(file);
+          const url = String(file.type || '').startsWith('video/')
+            ? await uploadStudioVideo(file)
+            : await uploadStudioImage(file);
           if (!url) throw new Error('Upload failed');
           if (_csCoachStyleUrls.includes(url)) continue;
           _csCoachStyleUrls.push(url);
@@ -1325,6 +1334,19 @@
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch(`${apiBase()}/api/studio/upload-image`, {
+      method: 'POST',
+      headers: authHeadersMultipart(),
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.url) throw new Error(data.error || 'Upload failed');
+    return data.url;
+  }
+
+  async function uploadStudioVideo(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${apiBase()}/api/studio/upload-video`, {
       method: 'POST',
       headers: authHeadersMultipart(),
       body: fd,
