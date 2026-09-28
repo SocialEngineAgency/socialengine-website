@@ -103,7 +103,7 @@ function normalizeCoachDestination(value, text) {
   let dest = (d === 'animate' || d === 'design' || d === 'studio')
     ? d
     : ((d === 'carousel' || d === 'post') ? 'design' : inferred);
-  if (dest === 'design' && isCoachVideoBrief(text)) {
+  if (dest === 'design' && isCoachVideoBrief(text) && !isCoachDesignAsk(text)) {
     dest = inferred === 'design' ? 'animate' : inferred;
   }
   return dest;
