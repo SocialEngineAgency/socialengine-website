@@ -14913,7 +14913,7 @@
     try {
       const r = await fetch(`${API}/api/social-disconnect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ clientEmail, platform }),
       });
       const data = await r.json();
@@ -15020,7 +15020,7 @@
         _seShowConnectBanner(`Generating secure ${platformLabel} connection link…`);
         const r = await fetch(`${API}/api/social-connect`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             clientEmail,
             platforms: target ? [target] : ['instagram', 'facebook', 'tiktok'],
