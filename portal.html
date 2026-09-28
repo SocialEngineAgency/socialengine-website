@@ -2648,6 +2648,8 @@
     }
 
 
+  #fc-builder .fc-field{display:flex;flex-direction:column;gap:6px;font-size:0.72rem;font-weight:600;color:var(--color-text-muted);}
+  #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
 </head>
@@ -12180,6 +12182,38 @@
         </div>
 
         <div id="fundraise-dashboard">
+        <div class="analytics-card" id="fc-builder" style="margin-bottom:24px;">
+          <div class="analytics-card__header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <h3 class="analytics-card__title">Campaign builder</h3>
+            <span style="font-size:0.72rem;color:var(--color-text-muted);">Set a goal and dates, and we'll write the whole push for you to review</span>
+          </div>
+          <div class="analytics-card__body">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+              <label class="fc-field">Campaign name<input id="fc-name" type="text" maxlength="120" placeholder="e.g. Three Weeks Appeal"></label>
+              <label class="fc-field">Goal<input id="fc-goal" type="number" min="1" step="1" placeholder="2000"></label>
+              <label class="fc-field">Currency<select id="fc-currency"><option>GBP</option><option>USD</option><option>EUR</option></select></label>
+              <label class="fc-field">Start<input id="fc-start" type="date"></label>
+              <label class="fc-field">End<input id="fc-end" type="date"></label>
+              <label class="fc-field">Posts per day<select id="fc-perday"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+              <label class="fc-field">JustGiving page link<input id="fc-jg" type="url" placeholder="https://www.justgiving.com/page/..."></label>
+              <label class="fc-field">Facebook fundraiser link<input id="fc-meta" type="url" placeholder="https://www.facebook.com/donate/..."></label>
+            </div>
+            <label class="fc-field" style="margin-top:12px;">What is this campaign for? (the story)<textarea id="fc-story" rows="3" maxlength="1500" placeholder="What the money funds and why now. Only real details, the writer won't invent any."></textarea></label>
+            <label class="fc-field" style="margin-top:12px;">What does a gift do? (optional, one per line)<textarea id="fc-impact" rows="3" placeholder="£10 funds one support line call&#10;£25 ..."></textarea></label>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:0.8rem;color:var(--color-text);">
+              <label><input type="checkbox" id="fc-fb" checked> Facebook</label>
+              <label><input type="checkbox" id="fc-ig" checked> Instagram</label>
+              <label><input type="checkbox" id="fc-thanks" checked> Thank-you post the day after</label>
+              <label><input type="checkbox" id="fc-images"> Auto-generate images</label>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:16px;">
+              <button id="fc-preview-btn" onclick="fundraiseCampaignPreview()" style="padding:10px 16px;background:linear-gradient(135deg,#7C3AED,#EC4899);border:none;border-radius:9px;color:#fff;font-size:0.82rem;font-weight:700;cursor:pointer;">Write the campaign</button>
+              <span id="fc-status" style="font-size:0.78rem;color:var(--color-text-muted);"></span>
+            </div>
+            <div id="fc-results" style="margin-top:18px;"></div>
+          </div>
+        </div>
+
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px;">
             <div class="analytics-card" style="padding:20px;">
               <div style="font-size:0.72rem;font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Total Raised (JG)</div>
@@ -12234,9 +12268,150 @@
         </div>
       `;
 
+      fcInitDefaults();
       if (typeof lucide !== 'undefined') lucide.createIcons();
       loadFundraiseData();
     }
+
+    // === Fundraising campaign builder ===
+    const FC_PHASE_LABEL = { launch: 'Launch', why: 'Why it matters', impact: 'What your gift does', momentum: 'Momentum', share: 'Share the ask', final: 'Final push', thanks: 'Thank you' };
+    let _fcState = null;
+    let _fcBusy = false; // one preview or save at a time, so a save result is never lost
+    function fcDonationUrlOk(u, hosts) {
+      try {
+        const x = new URL(u);
+        if (x.protocol !== 'https:') return false;
+        const h = x.hostname.toLowerCase();
+        return hosts.some(function(d) { return h === d || h.endsWith('.' + d); });
+      } catch (e) { return false; }
+    }
+    function fcFormError(b) {
+      if (!String(b.name || '').trim()) return 'Give the campaign a name.';
+      const goal = Number(b.goal);
+      if (!Number.isFinite(goal) || goal <= 0) return 'Set a fundraising goal above zero.';
+      if (!b.start_date || !b.end_date) return 'Pick a start and end date.';
+      if (b.end_date < b.start_date) return 'The end date must be on or after the start date.';
+      if (b.start_date < fcIsoDay(0)) return 'The start date has already passed. Pick a start date from today onward.';
+      const jg = String(b.justgiving_url || '').trim(), fb = String(b.meta_fundraiser_url || '').trim();
+      if (!jg && !fb) return 'Add at least one donation link (JustGiving page or Facebook fundraiser).';
+      if (jg && !fcDonationUrlOk(jg, ['justgiving.com'])) return 'The JustGiving link must be an https://www.justgiving.com/... address.';
+      if (fb && !fcDonationUrlOk(fb, ['facebook.com', 'fb.com', 'fb.me'])) return 'The Facebook fundraiser link must be an https://www.facebook.com/... address.';
+      if (!b.platforms.length) return 'Pick at least one platform.';
+      return null;
+    }
+    function fcSetBusy(on) {
+      _fcBusy = on;
+      ['fc-preview-btn', 'fc-save-btn'].forEach(function(id) {
+        const b = document.getElementById(id);
+        if (b && !(id === 'fc-save-btn' && b.dataset.done)) { b.disabled = on; b.style.opacity = on ? '0.6' : ''; }
+      });
+    }
+    function fcEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function fcVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+    function fcChecked(id) { const el = document.getElementById(id); return !!(el && el.checked); }
+    function fcIsoDay(offset) { const d = new Date(); d.setDate(d.getDate() + offset); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function fcInitDefaults() {
+      const st = document.getElementById('fc-start'), en = document.getElementById('fc-end');
+      if (st && !st.value) st.value = fcIsoDay(1);
+      if (en && !en.value) en.value = fcIsoDay(5);
+    }
+    function fcCampaignFromForm() {
+      const platforms = [];
+      if (fcChecked('fc-fb')) platforms.push('facebook');
+      if (fcChecked('fc-ig')) platforms.push('instagram');
+      return {
+        name: fcVal('fc-name'), goal: fcVal('fc-goal'), currency: fcVal('fc-currency'),
+        start_date: fcVal('fc-start'), end_date: fcVal('fc-end'), posts_per_day: fcVal('fc-perday'),
+        justgiving_url: fcVal('fc-jg'), meta_fundraiser_url: fcVal('fc-meta'),
+        story: fcVal('fc-story'), impact_points: fcVal('fc-impact'),
+        platforms: platforms, include_thank_you: fcChecked('fc-thanks'),
+      };
+    }
+    window.fundraiseCampaignPreview = async function() {
+      const btn = document.getElementById('fc-preview-btn');
+      const status = document.getElementById('fc-status');
+      const out = document.getElementById('fc-results');
+      if (_fcBusy) return;
+      const body = fcCampaignFromForm();
+      const formErr = fcFormError(body);
+      if (formErr) { status.textContent = formErr; return; }
+      fcSetBusy(true);
+      status.textContent = 'Writing your campaign, this takes about a minute…';
+      out.innerHTML = '';
+      try {
+        const r = await apiFetch('/api/fundraise/campaign/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const d = await r.json().catch(function() { return {}; });
+        if (!r.ok) throw new Error(d.error || 'Could not write the campaign.');
+        _fcState = { campaign: d.campaign, posts: d.posts };
+        status.textContent = d.empty ? (d.empty + ' post(s) came back empty. Write them in or press the button again.') : 'Review and edit below, then add to your calendar.';
+        fcRenderResults();
+      } catch (e) {
+        status.textContent = e.message;
+      } finally {
+        fcSetBusy(false);
+      }
+    };
+    function fcRenderResults() {
+      const out = document.getElementById('fc-results');
+      if (!out || !_fcState) return;
+      let lastDate = '';
+      const rows = _fcState.posts.map(function(p, i) {
+        let head = '';
+        if (p.date !== lastDate) {
+          lastDate = p.date;
+          const nice = new Date(p.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+          head = '<div style="margin:18px 0 8px;font-size:0.78rem;font-weight:700;color:#C4B5FD;text-transform:uppercase;letter-spacing:0.06em;">' + fcEsc(nice) + ' · ' + fcEsc(FC_PHASE_LABEL[p.phase] || p.phase) + '</div>';
+        }
+        return head
+          + '<div style="background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:12px;padding:14px;margin-bottom:10px;">'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;font-size:0.72rem;color:var(--color-text-muted);margin-bottom:8px;">'
+          + '<span><strong style="color:var(--color-text);text-transform:capitalize;">' + fcEsc(p.platform) + '</strong> · ' + fcEsc(p.time) + '</span>'
+          + (p.needs_numbers ? '<span style="color:#FBBF24;font-weight:700;">Fill in the [NUMBERS] on the day, saves as Draft</span>' : '')
+          + '</div>'
+          + '<textarea data-fc-i="' + i + '" data-fc-k="caption" rows="7" style="width:100%;box-sizing:border-box;padding:10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;line-height:1.5;font-family:inherit;">' + fcEsc(p.caption) + '</textarea>'
+          + '<input data-fc-i="' + i + '" data-fc-k="hashtags" value="' + fcEsc(p.hashtags) + '" style="width:100%;box-sizing:border-box;margin-top:6px;padding:8px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text-muted);font-size:0.75rem;">'
+          + '<input data-fc-i="' + i + '" data-fc-k="first_comment" value="' + fcEsc(p.first_comment) + '" placeholder="First comment" style="width:100%;box-sizing:border-box;margin-top:6px;padding:8px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text-muted);font-size:0.75rem;">'
+          + (p.reel_idea ? '<div style="margin-top:8px;font-size:0.74rem;color:var(--color-text-muted);"><strong>Reel idea:</strong> ' + fcEsc(p.reel_idea) + '</div>' : '')
+          + (p.image_prompt ? '<div style="margin-top:4px;font-size:0.74rem;color:var(--color-text-muted);"><strong>Visual:</strong> ' + fcEsc(p.image_prompt) + '</div>' : '')
+          + '</div>';
+      }).join('');
+      out.innerHTML = rows
+        + '<div style="display:flex;gap:10px;align-items:center;margin-top:14px;">'
+        + '<button id="fc-save-btn" onclick="fundraiseCampaignSave()" style="padding:10px 16px;background:linear-gradient(135deg,#10B981,#059669);border:none;border-radius:9px;color:#fff;font-size:0.82rem;font-weight:700;cursor:pointer;">Add ' + _fcState.posts.length + ' posts to calendar</button>'
+        + '<span id="fc-save-status" style="font-size:0.78rem;color:var(--color-text-muted);">Posts go to Content Review, nothing publishes until you approve it.</span>'
+        + '</div>';
+      out.querySelectorAll('[data-fc-i]').forEach(function(el) {
+        el.addEventListener('input', function() {
+          const p = _fcState.posts[Number(el.getAttribute('data-fc-i'))];
+          if (p) p[el.getAttribute('data-fc-k')] = el.value;
+        });
+      });
+    }
+    window.fundraiseCampaignSave = async function() {
+      if (!_fcState || _fcBusy) return;
+      const btn = document.getElementById('fc-save-btn');
+      const status = document.getElementById('fc-save-status');
+      fcSetBusy(true);
+      status.textContent = 'Saving…';
+      try {
+        const r = await apiFetch('/api/fundraise/campaign/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaign: _fcState.campaign, posts: _fcState.posts, generate_images: fcChecked('fc-images') }),
+        });
+        const d = await r.json().catch(function() { return {}; });
+        if (!r.ok) throw new Error(d.error || 'Could not save the campaign.');
+        status.textContent = 'Added ' + d.created + ' posts to your calendar'
+          + (d.needs_numbers ? ' (' + d.needs_numbers + ' saved as Draft until you fill in the numbers)' : '') + '.';
+        btn.textContent = 'Added to calendar';
+        btn.dataset.done = '1';
+        if (typeof showToast === 'function') showToast('Campaign added to your calendar');
+      } catch (e) {
+        status.textContent = e.message;
+      } finally {
+        fcSetBusy(false);
+        if (btn.dataset.done) { btn.disabled = true; btn.style.opacity = '0.6'; }
+      }
+    };
 
     window.fundraiseCreateContent = function(title, url) {
       const focus = String(title || 'Fundraiser').slice(0, 120);
