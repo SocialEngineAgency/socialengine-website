@@ -12276,6 +12276,36 @@
     // === Fundraising campaign builder ===
     const FC_PHASE_LABEL = { launch: 'Launch', why: 'Why it matters', impact: 'What your gift does', momentum: 'Momentum', share: 'Share the ask', final: 'Final push', thanks: 'Thank you' };
     let _fcState = null;
+    let _fcBusy = false; // one preview or save at a time, so a save result is never lost
+    function fcDonationUrlOk(u, hosts) {
+      try {
+        const x = new URL(u);
+        if (x.protocol !== 'https:') return false;
+        const h = x.hostname.toLowerCase();
+        return hosts.some(function(d) { return h === d || h.endsWith('.' + d); });
+      } catch (e) { return false; }
+    }
+    function fcFormError(b) {
+      if (!String(b.name || '').trim()) return 'Give the campaign a name.';
+      const goal = Number(b.goal);
+      if (!Number.isFinite(goal) || goal <= 0) return 'Set a fundraising goal above zero.';
+      if (!b.start_date || !b.end_date) return 'Pick a start and end date.';
+      if (b.end_date < b.start_date) return 'The end date must be on or after the start date.';
+      if (b.start_date < fcIsoDay(0)) return 'The start date has already passed. Pick a start date from today onward.';
+      const jg = String(b.justgiving_url || '').trim(), fb = String(b.meta_fundraiser_url || '').trim();
+      if (!jg && !fb) return 'Add at least one donation link (JustGiving page or Facebook fundraiser).';
+      if (jg && !fcDonationUrlOk(jg, ['justgiving.com'])) return 'The JustGiving link must be an https://www.justgiving.com/... address.';
+      if (fb && !fcDonationUrlOk(fb, ['facebook.com', 'fb.com', 'fb.me'])) return 'The Facebook fundraiser link must be an https://www.facebook.com/... address.';
+      if (!b.platforms.length) return 'Pick at least one platform.';
+      return null;
+    }
+    function fcSetBusy(on) {
+      _fcBusy = on;
+      ['fc-preview-btn', 'fc-save-btn'].forEach(function(id) {
+        const b = document.getElementById(id);
+        if (b && !(id === 'fc-save-btn' && b.dataset.done)) { b.disabled = on; b.style.opacity = on ? '0.6' : ''; }
+      });
+    }
     function fcEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function fcVal(id) { const el = document.getElementById(id); return el ? el.value : ''; }
     function fcChecked(id) { const el = document.getElementById(id); return !!(el && el.checked); }
@@ -12301,8 +12331,11 @@
       const btn = document.getElementById('fc-preview-btn');
       const status = document.getElementById('fc-status');
       const out = document.getElementById('fc-results');
+      if (_fcBusy) return;
       const body = fcCampaignFromForm();
-      btn.disabled = true; btn.style.opacity = '0.6';
+      const formErr = fcFormError(body);
+      if (formErr) { status.textContent = formErr; return; }
+      fcSetBusy(true);
       status.textContent = 'Writing your campaign, this takes about a minute…';
       out.innerHTML = '';
       try {
@@ -12315,7 +12348,7 @@
       } catch (e) {
         status.textContent = e.message;
       } finally {
-        btn.disabled = false; btn.style.opacity = '';
+        fcSetBusy(false);
       }
     };
     function fcRenderResults() {
@@ -12355,10 +12388,10 @@
       });
     }
     window.fundraiseCampaignSave = async function() {
-      if (!_fcState) return;
+      if (!_fcState || _fcBusy) return;
       const btn = document.getElementById('fc-save-btn');
       const status = document.getElementById('fc-save-status');
-      btn.disabled = true; btn.style.opacity = '0.6';
+      fcSetBusy(true);
       status.textContent = 'Saving…';
       try {
         const r = await apiFetch('/api/fundraise/campaign/create', {
@@ -12370,10 +12403,13 @@
         status.textContent = 'Added ' + d.created + ' posts to your calendar'
           + (d.needs_numbers ? ' (' + d.needs_numbers + ' saved as Draft until you fill in the numbers)' : '') + '.';
         btn.textContent = 'Added to calendar';
+        btn.dataset.done = '1';
         if (typeof showToast === 'function') showToast('Campaign added to your calendar');
       } catch (e) {
         status.textContent = e.message;
-        btn.disabled = false; btn.style.opacity = '';
+      } finally {
+        fcSetBusy(false);
+        if (btn.dataset.done) { btn.disabled = true; btn.style.opacity = '0.6'; }
       }
     };
 
