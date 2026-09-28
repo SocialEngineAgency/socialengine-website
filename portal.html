@@ -12141,6 +12141,8 @@
       if (!content) return;
       const clientName = (data && data.client && data.client.business_name) || 'your charity';
       const hasJGId = !!(data && data.client && data.client.justgiving_charity_id);
+      const _fcSite = String((data && data.client && data.client.website) || '').replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/[<>"&']/g, '');
+      const _fcSitePh = 'https://' + (_fcSite || 'www.yourcharity.org') + '/donate';
       const metaConnected = !!(data && data.client && (data.client.meta_page_token || data.client.meta_page_id || data.client.facebook_connected));
 
       const _jgIdeas = [
@@ -12195,6 +12197,7 @@
               <label class="fc-field">Start<input id="fc-start" type="date"></label>
               <label class="fc-field">End<input id="fc-end" type="date"></label>
               <label class="fc-field">Posts per day<select id="fc-perday"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label>
+              <label class="fc-field">Your own donation page<input id="fc-site" type="url" placeholder="${_fcSitePh}"></label>
               <label class="fc-field">JustGiving page link<input id="fc-jg" type="url" placeholder="https://www.justgiving.com/page/..."></label>
               <label class="fc-field">Facebook fundraiser link<input id="fc-meta" type="url" placeholder="https://www.facebook.com/donate/..."></label>
             </div>
@@ -12293,7 +12296,9 @@
       if (b.end_date < b.start_date) return 'The end date must be on or after the start date.';
       if (b.start_date < fcIsoDay(0)) return 'The start date has already passed. Pick a start date from today onward.';
       const jg = String(b.justgiving_url || '').trim(), fb = String(b.meta_fundraiser_url || '').trim();
-      if (!jg && !fb) return 'Add at least one donation link (JustGiving page or Facebook fundraiser).';
+      const own = String(b.site_donation_url || '').trim();
+      if (!jg && !fb && !own) return 'Add at least one donation link (your own donation page, JustGiving or a Facebook fundraiser).';
+      if (own) { try { if (new URL(own).protocol !== 'https:') throw 0; } catch (e) { return 'Your donation page link must start with https://'; } }
       if (jg && !fcDonationUrlOk(jg, ['justgiving.com'])) return 'The JustGiving link must be an https://www.justgiving.com/... address.';
       if (fb && !fcDonationUrlOk(fb, ['facebook.com', 'fb.com', 'fb.me'])) return 'The Facebook fundraiser link must be an https://www.facebook.com/... address.';
       if (!b.platforms.length) return 'Pick at least one platform.';
@@ -12322,7 +12327,7 @@
       return {
         name: fcVal('fc-name'), goal: fcVal('fc-goal'), currency: fcVal('fc-currency'),
         start_date: fcVal('fc-start'), end_date: fcVal('fc-end'), posts_per_day: fcVal('fc-perday'),
-        justgiving_url: fcVal('fc-jg'), meta_fundraiser_url: fcVal('fc-meta'),
+        justgiving_url: fcVal('fc-jg'), meta_fundraiser_url: fcVal('fc-meta'), site_donation_url: fcVal('fc-site'),
         story: fcVal('fc-story'), impact_points: fcVal('fc-impact'),
         platforms: platforms, include_thank_you: fcChecked('fc-thanks'),
       };
