@@ -10028,6 +10028,10 @@
       const rows = visible.map((a) => {
         const summary = String((a.analysis && a.analysis.summary) || '').trim();
         const collection = String(a.collection || (a.analysis && a.analysis.collection) || '').trim();
+        const aliases = ((a.analysis && a.analysis.aliases) || []).filter(Boolean).slice(0, 6);
+        const subjects = ((a.analysis && a.analysis.subjects) || []).filter(Boolean).slice(0, 6);
+        const place = String((a.analysis && a.analysis.place) || '').trim();
+        const unlabeled = still && !summary && !subjects.length;
         const still = isStillKind(a.kind);
         const kindChoices = (helpers.retagKinds ? helpers.retagKinds(a.kind) : [a.kind]).filter(Boolean);
         const kindOptions = kindChoices.map((k) =>
@@ -10062,12 +10066,16 @@
           <div style="flex:1;min-width:0;">
             <div style="color:#fff;font-size:0.875rem;">${escapeHtml(labelOf(a))}</div>
             ${summary ? `<div style="font-size:0.75rem;color:rgba(148,163,184,0.85);margin-top:2px;">${escapeHtml(summary)}</div>` : ''}
+            ${[place, aliases.length ? aliases.join(', ') : '', subjects.length ? subjects.join(' · ') : ''].filter(Boolean).length
+              ? `<div style="font-size:0.7rem;color:rgba(196,181,253,0.85);margin-top:2px;">${escapeHtml([place, aliases.join(', '), subjects.join(' · ')].filter(Boolean).join(' · '))}</div>`
+              : ''}
             ${collection ? `<div style="font-size:0.7rem;color:rgba(148,163,184,0.6);margin-top:2px;">${escapeHtml(collection)}</div>` : ''}
           </div>
           <select data-asset-kind="${escapeHtml(a.id)}" aria-label="Tag ${escapeHtml(labelOf(a))}" class="anim-select" style="width:auto;font-size:0.75rem;padding:4px 8px;">${kindOptions}</select>
           ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
           ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Make Multiview</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
+          ${still ? `<button type="button" class="settings-tab" data-asset-analyze="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">${unlabeled ? 'Label with AI' : 'Relabel'}</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
           <button type="button" class="settings-tab" data-asset-delete="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Delete</button>
         </div>
@@ -10103,11 +10111,12 @@
         </div>`).join('');
       root.innerHTML = `
         <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h3>
-        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), scenes, and style stills from past posts. Coach and Animate ask before using these — they will not invent them.</p>
+        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), scenes, and style stills. Label stills so Coach can find Bunny, a Cadillac, or a nightclub when you name them.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
           <input id="brand-lib-filter" type="text" placeholder="Filter collection" value="${escapeHtml(prevFilter)}" style="flex:1;min-width:160px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
           <button type="button" id="brand-lib-harvest" class="settings-tab" style="padding:6px 12px;">Import logo &amp; colors</button>
           <button type="button" id="brand-lib-import-past" class="settings-tab" style="padding:6px 12px;">Import past content</button>
+          <button type="button" id="brand-lib-label-missing" class="settings-tab" style="padding:6px 12px;">Label unlabeled</button>
         </div>
         ${pastPanel}
         ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Animate or below.</p>'}
@@ -10211,6 +10220,23 @@
         paintBrandLibrary(root, lastAssets);
         if (saved && typeof showToast === 'function') showToast(`Saved ${saved} style still${saved === 1 ? '' : 's'}`, 'success');
         if (lastErr && typeof showToast === 'function') showToast(lastErr.message || 'Some stills did not save', 'error');
+      });
+      root.querySelector('#brand-lib-label-missing')?.addEventListener('click', async () => {
+        const btn = root.querySelector('#brand-lib-label-missing');
+        if (btn) btn.disabled = true;
+        try {
+          const res = await apiFetch('/api/assets/analyze-missing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(d.error || 'Could not label stills');
+          paintBrandLibrary(root, d.assets || assets);
+          if (typeof showToast === 'function') {
+            showToast(d.labeled ? `Labeled ${d.labeled} still${d.labeled === 1 ? '' : 's'}${d.remaining ? ` — ${d.remaining} still unlabeled` : ''}` : 'Nothing left to label', 'success');
+          }
+        } catch (err) {
+          if (typeof showToast === 'function') showToast(err.message || 'Label failed', 'error');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
       });
       root.querySelector('#brand-lib-upload')?.addEventListener('click', () => fileEl?.click());
       fileEl?.addEventListener('change', async (e) => {
@@ -10435,6 +10461,27 @@
             paintBrandLibrary(root, d.assets || []);
           } catch (err) {
             if (typeof showToast === 'function') showToast(err.message || 'Delete failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-asset-analyze]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-asset-analyze');
+          btn.disabled = true;
+          try {
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}',
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not label that still');
+            paintBrandLibrary(root, d.assets || assets);
+            if (typeof showToast === 'function') showToast('Labeled', 'success');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Label failed', 'error');
+          } finally {
+            btn.disabled = false;
           }
         });
       });
