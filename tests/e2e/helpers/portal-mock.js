@@ -137,9 +137,12 @@ async function mockApi(page, base, { data = clientData(), onRequest, assets = []
     if (assetMatch && req.method() === 'PATCH') {
       const i = library.findIndex((a) => a.id === assetMatch[1]);
       if (i < 0) return json(404, { error: 'That asset is gone.', code: 'ASSET_NOT_FOUND' });
-      const name = String(JSON.parse(entry.body || '{}').name || '').trim();
-      if (!name) return json(400, { error: 'Give the asset a name.', code: 'ASSET_NAME' });
-      library[i] = { ...library[i], name };
+      const body = JSON.parse(entry.body || '{}');
+      const name = String(body.name || '').trim();
+      const kind = String(body.kind || '').trim();
+      if (!name && !kind) return json(400, { error: 'Give the asset a name or a tag.', code: 'ASSET_PATCH' });
+      if (name) library[i] = { ...library[i], name };
+      if (kind) library[i] = { ...library[i], kind };
       return json(200, { asset: library[i], assets: library.slice() });
     }
     if (url.pathname === '/api/animation/projects' && req.method() === 'POST') {
