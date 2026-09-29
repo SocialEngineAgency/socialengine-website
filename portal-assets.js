@@ -2,10 +2,11 @@
 // and Animate Saved outros / music. No DOM, no fetch.
 'use strict';
 
-const ASSET_KINDS = ['outro', 'intro', 'music', 'logo', 'scene', 'character', 'plate', 'shot'];
+const ASSET_KINDS = ['outro', 'intro', 'music', 'logo', 'scene', 'character', 'plate', 'shot', 'item', 'setting', 'color'];
 const KIND_LABEL = {
   outro: 'Outro', intro: 'Intro', music: 'Music', logo: 'Logo',
   scene: 'Scene', character: 'Character', plate: 'Plate', shot: 'Shot',
+  item: 'Item', setting: 'Setting', color: 'Color',
 };
 const KIND_ACCEPT = {
   outro: 'video/*',
@@ -16,8 +17,55 @@ const KIND_ACCEPT = {
   character: 'image/*',
   plate: 'image/*',
   shot: 'video/*,image/*',
+  item: 'image/*',
+  setting: 'image/*',
+  color: '',
 };
-const STILL_KINDS = ['scene', 'character', 'plate', 'logo'];
+const STILL_KINDS = ['scene', 'character', 'plate', 'logo', 'item', 'setting'];
+const SECTION_KINDS = ['logo', 'color', 'character', 'item', 'setting', 'scene'];
+
+function libraryOffer(list) {
+  const usable = (Array.isArray(list) ? list : []).filter((a) => (
+    a && ['character', 'item', 'setting'].includes(a.kind) && /^https?:\/\//i.test(String(a.url || ''))
+  ));
+  if (!usable.length) return null;
+  const names = usable.map((a) => String(a.name || a.kind));
+  const last = names.pop();
+  const label = names.length ? `${names.join(', ')} and ${last}` : last;
+  return {
+    question: `Use ${label} from your Library?`,
+    asset_ids: usable.map((a) => a.id),
+  };
+}
+
+function roleForKind(kind) {
+  if (kind === 'character') return 'character';
+  if (kind === 'logo') return 'style';
+  if (kind === 'item') return 'item';
+  if (kind === 'setting') return 'setting';
+  return 'scene';
+}
+
+function refsFromAssets(list, ids) {
+  const want = new Set((ids || []).map(String));
+  const refs = [];
+  const seen = new Set();
+  for (const asset of (list || [])) {
+    if (!want.has(String(asset.id))) continue;
+    const seed = String(asset.url || '').trim();
+    if (seed && !seen.has(seed)) {
+      seen.add(seed);
+      refs.push({ url: seed, title: asset.name || asset.kind, role: roleForKind(asset.kind) });
+    }
+    for (const view of asset.views || []) {
+      const url = String((view && view.url) || '').trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      refs.push({ url, title: `${asset.name || asset.kind} ${view.label || ''}`.trim(), role: roleForKind(asset.kind) });
+    }
+  }
+  return refs.slice(0, 8);
+}
 
 function isStillKind(kind) {
   return STILL_KINDS.includes(String(kind || '').trim());
@@ -67,13 +115,13 @@ function selectedUrl(list, id) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    ASSET_KINDS, STILL_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
-    filterKind, filterCollection, selectedId, selectedUrl,
+    ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
+    filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
   };
 }
 if (typeof window !== 'undefined') {
   window.SEAssets = {
-    ASSET_KINDS, STILL_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
-    filterKind, filterCollection, selectedId, selectedUrl,
+    ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
+    filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
   };
 }

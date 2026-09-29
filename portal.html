@@ -2828,6 +2828,7 @@
           <button class="dash-nav-item" data-nav="competitor-intel"><i data-lucide="search"></i> Intel</button>
           <button class="dash-nav-item" data-nav="fundraise" id="nav-fundraise" style="display:none;"><i data-lucide="heart-handshake"></i> Fundraise</button>
           <button class="dash-nav-item" data-nav="ai-coach"><i data-lucide="sparkles"></i> Coach</button>
+          <button class="dash-nav-item" data-nav="library"><i data-lucide="library"></i> Library</button>
           <button class="dash-nav-item" data-nav="ai-studio"><i data-lucide="layout-grid"></i> All Tools</button>
           <button class="dash-nav-item" data-nav="settings"><i data-lucide="settings"></i> Settings</button>
         </nav>
@@ -6147,6 +6148,7 @@
       else if (activeNav === 'analytics') renderAnalyticsPage(clientData);
       else if (activeNav === 'brand-voice') renderSettingsPage(clientData);
       else if (activeNav === 'ai-coach') renderAICoach();
+      else if (activeNav === 'library') renderLibraryPage(clientData);
       else if (activeNav === 'competitor-intel') renderCompetitorIntel();
       else if (activeNav === 'video-studio' || activeNav === 'creation-studio') renderVideoStudio();
       else if (activeNav === 'animation-studio' && typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
@@ -6233,6 +6235,7 @@
         'analytics': 'Your performance at a glance',
         'brand-voice': 'Your brand DNA and voice profile',
         'ai-coach': 'Your AI marketing strategist',
+        'library': 'Logo, colors, characters, items, and settings for every create',
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
         'create': 'Video & Post from your catalog, or animate a multi-shot reel',
@@ -6258,6 +6261,7 @@
       'analytics': 'Analytics',
       'brand-voice': 'Settings',
       'ai-coach': 'Coach',
+      'library': 'Library',
       'competitor-intel': 'Intel',
       'video-studio': 'Create',
       'inbox': 'Inbox',
@@ -6360,6 +6364,7 @@
         else if (nav === 'create') { renderCreatePage(); }
         else if (nav === 'analytics') { renderAnalyticsPage(clientData); }
         else if (nav === 'ai-coach') { renderAICoach(); }
+        else if (nav === 'library') { renderLibraryPage(clientData); }
         else if (nav === 'competitor-intel') { renderCompetitorIntel(); }
         else if (nav === 'fundraise') { renderFundraise(clientData); }
         else if (nav === 'inbox') { renderInbox(); }
@@ -9203,7 +9208,7 @@
         </div>
 
         <div id="bis-brand-root"></div>
-        <div id="brand-library" class="brand-library"></div>
+        <p style="margin:0 0 16px;"><button type="button" class="settings-tab" onclick="document.querySelector('[data-nav=library]')?.click();">Open Library</button></p>
 
         <!-- Archetype hero card — PREMIUM -->
         ${profile?.archetype ? `
@@ -9815,6 +9820,49 @@
 
     let _brandLibDrafts = [];
 
+    function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo'], onPick } = {}) {
+      return fetchAssetLibrary().then((assets) => {
+        const helpers = window.SEAssets || {};
+        const rows = (assets || []).filter((a) => !kinds.length || kinds.includes(a.kind));
+        const overlay = document.createElement('div');
+        overlay.id = 'se-library-picker';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        const panel = document.createElement('div');
+        panel.style.cssText = 'background:#0B0F1A;border:1px solid rgba(124,58,237,0.3);border-radius:14px;width:100%;max-width:720px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;';
+        panel.innerHTML = '<div style="padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+          '<div style="font-weight:700;font-size:0.95rem;color:#F8FAFC;">' + String(title || 'Library').replace(/[<>]/g, '') + '</div>' +
+          '<button type="button" id="se-lib-picker-close" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:1.4rem;line-height:1;">×</button></div>' +
+          '<div id="se-lib-picker-grid" style="padding:16px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>' +
+          '<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:flex-end;gap:8px;">' +
+          '<button type="button" id="se-lib-picker-use" class="settings-tab" style="padding:8px 14px;">Use selected</button></div>';
+        overlay.appendChild(panel);
+        document.body.appendChild(overlay);
+        const grid = panel.querySelector('#se-lib-picker-grid');
+        grid.innerHTML = rows.length ? rows.map((a) => {
+          const label = (helpers.labelOf ? helpers.labelOf(a) : (a.name || a.kind));
+          const img = a.kind === 'color'
+            ? '<div style="width:100%;aspect-ratio:1/1;background:' + String(a.hex || '#333') + ';"></div>'
+            : (a.url ? '<img src="' + String(a.url).replace(/"/g, '&quot;') + '" style="width:100%;aspect-ratio:1/1;object-fit:cover;">' : '');
+          return '<label style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;">' +
+            img + '<div style="padding:8px 10px;display:flex;gap:6px;align-items:center;">' +
+            '<input type="checkbox" data-lib-pick="' + String(a.id).replace(/"/g, '') + '">' +
+            '<span style="font-size:0.72rem;color:#E9D5FF;font-weight:600;">' + String(label).replace(/[<>]/g, '') + '</span></div></label>';
+        }).join('') : '<p style="color:#94A3B8;font-size:0.8rem;">Nothing in the Library yet. Open Library to upload.</p>';
+        const close = () => overlay.remove();
+        panel.querySelector('#se-lib-picker-close').addEventListener('click', close);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        panel.querySelector('#se-lib-picker-use').addEventListener('click', () => {
+          const ids = [...panel.querySelectorAll('[data-lib-pick]:checked')].map((el) => el.getAttribute('data-lib-pick')).filter(Boolean);
+          const picked = rows.filter((a) => ids.includes(a.id));
+          if (typeof onPick === 'function') onPick(picked, ids);
+          close();
+        });
+      }).catch((err) => {
+        if (typeof showToast === 'function') showToast(err.message || 'Could not load Library', 'error');
+      });
+    }
+    window.openLibraryPicker = openLibraryPicker;
+
     function useLibraryStillNow(asset) {
       const url = String(asset && asset.url || '').trim();
       if (!/^https?:\/\//i.test(url)) {
@@ -9838,7 +9886,7 @@
       if (Array.isArray(drafts)) _brandLibDrafts = drafts;
       const helpers = window.SEAssets || {};
       const labelOf = helpers.labelOf || ((a) => a.name || a.kind);
-      const isStillKind = helpers.isStillKind || ((k) => ['scene', 'character', 'plate', 'logo'].includes(String(k || '')));
+      const isStillKind = helpers.isStillKind || ((k) => ['scene', 'character', 'plate', 'logo', 'item', 'setting'].includes(String(k || '')));
       const filterCollection = helpers.filterCollection || ((list) => list || []);
       const prevFilter = String(root.querySelector('#brand-lib-filter')?.value || '').trim();
       const prevCollection = String(root.querySelector('#brand-lib-collection')?.value || '').trim();
@@ -9860,6 +9908,8 @@
           </div>
           <span style="font-size:0.75rem;color:rgba(148,163,184,0.75);text-transform:capitalize;">${escapeHtml(a.kind || '')}</span>
           ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
+          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Generate views</button>` : ''}
+          ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
           <button type="button" class="settings-tab" data-asset-delete="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Delete</button>
         </div>`;
@@ -9875,16 +9925,19 @@
           </div>
         </div>`).join('');
       root.innerHTML = `
-        <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Brand library</h3>
-        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Stills, outros, music, and logos. Select 2–8 stills to grow a theme-matched set. Coach can only use files that are here.</p>
+        <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h3>
+        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), and scenes. Coach and Animate ask before using these — they will not invent them.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
           <input id="brand-lib-filter" type="text" placeholder="Filter collection" value="${escapeHtml(prevFilter)}" style="flex:1;min-width:160px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
+          <button type="button" id="brand-lib-harvest" class="settings-tab" style="padding:6px 12px;">Import logo &amp; colors</button>
         </div>
         ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Animate or below.</p>'}
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
           <select id="brand-lib-kind" class="anim-select" style="width:auto;">
             <option value="scene">Scene</option>
             <option value="character">Character</option>
+            <option value="item">Item</option>
+            <option value="setting">Setting</option>
             <option value="plate">Plate</option>
             <option value="shot">Shot</option>
             <option value="outro">Outro</option>
@@ -9918,6 +9971,17 @@
       if (fileEl) fileEl.accept = acceptFor(kindSel?.value || 'scene');
       kindSel?.addEventListener('change', () => { if (fileEl) fileEl.accept = acceptFor(kindSel.value); });
       root.querySelector('#brand-lib-filter')?.addEventListener('change', () => paintBrandLibrary(root, assets));
+      root.querySelector('#brand-lib-harvest')?.addEventListener('click', async () => {
+        try {
+          const res = await apiFetch('/api/assets/harvest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(d.error || 'Harvest failed');
+          paintBrandLibrary(root, d.assets || []);
+          if (typeof showToast === 'function') showToast(`Imported ${(d.added || []).length} logo/color assets`, 'success');
+        } catch (err) {
+          if (typeof showToast === 'function') showToast(err.message || 'Harvest failed', 'error');
+        }
+      });
       root.querySelector('#brand-lib-upload')?.addEventListener('click', () => fileEl?.click());
       fileEl?.addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
@@ -10029,6 +10093,51 @@
           if (current) useLibraryStillNow(current);
         });
       });
+      root.querySelectorAll('[data-asset-views]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-asset-views');
+          btn.disabled = true;
+          try {
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/generate-views', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}',
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not generate views');
+            paintBrandLibrary(root, d.assets || assets);
+            if (typeof showToast === 'function') showToast('Four views saved on this asset', 'success');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Generate views failed', 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+      root.querySelectorAll('[data-asset-more]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-asset-more');
+          const current = (assets || []).find((a) => a.id === id);
+          const prompt = window.prompt('Create more like this — describe what to add', current ? `more ${current.kind}s like ${current.name || current.kind}` : '');
+          if (prompt == null) return;
+          btn.disabled = true;
+          try {
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/more-like-this', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt, count: 3 }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not generate more');
+            paintBrandLibrary(root, assets, d.drafts || []);
+            if (typeof showToast === 'function') showToast(`${(d.drafts || []).length} drafts ready`, 'success');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'More like this failed', 'error');
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
       root.querySelectorAll('[data-asset-rename]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-asset-rename');
@@ -10067,13 +10176,26 @@
 
     async function mountBrandLibrary(root) {
       if (!root) return;
-      root.innerHTML = '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);">Loading Brand library…</p>';
+      root.innerHTML = '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);">Loading Library…</p>';
       try {
         paintBrandLibrary(root, await fetchAssetLibrary());
       } catch (e) {
-        root.innerHTML = `<div id="brand-library"><h3 style="color:#fff;">Brand library</h3><p style="color:#FCA5A5;font-size:0.8125rem;">${escapeHtml(e.message || 'Could not load the library')}</p></div>`;
+        root.innerHTML = `<div id="brand-library"><h3 style="color:#fff;">Library</h3><p style="color:#FCA5A5;font-size:0.8125rem;">${escapeHtml(e.message || 'Could not load the library')}</p></div>`;
       }
     }
+
+    function renderLibraryPage() {
+      const content = document.getElementById('dash-content');
+      if (!content) return;
+      content.innerHTML = `
+        <div style="max-width:960px;">
+          <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h2>
+          <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0 0 20px;">The source of truth for logos, colors, characters, items, and settings (family, friends, classroom). Coach and Animate pull from here when you say yes.</p>
+          <div id="brand-library" class="brand-library"></div>
+        </div>`;
+      mountBrandLibrary(content.querySelector('#brand-library'));
+    }
+    window.renderLibraryPage = renderLibraryPage;
 
     // Settings tab switcher. The Brand tab mounts the (unchanged) Brand Voice page
     // lazily into #settings-brand-panel; the other three are plain show/hide.
@@ -10090,7 +10212,6 @@
         if (panel && !panel.dataset.mounted) {
           panel.dataset.mounted = '1';
           renderBrandVoicePage(clientData, panel);
-          mountBrandLibrary(panel.querySelector('#brand-library'));
         }
       }
       seWriteHash('settings/' + tab);
@@ -10807,6 +10928,9 @@
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 + Upload image/video
               </button>
+              <button type="button" id="chat-attach-library" style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.25);color:#A78BFA;font-size:0.72rem;font-weight:600;padding:6px 11px;border-radius:7px;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:5px;">
+                + Library
+              </button>
               <input type="file" id="chat-upload-input" accept="image/*,video/*" style="display:none;">
             </div>
             <div class="chat-input-bar">
@@ -11052,6 +11176,9 @@
                 if (a.type === 'create') {
                   coachActionPayloads[i] = Object.assign({}, a, {
                     attached_image_url: a.attached_image_url || window._seCoachAttachedImage || '',
+                    library_asset_ids: a.library_asset_ids || window._seCoachLibraryIds || [],
+                    references: a.references || window._seCoachLibraryRefs || [],
+                    ref_image_urls: a.ref_image_urls || (window._seCoachLibraryRefs || []).map((r) => r.url),
                   });
                   const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
                   return '<button class="coach-action-btn" data-type="create" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
@@ -11067,6 +11194,43 @@
           }
           aiRow.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai">' + replyHtml + actionsHtml + '<div style="font-size:0.6rem;color:rgba(148,163,184,0.3);margin-top:6px;">' + now + '</div></div>';
           messagesEl.appendChild(aiRow);
+          fetchAssetLibrary().then((assets) => {
+            const offer = (window.SEAssets && typeof window.SEAssets.libraryOffer === 'function')
+              ? window.SEAssets.libraryOffer(assets)
+              : null;
+            const actions = aiRow.querySelector('.coach-actions');
+            if (!offer || !actions) return;
+            const bar = document.createElement('div');
+            bar.className = 'coach-library-offer';
+            bar.style.cssText = 'margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
+            bar.innerHTML = '<span style="font-size:0.75rem;color:#E9D5FF;">' + offer.question.replace(/[<>]/g, '') + '</span>' +
+              '<button type="button" data-lib-yes style="background:rgba(124,58,237,0.2);border:1px solid rgba(167,139,250,0.4);color:#E9D5FF;font-size:0.72rem;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;">Use library refs</button>' +
+              '<button type="button" data-lib-no style="background:transparent;border:1px solid rgba(255,255,255,0.12);color:#94A3B8;font-size:0.72rem;padding:5px 10px;border-radius:7px;cursor:pointer;">Skip</button>';
+            actions.after(bar);
+            bar.querySelector('[data-lib-yes]').addEventListener('click', () => {
+              const refs = window.SEAssets.refsFromAssets(assets, offer.asset_ids);
+              window._seCoachLibraryIds = offer.asset_ids.slice();
+              window._seCoachLibraryRefs = refs;
+              const firstChar = refs.find((r) => r.role === 'character') || refs[0];
+              if (firstChar) window._seCoachAttachedImage = firstChar.url;
+              coachActionPayloads.forEach((p, idx) => {
+                if (!p || p.type === 'regenerate') return;
+                coachActionPayloads[idx] = Object.assign({}, p, {
+                  library_asset_ids: offer.asset_ids.slice(),
+                  references: refs,
+                  ref_image_urls: refs.map((r) => r.url),
+                  attached_image_url: (firstChar && firstChar.url) || p.attached_image_url,
+                });
+              });
+              if (typeof showToast === 'function') showToast('Library refs will follow Create this now', 'success');
+              bar.remove();
+            });
+            bar.querySelector('[data-lib-no]').addEventListener('click', () => {
+              window._seCoachLibraryIds = [];
+              window._seCoachLibraryRefs = [];
+              bar.remove();
+            });
+          }).catch(() => {});
           // Wire action buttons: create deep-links into Studio/Animate; regenerate still queues.
           aiRow.querySelectorAll('.coach-action-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -11175,10 +11339,28 @@
           chips.push('<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#E9D5FF;font-size:0.7rem;font-weight:600;padding:4px 10px;border-radius:20px;">' +
             '<img src="' + safeUrl + '" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;">' +
             'Uploaded asset' +
+            ' <button type="button" data-save-lib style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0 4px;font-size:0.68rem;">Save to Library</button>' +
             ' <button onclick="window._seCoachAttachedImage=\'\';_seRenderAttachChips();" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
             '</span>');
         }
         bar.innerHTML = chips.join('');
+        bar.querySelector('[data-save-lib]')?.addEventListener('click', async () => {
+          const url = String(window._seCoachAttachedImage || '').trim();
+          if (!/^https?:\/\//i.test(url)) return;
+          const kind = window.prompt('Save as character, item, setting, scene, or logo?', 'character') || 'character';
+          try {
+            const res = await apiFetch('/api/assets/from-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, kind: kind.trim(), name: kind.trim() }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not save to Library');
+            if (typeof showToast === 'function') showToast('Saved to Library', 'success');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Save failed', 'error');
+          }
+        });
       }
       window._seRenderAttachChips = _seRenderAttachChips;
       if (window.__SE_COACH_MASTER_IMAGE && !window._seCoachAttachedImage) {
@@ -11246,6 +11428,22 @@
         });
       }
 
+      document.getElementById('chat-attach-library')?.addEventListener('click', () => {
+        openLibraryPicker({
+          title: 'Use Library refs',
+          kinds: ['character', 'item', 'setting', 'scene', 'logo'],
+          onPick: (picked, ids) => {
+            const refs = (window.SEAssets && window.SEAssets.refsFromAssets)
+              ? window.SEAssets.refsFromAssets(picked, ids)
+              : picked.map((a) => ({ url: a.url, title: a.name, role: a.kind === 'character' ? 'character' : (a.kind === 'item' ? 'item' : (a.kind === 'setting' ? 'setting' : 'scene')) }));
+            window._seCoachLibraryIds = ids.slice();
+            window._seCoachLibraryRefs = refs;
+            const first = refs[0];
+            if (first) window._seCoachAttachedImage = first.url;
+            _seRenderAttachChips();
+          },
+        });
+      });
       const attachUploadBtn = document.getElementById('chat-attach-upload');
       const uploadInput = document.getElementById('chat-upload-input');
       if (attachUploadBtn && uploadInput) {

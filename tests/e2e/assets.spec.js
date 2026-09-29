@@ -22,16 +22,16 @@ function readyProject(over = {}) {
   };
 }
 
-test('Settings → Brand shows Brand library; rename and delete hit the API', async ({ page }) => {
+test('Library nav shows the kit; rename and delete hit the API', async ({ page }) => {
   const store = [ { ...OUTRO } ];
   const calls = await mockApi(page, srv.base, {
     data: clientData(),
     assets: store,
   });
   await login(page, srv.base);
-  await page.click('.dash-nav-item[data-nav="settings"]');
+  await page.click('.dash-nav-item[data-nav="library"]');
   await expect(page.locator('#brand-library')).toBeVisible({ timeout: 15000 });
-  await expect(page.locator('#brand-library')).toContainText(/Brand library/);
+  await expect(page.locator('#brand-library')).toContainText(/Library/);
   await expect(page.locator('#brand-library')).toContainText(/Silk end/);
 
   page.once('dialog', (d) => d.accept('End card'));

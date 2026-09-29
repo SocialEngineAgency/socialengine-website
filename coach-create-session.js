@@ -140,6 +140,12 @@ function normalizeCoachCreateSession(intent = {}) {
     ref_image_urls: Array.isArray(intent.ref_image_urls)
       ? intent.ref_image_urls.map(httpsUrl).filter(Boolean).slice(0, 8)
       : [],
+    library_asset_ids: Array.isArray(intent.library_asset_ids)
+      ? intent.library_asset_ids.map((id) => String(id || '').trim()).filter(Boolean).slice(0, 12)
+      : [],
+    references: Array.isArray(intent.references)
+      ? intent.references.filter((r) => r && httpsUrl(r.url)).slice(0, 8)
+      : [],
     collection: String(intent.collection || '').slice(0, 80),
     missing_outro: String(intent.missing_outro || '').slice(0, 240),
   };
@@ -364,6 +370,8 @@ function sessionApplyExtras(session) {
     outro_url: session.outro_url || '',
     music_bed_url: session.music_bed_url || '',
     ref_image_urls: Array.isArray(session.ref_image_urls) ? session.ref_image_urls.slice(0, 8) : [],
+    library_asset_ids: Array.isArray(session.library_asset_ids) ? session.library_asset_ids.slice(0, 12) : [],
+    references: Array.isArray(session.references) ? session.references.slice(0, 8) : [],
     collection: session.collection || '',
     missing_outro: session.missing_outro || '',
   };

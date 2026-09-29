@@ -1021,7 +1021,7 @@
           </div>
           <div style="display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.06);">
             <button type="button" id="cs-tab-products" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Products</button>
-            <button type="button" id="cs-tab-library" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Library</button>
+            <button type="button" id="cs-tab-library" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Past posts</button>
             <button type="button" id="cs-tab-uploads" style="flex:1;padding:8px;border:none;border-radius:8px;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Uploads</button>
           </div>
           <div style="flex:1;overflow:auto;padding:14px;">
