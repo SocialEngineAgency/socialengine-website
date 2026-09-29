@@ -10031,8 +10031,8 @@
         const aliases = ((a.analysis && a.analysis.aliases) || []).filter(Boolean).slice(0, 6);
         const subjects = ((a.analysis && a.analysis.subjects) || []).filter(Boolean).slice(0, 6);
         const place = String((a.analysis && a.analysis.place) || '').trim();
-        const unlabeled = still && !summary && !subjects.length;
         const still = isStillKind(a.kind);
+        const unlabeled = still && !summary && !subjects.length;
         const kindChoices = (helpers.retagKinds ? helpers.retagKinds(a.kind) : [a.kind]).filter(Boolean);
         const kindOptions = kindChoices.map((k) =>
           `<option value="${escapeHtml(k)}" ${k === a.kind ? 'selected' : ''}>${escapeHtml((helpers.kindLabel && helpers.kindLabel(k)) || k)}</option>`

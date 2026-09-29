@@ -44,6 +44,7 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /Add selected as Style/);
   assert.match(src, /\/api\/studio\/media-library/);
   assert.match(src, /kind: 'style'/);
+  assert.match(src, /const still = isStillKind[\s\S]*const unlabeled = still/);
   assert.match(src, /Label unlabeled/);
   assert.match(src, /Label with AI/);
   assert.match(src, /\/api\/assets\/analyze-missing/);
