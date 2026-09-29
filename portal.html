@@ -9946,8 +9946,8 @@
             <option value="logo">Logo</option>
           </select>
           <input id="brand-lib-collection" type="text" placeholder="Collection name" value="${escapeHtml(prevCollection)}" style="flex:1;min-width:140px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
-          <input type="file" id="brand-lib-file" hidden />
-          <button type="button" id="brand-lib-upload" class="settings-tab" style="padding:6px 12px;">Upload</button>
+          <input type="file" id="brand-lib-file" multiple hidden />
+          <button type="button" id="brand-lib-upload" class="settings-tab" style="padding:6px 12px;">Upload files</button>
         </div>
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
           <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 8px;">Generate from selected stills (2–8). Fashion accounts without FigureLabs get a clear error.</p>
@@ -9984,22 +9984,36 @@
       });
       root.querySelector('#brand-lib-upload')?.addEventListener('click', () => fileEl?.click());
       fileEl?.addEventListener('change', async (e) => {
-        const file = e.target.files && e.target.files[0];
+        const files = [...(e.target.files || [])];
         e.target.value = '';
-        if (!file) return;
-        const fd = new FormData();
-        fd.append('kind', kindSel?.value || 'scene');
-        fd.append('name', file.name.replace(/\.[^.]+$/, ''));
-        fd.append('collection', String(root.querySelector('#brand-lib-collection')?.value || '').trim());
-        fd.append('file', file);
-        try {
-          const res = await apiFetch('/api/assets', { method: 'POST', body: fd });
-          const d = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(d.error || 'Upload failed');
-          paintBrandLibrary(root, d.assets || []);
-          if (typeof showToast === 'function') showToast('Saved to the library', 'success');
-        } catch (err) {
-          if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error', err.request_id ? { ref: err.request_id } : undefined);
+        if (!files.length) return;
+        const kind = kindSel?.value || 'scene';
+        const collection = String(root.querySelector('#brand-lib-collection')?.value || '').trim();
+        let lastAssets = assets;
+        let saved = 0;
+        let lastErr = null;
+        for (const file of files) {
+          const fd = new FormData();
+          fd.append('kind', kind);
+          fd.append('name', file.name.replace(/\.[^.]+$/, ''));
+          fd.append('collection', collection);
+          fd.append('file', file);
+          try {
+            const res = await apiFetch('/api/assets', { method: 'POST', body: fd });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Upload failed');
+            lastAssets = d.assets || lastAssets;
+            saved += 1;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        paintBrandLibrary(root, lastAssets);
+        if (saved && typeof showToast === 'function') {
+          showToast(saved === 1 ? 'Saved to the library' : `Saved ${saved} files to the library`, 'success');
+        }
+        if (lastErr && typeof showToast === 'function') {
+          showToast(lastErr.message || 'Upload failed', 'error', lastErr.request_id ? { ref: lastErr.request_id } : undefined);
         }
       });
       root.querySelector('#brand-lib-generate')?.addEventListener('click', async () => {
