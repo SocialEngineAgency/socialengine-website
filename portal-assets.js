@@ -67,6 +67,20 @@ function refsFromAssets(list, ids) {
   return refs.slice(0, 8);
 }
 
+function persistFamily(kind) {
+  const k = String(kind || '').trim();
+  if (k === 'color') return 'color';
+  if (k === 'music') return 'audio';
+  if (['outro', 'intro', 'shot'].includes(k)) return 'video';
+  if (STILL_KINDS.includes(k)) return 'image';
+  return '';
+}
+
+function retagKinds(kind) {
+  const family = persistFamily(kind);
+  return ASSET_KINDS.filter((k) => persistFamily(k) === family);
+}
+
 function isStillKind(kind) {
   return STILL_KINDS.includes(String(kind || '').trim());
 }
@@ -117,11 +131,13 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
     filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
+    persistFamily, retagKinds,
   };
 }
 if (typeof window !== 'undefined') {
   window.SEAssets = {
     ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
     filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
+    persistFamily, retagKinds,
   };
 }

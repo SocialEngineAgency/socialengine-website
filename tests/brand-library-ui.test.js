@@ -25,6 +25,8 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /brand-lib-filter/);
   assert.match(src, /chat-attach-library/);
   assert.match(src, /id="brand-lib-file" multiple/);
+  assert.match(src, /data-asset-kind/);
+  assert.match(src, /retagKinds/);
   assert.match(src, /const files = \[\.\.\.\(e\.target\.files/);
 });
 

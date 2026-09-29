@@ -9898,6 +9898,10 @@
         const summary = String((a.analysis && a.analysis.summary) || '').trim();
         const collection = String(a.collection || (a.analysis && a.analysis.collection) || '').trim();
         const still = isStillKind(a.kind);
+        const kindChoices = (helpers.retagKinds ? helpers.retagKinds(a.kind) : [a.kind]).filter(Boolean);
+        const kindOptions = kindChoices.map((k) =>
+          `<option value="${escapeHtml(k)}" ${k === a.kind ? 'selected' : ''}>${escapeHtml((helpers.kindLabel && helpers.kindLabel(k)) || k)}</option>`
+        ).join('');
         return `
         <div class="brand-lib-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
           ${still ? `<input type="checkbox" data-asset-select="${escapeHtml(a.id)}" style="margin-top:4px;" />` : '<span style="width:16px;"></span>'}
@@ -9906,7 +9910,7 @@
             ${summary ? `<div style="font-size:0.75rem;color:rgba(148,163,184,0.85);margin-top:2px;">${escapeHtml(summary)}</div>` : ''}
             ${collection ? `<div style="font-size:0.7rem;color:rgba(148,163,184,0.6);margin-top:2px;">${escapeHtml(collection)}</div>` : ''}
           </div>
-          <span style="font-size:0.75rem;color:rgba(148,163,184,0.75);text-transform:capitalize;">${escapeHtml(a.kind || '')}</span>
+          <select data-asset-kind="${escapeHtml(a.id)}" aria-label="Tag ${escapeHtml(labelOf(a))}" class="anim-select" style="width:auto;font-size:0.75rem;padding:4px 8px;">${kindOptions}</select>
           ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
           ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Generate views</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
@@ -10149,6 +10153,28 @@
             if (typeof showToast === 'function') showToast(err.message || 'More like this failed', 'error');
           } finally {
             btn.disabled = false;
+          }
+        });
+      });
+      root.querySelectorAll('[data-asset-kind]').forEach((sel) => {
+        sel.addEventListener('change', async () => {
+          const id = sel.getAttribute('data-asset-kind');
+          const kind = String(sel.value || '').trim();
+          const current = (assets || []).find((a) => a.id === id);
+          if (!kind || (current && current.kind === kind)) return;
+          try {
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ kind }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Retag failed');
+            paintBrandLibrary(root, d.assets || []);
+            if (typeof showToast === 'function') showToast('Tag updated', 'success');
+          } catch (err) {
+            if (current) sel.value = current.kind;
+            if (typeof showToast === 'function') showToast(err.message || 'Retag failed', 'error');
           }
         });
       });

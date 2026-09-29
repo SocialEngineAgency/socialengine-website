@@ -22,8 +22,11 @@ function readyProject(over = {}) {
   };
 }
 
-test('Library nav shows the kit; rename and delete hit the API', async ({ page }) => {
-  const store = [ { ...OUTRO } ];
+test('Library nav shows the kit; rename, retag, and delete hit the API', async ({ page }) => {
+  const store = [
+    { ...OUTRO },
+    { id: 'ast_logo1', kind: 'scene', name: 'opa logo', url: 'https://store.test/opa.png', bytes: 8, content_type: 'image/png' },
+  ];
   const calls = await mockApi(page, srv.base, {
     data: clientData(),
     assets: store,
@@ -33,6 +36,14 @@ test('Library nav shows the kit; rename and delete hit the API', async ({ page }
   await expect(page.locator('#brand-library')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('#brand-library')).toContainText(/Library/);
   await expect(page.locator('#brand-library')).toContainText(/Silk end/);
+  await expect(page.locator('#brand-library [data-asset-kind="ast_logo1"]')).toHaveValue('scene');
+
+  await page.selectOption('#brand-library [data-asset-kind="ast_logo1"]', 'logo');
+  await expect.poll(() => calls.some((c) => {
+    if (c.method !== 'PATCH' || c.path !== '/api/assets/ast_logo1') return false;
+    try { return JSON.parse(c.body).kind === 'logo'; } catch { return false; }
+  })).toBeTruthy();
+  await expect(page.locator('#brand-library [data-asset-kind="ast_logo1"]')).toHaveValue('logo');
 
   page.once('dialog', (d) => d.accept('End card'));
   await page.click('#brand-library [data-asset-rename="ast_outro1"]');
