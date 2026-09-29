@@ -16,7 +16,7 @@
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./claude-studio.js?v=20260919-tmpl-direct" defer></script>
   <script src="./portal-assets.js?v=20260919-saved-shots"></script>
-  <script src="./coach-create-session.js?v=20260922-job"></script>
+  <script src="./coach-create-session.js?v=20260929-prompt"></script>
   <script src="./animation-studio.js?v=20260919-saved-shots" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
@@ -7203,6 +7203,15 @@
       if (navName === 'creation-studio') {
         setTimeout(() => applyCoachCreateSessionIfAny(), 120);
         setTimeout(() => applyCoachCreateSessionIfAny(), 450);
+      }
+      if (navName === 'animation-studio') {
+        const applyAnim = () => {
+          if (typeof window.applyAnimCoachCreateSessionIfAny === 'function') {
+            window.applyAnimCoachCreateSessionIfAny();
+          }
+        };
+        setTimeout(applyAnim, 120);
+        setTimeout(applyAnim, 450);
       }
       return true;
     }

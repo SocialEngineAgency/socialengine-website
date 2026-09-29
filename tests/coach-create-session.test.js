@@ -69,6 +69,34 @@ test('this-turn infographic ask does not reuse a prior reel brief', () => {
   assert.doesNotMatch(action.prompt, /GP Appointment/);
 });
 
+test('create this reel keeps the Coach shot list, not the short user line', () => {
+  const action = inferCreateActionFromReply(
+    'Create this now is below. Frame 1 (6s): kitchen at night. Frame 2 (6s): GP checklist. Soft music.',
+    'create this reel now'
+  );
+  assert.equal(action.destination, 'animate');
+  assert.match(action.prompt, /Frame 1/);
+  assert.doesNotMatch(action.prompt, /^create this reel now$/i);
+  assert.equal(action.entry, 'prompt');
+});
+
+test('create this reel with a spoken VO plan opens Voiceover', () => {
+  const action = inferCreateActionFromReply(
+    'Create this now is below. Voiceover:\nNight reflux is not always just heartburn.\nSee your GP if it lasts three weeks.',
+    'create this reel'
+  );
+  assert.match(action.prompt, /Night reflux/);
+  assert.equal(action.entry, 'vo');
+});
+
+test('a visual reel brief infers Describe a video even if it says script', () => {
+  const s = normalizeCoachCreateSession({
+    prompt: '25-30s Reel. Visual script: kitchen at night, reflux vs heartburn, soft music.',
+    destination: 'animate',
+  });
+  assert.equal(s.entry, 'prompt');
+});
+
 test('carousel language infers design', () => {
   const action = inferCreateActionFromReply(
     'Create this now is below.',
@@ -425,6 +453,24 @@ test('portal and animate apply do not consume the session', () => {
   );
   assert.doesNotMatch(applyAnim, /__SE_COACH_CREATE_SESSION\s*=\s*null/);
   assert.match(applyAnim, /if\s*\(\s*!ta\s*\)\s*return false/);
+});
+
+test('Create this now retries Animate fill the way Studio does, and never auto-Sends', () => {
+  const portal = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const open = portal.slice(
+    portal.indexOf('function openCreateFromCoach'),
+    portal.indexOf('window.openCreateFromCoach')
+  );
+  assert.match(open, /animation-studio/);
+  assert.match(open, /applyAnimCoachCreateSessionIfAny/);
+  assert.match(open, /setTimeout/);
+  assert.doesNotMatch(open, /sendPrompt|anim-send|auto-?send/i);
+  const anim = fs.readFileSync(path.join(__dirname, '..', 'animation-studio.js'), 'utf8');
+  const applyAnim = anim.slice(
+    anim.indexOf('async function applyAnimCoachCreateSessionIfAny'),
+    anim.indexOf('window.applyAnimCoachCreateSessionIfAny')
+  );
+  assert.doesNotMatch(applyAnim, /sendPrompt\(/);
 });
 
 test('no still is text-to-video; a still is image-to-video', () => {

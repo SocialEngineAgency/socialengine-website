@@ -47,8 +47,8 @@ function inferCoachSessionExtras(text) {
   else if (/\b15\s*s|\bawareness/.test(t)) format_template_id = 'awareness-15s';
 
   let entry = '';
-  if (/\bframe\s*\d|\bshot\s*\d/.test(t)) entry = 'prompt';
-  else if (/\bvo\b|voice[- ]?over|script/.test(t)) entry = 'vo';
+  if (/\bframe\s*\d|\bshot\s*\d|\bvisual script\b/.test(t)) entry = 'prompt';
+  else if (/\bvo\b|voice[- ]?over|\bspoken (lines?|script)\b|\bvoiceover script\b/.test(t)) entry = 'vo';
 
   return { duration, format_template_id, entry };
 }
@@ -72,6 +72,12 @@ function isCoachCarouselRedesignAsk(userMessage) {
 
 function coachUserStatedNewBrief(userMessage) {
   return /\b(make|create|generate|render|shoot)\b.{0,80}\b(reel|video|clip|post|carousel|infographic|slides?)\b/.test(String(userMessage || '').toLowerCase());
+}
+
+function coachUserRestatedSameCreate(userMessage) {
+  const t = String(userMessage || '').toLowerCase();
+  if (/\b(create|make|generate|render|shoot)\s+(this|that|it)(\s+now)?\b/.test(t)) return true;
+  return /\b(make|create|generate|render|shoot)\b.{0,40}\b(this|that|the)\b.{0,40}\b(reel|video|clip|post|carousel|infographic|slides?)\b/.test(t);
 }
 
 function inferCoachDestinationFromText(text) {
@@ -160,7 +166,9 @@ function stripCoachButtonFiller(text) {
     .replace(/you need to click[^.!?\n]*[.!?]?/gi, ' ')
     .replace(/i understand[^.!?\n]*[.!?]?/gi, ' ')
     .replace(/i (can't|cannot) execute[^.!?\n]*[.!?]?/gi, ' ')
-    .replace(/if the button still isn't[\s\S]*/gi, ' '));
+    .replace(/if the button still isn't[\s\S]*/gi, ' ')
+    .replace(/create this now is below[^.!?\n]*[.!?]?/gi, ' ')
+    .replace(/it opens (studio|animate|design studio)[^.!?\n]*[.!?]?/gi, ' '));
 }
 
 function isCoachWaitingOnCreateAsk(userMessage) {
@@ -318,7 +326,12 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
   if (!/create this now|generate this|one-click button|canva\.com|canva pro|synthesia|socialengine account manager|\[create_content\]|can't press a button|cannot press a button|button isn't rendering/.test(blob)) return null;
   const user = normalizeCoachPrompt(String(userMessage || '').replace(/<[^>]+>/g, ' '));
-  if (coachUserStatedNewBrief(userMessage) && user.length >= 20 && !isCoachMetaBrief(user)) {
+  if (
+    coachUserStatedNewBrief(userMessage)
+    && !coachUserRestatedSameCreate(userMessage)
+    && user.length >= 20
+    && !isCoachMetaBrief(user)
+  ) {
     const destination = inferCoachDestination(userMessage, userMessage);
     return normalizeCoachCreateSession({
       prompt: user,
@@ -498,6 +511,7 @@ const coachSessionApi = {
   normalizeCoachCreateSession,
   coachCreateNav,
   inferCoachDestination,
+  coachUserRestatedSameCreate,
   applyCoachCreateFields,
   inferCreateActionFromReply,
   isCoachFailedReply,
