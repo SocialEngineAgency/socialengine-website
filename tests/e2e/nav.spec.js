@@ -8,8 +8,8 @@ let srv;
 test.beforeAll(async () => { srv = await startStatic(); });
 test.afterAll(async () => { await srv.close(); });
 
-const EXPECTED_LABELS = ['Home', 'Content Review', 'Calendar', 'Create', 'Ads', 'Inbox', 'Analytics', 'Intel', 'Coach', 'All Tools', 'Settings'];
-const EXPECTED_NAVS = ['dashboard', 'content', 'schedule', 'create', 'ad-studio', 'inbox', 'analytics', 'competitor-intel', 'ai-coach', 'ai-studio', 'settings'];
+const EXPECTED_LABELS = ['Home', 'Content Review', 'Calendar', 'Create', 'Ads', 'Inbox', 'Analytics', 'Intel', 'Coach', 'Library', 'All Tools', 'Settings'];
+const EXPECTED_NAVS = ['dashboard', 'content', 'schedule', 'create', 'ad-studio', 'inbox', 'analytics', 'competitor-intel', 'ai-coach', 'library', 'ai-studio', 'settings'];
 
 async function visibleNav(page) {
   const items = page.locator('.dash-nav-item');
@@ -23,7 +23,7 @@ async function visibleNav(page) {
   return out;
 }
 
-test('commerce client: sidebar is the approved 11 items, studios and Brand are gone', async ({ page }) => {
+test('commerce client: sidebar is the approved 12 items, studios and Brand are gone', async ({ page }) => {
   await mockApi(page, srv.base);
   await login(page, srv.base);
   const items = await visibleNav(page);
