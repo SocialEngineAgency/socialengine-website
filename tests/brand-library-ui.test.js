@@ -12,6 +12,7 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /value="character"/);
   assert.match(src, /value="item"/);
   assert.match(src, /value="setting"/);
+  assert.match(src, /value="style"/);
   assert.match(src, /value="plate"/);
   assert.match(src, /data-asset-select/);
   assert.match(src, /\/api\/assets\/generate/);
@@ -33,6 +34,10 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /brand-lib-thumb/);
   assert.match(src, /data-asset-expand/);
   assert.match(src, /data-asset-expand-panel/);
+  assert.match(src, /brand-lib-import-past/);
+  assert.match(src, /Add selected as Style/);
+  assert.match(src, /\/api\/studio\/media-library/);
+  assert.match(src, /kind: 'style'/);
 });
 
 test('Animate applies Coach library refs without auto-Send', () => {
@@ -49,6 +54,16 @@ test('Animate applies Coach library refs without auto-Send', () => {
   assert.match(src, /openLibraryPicker/);
   assert.match(src, /id: 'item', label: 'Item'/);
   assert.match(src, /id: 'setting', label: 'Setting'/);
+  assert.match(src, /'style'/);
+});
+
+test('Library style stills map to the style ref role', () => {
+  const { roleForKind, libraryOffer, STILL_KINDS } = require('../portal-assets.js');
+  assert.equal(roleForKind('style'), 'style');
+  assert.equal(roleForKind('logo'), 'style');
+  assert.ok(STILL_KINDS.includes('style'));
+  const offer = libraryOffer([{ id: 'ast_look', kind: 'style', name: 'April reel', url: 'https://store.test/april.png' }]);
+  assert.match(offer.question, /April reel/);
 });
 
 test('Claude Design picker tab is Past posts, not Library', () => {
