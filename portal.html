@@ -15,9 +15,9 @@
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./claude-studio.js?v=20260919-tmpl-direct" defer></script>
-  <script src="./portal-assets.js?v=20260919-saved-shots"></script>
+  <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20260929-prompt"></script>
-  <script src="./animation-studio.js?v=20260919-saved-shots" defer></script>
+  <script src="./animation-studio.js?v=20260929-style" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -9878,8 +9878,10 @@
     }
 
     let _brandLibDrafts = [];
+    let _brandLibPastOpen = false;
+    let _brandLibPastItems = [];
 
-    function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo'], onPick } = {}) {
+    function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo', 'style'], onPick } = {}) {
       return fetchAssetLibrary().then((assets) => {
         const helpers = window.SEAssets || {};
         const rows = (assets || []).filter((a) => !kinds.length || kinds.includes(a.kind));
@@ -9935,7 +9937,7 @@
       window.__SE_ANIM_PENDING_REF = {
         url,
         title: name,
-        role: kind === 'character' ? 'character' : 'scene',
+        role: (window.SEAssets && window.SEAssets.roleForKind) ? window.SEAssets.roleForKind(kind) : (kind === 'character' ? 'character' : (kind === 'style' || kind === 'logo' ? 'style' : 'scene')),
       };
       if (typeof showToast === 'function') showToast('Ready — open Design or Animate to use this still', 'success');
     }
@@ -10024,6 +10026,22 @@
         ${expanded ? `<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(a.id)}" hidden>${expanded}</div>` : ''}
         </div>`;
       }).join('');
+      const pastCards = (_brandLibPastOpen ? (_brandLibPastItems || []) : []).filter((it) => /^https?:\/\//i.test(String(it.image_url || ''))).map((it) => `
+        <label class="brand-lib-past-card" style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.03);cursor:pointer;display:flex;flex-direction:column;">
+          <img src="${escapeHtml(it.image_url)}" alt="" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#111;" loading="lazy" referrerpolicy="no-referrer" />
+          <div style="padding:8px 10px;display:flex;gap:6px;align-items:flex-start;">
+            <input type="checkbox" data-past-pick data-past-url="${escapeHtml(it.image_url)}" data-past-title="${escapeHtml(it.title || 'Past post')}" data-past-id="${escapeHtml(it.id || '')}" />
+            <span style="font-size:0.72rem;color:#E9D5FF;font-weight:600;line-height:1.3;">${escapeHtml(it.title || 'Past post')}</span>
+          </div>
+        </label>`).join('');
+      const pastPanel = _brandLibPastOpen ? `
+        <div id="brand-lib-past" style="margin:0 0 14px;">
+          <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 8px;">Pick finished posts to save as Style refs. Coach can match that look when you say yes. Video-only rows without a still are skipped.</p>
+          ${pastCards
+            ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:10px;">${pastCards}</div>
+               <button type="button" id="brand-lib-past-add" class="settings-tab" style="padding:6px 12px;">Add selected as Style</button>`
+            : '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0;">No past stills yet. Publish or generate a post with an image first.</p>'}
+        </div>` : '';
       const draftCards = (_brandLibDrafts || []).map((d) => `
         <div class="brand-lib-draft" data-draft-id="${escapeHtml(d.id || d.url)}" style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px;background:rgba(255,255,255,0.03);">
           ${d.url ? `<img src="${escapeHtml(d.url)}" alt="" style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:8px;background:#111;" />` : ''}
@@ -10036,11 +10054,13 @@
         </div>`).join('');
       root.innerHTML = `
         <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h3>
-        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), and scenes. Coach and Animate ask before using these — they will not invent them.</p>
+        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), scenes, and style stills from past posts. Coach and Animate ask before using these — they will not invent them.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
           <input id="brand-lib-filter" type="text" placeholder="Filter collection" value="${escapeHtml(prevFilter)}" style="flex:1;min-width:160px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
           <button type="button" id="brand-lib-harvest" class="settings-tab" style="padding:6px 12px;">Import logo &amp; colors</button>
+          <button type="button" id="brand-lib-import-past" class="settings-tab" style="padding:6px 12px;">Import past content</button>
         </div>
+        ${pastPanel}
         ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Animate or below.</p>'}
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
           <select id="brand-lib-kind" class="anim-select" style="width:auto;">
@@ -10048,6 +10068,7 @@
             <option value="character">Character</option>
             <option value="item">Item</option>
             <option value="setting">Setting</option>
+            <option value="style">Style</option>
             <option value="plate">Plate</option>
             <option value="shot">Shot</option>
             <option value="outro">Outro</option>
@@ -10091,6 +10112,56 @@
         } catch (err) {
           if (typeof showToast === 'function') showToast(err.message || 'Harvest failed', 'error');
         }
+      });
+      root.querySelector('#brand-lib-import-past')?.addEventListener('click', async () => {
+        _brandLibPastOpen = !_brandLibPastOpen;
+        if (_brandLibPastOpen && !(_brandLibPastItems || []).length) {
+          try {
+            const res = await apiFetch('/api/studio/media-library?type=image&limit=80');
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not load past content');
+            _brandLibPastItems = Array.isArray(d.items) ? d.items : [];
+          } catch (err) {
+            _brandLibPastOpen = false;
+            if (typeof showToast === 'function') showToast(err.message || 'Could not load past content', 'error');
+          }
+        }
+        paintBrandLibrary(root, assets);
+      });
+      root.querySelector('#brand-lib-past-add')?.addEventListener('click', async () => {
+        const picks = [...root.querySelectorAll('[data-past-pick]:checked')];
+        if (!picks.length) {
+          if (typeof showToast === 'function') showToast('Select at least one past still', 'error');
+          return;
+        }
+        const btn = root.querySelector('#brand-lib-past-add');
+        if (btn) btn.disabled = true;
+        let lastAssets = assets;
+        let saved = 0;
+        let lastErr = null;
+        for (const el of picks) {
+          const url = String(el.getAttribute('data-past-url') || '').trim();
+          const name = String(el.getAttribute('data-past-title') || 'Past post').trim();
+          const createdFrom = String(el.getAttribute('data-past-id') || '').trim();
+          if (!/^https?:\/\//i.test(url)) continue;
+          try {
+            const res = await apiFetch('/api/assets/from-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, kind: 'style', name, source: 'content', created_from_id: createdFrom }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not save style');
+            lastAssets = d.assets || lastAssets;
+            saved += 1;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (btn) btn.disabled = false;
+        paintBrandLibrary(root, lastAssets);
+        if (saved && typeof showToast === 'function') showToast(`Saved ${saved} style still${saved === 1 ? '' : 's'}`, 'success');
+        if (lastErr && typeof showToast === 'function') showToast(lastErr.message || 'Some stills did not save', 'error');
       });
       root.querySelector('#brand-lib-upload')?.addEventListener('click', () => fileEl?.click());
       fileEl?.addEventListener('change', async (e) => {
@@ -10350,7 +10421,7 @@
       content.innerHTML = `
         <div style="max-width:960px;">
           <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h2>
-          <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0 0 20px;">The source of truth for logos, colors, characters, items, and settings (family, friends, classroom). Coach and Animate pull from here when you say yes.</p>
+          <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0 0 20px;">The source of truth for logos, colors, characters, items, settings (family, friends, classroom), and style stills from past posts. Coach and Animate pull from here when you say yes.</p>
           <div id="brand-library" class="brand-library"></div>
         </div>`;
       mountBrandLibrary(content.querySelector('#brand-library'));
@@ -11507,7 +11578,7 @@
         bar.querySelector('[data-save-lib]')?.addEventListener('click', async () => {
           const url = String(window._seCoachAttachedImage || '').trim();
           if (!/^https?:\/\//i.test(url)) return;
-          const kind = window.prompt('Save as character, item, setting, scene, or logo?', 'character') || 'character';
+          const kind = window.prompt('Save as character, item, setting, scene, logo, or style?', 'style') || 'style';
           try {
             const res = await apiFetch('/api/assets/from-url', {
               method: 'POST',
@@ -11591,11 +11662,11 @@
       document.getElementById('chat-attach-library')?.addEventListener('click', () => {
         openLibraryPicker({
           title: 'Use Library refs',
-          kinds: ['character', 'item', 'setting', 'scene', 'logo'],
+          kinds: ['character', 'item', 'setting', 'scene', 'logo', 'style'],
           onPick: (picked, ids) => {
             const refs = (window.SEAssets && window.SEAssets.refsFromAssets)
               ? window.SEAssets.refsFromAssets(picked, ids)
-              : picked.map((a) => ({ url: a.url, title: a.name, role: a.kind === 'character' ? 'character' : (a.kind === 'item' ? 'item' : (a.kind === 'setting' ? 'setting' : 'scene')) }));
+              : picked.map((a) => ({ url: a.url, title: a.name, role: (window.SEAssets && window.SEAssets.roleForKind) ? window.SEAssets.roleForKind(a.kind) : (a.kind === 'character' ? 'character' : (a.kind === 'style' || a.kind === 'logo' ? 'style' : 'scene')) }));
             window._seCoachLibraryIds = ids.slice();
             window._seCoachLibraryRefs = refs;
             const first = refs[0];

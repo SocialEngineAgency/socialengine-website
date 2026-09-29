@@ -2929,14 +2929,14 @@
       if (typeof open !== 'function') return toast('Open Library from the sidebar first', 'error');
       open({
         title: 'Add Library refs',
-        kinds: ['character', 'item', 'setting', 'scene', 'logo', 'plate'],
+        kinds: ['character', 'item', 'setting', 'scene', 'logo', 'plate', 'style'],
         onPick: (picked, ids) => {
           const refs = (window.SEAssets && typeof window.SEAssets.refsFromAssets === 'function')
             ? window.SEAssets.refsFromAssets(picked, ids)
             : (picked || []).map((a) => ({
               url: a.url,
               title: a.name || a.kind,
-              role: a.kind === 'character' ? 'character' : (a.kind === 'item' ? 'item' : (a.kind === 'setting' ? 'setting' : 'scene')),
+              role: (window.SEAssets && window.SEAssets.roleForKind) ? window.SEAssets.roleForKind(a.kind) : (a.kind === 'character' ? 'character' : (a.kind === 'style' || a.kind === 'logo' ? 'style' : 'scene')),
             }));
           const seen = new Set(_refs.map((r) => r.url));
           refs.forEach((r) => {
