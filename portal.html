@@ -36,8 +36,28 @@
     /* Button press feedback */
     button:active:not(:disabled) { transform: scale(0.98); }
     
-    /* Premium select styling */
-    select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px !important; }
+    /* Premium select styling — appearance:none without a fill paints a white OS box
+       with inherited white text (Library tag dropdowns looked empty). */
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      color-scheme: dark;
+      background-color: #1E293B;
+      color: #F8FAFC;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px !important;
+    }
+    select option { background-color: #1E293B; color: #F8FAFC; }
+    .brand-library input[type="text"] {
+      color-scheme: dark;
+      background-color: #1E293B;
+      color: #F8FAFC;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
     
     /* Premium input focus */
     input:focus, textarea:focus, select:focus { border-color: rgba(124,58,237,0.45) !important; box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }

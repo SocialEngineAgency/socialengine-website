@@ -27,6 +27,8 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /id="brand-lib-file" multiple/);
   assert.match(src, /data-asset-kind/);
   assert.match(src, /retagKinds/);
+  assert.match(src, /background-color: #1E293B/);
+  assert.match(src, /color-scheme: dark/);
   assert.match(src, /const files = \[\.\.\.\(e\.target\.files/);
 });
 
