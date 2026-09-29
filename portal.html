@@ -97,6 +97,30 @@
       border: 1px solid rgba(255,255,255,0.12);
     }
     .brand-lib-expand-hex { color: #94A3B8; font-size: 0.75rem; margin-top: 6px; }
+    .brand-lib-views {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 12px 90px;
+    }
+    .brand-lib-view {
+      width: 72px;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      background: #0f172a;
+      cursor: zoom-in;
+      overflow: hidden;
+    }
+    .brand-lib-view img { width: 100%; height: 72px; object-fit: cover; display: block; }
+    .brand-lib-view span {
+      display: block;
+      font-size: 0.62rem;
+      color: #94A3B8;
+      padding: 4px 6px;
+      text-align: center;
+      line-height: 1.2;
+    }
     
     /* Premium input focus */
     input:focus, textarea:focus, select:focus { border-color: rgba(124,58,237,0.45) !important; box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }
@@ -9983,6 +10007,10 @@
       return `<img src="${safeUrl}" alt="${label}" referrerpolicy="no-referrer">`;
     }
 
+    function brandLibViewLabel(label) {
+      return String(label || 'view').replace(/_/g, ' ');
+    }
+
     function paintBrandLibrary(root, assets, drafts) {
       if (!root) return;
       if (Array.isArray(drafts)) _brandLibDrafts = drafts;
@@ -9996,6 +10024,7 @@
       const prevKind = String(root.querySelector('#brand-lib-kind')?.value || 'scene');
       const prevGenKind = String(root.querySelector('#brand-lib-gen-kind')?.value || 'scene');
       const visible = prevFilter ? filterCollection(assets || [], prevFilter) : (assets || []);
+      const showFigureLabsGenerate = typeof isCharityClient === 'function' && isCharityClient(window.__clientData || window.clientData || {});
       const rows = visible.map((a) => {
         const summary = String((a.analysis && a.analysis.summary) || '').trim();
         const collection = String(a.collection || (a.analysis && a.analysis.collection) || '').trim();
@@ -10006,10 +10035,29 @@
         ).join('');
         const thumb = brandLibPreviewHtml(a, 'thumb', helpers);
         const expanded = brandLibPreviewHtml(a, 'expand', helpers);
+        const views = Array.isArray(a.views) ? a.views.filter((v) => v && /^https?:\/\//i.test(String(v.url || ''))) : [];
+        const viewStrip = views.length ? `
+          <div class="brand-lib-views" data-asset-views-of="${escapeHtml(a.id)}">
+            ${views.map((v) => {
+              const viewId = `${a.id}::${v.label || 'view'}`;
+              const viewName = brandLibViewLabel(v.label);
+              return `<button type="button" class="brand-lib-view" data-asset-expand="${escapeHtml(viewId)}" aria-expanded="false" aria-label="Preview ${escapeHtml(viewName)}">
+                <img src="${escapeHtml(v.url)}" alt="${escapeHtml(viewName)}" loading="lazy" referrerpolicy="no-referrer">
+                <span>${escapeHtml(viewName)}</span>
+              </button>`;
+            }).join('')}
+          </div>
+          ${views.map((v) => {
+            const viewId = `${a.id}::${v.label || 'view'}`;
+            const viewName = brandLibViewLabel(v.label);
+            return `<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(viewId)}" hidden>
+              <img src="${escapeHtml(v.url)}" alt="${escapeHtml(viewName)}" referrerpolicy="no-referrer">
+            </div>`;
+          }).join('')}` : '';
         return `
         <div class="brand-lib-item">
         <div class="brand-lib-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-          ${still ? `<input type="checkbox" data-asset-select="${escapeHtml(a.id)}" />` : '<span style="width:16px;"></span>'}
+          ${still && showFigureLabsGenerate ? `<input type="checkbox" data-asset-select="${escapeHtml(a.id)}" />` : '<span style="width:16px;"></span>'}
           ${thumb}
           <div style="flex:1;min-width:0;">
             <div style="color:#fff;font-size:0.875rem;">${escapeHtml(labelOf(a))}</div>
@@ -10018,12 +10066,13 @@
           </div>
           <select data-asset-kind="${escapeHtml(a.id)}" aria-label="Tag ${escapeHtml(labelOf(a))}" class="anim-select" style="width:auto;font-size:0.75rem;padding:4px 8px;">${kindOptions}</select>
           ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
-          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Generate views</button>` : ''}
+          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Make Multiview</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
           <button type="button" class="settings-tab" data-asset-delete="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Delete</button>
         </div>
         ${expanded ? `<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(a.id)}" hidden>${expanded}</div>` : ''}
+        ${viewStrip}
         </div>`;
       }).join('');
       const pastCards = (_brandLibPastOpen ? (_brandLibPastItems || []) : []).filter((it) => /^https?:\/\//i.test(String(it.image_url || ''))).map((it) => `
@@ -10080,10 +10129,10 @@
           <input type="file" id="brand-lib-file" multiple hidden />
           <button type="button" id="brand-lib-upload" class="settings-tab" style="padding:6px 12px;">Upload files</button>
         </div>
-        <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
-          <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 8px;">Generate from selected stills (2–8). Fashion accounts without FigureLabs get a clear error.</p>
+        ${showFigureLabsGenerate ? `<div id="brand-lib-figurelabs" style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 8px;">FigureLabs diagrams only — medical, scientific, or technical. Select 2–8 stills. Not for fashion or product shots.</p>
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-            <input id="brand-lib-gen-prompt" type="text" placeholder="5 new home scenes: bedroom, living room, kitchen, garden, hallway" value="${escapeHtml(prevPrompt)}" style="flex:1;min-width:220px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
+            <input id="brand-lib-gen-prompt" type="text" placeholder="5 labeled diagrams: anatomy, equipment, process" value="${escapeHtml(prevPrompt)}" style="flex:1;min-width:220px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
             <select id="brand-lib-gen-kind" class="anim-select" style="width:auto;">
               <option value="scene">Scene</option>
               <option value="character">Character</option>
@@ -10091,7 +10140,7 @@
             </select>
             <button type="button" id="brand-lib-generate" class="settings-tab" style="padding:6px 12px;">Generate</button>
           </div>
-        </div>
+        </div>` : ''}
         ${draftCards ? `<div id="brand-lib-drafts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px;">${draftCards}</div>` : ''}`;
       const kindSel = root.querySelector('#brand-lib-kind');
       const fileEl = root.querySelector('#brand-lib-file');
@@ -10299,11 +10348,11 @@
               body: '{}',
             });
             const d = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(d.error || 'Could not generate views');
+            if (!res.ok) throw new Error(d.error || 'Could not make multiview');
             paintBrandLibrary(root, d.assets || assets);
-            if (typeof showToast === 'function') showToast('Four views saved on this asset', 'success');
+            if (typeof showToast === 'function') showToast('Multiview saved under this asset', 'success');
           } catch (err) {
-            if (typeof showToast === 'function') showToast(err.message || 'Generate views failed', 'error');
+            if (typeof showToast === 'function') showToast(err.message || 'Make Multiview failed', 'error');
           } finally {
             btn.disabled = false;
           }
