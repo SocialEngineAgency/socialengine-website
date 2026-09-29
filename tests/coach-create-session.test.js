@@ -39,13 +39,21 @@ test('a 25 second VO brief keeps duration 25 and library attachments', () => {
     outro_url: 'https://store.test/opa-outro.mp4',
     music_bed_url: 'https://store.test/soft.mp3',
     ref_image_urls: ['https://store.test/kitchen.png'],
+    library_asset_ids: ['ast_maya', 'ast_device'],
+    references: [
+      { url: 'https://store.test/maya.png', role: 'character', title: 'Dr Maya' },
+      { url: 'https://store.test/device.png', role: 'scene', title: 'OPA device' },
+    ],
   });
   assert.equal(s.duration, 25);
   assert.equal(s.entry, 'vo');
   assert.equal(s.outro_url, 'https://store.test/opa-outro.mp4');
+  assert.deepEqual(s.library_asset_ids, ['ast_maya', 'ast_device']);
   const applied = applyCoachCreateFields(s, { animPrompt: { value: '' } });
   assert.equal(applied.outro_url, 'https://store.test/opa-outro.mp4');
   assert.deepEqual(applied.ref_image_urls, ['https://store.test/kitchen.png']);
+  assert.equal(applied.references.length, 2);
+  assert.equal(applied.references[0].role, 'character');
 });
 
 test('design destination opens Design Studio', () => {

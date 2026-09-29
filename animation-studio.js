@@ -15,14 +15,16 @@
   let _captionPreviewRaf = 0;
   let _recentLoading = false;
   let _library = [];
-  let _refs = []; // [{ url, title, role: 'character'|'style'|'scene' }]
+  let _refs = []; // [{ url, title, role: 'character'|'item'|'setting'|'style'|'scene' }]
   let _pendingFormatTemplateId = null;
   let _pendingOutroUrl = null;
   let _pendingMusicUrl = null;
   const REF_ROLES = [
     { id: 'character', label: 'Char' },
-    { id: 'style', label: 'Style' },
+    { id: 'item', label: 'Item' },
+    { id: 'setting', label: 'Setting' },
     { id: 'scene', label: 'Scene' },
+    { id: 'style', label: 'Style' },
   ];
 
   function defaultRefRole() {
@@ -1085,7 +1087,7 @@
         <div class="anim-empty">
           <div class="anim-empty__title">Animation canvas</div>
           <div class="anim-empty__desc">Pick a mode, attach tagged refs, and describe one idea. AI looks at the images, then writes distinct shots. Accept to generate character views, scenes, and shots here.</div>
-          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong> + <strong>Scene</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
+          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong>, <strong>Item</strong>, <strong>Setting</strong>, or <strong>Scene</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
         </div>
         ${recentHtml}`;
       el.querySelectorAll('[data-open-project]').forEach((btn) => {
@@ -2431,7 +2433,7 @@
     const box = document.getElementById('anim-refs');
     if (!box) return;
     if (!_refs.length) {
-      box.innerHTML = `<div class="anim-refs-empty">Add refs and tag roles: Character = identity (tag EACH person as Char), Style = art look, Scene = setting</div>`;
+      box.innerHTML = `<div class="anim-refs-empty">Add refs and tag roles: Char = one person, Item = object, Setting = group of people (family, friends, classroom), Scene = place, Style = look</div>`;
       return;
     }
     box.innerHTML = _refs.map((r, i) => `
@@ -2574,14 +2576,19 @@
       seen.add(u);
       nextRefs.push({ url: u, title: title || 'Coach ref', role });
     };
-    if (result.attached_image_url) {
-      pushRef(result.attached_image_url, (s && s.product_name) || 'Coach ref', 'character');
+    const tagged = Array.isArray(result.references) ? result.references : [];
+    if (tagged.length) {
+      tagged.forEach((r) => pushRef(r.url, r.name || r.title || 'Library ref', r.role || 'scene'));
+    } else {
+      if (result.attached_image_url) {
+        pushRef(result.attached_image_url, (s && s.product_name) || 'Coach ref', 'character');
+      }
+      const extras = Array.isArray(result.ref_image_urls) ? result.ref_image_urls : [];
+      extras.forEach((url, i) => {
+        const role = nextRefs.some((r) => r.role === 'character') ? 'scene' : (i === 0 ? 'character' : 'scene');
+        pushRef(url, 'Collection still', role);
+      });
     }
-    const extras = Array.isArray(result.ref_image_urls) ? result.ref_image_urls : [];
-    extras.forEach((url, i) => {
-      const role = nextRefs.some((r) => r.role === 'character') ? 'scene' : (i === 0 ? 'character' : 'scene');
-      pushRef(url, 'Collection still', role);
-    });
     if (nextRefs.length) {
       _refs = nextRefs.slice(0, 8);
       renderRefs();
@@ -2880,13 +2887,14 @@
                 ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
               </div>
               ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">AI can see tagged refs (Char = identity, Scene = environment). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
+              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">AI can see tagged refs (Char = one person, Item = object, Setting = group, Scene = place). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
               ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">Voiceover and music generation aren't enabled on this account — captions, uploaded music and outros still work.</div>` : ''}
-              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— tag every person as Char · Scene for setting · Style optional</span></div>
+              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char = one person · Item = object · Setting = group · Scene = place · Style optional</span></div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
                 <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-upload" style="padding:7px 10px;font-size:0.72rem;width:auto;white-space:nowrap;">Upload</button>
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-library" style="padding:7px 10px;font-size:0.72rem;width:auto;white-space:nowrap;">Library</button>
                 <input type="url" id="anim-ref-url" class="anim-ref-url" placeholder="Paste image URL…" />
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-add-url" style="padding:7px 10px;font-size:0.72rem;width:auto;">Add</button>
               </div>
@@ -2916,6 +2924,33 @@
     document.getElementById('anim-new')?.addEventListener('click', newProject);
     document.getElementById('anim-home')?.addEventListener('click', goHome);
     document.getElementById('anim-ref-upload')?.addEventListener('click', () => document.getElementById('anim-ref-file')?.click());
+    document.getElementById('anim-ref-library')?.addEventListener('click', () => {
+      const open = window.openLibraryPicker;
+      if (typeof open !== 'function') return toast('Open Library from the sidebar first', 'error');
+      open({
+        title: 'Add Library refs',
+        kinds: ['character', 'item', 'setting', 'scene', 'logo', 'plate'],
+        onPick: (picked, ids) => {
+          const refs = (window.SEAssets && typeof window.SEAssets.refsFromAssets === 'function')
+            ? window.SEAssets.refsFromAssets(picked, ids)
+            : (picked || []).map((a) => ({
+              url: a.url,
+              title: a.name || a.kind,
+              role: a.kind === 'character' ? 'character' : (a.kind === 'item' ? 'item' : (a.kind === 'setting' ? 'setting' : 'scene')),
+            }));
+          const seen = new Set(_refs.map((r) => r.url));
+          refs.forEach((r) => {
+            const u = String(r.url || '').trim();
+            if (!u || seen.has(u)) return;
+            seen.add(u);
+            _refs.push({ url: u, title: r.title || r.name || 'Library ref', role: r.role || 'scene' });
+          });
+          _refs = _refs.slice(0, 8);
+          renderRefs();
+          if (refs.length) toast('Library refs attached — tag Char vs Scene, then Write shots.', 'success');
+        },
+      });
+    });
     document.getElementById('anim-ref-file')?.addEventListener('change', async (e) => {
       const files = [...(e.target.files || [])];
       for (const f of files) await uploadRefFile(f);
