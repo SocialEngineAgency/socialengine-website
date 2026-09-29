@@ -58,6 +58,45 @@
       color: #F8FAFC;
       border: 1px solid rgba(255,255,255,0.14);
     }
+    .brand-lib-thumb {
+      width: 64px;
+      height: 64px;
+      border-radius: 10px;
+      overflow: hidden;
+      flex-shrink: 0;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: #0f172a;
+      cursor: zoom-in;
+    }
+    .brand-lib-thumb img,
+    .brand-lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .brand-lib-thumb--empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94A3B8;
+      font-size: 0.68rem;
+      cursor: default;
+    }
+    .brand-lib-thumb[data-asset-expand].brand-lib-thumb--empty { cursor: zoom-in; font-size: 1.25rem; color: #E9D5FF; }
+    .brand-lib-expand { margin: 6px 0 10px 90px; }
+    .brand-lib-expand img,
+    .brand-lib-expand video {
+      max-width: min(420px, 100%);
+      max-height: 420px;
+      border-radius: 12px;
+      object-fit: contain;
+      background: #0f172a;
+      display: block;
+    }
+    .brand-lib-expand-swatch {
+      width: 160px;
+      height: 160px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .brand-lib-expand-hex { color: #94A3B8; font-size: 0.75rem; margin-top: 6px; }
     
     /* Premium input focus */
     input:focus, textarea:focus, select:focus { border-color: rgba(124,58,237,0.45) !important; box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }
@@ -9901,6 +9940,47 @@
       if (typeof showToast === 'function') showToast('Ready — open Design or Animate to use this still', 'success');
     }
 
+    function safeBrandLibHex(value) {
+      const hex = String(value || '').trim();
+      return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(hex) ? hex : '#334155';
+    }
+
+    function brandLibPreviewHtml(a, mode, helpers) {
+      const family = (helpers.persistFamily ? helpers.persistFamily(a.kind) : '') || (a.kind === 'color' ? 'color' : a.kind === 'music' ? 'audio' : ['outro', 'intro', 'shot'].includes(a.kind) ? 'video' : 'image');
+      const id = escapeHtml(a.id);
+      const label = escapeHtml((helpers.labelOf ? helpers.labelOf(a) : (a.name || a.kind)));
+      if (a.kind === 'color' || family === 'color') {
+        const hex = safeBrandLibHex(a.hex || a.url);
+        if (mode === 'thumb') {
+          return `<button type="button" class="brand-lib-thumb brand-lib-thumb--swatch" data-asset-expand="${id}" aria-expanded="false" aria-label="Preview ${label}" style="background:${hex}"></button>`;
+        }
+        return `<div class="brand-lib-expand-swatch" style="background:${hex}"></div><div class="brand-lib-expand-hex">${escapeHtml(hex)}</div>`;
+      }
+      const url = String(a.url || '').trim();
+      const safeUrl = escapeHtml(url);
+      if (!url) {
+        return mode === 'thumb'
+          ? `<span class="brand-lib-thumb brand-lib-thumb--empty">${escapeHtml((helpers.kindLabel && helpers.kindLabel(a.kind)) || 'File')}</span>`
+          : '';
+      }
+      if (family === 'audio') {
+        if (mode === 'thumb') {
+          return `<button type="button" class="brand-lib-thumb brand-lib-thumb--empty" data-asset-expand="${id}" aria-expanded="false" aria-label="Preview ${label}">♪</button>`;
+        }
+        return `<audio controls src="${safeUrl}" style="width:min(420px,100%);"></audio>`;
+      }
+      if (family === 'video') {
+        if (mode === 'thumb') {
+          return `<button type="button" class="brand-lib-thumb" data-asset-expand="${id}" aria-expanded="false" aria-label="Preview ${label}"><video src="${safeUrl}" muted preload="metadata" playsinline></video></button>`;
+        }
+        return `<video src="${safeUrl}" controls playsinline></video>`;
+      }
+      if (mode === 'thumb') {
+        return `<button type="button" class="brand-lib-thumb" data-asset-expand="${id}" aria-expanded="false" aria-label="Preview ${label}"><img src="${safeUrl}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`;
+      }
+      return `<img src="${safeUrl}" alt="${label}" referrerpolicy="no-referrer">`;
+    }
+
     function paintBrandLibrary(root, assets, drafts) {
       if (!root) return;
       if (Array.isArray(drafts)) _brandLibDrafts = drafts;
@@ -9922,9 +10002,13 @@
         const kindOptions = kindChoices.map((k) =>
           `<option value="${escapeHtml(k)}" ${k === a.kind ? 'selected' : ''}>${escapeHtml((helpers.kindLabel && helpers.kindLabel(k)) || k)}</option>`
         ).join('');
+        const thumb = brandLibPreviewHtml(a, 'thumb', helpers);
+        const expanded = brandLibPreviewHtml(a, 'expand', helpers);
         return `
-        <div class="brand-lib-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
-          ${still ? `<input type="checkbox" data-asset-select="${escapeHtml(a.id)}" style="margin-top:4px;" />` : '<span style="width:16px;"></span>'}
+        <div class="brand-lib-item">
+        <div class="brand-lib-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+          ${still ? `<input type="checkbox" data-asset-select="${escapeHtml(a.id)}" />` : '<span style="width:16px;"></span>'}
+          ${thumb}
           <div style="flex:1;min-width:0;">
             <div style="color:#fff;font-size:0.875rem;">${escapeHtml(labelOf(a))}</div>
             ${summary ? `<div style="font-size:0.75rem;color:rgba(148,163,184,0.85);margin-top:2px;">${escapeHtml(summary)}</div>` : ''}
@@ -9936,6 +10020,8 @@
           ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
           <button type="button" class="settings-tab" data-asset-delete="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Delete</button>
+        </div>
+        ${expanded ? `<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(a.id)}" hidden>${expanded}</div>` : ''}
         </div>`;
       }).join('');
       const draftCards = (_brandLibDrafts || []).map((d) => `
@@ -10229,6 +10315,20 @@
             paintBrandLibrary(root, d.assets || []);
           } catch (err) {
             if (typeof showToast === 'function') showToast(err.message || 'Delete failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-asset-expand]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-asset-expand');
+          const panel = root.querySelector('[data-asset-expand-panel="' + CSS.escape(id) + '"]');
+          if (!panel) return;
+          const open = !panel.hidden;
+          root.querySelectorAll('[data-asset-expand-panel]').forEach((el) => { el.hidden = true; });
+          root.querySelectorAll('[data-asset-expand]').forEach((el) => el.setAttribute('aria-expanded', 'false'));
+          if (!open) {
+            panel.hidden = false;
+            btn.setAttribute('aria-expanded', 'true');
           }
         });
       });

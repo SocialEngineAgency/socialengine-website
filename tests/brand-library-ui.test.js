@@ -30,6 +30,9 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /background-color: #1E293B/);
   assert.match(src, /color-scheme: dark/);
   assert.match(src, /const files = \[\.\.\.\(e\.target\.files/);
+  assert.match(src, /brand-lib-thumb/);
+  assert.match(src, /data-asset-expand/);
+  assert.match(src, /data-asset-expand-panel/);
 });
 
 test('Animate applies Coach library refs without auto-Send', () => {
