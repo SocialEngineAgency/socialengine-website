@@ -18,6 +18,12 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /\/api\/assets\/generate/);
   assert.match(src, /\/api\/assets\/harvest/);
   assert.match(src, /generate-views/);
+  assert.match(src, /Make Multiview/);
+  assert.match(src, /brand-lib-views/);
+  assert.match(src, /data-asset-views-of/);
+  assert.match(src, /showFigureLabsGenerate/);
+  assert.match(src, /FigureLabs diagrams only/);
+  assert.doesNotMatch(src, /Fashion accounts without FigureLabs/);
   assert.match(src, /more-like-this/);
   assert.match(src, /Add to library/);
   assert.match(src, /Use now/i);
