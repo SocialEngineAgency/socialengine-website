@@ -97,29 +97,77 @@
       border: 1px solid rgba(255,255,255,0.12);
     }
     .brand-lib-expand-hex { color: #94A3B8; font-size: 0.75rem; margin-top: 6px; }
-    .brand-lib-views {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 0 0 12px 90px;
+    .brand-lib-sheet {
+      margin: 8px 0 18px 26px;
+      padding: 12px 14px 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(30,41,59,0.55), rgba(15,23,42,0.8));
     }
-    .brand-lib-view {
-      width: 72px;
+    .brand-lib-sheet__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .brand-lib-sheet__title { color: #F8FAFC; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; }
+    .brand-lib-sheet__meta { color: #94A3B8; font-size: 0.72rem; }
+    .brand-lib-sheet__grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 720px) {
+      .brand-lib-sheet { margin-left: 0; }
+      .brand-lib-sheet__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .brand-lib-sheet__cell {
       padding: 0;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px;
-      background: #0f172a;
+      border: 0;
+      background: transparent;
       cursor: zoom-in;
+      text-align: left;
+      width: 100%;
+    }
+    .brand-lib-sheet__cell:disabled { cursor: default; }
+    .brand-lib-sheet__frame {
+      aspect-ratio: 3 / 4;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0b1220;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .brand-lib-sheet__frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .brand-lib-sheet__frame--wait {
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.03), rgba(124,58,237,0.18), rgba(255,255,255,0.03));
+      background-size: 200% 100%;
+      animation: brandLibSheetWait 1.2s ease-in-out infinite;
+    }
+    @keyframes brandLibSheetWait {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .brand-lib-sheet__cap {
+      display: block;
+      margin-top: 6px;
+      font-size: 0.72rem;
+      color: #CBD5E1;
+      font-weight: 600;
+    }
+    .brand-lib-progress {
+      height: 4px;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
       overflow: hidden;
     }
-    .brand-lib-view img { width: 100%; height: 72px; object-fit: cover; display: block; }
-    .brand-lib-view span {
+    .brand-lib-progress > span {
       display: block;
-      font-size: 0.62rem;
-      color: #94A3B8;
-      padding: 4px 6px;
-      text-align: center;
-      line-height: 1.2;
+      height: 100%;
+      background: #7C3AED;
+      transition: width 0.25s ease;
     }
     
     /* Premium input focus */
@@ -9904,6 +9952,8 @@
     let _brandLibDrafts = [];
     let _brandLibPastOpen = false;
     let _brandLibPastItems = [];
+    let _brandLibBusy = {};
+    const BRAND_LIB_VIEW_LABELS = ['front', 'three_quarter', 'side', 'expression_neutral'];
 
     function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo', 'style'], onPick } = {}) {
       return fetchAssetLibrary().then((assets) => {
@@ -10008,7 +10058,12 @@
     }
 
     function brandLibViewLabel(label) {
-      return String(label || 'view').replace(/_/g, ' ');
+      return ({
+        front: 'Front',
+        three_quarter: 'Three-quarter',
+        side: 'Side',
+        expression_neutral: 'Neutral',
+      })[String(label || '')] || String(label || 'View').replace(/_/g, ' ');
     }
 
     function paintBrandLibrary(root, assets, drafts) {
@@ -10040,24 +10095,41 @@
         const thumb = brandLibPreviewHtml(a, 'thumb', helpers);
         const expanded = brandLibPreviewHtml(a, 'expand', helpers);
         const views = Array.isArray(a.views) ? a.views.filter((v) => v && /^https?:\/\//i.test(String(v.url || ''))) : [];
-        const viewStrip = views.length ? `
-          <div class="brand-lib-views" data-asset-views-of="${escapeHtml(a.id)}">
-            ${views.map((v) => {
-              const viewId = `${a.id}::${v.label || 'view'}`;
-              const viewName = brandLibViewLabel(v.label);
-              return `<button type="button" class="brand-lib-view" data-asset-expand="${escapeHtml(viewId)}" aria-expanded="false" aria-label="Preview ${escapeHtml(viewName)}">
-                <img src="${escapeHtml(v.url)}" alt="${escapeHtml(viewName)}" loading="lazy" referrerpolicy="no-referrer">
-                <span>${escapeHtml(viewName)}</span>
-              </button>`;
-            }).join('')}
+        const byLabel = new Map(views.map((v) => [String(v.label || ''), v]));
+        const busy = _brandLibBusy[a.id];
+        const sheetCells = [];
+        const sheetExpands = [];
+        if (busy || views.length) {
+          BRAND_LIB_VIEW_LABELS.forEach((label) => {
+            const hit = byLabel.get(label);
+            const viewName = brandLibViewLabel(label);
+            const viewId = `${a.id}::${label}`;
+            if (hit) {
+              sheetCells.push(`<button type="button" class="brand-lib-sheet__cell" data-asset-expand="${escapeHtml(viewId)}" aria-expanded="false" aria-label="Preview ${escapeHtml(viewName)}">
+                <div class="brand-lib-sheet__frame"><img src="${escapeHtml(hit.url)}" alt="${escapeHtml(viewName)}" loading="lazy" referrerpolicy="no-referrer"></div>
+                <span class="brand-lib-sheet__cap">${escapeHtml(viewName)}</span>
+              </button>`);
+              sheetExpands.push(`<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(viewId)}" hidden>
+                <img src="${escapeHtml(hit.url)}" alt="${escapeHtml(viewName)}" referrerpolicy="no-referrer">
+              </div>`);
+            } else {
+              sheetCells.push(`<div class="brand-lib-sheet__cell" aria-hidden="true">
+                <div class="brand-lib-sheet__frame brand-lib-sheet__frame--wait"></div>
+                <span class="brand-lib-sheet__cap">${escapeHtml(busy && busy.label === label ? 'Working…' : viewName)}</span>
+              </div>`);
+            }
+          });
+        }
+        const viewStrip = sheetCells.length ? `
+          <div class="brand-lib-sheet" data-asset-views-of="${escapeHtml(a.id)}">
+            <div class="brand-lib-sheet__head">
+              <span class="brand-lib-sheet__title">Multiview sheet</span>
+              <span class="brand-lib-sheet__meta">${busy ? `Making ${brandLibViewLabel(busy.label)} · ${busy.done} of ${busy.total}` : `${views.length} angles`}</span>
+            </div>
+            <div class="brand-lib-sheet__grid">${sheetCells.join('')}</div>
+            ${busy ? `<div class="brand-lib-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${busy.total}" aria-valuenow="${busy.done}"><span style="width:${Math.round((busy.done / busy.total) * 100)}%"></span></div>` : ''}
           </div>
-          ${views.map((v) => {
-            const viewId = `${a.id}::${v.label || 'view'}`;
-            const viewName = brandLibViewLabel(v.label);
-            return `<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(viewId)}" hidden>
-              <img src="${escapeHtml(v.url)}" alt="${escapeHtml(viewName)}" referrerpolicy="no-referrer">
-            </div>`;
-          }).join('')}` : '';
+          ${sheetExpands.join('')}` : '';
         return `
         <div class="brand-lib-item">
         <div class="brand-lib-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -10073,7 +10145,7 @@
           </div>
           <select data-asset-kind="${escapeHtml(a.id)}" aria-label="Tag ${escapeHtml(labelOf(a))}" class="anim-select" style="width:auto;font-size:0.75rem;padding:4px 8px;">${kindOptions}</select>
           ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
-          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Make Multiview</button>` : ''}
+          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" ${busy ? 'disabled' : ''} style="padding:4px 10px;font-size:0.75rem;">${busy ? `Making ${busy.done}/${busy.total}` : (views.length ? 'Remake Multiview' : 'Make Multiview')}</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-analyze="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">${unlabeled ? 'Label with AI' : 'Relabel'}</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
@@ -10366,21 +10438,36 @@
       root.querySelectorAll('[data-asset-views]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-asset-views');
-          btn.disabled = true;
+          if (!id || _brandLibBusy[id]) return;
+          const current = (assets || []).find((a) => a.id === id);
+          let lastAssets = assets;
           try {
-            const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/generate-views', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: '{}',
-            });
-            const d = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(d.error || 'Could not make multiview');
-            paintBrandLibrary(root, d.assets || assets);
-            if (typeof showToast === 'function') showToast('Multiview saved under this asset', 'success');
+            if (typeof showToast === 'function') {
+              showToast(`Making a 4-angle sheet for ${current ? (current.name || current.kind) : 'this still'}…`, 'success');
+            }
+            for (let i = 0; i < BRAND_LIB_VIEW_LABELS.length; i++) {
+              const label = BRAND_LIB_VIEW_LABELS[i];
+              _brandLibBusy[id] = { done: i, total: 4, label };
+              paintBrandLibrary(root, lastAssets);
+              const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/generate-views', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label }),
+              });
+              const d = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(d.error || 'Could not make multiview');
+              lastAssets = d.assets || lastAssets;
+              _brandLibBusy[id] = { done: i + 1, total: 4, label };
+              const got = ((d.asset && d.asset.views) || []).length;
+              if (i === 0 && got >= 4) break;
+            }
+            delete _brandLibBusy[id];
+            paintBrandLibrary(root, lastAssets);
+            if (typeof showToast === 'function') showToast('Multiview sheet ready', 'success');
           } catch (err) {
+            delete _brandLibBusy[id];
+            paintBrandLibrary(root, lastAssets);
             if (typeof showToast === 'function') showToast(err.message || 'Make Multiview failed', 'error');
-          } finally {
-            btn.disabled = false;
           }
         });
       });
