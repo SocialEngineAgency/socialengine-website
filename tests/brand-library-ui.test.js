@@ -19,7 +19,10 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /\/api\/assets\/harvest/);
   assert.match(src, /generate-views/);
   assert.match(src, /Make Multiview/);
-  assert.match(src, /brand-lib-views/);
+  assert.match(src, /brand-lib-sheet/);
+  assert.match(src, /brand-lib-progress/);
+  assert.match(src, /4-angle sheet/);
+  assert.match(src, /JSON\.stringify\(\{ label \}\)/);
   assert.match(src, /data-asset-views-of/);
   assert.match(src, /showFigureLabsGenerate/);
   assert.match(src, /FigureLabs diagrams only/);
