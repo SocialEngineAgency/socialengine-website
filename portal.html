@@ -8826,8 +8826,8 @@
               <div class="grow-empty__icon"><i data-lucide="trending-up" style="width:28px;height:28px;"></i></div>
               <div class="grow-empty__title">${fbOnly ? 'Instagram Business still needed' : 'Connect Meta to see your growth'}</div>
               <div class="grow-empty__desc">${fbOnly
-                ? 'Your Facebook Page is linked, but Grow needs the Instagram Business account attached to that Page. In Meta Business Suite, link OPA’s Instagram to the Page, then click Connect Instagram below and pick that Page.'
-                : 'Connect Instagram (with the Facebook Page that has OPA’s Instagram Business linked). That saves Meta tokens and unlocks live reach, engagement, and insights.'}</div>
+                ? 'Your Facebook Page is linked, but Grow needs the Instagram Business account attached to that Page. In Meta Business Suite, link your Instagram Business account to the Page, then click Connect Instagram below and pick that Page.'
+                : 'Connect Instagram (with the Facebook Page that has your Instagram Business account linked). That saves Meta tokens and unlocks live reach, engagement, and insights.'}</div>
               <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
                 <button class="grow-cta-btn" style="width:auto;" onclick="connectInstagramOAuth()"><i data-lucide="instagram" style="width:16px;height:16px;"></i> Connect Instagram</button>
                 <button class="grow-ghost-btn" style="width:auto;" onclick="connectFacebookOAuth()"><i data-lucide="facebook" style="width:15px;height:15px;"></i> Connect Facebook</button>
@@ -11442,7 +11442,14 @@
       }
 
       // Chat history persistence
-      const CHAT_STORAGE_KEY = 'se_chat_history_' + clientEmail;
+      const _coachClientId = (clientData && clientData.client && clientData.client.id) || '';
+      const _coachBrand = (clientData && clientData.client && clientData.client.business_name) || '';
+      const CHAT_STORAGE_KEY = 'se_chat_history_' + (_coachClientId || (_coachBrand + '_' + clientEmail));
+      // Drop legacy email-only history so OPA turns cannot reappear under Bunny Boiler.
+      try {
+        const legacyKey = 'se_chat_history_' + clientEmail;
+        if (legacyKey !== CHAT_STORAGE_KEY) localStorage.removeItem(legacyKey);
+      } catch (e) {}
       let chatHistory = [];
       try { chatHistory = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || '[]'); } catch(e) { chatHistory = []; }
 
@@ -11787,9 +11794,16 @@
           let products = (window._seStudioCatalog || []);
           if (!products.length) {
             try {
-              const r = await apiFetch(`${API}/api/client-data`, { headers: authHeaders() });
+              // catalog_products was removed from /api/client-data — Studio/Coach
+              // must use the paginated Shopify catalog endpoint.
+              const r = await apiFetch(`${API}/api/studio/products?limit=250&page=1`, { headers: authHeaders() });
               const d = await r.json().catch(() => ({}));
-              products = d?.catalog_products || [];
+              products = (Array.isArray(d?.products) ? d.products : []).map((p) => ({
+                title: p.title || '',
+                image_url: p.primary_image || p.image_url || (p.images && p.images[0] && p.images[0].url) || '',
+                id: p.id || '',
+                price: p.price || '',
+              }));
               window._seStudioCatalog = products;
             } catch {}
           }
