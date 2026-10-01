@@ -118,6 +118,12 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
+    .brand-lib-sheet__grid--single {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: min(320px, 100%);
+    }
+    .brand-lib-sheet__frame--sheet { aspect-ratio: 1 / 1; }
+    .brand-lib-sheet__frame--sheet img { object-fit: contain; }
     @media (max-width: 720px) {
       .brand-lib-sheet { margin-left: 0; }
       .brand-lib-sheet__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -9953,7 +9959,6 @@
     let _brandLibPastOpen = false;
     let _brandLibPastItems = [];
     let _brandLibBusy = {};
-    const BRAND_LIB_VIEW_LABELS = ['front', 'three_quarter', 'side', 'expression_neutral'];
 
     function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo', 'style'], onPick } = {}) {
       return fetchAssetLibrary().then((assets) => {
@@ -10057,15 +10062,6 @@
       return `<img src="${safeUrl}" alt="${label}" referrerpolicy="no-referrer">`;
     }
 
-    function brandLibViewLabel(label) {
-      return ({
-        front: 'Front',
-        three_quarter: 'Three-quarter',
-        side: 'Side',
-        expression_neutral: 'Neutral',
-      })[String(label || '')] || String(label || 'View').replace(/_/g, ' ');
-    }
-
     function paintBrandLibrary(root, assets, drafts) {
       if (!root) return;
       if (Array.isArray(drafts)) _brandLibDrafts = drafts;
@@ -10095,41 +10091,46 @@
         const thumb = brandLibPreviewHtml(a, 'thumb', helpers);
         const expanded = brandLibPreviewHtml(a, 'expand', helpers);
         const views = Array.isArray(a.views) ? a.views.filter((v) => v && /^https?:\/\//i.test(String(v.url || ''))) : [];
-        const byLabel = new Map(views.map((v) => [String(v.label || ''), v]));
-        const busy = _brandLibBusy[a.id];
-        const sheetCells = [];
-        const sheetExpands = [];
-        if (busy || views.length) {
-          BRAND_LIB_VIEW_LABELS.forEach((label) => {
-            const hit = byLabel.get(label);
-            const viewName = brandLibViewLabel(label);
-            const viewId = `${a.id}::${label}`;
-            if (hit) {
-              sheetCells.push(`<button type="button" class="brand-lib-sheet__cell" data-asset-expand="${escapeHtml(viewId)}" aria-expanded="false" aria-label="Preview ${escapeHtml(viewName)}">
-                <div class="brand-lib-sheet__frame"><img src="${escapeHtml(hit.url)}" alt="${escapeHtml(viewName)}" loading="lazy" referrerpolicy="no-referrer"></div>
-                <span class="brand-lib-sheet__cap">${escapeHtml(viewName)}</span>
-              </button>`);
-              sheetExpands.push(`<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(viewId)}" hidden>
-                <img src="${escapeHtml(hit.url)}" alt="${escapeHtml(viewName)}" referrerpolicy="no-referrer">
-              </div>`);
-            } else {
-              sheetCells.push(`<div class="brand-lib-sheet__cell" aria-hidden="true">
-                <div class="brand-lib-sheet__frame brand-lib-sheet__frame--wait"></div>
-                <span class="brand-lib-sheet__cap">${escapeHtml(busy && busy.label === label ? 'Working…' : viewName)}</span>
-              </div>`);
-            }
-          });
-        }
-        const viewStrip = sheetCells.length ? `
+        const busy = !!_brandLibBusy[a.id];
+        const hasSheet = a.multiview_kind === 'sheet' || !!String(a.sheet_url || '').trim();
+        const hadLegacyViews = views.length > 0;
+        const showSheetStrip = busy || hasSheet || hadLegacyViews;
+        const sheetThumbUrl = (() => {
+          const sheet = String(a.sheet_url || '').trim();
+          if (/^https?:\/\//i.test(sheet)) return sheet;
+          if (hasSheet && /^https?:\/\//i.test(String(a.url || ''))) return String(a.url).trim();
+          if (hadLegacyViews && /^https?:\/\//i.test(String(a.url || ''))) return String(a.url).trim();
+          return '';
+        })();
+        const canRemakeSheet = hasSheet || hadLegacyViews;
+        let viewStrip = '';
+        if (showSheetStrip) {
+          const viewId = `${a.id}::sheet`;
+          const sheetCell = sheetThumbUrl
+            ? `<button type="button" class="brand-lib-sheet__cell" data-asset-expand="${escapeHtml(viewId)}" aria-expanded="false" aria-label="Preview multiview sheet">
+                <div class="brand-lib-sheet__frame brand-lib-sheet__frame--sheet"><img src="${escapeHtml(sheetThumbUrl)}" alt="Multiview sheet" loading="lazy" referrerpolicy="no-referrer"></div>
+                <span class="brand-lib-sheet__cap">Turnaround sheet</span>
+              </button>`
+            : `<div class="brand-lib-sheet__cell" aria-hidden="true">
+                <div class="brand-lib-sheet__frame brand-lib-sheet__frame--sheet brand-lib-sheet__frame--wait"></div>
+                <span class="brand-lib-sheet__cap">Working…</span>
+              </div>`;
+          const sheetExpand = sheetThumbUrl
+            ? `<div class="brand-lib-expand" data-asset-expand-panel="${escapeHtml(viewId)}" hidden>
+                <img src="${escapeHtml(sheetThumbUrl)}" alt="Multiview sheet" referrerpolicy="no-referrer">
+              </div>`
+            : '';
+          viewStrip = `
           <div class="brand-lib-sheet" data-asset-views-of="${escapeHtml(a.id)}">
             <div class="brand-lib-sheet__head">
               <span class="brand-lib-sheet__title">Multiview sheet</span>
-              <span class="brand-lib-sheet__meta">${busy ? `Making ${brandLibViewLabel(busy.label)} · ${busy.done} of ${busy.total}` : `${views.length} angles`}</span>
+              <span class="brand-lib-sheet__meta">${busy ? 'Making sheet…' : (hasSheet ? 'Single turnaround' : 'Legacy angles — remake for one sheet')}</span>
             </div>
-            <div class="brand-lib-sheet__grid">${sheetCells.join('')}</div>
-            ${busy ? `<div class="brand-lib-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${busy.total}" aria-valuenow="${busy.done}"><span style="width:${Math.round((busy.done / busy.total) * 100)}%"></span></div>` : ''}
+            <div class="brand-lib-sheet__grid brand-lib-sheet__grid--single">${sheetCell}</div>
+            ${busy ? '<div class="brand-lib-progress" role="progressbar" aria-busy="true" aria-label="Making sheet"><span style="width:42%"></span></div>' : ''}
           </div>
-          ${sheetExpands.join('')}` : '';
+          ${sheetExpand}`;
+        }
         return `
         <div class="brand-lib-item">
         <div class="brand-lib-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -10145,7 +10146,7 @@
           </div>
           <select data-asset-kind="${escapeHtml(a.id)}" aria-label="Tag ${escapeHtml(labelOf(a))}" class="anim-select" style="width:auto;font-size:0.75rem;padding:4px 8px;">${kindOptions}</select>
           ${still ? `<button type="button" class="settings-tab" data-asset-use="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Use now</button>` : ''}
-          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" ${busy ? 'disabled' : ''} style="padding:4px 10px;font-size:0.75rem;">${busy ? `Making ${busy.done}/${busy.total}` : (views.length ? 'Remake Multiview' : 'Make Multiview')}</button>` : ''}
+          ${['character', 'item'].includes(a.kind) ? `<button type="button" class="settings-tab" data-asset-views="${escapeHtml(a.id)}" ${busy ? 'disabled' : ''} style="padding:4px 10px;font-size:0.75rem;">${busy ? 'Making sheet…' : (canRemakeSheet ? 'Remake sheet' : 'Make Multiview')}</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-more="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">More like this</button>` : ''}
           ${still ? `<button type="button" class="settings-tab" data-asset-analyze="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">${unlabeled ? 'Label with AI' : 'Relabel'}</button>` : ''}
           <button type="button" class="settings-tab" data-asset-rename="${escapeHtml(a.id)}" style="padding:4px 10px;font-size:0.75rem;">Rename</button>
@@ -10442,25 +10443,19 @@
           const current = (assets || []).find((a) => a.id === id);
           let lastAssets = assets;
           try {
+            _brandLibBusy[id] = true;
+            paintBrandLibrary(root, lastAssets);
             if (typeof showToast === 'function') {
-              showToast(`Making a 4-angle sheet for ${current ? (current.name || current.kind) : 'this still'}…`, 'success');
+              showToast(`Making sheet for ${current ? (current.name || current.kind) : 'this still'}…`, 'success');
             }
-            for (let i = 0; i < BRAND_LIB_VIEW_LABELS.length; i++) {
-              const label = BRAND_LIB_VIEW_LABELS[i];
-              _brandLibBusy[id] = { done: i, total: 4, label };
-              paintBrandLibrary(root, lastAssets);
-              const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/generate-views', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ label }),
-              });
-              const d = await res.json().catch(() => ({}));
-              if (!res.ok) throw new Error(d.error || 'Could not make multiview');
-              lastAssets = d.assets || lastAssets;
-              _brandLibBusy[id] = { done: i + 1, total: 4, label };
-              const got = ((d.asset && d.asset.views) || []).length;
-              if (i === 0 && got >= 4) break;
-            }
+            const res = await apiFetch('/api/assets/' + encodeURIComponent(id) + '/generate-views', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}',
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || 'Could not make multiview');
+            lastAssets = d.assets || lastAssets;
             delete _brandLibBusy[id];
             paintBrandLibrary(root, lastAssets);
             if (typeof showToast === 'function') showToast('Multiview sheet ready', 'success');

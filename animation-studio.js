@@ -1335,7 +1335,7 @@
               <label><input type="checkbox" id="anim-flag-music" ${f.music ? 'checked' : ''}/> Music</label>
               <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
             </div>
-            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="VO script (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
+            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="Speakable words only — no “Shot 1:” or scene labels (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
             <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px;">
               <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
                 VO vol
