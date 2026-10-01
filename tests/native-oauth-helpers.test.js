@@ -6,6 +6,7 @@ const {
   getPlatformConnectionState,
   getNativeOAuthFailureMessage,
   shouldStartNativeOAuth,
+  defaultPublishPlatforms,
 } = helpers;
 
 test('no helper builds an OAuth URL carrying credentials (starters go through /api/auth/oauth-start)', () => {
@@ -95,6 +96,30 @@ test('failure messaging explains that Grow analytics will be limited', () => {
   assert.match(message, /TikTok/i);
   assert.match(message, /Grow/i);
   assert.match(message, /limited/i);
+});
+
+test('default publish platforms add TikTok only when Upload-Post publish is connected', () => {
+  assert.deepEqual(
+    defaultPublishPlatforms(
+      { instagram_user_id: '1784', meta_page_id: '1', meta_page_token: 't' },
+      { accounts: [] }
+    ),
+    ['Instagram', 'Facebook']
+  );
+  assert.deepEqual(
+    defaultPublishPlatforms(
+      { instagram_user_id: '1784', social_connected_platforms: 'instagram,tiktok' },
+      { accounts: [{ platform: 'tiktok' }] }
+    ),
+    ['Instagram', 'TikTok']
+  );
+  assert.deepEqual(
+    defaultPublishPlatforms(
+      { instagram_user_id: '1784', tiktok_access_token: 'native-only' },
+      { accounts: [] }
+    ),
+    ['Instagram']
+  );
 });
 
 test('native OAuth follow-up starts only for publish-only connections', () => {

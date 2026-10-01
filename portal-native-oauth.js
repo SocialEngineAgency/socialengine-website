@@ -145,6 +145,16 @@
     return `${meta.label} publishing is connected, but the native analytics connection did not finish. Grow tab metrics like impressions, reach, and saves will be limited until you complete native OAuth.`;
   }
 
+  /** Destinations for new Schedule/Batch items. TikTok only when Upload-Post can publish it. */
+  function defaultPublishPlatforms(clientRecord, uploadPostSnapshot) {
+    const plats = ['Instagram'];
+    const fb = getPlatformConnectionState('facebook', clientRecord, uploadPostSnapshot);
+    const tt = getPlatformConnectionState('tiktok', clientRecord, uploadPostSnapshot);
+    if (fb.publishConnected || fb.nativeConnected) plats.push('Facebook');
+    if (tt.publishConnected) plats.push('TikTok');
+    return plats;
+  }
+
   const api = {
     PLATFORM_META,
     getPlatformConnectionState,
@@ -153,6 +163,7 @@
     isPublishingConnected,
     shouldStartNativeOAuth,
     supportsNativeOAuth,
+    defaultPublishPlatforms,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

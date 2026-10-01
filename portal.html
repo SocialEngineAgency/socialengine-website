@@ -18674,21 +18674,14 @@
   }
 
   function _defaultBatchPlatforms() {
-    const plats = ['Instagram'];
     try {
       const c = window.__clientData?.client || window.clientData?.client || {};
       const up = window.__clientData?.upload_post_connection || window.clientData?.upload_post_connection;
-      let fbOk = false;
-      if (typeof getNativeConnectionState === 'function') {
-        fbOk = !!getNativeConnectionState('facebook', c, up)?.fullyConnected
-          || !!getNativeConnectionState('facebook', c, up)?.publishConnected;
-      } else {
-        const flag = String(c.facebook_connected || '').toLowerCase();
-        fbOk = !!(c.meta_page_id && c.meta_page_token) && flag !== 'false' && flag !== '0' && flag !== 'no';
+      if (window.SENativeOAuth?.defaultPublishPlatforms) {
+        return window.SENativeOAuth.defaultPublishPlatforms(c, up);
       }
-      if (fbOk) plats.push('Facebook');
     } catch (_) {}
-    return plats;
+    return ['Instagram'];
   }
 
   function _handleBatchUpload(fileList) {
