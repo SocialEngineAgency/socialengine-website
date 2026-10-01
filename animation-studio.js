@@ -429,6 +429,21 @@
     };
   }
 
+  function defaultOutroUrl(library, current) {
+    if (current) return current;
+    const list = (library || []).filter((a) => a && a.kind === 'outro' && /^https?:\/\//i.test(a.url || ''));
+    return list[0]?.url || '';
+  }
+
+  async function maybeAttachDefaultOutro() {
+    if (!_project?.id) return;
+    if (!assembleFlags().outro || _project.outro_url) return;
+    const url = defaultOutroUrl(_library, _pendingOutroUrl || '');
+    if (!url) return;
+    _project.outro_url = url;
+    await syncMotionSettings();
+  }
+
   function captionPresets() {
     return Array.isArray(_meta?.caption_presets) ? _meta.caption_presets : [];
   }
@@ -945,6 +960,7 @@
     } catch (e) {
       if (!silent) toast(e.message || 'Could not load the library', 'error', e.request_id);
     }
+    await maybeAttachDefaultOutro();
   }
 
   function renderSavedPicker(kind, selectedUrl) {
@@ -1038,6 +1054,7 @@
       }
       // Drop dead ephemeral refs from the chip strip so broken thumbnails don't stick around.
       _refs = _refs.filter((r) => r.url && !/\/api\/media\/[a-f0-9]+/i.test(String(r.url)));
+      await maybeAttachDefaultOutro();
       renderCanvas();
       renderChat();
       renderRefs();
@@ -1318,7 +1335,7 @@
               <label><input type="checkbox" id="anim-flag-music" ${f.music ? 'checked' : ''}/> Music</label>
               <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
             </div>
-            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="VO script (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
+            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="Speakable words only — no “Shot 1:” or scene labels (used when VO is on)…">${esc(p.vo_script || p.agent_brief?.caption || '')}</textarea>
             <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px;">
               <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
                 VO vol
@@ -1743,8 +1760,8 @@
       }),
     });
     _project = data.project;
-    if (_pendingOutroUrl && !_project.outro_url) _project.outro_url = _pendingOutroUrl;
     if (_pendingMusicUrl && !_project.music_bed_url) _project.music_bed_url = _pendingMusicUrl;
+    await maybeAttachDefaultOutro();
     if (_project.outro_url || _project.music_bed_url) await syncMotionSettings();
     rememberOpenProject(_project?.id);
     return _project;
@@ -3035,6 +3052,7 @@
         }
       }
     }
+    await maybeAttachDefaultOutro();
     renderCanvas();
     renderChat();
     if (_project && (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project))) {
