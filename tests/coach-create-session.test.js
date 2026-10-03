@@ -349,7 +349,35 @@ test('Stage keeps purple spinner across remount and times out design-generate', 
   assert.match(src, /AbortSignal\.timeout\(\s*360_000\s*\)/);
   assert.match(src, /function restoreBusyUiIfGenerating/);
   assert.match(src, /restoreBusyUiIfGenerating\(\)/);
-  assert.match(src, /Scientific Infographic can take up to/);
+  assert.match(src, /CS_LEAVE_BUSY/);
+  assert.match(src, /you can leave/i);
+});
+
+test('accept carousel brief applies slides — never regenerates the master poster', () => {
+  const plan = {
+    type: 'carousel_redesign',
+    master_image_url: 'https://cdn.example/foods.png',
+    slides: [{ title: 'Hook' }, { title: 'Fact' }, { title: 'CTA' }],
+  };
+  const create = {
+    type: 'create',
+    destination: 'design',
+    prompt: 'Slide 1… Slide 9 — CTA / close with NHS advice…',
+  };
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Happy with this 9-slide plan? Confirm and I will paint the carousel.',
+    userMessage: 'accept the brief',
+    hasCanvas: true,
+    lastPlan: plan,
+    actions: [create, plan],
+  }).mode, 'apply_carousel');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'Plan ready.',
+    userMessage: 'I accept this plan',
+    hasCanvas: true,
+    lastPlan: plan,
+    actions: [create],
+  }).mode, 'apply_carousel');
 });
 
 test('Design rail refines auto-apply; first poster generates now; split with a plan applies', () => {
