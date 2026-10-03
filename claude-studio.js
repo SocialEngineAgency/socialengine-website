@@ -1891,6 +1891,11 @@
       if (data.image_url) showGeneratedImage(data.image_url, data.spec);
       else if (data.html) showDesign(data.html, data.spec);
       else throw new Error('Generation failed');
+      if (styleUrls.length && !(data.style_lock && data.style_lock.sent)) {
+        toast('Style photo did not reach the generator — re-attach it', 'error');
+      } else if (styleUrls.length && data.method && data.method !== 'figurelabs') {
+        toast('Style lock needs Scientific Infographic on this account', 'warning');
+      }
       toast('Design ready', 'success');
     } catch (e) {
       toast(e.message || 'Generation failed', 'error');
@@ -2075,7 +2080,10 @@
     } else if (!next) {
       return false;
     } else if (briefEl) {
-      if (masterImageUrl() && current && next !== current) {
+      const styles = coachStyleHttpsUrls();
+      if (styles.length && current) {
+        // Keep the operator topic. Coach layout essays fight the style image at FigureLabs.
+      } else if (masterImageUrl() && current && next !== current) {
         briefEl.value = `${current} [MODIFICATION: ${next}]`;
       } else {
         briefEl.value = next;
