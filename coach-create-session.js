@@ -297,13 +297,16 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
   const create = list.find((a) => a && a.type === 'create');
   const carousel = list.find((a) => usableCarouselPlan(a)) || (usableCarouselPlan(lastPlan) ? lastPlan : null);
   const askedSplit = !!(job && job.stage === 'split') || isCoachCarouselRedesignAsk(userMessage);
-  // Carousel plan wins over produce/refine/create — accepting a slide brief must
-  // never redraw the master poster via FigureLabs.
-  if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && (isCoachCarouselConfirmAsk(userMessage) || askedSplit)) {
-    return { mode: 'apply_carousel', action: carousel, job };
-  }
-  if (carousel && carouselHasStoredMaster(carousel, hasCanvas)) {
+  const confirmCarousel = isCoachCarouselConfirmAsk(userMessage) || askedSplit;
+  // With art on Stage, a usable carousel plan wins over produce/refine/create —
+  // accepting a slide brief must never redraw the master via FigureLabs.
+  // Without a canvas, a stale lastPlan must not block a new poster generate.
+  if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && hasCanvas) {
+    if (confirmCarousel) return { mode: 'apply_carousel', action: carousel, job };
     return { mode: 'confirm_carousel', action: carousel, job };
+  }
+  if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && !hasCanvas && confirmCarousel && !/\b(infogra\w*ic|poster|graphic)\b/.test(String(userMessage || '').toLowerCase())) {
+    return { mode: 'apply_carousel', action: carousel, job };
   }
   if (!hasCanvas && isCoachWaitingOnCreateAsk(userMessage)) {
     return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
