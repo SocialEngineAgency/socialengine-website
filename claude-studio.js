@@ -29,6 +29,8 @@
   let _csDesignId = null;
   let _csWorkspaceCleared = false;
   let _csScene = null;
+  let _csActiveDesignPoll = null; // { jobId, promise }
+  const CS_LEAVE_BUSY = 'Scientific Infographic usually takes a few minutes. You can leave Design Studio — we\'ll keep working.';
 
   function queueReady() {
     return (typeof window !== 'undefined' && window.studioQueueReady) || {
@@ -159,6 +161,130 @@
     const data = window._studioClientData || window.__clientData || window.clientData || {};
     const id = data?.client?.id || data?.client?.contact_email || data?.email || _csBrandName || 'client';
     return `se-design-last:${id}`;
+  }
+
+  function designJobStoreKey() {
+    return designStoreKey().replace('se-design-last:', 'se-design-job:');
+  }
+
+  function persistDesignJob(job) {
+    try {
+      if (!job || !job.job_id) return;
+      sessionStorage.setItem(designJobStoreKey(), JSON.stringify(job));
+    } catch (_) {}
+  }
+
+  function readDesignJob() {
+    try {
+      const raw = sessionStorage.getItem(designJobStoreKey());
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.job_id ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearDesignJob() {
+    try { sessionStorage.removeItem(designJobStoreKey()); } catch (_) {}
+  }
+
+  function designStudioMounted() {
+    return !!(document.getElementById('cs-loading') || document.getElementById('cs-brief'));
+  }
+
+  function applyCompletedDesign(data, { awayToast = false } = {}) {
+    if (data && data.brand && data.brand.name) {
+      _csBrandName = data.brand.name;
+      const pill = document.getElementById('cs-brand-pill');
+      if (pill) pill.textContent = _csBrandName;
+    }
+    if (data && data.record_id) _csDesignId = data.record_id;
+    const imageUrl = data && data.image_url;
+    if (!imageUrl) throw new Error('Generation failed');
+    if (designStudioMounted()) {
+      showGeneratedImage(imageUrl, data.spec);
+      if (!awayToast) toast('Design ready', 'success');
+    } else {
+      _csHtml = '';
+      _csWorkspaceCleared = false;
+      _csGeneratedUrl = imageUrl;
+      _csSpec = data.spec || _csSpec;
+      _csQueueSingleUrl = imageUrl;
+      _csOriginalPreviewUrl = imageUrl;
+      _csRef = {
+        url: imageUrl,
+        type: 'image',
+        title: 'Generated design',
+        source: 'generate',
+      };
+      window._studioReference = { ..._csRef };
+      persistLastDesign();
+      toast('Poster ready in Design Studio', 'success');
+    }
+  }
+
+  async function awaitDesignJob(jobId) {
+    const id = String(jobId || '').trim();
+    if (!id) throw new Error('Missing generate job');
+    if (_csActiveDesignPoll && _csActiveDesignPoll.jobId === id) {
+      return _csActiveDesignPoll.promise;
+    }
+    const started = Date.now();
+    const maxMs = 8 * 60_000;
+    const promise = (async () => {
+      persistDesignJob({ job_id: id, status: 'processing', started_at: started });
+      while (Date.now() - started < maxMs) {
+        const res = await fetch(`${apiBase()}/api/studio/design-job/${encodeURIComponent(id)}`, {
+          headers: authHeaders(),
+          signal: AbortSignal.timeout(30_000),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 404) {
+          clearDesignJob();
+          throw new Error('That generate job expired — try again');
+        }
+        if (!res.ok) throw new Error(data.error || 'Could not check generate status');
+        if (data.status === 'completed' && data.image_url) {
+          clearDesignJob();
+          return data;
+        }
+        if (data.status === 'failed') {
+          clearDesignJob();
+          const err = new Error(data.error || 'Generation failed');
+          err.code = data.code;
+          throw err;
+        }
+        persistDesignJob({ job_id: id, status: 'processing', started_at: started });
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+      throw new Error('Still generating — reopen Design Studio in a minute');
+    })().finally(() => {
+      if (_csActiveDesignPoll && _csActiveDesignPoll.jobId === id) _csActiveDesignPoll = null;
+    });
+    _csActiveDesignPoll = { jobId: id, promise };
+    return promise;
+  }
+
+  async function resumeDesignJobIfAny() {
+    const saved = readDesignJob();
+    if (!saved || !saved.job_id) return;
+    if (_csGenerating && _csActiveDesignPoll && _csActiveDesignPoll.jobId === saved.job_id) {
+      restoreBusyUiIfGenerating();
+      return;
+    }
+    if (_csGenerating && !_csActiveDesignPoll) {
+      // In-memory flag orphaned (e.g. remount after false busy) — reclaim via job poll.
+    }
+    setBusy(true, CS_LEAVE_BUSY);
+    try {
+      const data = await awaitDesignJob(saved.job_id);
+      applyCompletedDesign(data, { awayToast: false });
+    } catch (e) {
+      toast(e.message || 'Generation failed', 'error');
+    } finally {
+      setBusy(false);
+    }
   }
 
   function persistLastDesign() {
@@ -1299,6 +1425,7 @@
     renderSavedDesigns();
     restoreLastDesign();
     restoreBusyUiIfGenerating();
+    resumeDesignJobIfAny();
     if (window.__SE_COACH_MASTER_IMAGE && !masterImageUrl()) {
       setReference({
         url: window.__SE_COACH_MASTER_IMAGE,
@@ -1391,7 +1518,7 @@
   /** Session poll / nav remount wipes #cs-loading; keep the purple spinner if a generate is in flight. */
   function restoreBusyUiIfGenerating() {
     if (!_csGenerating) return;
-    setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
+    setBusy(true, CS_LEAVE_BUSY);
   }
 
   function restorePreview() {
@@ -1875,9 +2002,7 @@
     }
     _csBrief = brief;
     const styleUrls = coachStyleHttpsUrls();
-    const busyMsg = styleUrls.length
-      ? 'Scientific Infographic can take up to ~5 minutes — keep this tab open…'
-      : 'Creating your design…';
+    const busyMsg = styleUrls.length ? CS_LEAVE_BUSY : 'Creating your design…';
     setBusy(true, busyMsg);
     try {
       const payload = {
@@ -1894,7 +2019,7 @@
         payload.reference = { ..._csRef, url: hero };
         payload.photo_url = hero;
       }
-      // FigureLabs generate (~180s) + retry + 4K upscale (~180s) — fail clearly instead of silent hang
+      // FigureLabs path returns a job_id immediately; HTML/Soul stay sync.
       const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
         method: 'POST',
         headers: authHeaders(),
@@ -1909,25 +2034,32 @@
         }
         throw new Error(data.error || 'Generation failed');
       }
-      if (data.brand?.name) {
-        _csBrandName = data.brand.name;
-        const pill = document.getElementById('cs-brand-pill');
-        if (pill) pill.textContent = _csBrandName;
+      let result = data;
+      if (data.async && data.job_id) {
+        setBusy(true, CS_LEAVE_BUSY);
+        result = await awaitDesignJob(data.job_id);
+        applyCompletedDesign(result, { awayToast: false });
+      } else {
+        if (data.brand?.name) {
+          _csBrandName = data.brand.name;
+          const pill = document.getElementById('cs-brand-pill');
+          if (pill) pill.textContent = _csBrandName;
+        }
+        if (data.record_id) _csDesignId = data.record_id;
+        if (data.image_url) showGeneratedImage(data.image_url, data.spec);
+        else if (data.html) showDesign(data.html, data.spec);
+        else throw new Error('Generation failed');
+        toast('Design ready', 'success');
       }
-      if (data.record_id) _csDesignId = data.record_id;
-      if (data.image_url) showGeneratedImage(data.image_url, data.spec);
-      else if (data.html) showDesign(data.html, data.spec);
-      else throw new Error('Generation failed');
-      if (styleUrls.length && !(data.style_lock && data.style_lock.sent)) {
+      if (styleUrls.length && !(result.style_lock && result.style_lock.sent)) {
         toast('Style photo did not reach the generator — re-attach it', 'error');
-      } else if (styleUrls.length && data.method && data.method !== 'figurelabs') {
+      } else if (styleUrls.length && result.method && result.method !== 'figurelabs') {
         toast('Style lock needs Scientific Infographic on this account', 'warning');
       }
-      toast('Design ready', 'success');
     } catch (e) {
       const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
       toast(timedOut
-        ? 'Generation timed out after 6 minutes — try again, or shorten the brief'
+        ? 'Generation timed out — try again, or shorten the brief'
         : (e.message || 'Generation failed'), 'error');
     } finally {
       setBusy(false);
@@ -2125,7 +2257,7 @@
     }
     const before = _csGeneratedUrl;
     if (!_csGenerating) {
-      setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
+      setBusy(true, CS_LEAVE_BUSY);
     }
     await generate({ continueBusy: true });
     return Boolean(_csGeneratedUrl && _csGeneratedUrl !== before);
