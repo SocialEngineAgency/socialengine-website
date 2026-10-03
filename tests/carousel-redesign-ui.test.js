@@ -67,10 +67,10 @@ test('Post tab can start fresh, save, archive, and delete a design', () => {
   assert.match(setRef, /startFresh/);
 });
 
-test('Design generate waits for FigureLabs 4K upscale', () => {
+test('Design generate shows customer-facing busy copy', () => {
   const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   const gen = design.slice(design.indexOf('async function generate()'), design.indexOf('function sharedCoachStorageKey'));
-  assert.match(gen, /4K upscale/);
+  assert.match(gen, /Creating your design|Generating/i);
 });
 
 test('Coach chat sends a durable image URL and can accept a redesign plan', () => {
