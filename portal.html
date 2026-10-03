@@ -14,7 +14,7 @@
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
-  <script src="./claude-studio.js?v=20260919-tmpl-direct" defer></script>
+  <script src="./claude-studio.js?v=20261002-workspace" defer></script>
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20260929-prompt"></script>
   <script src="./animation-studio.js?v=20260929-style" defer></script>
@@ -1873,6 +1873,70 @@
       min-height: 0;
     }
     .chat-page { flex: 1; min-height: 0; min-width: 0; max-width: 100%; overflow-x: hidden; display: flex; flex-direction: column; }
+    .chat-workspace { flex: 1; min-height: 0; display: flex; gap: 0; min-width: 0; }
+    .chat-workspace-rail {
+      width: 240px; flex-shrink: 0; min-height: 0; overflow-y: auto;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      padding: 12px 10px 16px; display: flex; flex-direction: column; gap: 10px;
+      background: rgba(0,0,0,0.18);
+    }
+    .chat-workspace-rail__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .chat-workspace-rail__title { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(148,163,184,0.55); margin: 0; }
+    .chat-workspace-rail__btn {
+      border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); color: #E9D5FF;
+      font-size: 0.68rem; font-weight: 600; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-family: var(--font-body);
+    }
+    .chat-ws-project { border-radius: 8px; margin-bottom: 4px; }
+    .chat-ws-project__btn {
+      width: 100%; text-align: left; display: flex; align-items: center; gap: 6px;
+      padding: 7px 8px; border: none; background: transparent; color: #F8FAFC;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; border-radius: 8px; font-family: var(--font-body);
+    }
+    .chat-ws-project__btn:hover, .chat-ws-project.is-open > .chat-ws-project__btn { background: rgba(124,58,237,0.1); }
+    .chat-ws-kind {
+      font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 2px 5px; border-radius: 4px; background: rgba(255,255,255,0.06); color: rgba(148,163,184,0.7); flex-shrink: 0;
+    }
+    .chat-ws-threads { padding: 2px 0 6px 10px; display: none; flex-direction: column; gap: 2px; }
+    .chat-ws-project.is-open .chat-ws-threads { display: flex; }
+    .chat-ws-thread {
+      text-align: left; border: none; background: transparent; color: rgba(226,232,240,0.75);
+      font-size: 0.72rem; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-family: var(--font-body);
+    }
+    .chat-ws-thread:hover { background: rgba(255,255,255,0.04); color: #fff; }
+    .chat-ws-thread.is-active { background: rgba(124,58,237,0.18); color: #E9D5FF; font-weight: 600; }
+    .chat-ws-thread-new { margin-top: 2px; font-size: 0.68rem; color: #A78BFA; }
+    .chat-workspace-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .chat-project-strip {
+      flex-shrink: 0; margin: 0 0 8px; padding: 10px 12px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02);
+    }
+    .chat-project-strip__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .chat-project-strip__label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(148,163,184,0.5); }
+    .chat-project-strip__name { font-size: 0.82rem; font-weight: 700; color: #fff; }
+    .chat-project-strip__brief {
+      width: 100%; margin-top: 8px; min-height: 52px; resize: vertical; box-sizing: border-box;
+      padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.25); color: #E2E8F0; font-size: 0.78rem; font-family: var(--font-body); display: none;
+    }
+    .chat-project-strip.is-editing .chat-project-strip__brief { display: block; }
+    .chat-wins { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chat-win-chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px;
+      background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #6EE7B7;
+      font-size: 0.68rem; font-weight: 600;
+    }
+    .chat-win-chip button { background: none; border: none; color: inherit; cursor: pointer; padding: 0 0 0 2px; font-size: 0.9em; }
+    @media (max-width: 900px) {
+      .chat-workspace-rail { width: 180px; padding: 8px 6px; }
+    }
+    @media (max-width: 720px) {
+      .chat-workspace { flex-direction: column; }
+      .chat-workspace-rail {
+        width: 100%; max-height: 160px; border-right: none;
+        border-bottom: 1px solid rgba(255,255,255,0.06); flex-direction: row; flex-wrap: wrap; overflow-x: auto;
+      }
+    }
     .chat-page .chat-container,
     .chat-page .chat-input-area,
     .chat-page .chat-input-bar { min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; }
@@ -7327,6 +7391,20 @@
         if (typeof showToast === 'function') showToast('Coach did not send a usable prompt', 'warning');
         return false;
       }
+      const ws = window.__SE_WORKSPACE_ACTIVE || {};
+      if (ws.projectId) session.projectId = ws.projectId;
+      if (ws.threadId) session.threadId = ws.threadId;
+      if (ws.projectName) session.projectName = ws.projectName;
+      if (ws.threadName) session.threadName = ws.threadName;
+      try {
+        sessionStorage.setItem('se_workspace_handoff', JSON.stringify({
+          projectId: session.projectId || '',
+          threadId: session.threadId || '',
+          projectName: session.projectName || '',
+          threadName: session.threadName || '',
+          kind: ws.kind || '',
+        }));
+      } catch (e) {}
       window.__SE_COACH_CREATE_SESSION = session;
       if (session.destination === 'studio' || session.destination === 'creation-studio' || !session.destination) {
         window.__SE_VS_DOOR = 'make';
@@ -11285,6 +11363,15 @@
       seMeasureDashHeader();
       content.innerHTML = `
         <div class="chat-page">
+        <div class="chat-workspace">
+          <aside class="chat-workspace-rail" id="chat-workspace-rail" aria-label="Projects">
+            <div class="chat-workspace-rail__head">
+              <p class="chat-workspace-rail__title">Projects</p>
+              <button type="button" class="chat-workspace-rail__btn" id="chat-ws-new-project">+ New</button>
+            </div>
+            <div id="chat-ws-project-list"><div style="font-size:0.72rem;color:rgba(148,163,184,0.45);padding:8px;">Loading…</div></div>
+          </aside>
+          <div class="chat-workspace-main">
         <div class="chat-page-header">
           <div class="chat-page-header__icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -11310,9 +11397,20 @@
             </div>
             <button id="chat-clear-btn" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.5);font-size:0.7rem;font-weight:500;cursor:pointer;transition:all 0.15s;font-family:var(--font-body);" onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='rgba(148,163,184,0.8)';" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='rgba(148,163,184,0.5)';">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              Clear History
+              Clear thread
             </button>
           </div>
+        </div>
+        <div class="chat-project-strip" id="chat-project-strip">
+          <div class="chat-project-strip__row">
+            <span class="chat-project-strip__label">Working in</span>
+            <span class="chat-project-strip__name" id="chat-ws-active-label">General · Main chat</span>
+            <button type="button" class="chat-workspace-rail__btn" id="chat-ws-edit-brief">Brief</button>
+            <button type="button" class="chat-workspace-rail__btn" id="chat-ws-pin-win">Pin win</button>
+            <button type="button" class="chat-workspace-rail__btn" id="chat-ws-open-reel" style="display:none;">Open Animate</button>
+          </div>
+          <textarea class="chat-project-strip__brief" id="chat-ws-brief" placeholder="Sticky notes for this project (tone, format rules, what already worked)…"></textarea>
+          <div class="chat-wins" id="chat-ws-wins"></div>
         </div>
         <div class="chat-container">
           <div class="chat-messages" id="chat-messages">
@@ -11348,6 +11446,8 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </button>
             </div>
+          </div>
+        </div>
           </div>
         </div>
         </div>
@@ -11441,24 +11541,181 @@
         });
       }
 
-      // Chat history persistence
+      // Workspace + thread-scoped chat history
       const _coachClientId = (clientData && clientData.client && clientData.client.id) || '';
       const _coachBrand = (clientData && clientData.client && clientData.client.business_name) || '';
-      const CHAT_STORAGE_KEY = 'se_chat_history_' + (_coachClientId || (_coachBrand + '_' + clientEmail));
-      // Drop legacy email-only history so OPA turns cannot reappear under Bunny Boiler.
-      try {
-        const legacyKey = 'se_chat_history_' + clientEmail;
-        if (legacyKey !== CHAT_STORAGE_KEY) localStorage.removeItem(legacyKey);
-      } catch (e) {}
+      const ACTIVE_WS_KEY = 'se_workspace_active_' + (_coachClientId || clientEmail);
+      let workspaceState = { projects: [], active: { projectId: null, threadId: null } };
+      let activeProjectId = null;
+      let activeThreadId = null;
       let chatHistory = [];
-      try { chatHistory = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) || '[]'); } catch(e) { chatHistory = []; }
 
-      // Restore previous messages
-      if (chatHistory.length > 0) {
+      function threadStorageKey(threadId) {
+        return 'se_chat_history_' + (_coachClientId || (_coachBrand + '_' + clientEmail)) + '_' + (threadId || 'default');
+      }
+      function legacyStorageKey() {
+        return 'se_chat_history_' + (_coachClientId || (_coachBrand + '_' + clientEmail));
+      }
+      try {
+        const emailOnly = 'se_chat_history_' + clientEmail;
+        if (emailOnly !== legacyStorageKey()) localStorage.removeItem(emailOnly);
+      } catch (e) {}
+
+      function currentProject() {
+        return (workspaceState.projects || []).find((p) => p.id === activeProjectId) || null;
+      }
+      function currentThreadSummary() {
+        const p = currentProject();
+        return (p && p.threads || []).find((t) => t.id === activeThreadId) || null;
+      }
+      function persistActiveIds() {
+        try {
+          localStorage.setItem(ACTIVE_WS_KEY, JSON.stringify({ projectId: activeProjectId, threadId: activeThreadId }));
+        } catch (e) {}
+        window.__SE_WORKSPACE_ACTIVE = {
+          projectId: activeProjectId,
+          threadId: activeThreadId,
+          projectName: currentProject()?.name || '',
+          threadName: currentThreadSummary()?.name || '',
+          kind: currentProject()?.kind || 'general',
+        };
+        try {
+          sessionStorage.setItem('se_workspace_handoff', JSON.stringify(window.__SE_WORKSPACE_ACTIVE));
+        } catch (e) {}
+      }
+      function updateProjectStrip() {
+        const p = currentProject();
+        const t = currentThreadSummary();
+        const label = document.getElementById('chat-ws-active-label');
+        if (label) label.textContent = (p?.name || 'Project') + ' · ' + (t?.name || 'Chat');
+        const brief = document.getElementById('chat-ws-brief');
+        if (brief) brief.value = p?.brief || '';
+        const winsEl = document.getElementById('chat-ws-wins');
+        if (winsEl) {
+          const wins = Array.isArray(p?.wins) ? p.wins : [];
+          winsEl.innerHTML = wins.map((w) =>
+            '<span class="chat-win-chip" data-win-id="' + String(w.id || '').replace(/"/g, '') + '">' +
+            String(w.title || '').replace(/[<>]/g, '').slice(0, 40) +
+            ' <button type="button" data-unpin title="Unpin">×</button></span>'
+          ).join('');
+          winsEl.querySelectorAll('[data-unpin]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+              const chip = btn.closest('[data-win-id]');
+              const winId = chip?.getAttribute('data-win-id');
+              if (!winId || !activeProjectId) return;
+              try {
+                const r = await apiFetch(API + '/api/workspace/projects/' + encodeURIComponent(activeProjectId), {
+                  method: 'PATCH',
+                  headers: authHeaders({ 'Content-Type': 'application/json' }),
+                  body: JSON.stringify({ removeWinId: winId }),
+                });
+                const d = await r.json().catch(() => ({}));
+                if (r.ok) applyWorkspacePayload(d);
+              } catch (e) {}
+            });
+          });
+        }
+        const reelBtn = document.getElementById('chat-ws-open-reel');
+        if (reelBtn) {
+          const isReel = p?.kind === 'reel';
+          reelBtn.style.display = isReel ? 'inline-flex' : 'none';
+        }
+      }
+      function renderWorkspaceRail() {
+        const list = document.getElementById('chat-ws-project-list');
+        if (!list) return;
+        const projects = workspaceState.projects || [];
+        if (!projects.length) {
+          list.innerHTML = '<div style="font-size:0.72rem;color:rgba(148,163,184,0.45);padding:8px;">No projects yet</div>';
+          return;
+        }
+        list.innerHTML = projects.map((p) => {
+          const open = p.id === activeProjectId ? ' is-open' : '';
+          const threads = (p.threads || []).map((t) => {
+            const active = t.id === activeThreadId ? ' is-active' : '';
+            return '<button type="button" class="chat-ws-thread' + active + '" data-project-id="' + p.id + '" data-thread-id="' + t.id + '">' +
+              String(t.name || 'Chat').replace(/[<>]/g, '') + '</button>';
+          }).join('');
+          return '<div class="chat-ws-project' + open + '" data-project-id="' + p.id + '">' +
+            '<button type="button" class="chat-ws-project__btn" data-toggle-project="' + p.id + '">' +
+            '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + String(p.name || '').replace(/[<>]/g, '') + '</span>' +
+            '<span class="chat-ws-kind">' + String(p.kind || 'general') + '</span></button>' +
+            '<div class="chat-ws-threads">' + threads +
+            '<button type="button" class="chat-ws-thread chat-ws-thread-new" data-new-thread="' + p.id + '">+ New chat</button>' +
+            '</div></div>';
+        }).join('');
+        list.querySelectorAll('[data-toggle-project]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-toggle-project');
+            list.querySelectorAll('.chat-ws-project').forEach((el) => {
+              if (el.getAttribute('data-project-id') === id) el.classList.toggle('is-open');
+            });
+          });
+        });
+        list.querySelectorAll('.chat-ws-thread[data-thread-id]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            selectWorkspaceThread(btn.getAttribute('data-project-id'), btn.getAttribute('data-thread-id'));
+          });
+        });
+        list.querySelectorAll('[data-new-thread]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const pid = btn.getAttribute('data-new-thread');
+            const name = window.prompt('Name this chat', 'New chat');
+            if (!name) return;
+            try {
+              const r = await apiFetch(API + '/api/workspace/projects/' + encodeURIComponent(pid) + '/threads', {
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ name }),
+              });
+              const d = await r.json().catch(() => ({}));
+              if (r.ok) {
+                applyWorkspacePayload(d);
+                if (d.thread?.id) await selectWorkspaceThread(pid, d.thread.id, { skipActivePost: true });
+              }
+            } catch (e) {
+              if (typeof showToast === 'function') showToast('Could not create chat', 'error');
+            }
+          });
+        });
+      }
+      function applyWorkspacePayload(d) {
+        if (!d) return;
+        workspaceState = {
+          projects: Array.isArray(d.projects) ? d.projects : workspaceState.projects,
+          active: d.active || workspaceState.active,
+        };
+        if (d.active?.projectId) activeProjectId = d.active.projectId;
+        if (d.active?.threadId) activeThreadId = d.active.threadId;
+        persistActiveIds();
+        renderWorkspaceRail();
+        updateProjectStrip();
+      }
+      function clearMessagesUi(keepWelcome) {
+        const welcome = document.getElementById('chat-welcome');
+        messagesEl.innerHTML = '';
+        if (keepWelcome !== false) {
+          const row = document.createElement('div');
+          row.className = 'chat-msg-row';
+          row.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai" id="chat-welcome">' + (welcome ? welcome.innerHTML : 'Ask me anything about your brand.') + '</div>';
+          messagesEl.appendChild(row);
+        }
+      }
+      function restoreChatHistoryFromStorage() {
+        chatHistory = [];
+        try { chatHistory = JSON.parse(localStorage.getItem(threadStorageKey(activeThreadId)) || '[]'); } catch (e) { chatHistory = []; }
+        if (!chatHistory.length && activeThreadId) {
+          try {
+            const legacy = JSON.parse(localStorage.getItem(legacyStorageKey()) || '[]');
+            if (Array.isArray(legacy) && legacy.length) chatHistory = legacy;
+          } catch (e) {}
+        }
+        clearMessagesUi(true);
+        if (!chatHistory.length) return;
         const divider = document.createElement('div');
         divider.style.cssText = 'display:flex;align-items:center;gap:12px;padding:4px 0;margin:4px 0;';
         divider.innerHTML = '<div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div><span style="font-size:0.65rem;color:rgba(148,163,184,0.4);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;white-space:nowrap;">Previous Conversation</span><div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div>';
-        messagesEl.insertBefore(divider, messagesEl.firstChild);
+        messagesEl.appendChild(divider);
         chatHistory.forEach(msg => {
           const msgDiv = document.createElement('div');
           msgDiv.className = 'chat-msg-row';
@@ -11482,6 +11739,190 @@
         messagesEl.appendChild(newDivider);
         scrollToBottom();
       }
+      async function hydrateThreadFromServer(threadId) {
+        if (!threadId) return;
+        try {
+          const r = await apiFetch(API + '/api/workspace/threads/' + encodeURIComponent(threadId), { headers: authHeaders() });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok || !d.thread) return;
+          const serverMsgs = (d.thread.messages || []).map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            text: String(m.content || '').replace(/</g, '&lt;').replace(/\n/g, '<br>'),
+            time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+          }));
+          if (serverMsgs.length) {
+            chatHistory = serverMsgs;
+            try { localStorage.setItem(threadStorageKey(threadId), JSON.stringify(chatHistory)); } catch (e) {}
+            restoreChatHistoryFromStorage();
+          }
+          if (d.project) {
+            const idx = (workspaceState.projects || []).findIndex((p) => p.id === d.project.id);
+            if (idx >= 0) {
+              workspaceState.projects[idx] = Object.assign({}, workspaceState.projects[idx], {
+                brief: d.project.brief,
+                wins: d.project.wins,
+                kind: d.project.kind,
+                name: d.project.name,
+              });
+              updateProjectStrip();
+            }
+          }
+        } catch (e) {}
+      }
+      async function selectWorkspaceThread(projectId, threadId, opts) {
+        activeProjectId = projectId;
+        activeThreadId = threadId;
+        persistActiveIds();
+        renderWorkspaceRail();
+        updateProjectStrip();
+        restoreChatHistoryFromStorage();
+        await hydrateThreadFromServer(threadId);
+        if (!opts || !opts.skipActivePost) {
+          try {
+            await apiFetch(API + '/api/workspace/active', {
+              method: 'POST',
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ projectId, threadId }),
+            });
+          } catch (e) {}
+        }
+        const p = currentProject();
+        if (p?.kind === 'reel') {
+          const animId = currentThreadSummary()?.animProjectId;
+          if (animId) {
+            try { localStorage.setItem('se_anim_last_project', animId); } catch (e) {}
+          }
+        }
+      }
+      async function syncReelThreads(projects, preferredActive) {
+        const reelProj = (projects || []).find((p) => p.kind === 'reel');
+        if (!reelProj) return projects;
+        try {
+          const r = await apiFetch(API + '/api/workspace/reel-projects', { headers: authHeaders() });
+          const d = await r.json().catch(() => ({}));
+          const anim = Array.isArray(d.projects) ? d.projects : [];
+          if (!anim.length) return projects;
+          const existing = new Set((reelProj.threads || []).map((t) => t.animProjectId).filter(Boolean));
+          let added = 0;
+          for (const a of anim.slice(0, 20)) {
+            if (!a.id || existing.has(a.id)) continue;
+            try {
+              await apiFetch(API + '/api/workspace/projects/' + encodeURIComponent(reelProj.id) + '/threads', {
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ name: a.title || 'Reel', animProjectId: a.id }),
+              });
+              existing.add(a.id);
+              added += 1;
+            } catch (e) {}
+          }
+          if (!added) return projects;
+          if (preferredActive?.projectId && preferredActive?.threadId) {
+            try {
+              await apiFetch(API + '/api/workspace/active', {
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify(preferredActive),
+              });
+            } catch (e) {}
+          }
+          const refreshed = await apiFetch(API + '/api/workspace/projects', { headers: authHeaders() });
+          const rd = await refreshed.json().catch(() => ({}));
+          if (refreshed.ok && Array.isArray(rd.projects)) return rd.projects;
+        } catch (e) {}
+        return projects;
+      }
+      async function loadWorkspace() {
+        try {
+          const r = await apiFetch(API + '/api/workspace/projects', { headers: authHeaders() });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || 'workspace load failed');
+          let projects = d.projects || [];
+          projects = await syncReelThreads(projects, d.active || null);
+          workspaceState = { projects, active: d.active || {} };
+          let stored = null;
+          try { stored = JSON.parse(localStorage.getItem(ACTIVE_WS_KEY) || 'null'); } catch (e) {}
+          activeProjectId = stored?.projectId || d.active?.projectId || projects?.[0]?.id || null;
+          const proj = projects.find((p) => p.id === activeProjectId) || projects[0];
+          activeThreadId = stored?.threadId || d.active?.threadId || proj?.threads?.[0]?.id || null;
+          if (activeProjectId && activeThreadId) {
+            await selectWorkspaceThread(activeProjectId, activeThreadId, { skipActivePost: false });
+          } else {
+            restoreChatHistoryFromStorage();
+            renderWorkspaceRail();
+            updateProjectStrip();
+          }
+        } catch (e) {
+          const list = document.getElementById('chat-ws-project-list');
+          if (list) list.innerHTML = '<div style="font-size:0.72rem;color:rgba(148,163,184,0.45);padding:8px;">Could not load projects</div>';
+          restoreChatHistoryFromStorage();
+        }
+      }
+      loadWorkspace();
+
+      document.getElementById('chat-ws-new-project')?.addEventListener('click', async () => {
+        const name = window.prompt('Project name', 'Carousels');
+        if (!name) return;
+        const kind = window.prompt('Kind: carousel, still, reel, or general', 'carousel') || 'general';
+        try {
+          const r = await apiFetch(API + '/api/workspace/projects', {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ name, kind }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (r.ok) {
+            applyWorkspacePayload(d);
+            if (d.active?.threadId) await selectWorkspaceThread(d.active.projectId, d.active.threadId, { skipActivePost: true });
+          }
+        } catch (e) {
+          if (typeof showToast === 'function') showToast('Could not create project', 'error');
+        }
+      });
+      document.getElementById('chat-ws-edit-brief')?.addEventListener('click', () => {
+        const strip = document.getElementById('chat-project-strip');
+        strip?.classList.toggle('is-editing');
+        document.getElementById('chat-ws-brief')?.focus();
+      });
+      let briefTimer = null;
+      document.getElementById('chat-ws-brief')?.addEventListener('input', (e) => {
+        clearTimeout(briefTimer);
+        briefTimer = setTimeout(async () => {
+          if (!activeProjectId) return;
+          try {
+            const r = await apiFetch(API + '/api/workspace/projects/' + encodeURIComponent(activeProjectId), {
+              method: 'PATCH',
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ brief: e.target.value }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (r.ok) applyWorkspacePayload(d);
+          } catch (err) {}
+        }, 600);
+      });
+      document.getElementById('chat-ws-pin-win')?.addEventListener('click', async () => {
+        if (!activeProjectId) return;
+        const title = window.prompt('Name this win (what worked?)', currentThreadSummary()?.name || '');
+        if (!title) return;
+        const note = window.prompt('Short note (optional)', '') || '';
+        try {
+          const r = await apiFetch(API + '/api/workspace/projects/' + encodeURIComponent(activeProjectId), {
+            method: 'PATCH',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ addWin: { title, note } }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (r.ok) applyWorkspacePayload(d);
+        } catch (e) {}
+      });
+      document.getElementById('chat-ws-open-reel')?.addEventListener('click', () => {
+        const animId = currentThreadSummary()?.animProjectId;
+        if (animId) {
+          try { localStorage.setItem('se_anim_last_project', animId); } catch (e) {}
+        }
+        if (typeof switchNav === 'function') switchNav('animation-studio');
+        else document.querySelector('[data-nav="animation-studio"]')?.click();
+      });
 
       function saveToHistory(role, text, extra) {
         const now = new Date();
@@ -11491,9 +11932,8 @@
           ? persist(role, text, Object.assign({ time: timeStr }, extra || {}))
           : { role, text, time: timeStr };
         chatHistory.push(entry);
-        // Keep last 50 messages
         if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
-        try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory)); } catch(e) {}
+        try { localStorage.setItem(threadStorageKey(activeThreadId), JSON.stringify(chatHistory)); } catch(e) {}
       }
 
       async function sendMessage() {
@@ -11551,7 +11991,12 @@
           const res = await apiFetch(`${API}/api/chat/v2`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ message, attached_image_url: attachedImageUrl })
+            body: JSON.stringify({
+              message,
+              attached_image_url: attachedImageUrl,
+              projectId: activeProjectId || undefined,
+              threadId: activeThreadId || undefined,
+            })
           });
 
           if (!res.ok) throw new Error('API error');
@@ -11912,20 +12357,22 @@
         });
       });
 
-      // Clear history handler — clears both localStorage and server-side Airtable history
+      // Clear history handler — clears the active thread only
       const clearBtn = document.getElementById('chat-clear-btn');
       if (clearBtn) {
         clearBtn.addEventListener('click', async () => {
-          if (!confirm('Clear your full conversation history with the coach? This cannot be undone.')) return;
+          if (!confirm('Clear this thread? Other projects and chats stay intact.')) return;
           chatHistory = [];
-          try { localStorage.removeItem(CHAT_STORAGE_KEY); } catch(e) {}
+          try { localStorage.removeItem(threadStorageKey(activeThreadId)); } catch(e) {}
           try {
             await apiFetch(API + '/api/coach/clear-history', {
               method: 'POST',
-              headers: authHeaders()
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ threadId: activeThreadId || undefined }),
             });
           } catch(e) {}
-          renderAICoach();
+          clearMessagesUi(true);
+          scrollToBottom();
         });
       }
     }

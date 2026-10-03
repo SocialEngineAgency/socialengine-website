@@ -783,8 +783,55 @@
     toast('URL set as reference', 'success');
   }
 
+  function readWorkspaceHandoff() {
+    let handoff = null;
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const project = params.get('project') || '';
+      const thread = params.get('thread') || '';
+      if (project || thread) {
+        handoff = {
+          projectId: project,
+          threadId: thread,
+          projectName: params.get('projectName') || '',
+          threadName: params.get('threadName') || '',
+        };
+      }
+    } catch (_) {}
+    if (!handoff) {
+      try { handoff = JSON.parse(sessionStorage.getItem('se_workspace_handoff') || 'null'); } catch (_) { handoff = null; }
+    }
+    const s = window.__SE_COACH_CREATE_SESSION;
+    if ((!handoff || (!handoff.projectName && !handoff.threadName)) && s && (s.projectId || s.projectName)) {
+      handoff = {
+        projectId: s.projectId || handoff?.projectId || '',
+        threadId: s.threadId || handoff?.threadId || '',
+        projectName: s.projectName || handoff?.projectName || '',
+        threadName: s.threadName || handoff?.threadName || '',
+        kind: s.kind || handoff?.kind || '',
+      };
+    }
+    return handoff && (handoff.projectName || handoff.threadName || handoff.projectId) ? handoff : null;
+  }
+
+  function renderWorkspaceChip() {
+    const chip = document.getElementById('cs-workspace-chip');
+    if (!chip) return;
+    const handoff = readWorkspaceHandoff();
+    if (!handoff) {
+      chip.style.display = 'none';
+      chip.textContent = '';
+      return;
+    }
+    const project = handoff.projectName || 'Project';
+    const thread = handoff.threadName || 'chat';
+    chip.style.display = 'block';
+    chip.textContent = 'Working in: ' + project + ' · ' + thread;
+  }
+
   function applyDesignCoachSession() {
     const s = window.__SE_COACH_CREATE_SESSION;
+    renderWorkspaceChip();
     if (!s || s.destination !== 'design' || !s.prompt) return;
     const apply = typeof window.applyCoachCreateFields === 'function' ? window.applyCoachCreateFields : null;
     const briefEl = document.getElementById('cs-brief');
@@ -878,6 +925,7 @@
               <button type="button" style="padding:6px 10px;border:none;border-radius:7px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.7rem;font-weight:700;cursor:default;font-family:var(--font-body);">Post</button>
             </div>
           </div>
+          <div id="cs-workspace-chip" style="display:none;padding:8px 10px;border-radius:8px;border:1px solid rgba(124,58,237,0.25);background:rgba(124,58,237,0.08);font-size:0.72rem;color:#E9D5FF;font-weight:600;line-height:1.35;"></div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;">
             <button type="button" id="cs-new-post" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">New post</button>
             <button type="button" id="cs-save-later" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid rgba(16,185,129,0.28);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save for later</button>
