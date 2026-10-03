@@ -114,14 +114,18 @@
     writeStickyEngine(chosen);
     if (hint) {
       const cur = rows.find((e) => e.id === chosen);
-      hint.textContent = (cur && cur.description)
-        || 'Auto picks for this account. Stick with a model you’ve liked.';
+      const styleLock = rows.some((e) => e.id === 'figurelabs') && rows.every((e) => (e.capabilities || []).includes('style_ref'));
+      hint.textContent = styleLock
+        ? 'Style attached — Scientific Infographic will match that look. New facts come from your brief.'
+        : ((cur && cur.description) || 'Auto picks for this account. Stick with a model you’ve liked.');
     }
   }
 
   async function loadDesignEngines() {
     try {
-      const res = await fetch(`${apiBase()}/api/studio/design-engines`, { headers: authHeaders() });
+      const hasStyle = typeof coachStyleHttpsUrls === 'function' && coachStyleHttpsUrls().length > 0;
+      const qs = hasStyle ? '?style_lock=1' : '';
+      const res = await fetch(`${apiBase()}/api/studio/design-engines${qs}`, { headers: authHeaders() });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'engines failed');
       const engines = Array.isArray(data.engines) ? data.engines.filter((e) => e && e.status !== 'tier_locked' && e.status !== 'coming_soon') : [];
@@ -1219,6 +1223,7 @@
           added += 1;
         }
         renderCoachStyleChip();
+        if (added) loadDesignEngines();
         if (added === 1) toast('Style reference attached', 'success');
         else if (added > 1) toast(`${added} style references attached`, 'success');
       } catch (err) {
@@ -1855,6 +1860,11 @@
         aspect_ratio: document.getElementById('cs-aspect')?.value || '9:16',
         model: selectedEngineId(),
       };
+      const styleUrls = coachStyleHttpsUrls();
+      if (styleUrls.length) {
+        payload.style_image_url = styleUrls[0];
+        payload.style_image_urls = styleUrls;
+      }
       if (_csRef && hero) {
         payload.reference = { ..._csRef, url: hero };
         payload.photo_url = hero;
@@ -1990,6 +2000,7 @@
         if (!Number.isFinite(idx)) return;
         _csCoachStyleUrls.splice(idx, 1);
         renderCoachStyleChip();
+        loadDesignEngines();
       });
     });
   }
