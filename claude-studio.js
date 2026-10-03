@@ -2103,7 +2103,7 @@
     if (_csGenerating) {
       restoreBusyUiIfGenerating();
       toast('Still generating — watch the Stage spinner', 'info');
-      return false;
+      return 'busy';
     }
     const current = briefEl ? (briefEl.value.trim() || _csBrief) : _csBrief;
     if (waitingAsk) {
@@ -2288,12 +2288,12 @@
         setDesignCoachApply(null);
       } else if (pending.mode === 'confirm_generate' || pending.mode === 'apply_generate') {
         const ok = await generateFromCoach(pending.prompt);
-        if (ok) {
+        if (ok === true) {
           _csCoachJob = typeof window.advanceCoachJob === 'function'
             ? window.advanceCoachJob(_csCoachJob || pending.job, 'generated')
             : _csCoachJob;
           offerNextCoachJobChip();
-        } else {
+        } else if (ok !== 'busy') {
           setDesignCoachApply(null);
         }
       }
@@ -2476,24 +2476,36 @@
       } else if (decision.mode === 'apply_generate') {
         const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
         scrollCoachLogToBottom();
-        setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
+        // generateFromCoach owns setBusy — do not set busy before calling it
+        // (that races the in-flight guard and leaves Stage stuck forever).
         const ok = await generateFromCoach(decision.prompt || message);
-        if (status) status.textContent = ok ? '4K poster ready.' : 'Could not generate the poster.';
-        if (ok) {
+        if (status) {
+          status.textContent = ok === true
+            ? '4K poster ready.'
+            : ok === 'busy'
+              ? 'Still generating — watch the Stage spinner.'
+              : 'Could not generate the poster.';
+        }
+        if (ok === true) {
           _csCoachJob = typeof window.advanceCoachJob === 'function'
             ? window.advanceCoachJob(_csCoachJob || decision.job, 'generated')
             : _csCoachJob;
           offerNextCoachJobChip();
-        } else if (!_csGenerating) {
+        } else if (ok !== 'busy') {
           setBusy(false);
         }
       } else if (decision.mode === 'refine') {
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
         scrollCoachLogToBottom();
-        setBusy(true, 'Updating the preview…');
         const ok = await generateFromCoach(decision.prompt || message);
-        if (status) status.textContent = ok ? 'Preview updated.' : 'Could not update the preview.';
-        if (!ok && !_csGenerating) setBusy(false);
+        if (status) {
+          status.textContent = ok === true
+            ? 'Preview updated.'
+            : ok === 'busy'
+              ? 'Still generating — watch the Stage spinner.'
+              : 'Could not update the preview.';
+        }
+        if (ok !== true && ok !== 'busy') setBusy(false);
       }
     } catch (e) {
       setCoachStatusBusy(false);
