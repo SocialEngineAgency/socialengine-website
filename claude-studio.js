@@ -1058,7 +1058,7 @@
           <div style="padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px;">
             <div id="cs-coach-style-chip" style="display:none;flex-direction:column;gap:6px;"></div>
             <input id="cs-coach-style-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
-            <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;"></textarea>
+            <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;min-height:52px;max-height:160px;overflow-y:auto;"></textarea>
             <div style="display:flex;gap:8px;">
               <button type="button" id="cs-coach-style" style="flex:1;padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">+ Reference photo</button>
               <button type="button" id="cs-coach-send" style="flex:1;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Send</button>
@@ -1143,12 +1143,22 @@
       }
     });
     document.getElementById('cs-coach-apply')?.addEventListener('click', () => applyPendingDesignCoach());
-    document.getElementById('cs-coach-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        designCoachAsk();
-      }
-    });
+    const coachInputEl = document.getElementById('cs-coach-input');
+    if (coachInputEl) {
+      const autosizeCoachInput = () => {
+        coachInputEl.style.height = 'auto';
+        const maxPx = parseFloat(getComputedStyle(coachInputEl).maxHeight) || 160;
+        coachInputEl.style.height = Math.min(coachInputEl.scrollHeight, maxPx) + 'px';
+      };
+      coachInputEl.addEventListener('input', autosizeCoachInput);
+      coachInputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          designCoachAsk();
+        }
+      });
+      autosizeCoachInput();
+    }
     document.getElementById('cs-queue')?.addEventListener('click', () => exportPng(true));
     document.getElementById('cs-caption')?.addEventListener('click', () => getCaption());
     document.getElementById('cs-resolve-url')?.addEventListener('click', () => resolveAdvancedUrl());
@@ -2189,8 +2199,12 @@
     const input = document.getElementById('cs-coach-input');
     const message = String(preset || input?.value || '').trim();
     if (!message || _csCoachSending) return;
-    if (input && !preset) input.value = '';
-    if (input && preset) input.value = '';
+    if (input) {
+      input.value = '';
+      input.style.height = 'auto';
+      const maxPx = parseFloat(getComputedStyle(input).maxHeight) || 160;
+      input.style.height = Math.min(input.scrollHeight, maxPx) + 'px';
+    }
     if (_csScene && sceneApi().applySceneCoachEdit) {
       const next = sceneApi().applySceneCoachEdit(_csScene, message);
       const changed = JSON.stringify(next) !== JSON.stringify(_csScene);
