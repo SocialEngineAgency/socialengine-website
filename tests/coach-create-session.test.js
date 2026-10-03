@@ -312,6 +312,18 @@ test('Design Studio Coach rail attaches a style photo and formats replies', () =
   assert.match(src, /row\.innerHTML = fmt\(text\)/);
 });
 
+test('Coach status sits above style chips and cycles progress phrases', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(src, /id="cs-coach-status"/);
+  assert.match(src, /function setCoachStatusBusy/);
+  assert.match(src, /Coach is checking your references/);
+  assert.match(src, /scrollCoachLogToBottom/);
+  assert.doesNotMatch(src, /Coach is looking/);
+  const statusAt = src.indexOf('id="cs-coach-status"');
+  const chipAt = src.indexOf('id="cs-coach-style-chip"');
+  assert.ok(statusAt > 0 && chipAt > statusAt, 'status bar should render above the style chip');
+});
+
 test('give me + typo infograhpic auto-starts generate (empty or occupied Stage)', () => {
   assert.equal(inferDesignJob({
     userMessage: 'give me an infograhpic on the best foods for gastric cancer',
@@ -433,7 +445,8 @@ test('Design rail shows attached style refs and does not lock Send during genera
   assert.match(src, /offer_split/);
   assert.match(src, /Split into carousel/);
   assert.match(src, /lastJob/);
-  assert.match(src, /Asking your coach/);
+  assert.match(src, /Coach is reading/);
+  assert.match(src, /setCoachStatusBusy/);
   assert.match(src, /Ask your coach/);
 });
 
