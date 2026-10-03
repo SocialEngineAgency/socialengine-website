@@ -97,7 +97,7 @@ test('Create: mode strip switches Video · Post · Animate and remembers the cho
 
   await seg.locator('[data-segment="design-studio"]').click();
   await expect(seg.locator('[data-segment="design-studio"]')).toHaveClass(/active/);
-  await expect(page.locator('#dash-content .atelier-shell, #dash-content #cs-generate')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#dash-content .atelier-shell')).toBeVisible({ timeout: 15000 });
   expect(await page.evaluate(() => location.hash)).toBe('#create/post');
 
   await seg.locator('[data-segment="animation-studio"]').click();
