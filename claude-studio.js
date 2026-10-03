@@ -73,6 +73,65 @@
   function authHeadersMultipart() {
     return seHeaders();
   }
+
+  const CS_ENGINE_KEY = 'se_post_engine';
+  let _csEngines = [{ id: 'auto', displayName: 'Auto (recommended)', description: 'Picks the best still engine for this account and brief.' }];
+
+  function readStickyEngine() {
+    try {
+      const v = String(localStorage.getItem(CS_ENGINE_KEY) || 'auto').trim();
+      return v || 'auto';
+    } catch (_) {
+      return 'auto';
+    }
+  }
+
+  function writeStickyEngine(id) {
+    try { localStorage.setItem(CS_ENGINE_KEY, String(id || 'auto')); } catch (_) {}
+  }
+
+  function selectedEngineId() {
+    const el = document.getElementById('cs-engine');
+    const v = el && el.value ? String(el.value).trim() : '';
+    return v || readStickyEngine() || 'auto';
+  }
+
+  function renderEngineSelect(engines) {
+    const sel = document.getElementById('cs-engine');
+    const hint = document.getElementById('cs-engine-hint');
+    if (!sel) return;
+    const rows = Array.isArray(engines) && engines.length ? engines : _csEngines;
+    _csEngines = rows;
+    const sticky = readStickyEngine();
+    const ids = new Set(rows.map((e) => e.id));
+    const chosen = ids.has(sticky) ? sticky : 'auto';
+    sel.innerHTML = rows.map((e) => {
+      const label = escapeHtml(e.displayName || e.id);
+      const badge = e.badge ? ` [${escapeHtml(e.badge)}]` : '';
+      return `<option value="${escapeHtml(e.id)}">${label}${badge}</option>`;
+    }).join('');
+    sel.value = chosen;
+    writeStickyEngine(chosen);
+    if (hint) {
+      const cur = rows.find((e) => e.id === chosen);
+      hint.textContent = (cur && cur.description)
+        || 'Auto picks for this account. Stick with a model you’ve liked.';
+    }
+  }
+
+  async function loadDesignEngines() {
+    try {
+      const res = await fetch(`${apiBase()}/api/studio/design-engines`, { headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'engines failed');
+      const engines = Array.isArray(data.engines) ? data.engines.filter((e) => e && e.status !== 'tier_locked' && e.status !== 'coming_soon') : [];
+      renderEngineSelect(engines.length ? engines : _csEngines);
+    } catch (e) {
+      console.warn('[SE] design-engines fetch failed:', e.message || e);
+      renderEngineSelect(_csEngines);
+    }
+  }
+
   function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
@@ -956,6 +1015,19 @@
 
             <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
               <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+                <span>Engine</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
+              </summary>
+              <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;">
+                <label for="cs-engine" style="font-size:0.65rem;color:rgba(255,255,255,0.38);font-weight:600;">Still model</label>
+                <select id="cs-engine" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
+                  <option value="auto">Auto (recommended)</option>
+                </select>
+                <div id="cs-engine-hint" style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;">Auto picks for this account. Stick with a model you’ve liked.</div>
+              </div>
+            </details>
+
+            <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
+              <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
                 <span>Carousel</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
               </summary>
               <div style="padding:0 12px 12px;">
@@ -1109,6 +1181,17 @@
     document.getElementById('cs-save-template')?.addEventListener('click', () => saveOpenTemplate());
     document.getElementById('cs-generate')?.addEventListener('click', () => generate());
     document.getElementById('cs-regen')?.addEventListener('click', () => generate());
+    document.getElementById('cs-engine')?.addEventListener('change', (e) => {
+      const id = e?.target?.value || 'auto';
+      writeStickyEngine(id);
+      const hint = document.getElementById('cs-engine-hint');
+      const cur = (_csEngines || []).find((x) => x.id === id);
+      if (hint) {
+        hint.textContent = (cur && cur.description)
+          || 'Auto picks for this account. Stick with a model you’ve liked.';
+      }
+    });
+    loadDesignEngines();
     document.getElementById('cs-export')?.addEventListener('click', () => exportPng(false));
     document.getElementById('cs-coach-send')?.addEventListener('click', () => designCoachAsk());
     document.getElementById('cs-coach-style')?.addEventListener('click', () => {
@@ -1770,6 +1853,7 @@
         brief,
         style_hint: document.getElementById('cs-style')?.value?.trim() || undefined,
         aspect_ratio: document.getElementById('cs-aspect')?.value || '9:16',
+        model: selectedEngineId(),
       };
       if (_csRef && hero) {
         payload.reference = { ..._csRef, url: hero };
