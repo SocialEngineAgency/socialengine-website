@@ -26,12 +26,18 @@
   const CS_MAX_STYLE_REFS = 10;
   const CS_CAROUSEL_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
   let _csCoachStyleUrls = [];
+  /** Style https URLs already injected into a Coach chat turn (do not re-attach). */
+  let _csCoachStylesSentToChat = new Set();
+  /** Prior Stage posters for Restore previous (newest at end). */
+  let _csPosterHistory = [];
+  let _csRestoringPoster = false;
   let _csDesignId = null;
   let _csWorkspaceCleared = false;
   let _csScene = null;
   let _csActiveDesignPoll = null; // { jobId, promise }
   // Stage spinner only — never the Generate button (that button is a short CTA).
   const CS_LEAVE_BUSY = 'A few minutes — you can leave; we\'ll keep working.';
+  const CS_POSTER_HISTORY_MAX = 5;
 
   function queueReady() {
     return (typeof window !== 'undefined' && window.studioQueueReady) || {
@@ -166,6 +172,93 @@
 
   function designJobStoreKey() {
     return designStoreKey().replace('se-design-last:', 'se-design-job:');
+  }
+
+  function posterHistoryStoreKey() {
+    return designStoreKey().replace('se-design-last:', 'se-design-history:');
+  }
+
+  function loadPosterHistory() {
+    try {
+      const raw = sessionStorage.getItem(posterHistoryStoreKey());
+      const list = raw ? JSON.parse(raw) : [];
+      _csPosterHistory = Array.isArray(list) ? list.filter((r) => r && /^https:\/\//i.test(r.image_url)).slice(-CS_POSTER_HISTORY_MAX) : [];
+    } catch (_) {
+      _csPosterHistory = [];
+    }
+    return _csPosterHistory;
+  }
+
+  function persistPosterHistory() {
+    try {
+      sessionStorage.setItem(posterHistoryStoreKey(), JSON.stringify(_csPosterHistory.slice(-CS_POSTER_HISTORY_MAX)));
+    } catch (_) {}
+  }
+
+  function pushPosterHistory(prevUrl, spec, brief) {
+    const url = String(prevUrl || '').trim();
+    if (!/^https:\/\//i.test(url)) return;
+    loadPosterHistory();
+    const last = _csPosterHistory[_csPosterHistory.length - 1];
+    if (last && last.image_url === url) return;
+    _csPosterHistory.push({
+      image_url: url,
+      spec: spec || _csSpec,
+      brief: brief || _csBrief || '',
+      saved_at: Date.now(),
+    });
+    if (_csPosterHistory.length > CS_POSTER_HISTORY_MAX) {
+      _csPosterHistory = _csPosterHistory.slice(-CS_POSTER_HISTORY_MAX);
+    }
+    persistPosterHistory();
+    refreshRestorePreviousButton();
+  }
+
+  function restorePreviousPoster() {
+    loadPosterHistory();
+    const prev = _csPosterHistory.pop();
+    persistPosterHistory();
+    if (!prev || !prev.image_url) {
+      toast('No previous poster to restore', 'info');
+      refreshRestorePreviousButton();
+      return false;
+    }
+    _csRestoringPoster = true;
+    try {
+      if (prev.brief) {
+        const briefEl = document.getElementById('cs-brief');
+        if (briefEl) briefEl.value = prev.brief;
+        _csBrief = prev.brief;
+      }
+      showGeneratedImage(prev.image_url, prev.spec);
+      toast('Restored previous poster', 'success');
+      return true;
+    } finally {
+      _csRestoringPoster = false;
+      refreshRestorePreviousButton();
+    }
+  }
+
+  function refreshRestorePreviousButton() {
+    loadPosterHistory();
+    const btn = document.getElementById('cs-restore-prev');
+    if (!btn) return;
+    const on = _csPosterHistory.length > 0 && !_csGenerating;
+    btn.disabled = !on;
+    btn.style.opacity = on ? '1' : '0.45';
+    btn.style.cursor = on ? 'pointer' : 'not-allowed';
+    btn.style.color = on ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.35)';
+    btn.style.borderColor = on ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)';
+  }
+
+  function coachStylesPendingForChat() {
+    return coachStyleHttpsUrls().filter((u) => !_csCoachStylesSentToChat.has(u));
+  }
+
+  function markCoachStylesSent(urls) {
+    for (const u of urls || []) {
+      if (/^https:\/\//i.test(u)) _csCoachStylesSentToChat.add(u);
+    }
   }
 
   function persistDesignJob(job) {
@@ -363,7 +456,10 @@
     _csBrief = '';
     _csWorkspaceCleared = true;
     _csCoachStyleUrls = Array.isArray(next.styleUrls) ? next.styleUrls : styles;
+    _csCoachStylesSentToChat = new Set();
+    _csPosterHistory = [];
     try { localStorage.removeItem(designStoreKey()); } catch (_) {}
+    try { sessionStorage.removeItem(posterHistoryStoreKey()); } catch (_) {}
     window._studioReference = null;
     window.__SE_CAROUSEL_REDESIGN = null;
     window.__SE_CAROUSEL_PLAN = null;
@@ -1250,6 +1346,7 @@
               <button type="button" id="cs-export" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Export PNG</button>
               <button type="button" id="cs-queue" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Add to Queue</button>
               <button type="button" id="cs-regen" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Regenerate</button>
+              <button type="button" id="cs-restore-prev" disabled title="Restore the previous Stage poster" style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Restore previous</button>
               <button type="button" id="cs-caption" disabled style="padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:600;cursor:not-allowed;font-family:var(--font-body);">Get Caption</button>
             </div>
             <textarea id="cs-caption-box" rows="3" placeholder="Paste your caption here — or Get Caption after you describe the post." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:10px;min-height:56px;font-size:0.75rem;color:rgba(255,255,255,0.75);font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
@@ -1320,6 +1417,7 @@
     document.getElementById('cs-save-template')?.addEventListener('click', () => saveOpenTemplate());
     document.getElementById('cs-generate')?.addEventListener('click', () => generate());
     document.getElementById('cs-regen')?.addEventListener('click', () => generate());
+    document.getElementById('cs-restore-prev')?.addEventListener('click', () => restorePreviousPoster());
     document.getElementById('cs-engine')?.addEventListener('change', (e) => {
       const id = e?.target?.value || 'auto';
       writeStickyEngine(id);
@@ -1425,6 +1523,8 @@
     applyRedesignedSlides();
     renderSavedDesigns();
     restoreLastDesign();
+    loadPosterHistory();
+    refreshRestorePreviousButton();
     restoreBusyUiIfGenerating();
     resumeDesignJobIfAny();
     if (window.__SE_COACH_MASTER_IMAGE && !masterImageUrl()) {
@@ -1486,6 +1586,7 @@
     setActionEnabled('cs-queue', carousel || designed || single);
     setActionEnabled('cs-regen', designed && !carousel);
     setActionEnabled('cs-caption', carousel || designed || !!_csOriginalPreviewUrl || single);
+    refreshRestorePreviousButton();
   }
 
   function setBusy(busy, msg) {
@@ -1586,24 +1687,29 @@
   }
 
   function showGeneratedImage(url, spec) {
+    const nextUrl = String(url || '').trim();
+    const prevUrl = String(_csGeneratedUrl || '').trim();
+    if (!_csRestoringPoster && /^https:\/\//i.test(prevUrl) && /^https:\/\//i.test(nextUrl) && prevUrl !== nextUrl) {
+      pushPosterHistory(prevUrl, _csSpec, (document.getElementById('cs-brief') && document.getElementById('cs-brief').value) || _csBrief);
+    }
     _csHtml = '';
     _csWorkspaceCleared = false;
-    _csGeneratedUrl = url;
+    _csGeneratedUrl = nextUrl;
     _csSpec = spec || _csSpec;
     _csCarousel = null;
-    _csQueueSingleUrl = url;
-    _csOriginalPreviewUrl = url;
+    _csQueueSingleUrl = nextUrl;
+    _csOriginalPreviewUrl = nextUrl;
     hidePreviewPanes();
     setPreviewHeader(previewLabel(_csSpec));
     const wrap = document.getElementById('cs-original-preview');
     const img = document.getElementById('cs-original-preview-img');
     if (img) {
       img.referrerPolicy = 'no-referrer';
-      img.src = mediaSrc(url);
+      img.src = mediaSrc(nextUrl);
     }
     if (wrap) wrap.style.display = 'block';
     _csRef = {
-      url,
+      url: nextUrl,
       type: 'image',
       title: 'Generated design',
       source: 'generate',
@@ -2154,24 +2260,43 @@
     if (!_csCoachStyleUrls.length) {
       chip.style.display = 'none';
       chip.innerHTML = '';
+      _csCoachStylesSentToChat = new Set();
       return;
     }
+    const n = _csCoachStyleUrls.length;
     chip.style.display = 'flex';
-    chip.innerHTML = _csCoachStyleUrls.map((url, i) => (
-      `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.28);border-radius:8px;font-size:0.72rem;color:#E9D5FF;">`
-      + `<img src="${escapeHtml(mediaSrc(url))}" alt="" referrerpolicy="no-referrer" style="width:28px;height:28px;border-radius:5px;object-fit:cover;background:#111;">`
-      + `<span style="flex:1;">Style ${i + 1} — match this format</span>`
-      + `<button type="button" data-style-clear="${i}" style="background:none;border:none;color:#E9D5FF;cursor:pointer;font-size:1.1em;line-height:1;">×</button>`
-      + `</div>`
+    chip.style.flexDirection = 'column';
+    chip.style.gap = '6px';
+    chip.style.maxHeight = '76px';
+    chip.style.overflowY = 'auto';
+    const thumbs = _csCoachStyleUrls.map((url, i) => (
+      `<span style="position:relative;display:inline-flex;flex-shrink:0;" title="Style ${i + 1} — match this format">`
+      + `<img src="${escapeHtml(mediaSrc(url))}" alt="" referrerpolicy="no-referrer" style="width:32px;height:32px;border-radius:6px;object-fit:cover;background:#111;border:1px solid rgba(124,58,237,0.35);">`
+      + `<button type="button" data-style-clear="${i}" aria-label="Remove style ${i + 1}" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;padding:0;border-radius:999px;border:none;background:#1E1433;color:#E9D5FF;font-size:11px;line-height:16px;cursor:pointer;">×</button>`
+      + `</span>`
     )).join('');
+    chip.innerHTML = (
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">`
+      + `<span style="font-size:0.68rem;font-weight:700;color:#DDD6FE;">Style refs (${n})</span>`
+      + `<button type="button" data-style-clear-all="1" style="background:none;border:none;color:rgba(233,213,255,0.75);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Clear all</button>`
+      + `</div>`
+      + `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">${thumbs}</div>`
+    );
     chip.querySelectorAll('[data-style-clear]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const idx = Number(btn.getAttribute('data-style-clear'));
         if (!Number.isFinite(idx)) return;
-        _csCoachStyleUrls.splice(idx, 1);
+        const removed = _csCoachStyleUrls.splice(idx, 1)[0];
+        if (removed) _csCoachStylesSentToChat.delete(removed);
         renderCoachStyleChip();
         loadDesignEngines();
       });
+    });
+    chip.querySelector('[data-style-clear-all]')?.addEventListener('click', () => {
+      _csCoachStyleUrls = [];
+      _csCoachStylesSentToChat = new Set();
+      renderCoachStyleChip();
+      loadDesignEngines();
     });
   }
 
@@ -2538,9 +2663,11 @@
       }
     }
     _csCoachSending = true;
-    const styleUrls = coachStyleHttpsUrls();
+    const allStyleUrls = coachStyleHttpsUrls();
+    // Inject style vision once per attach. Re-sending on every turn floods the model.
+    const styleUrls = coachStylesPendingForChat();
     setCoachStatusBusy(true, { hasStyleRefs: styleUrls.length > 0 });
-    if (_csCoachStyleUrls.length && !styleUrls.length) {
+    if (_csCoachStyleUrls.length && !allStyleUrls.length) {
       toast('Style photos need a stored https URL — re-upload them', 'error');
     }
     const shown = styleUrls.length
@@ -2572,6 +2699,7 @@
       });
       if (!res.ok) throw new Error('Coach error');
       const data = await res.json().catch(() => ({}));
+      markCoachStylesSent(styleUrls);
       setCoachStatusBusy(false);
       const reply = String(data.reply || 'Got it.');
       appendDesignCoachBubble('assistant', reply);

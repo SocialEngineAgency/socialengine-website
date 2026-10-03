@@ -186,7 +186,9 @@ function isCoachWaitingOnCreateAsk(userMessage) {
 
 function isCoachCarouselConfirmAsk(userMessage) {
   const t = String(userMessage || '').toLowerCase();
-  if (/\b(yes|yep|confirm|agreed|go ahead|do it|generate|apply|use these|replicate|match these)\b/.test(t)) return true;
+  if (/\b(yes|yep|confirm|accept(ed|s)?|agreed|go ahead|do it|generate|apply|use these|replicate|match these)\b/.test(t)) return true;
+  if (/\baccept(ed|s)?\b.{0,40}\b(brief|plan|carousel|slides?)\b/.test(t)) return true;
+  if (/\b(brief|plan)\b.{0,24}\baccept(ed|s)?\b/.test(t)) return true;
   return /\b(create|make|paint|generate|apply)\b.{0,40}\bslides?\b/.test(t);
 }
 
@@ -293,19 +295,21 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
   const job = inferDesignJob({ userMessage, hasCanvas, lastJob: normalizeCoachJob(lastJob) });
   const list = Array.isArray(actions) ? actions : [];
   const create = list.find((a) => a && a.type === 'create');
-  if (!hasCanvas && isCoachWaitingOnCreateAsk(userMessage)) {
-    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
-  }
-  if (!hasCanvas && job && job.stage === 'produce') {
-    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
-  }
   const carousel = list.find((a) => usableCarouselPlan(a)) || (usableCarouselPlan(lastPlan) ? lastPlan : null);
   const askedSplit = !!(job && job.stage === 'split') || isCoachCarouselRedesignAsk(userMessage);
+  // Carousel plan wins over produce/refine/create — accepting a slide brief must
+  // never redraw the master poster via FigureLabs.
   if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && (isCoachCarouselConfirmAsk(userMessage) || askedSplit)) {
     return { mode: 'apply_carousel', action: carousel, job };
   }
   if (carousel && carouselHasStoredMaster(carousel, hasCanvas)) {
     return { mode: 'confirm_carousel', action: carousel, job };
+  }
+  if (!hasCanvas && isCoachWaitingOnCreateAsk(userMessage)) {
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
+  }
+  if (!hasCanvas && job && job.stage === 'produce') {
+    return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
   }
   if (isCoachCarouselPlanReply(reply)) return { mode: 'none', job };
   if (create && isCoachDesignRefineAsk(userMessage, hasCanvas)) {
