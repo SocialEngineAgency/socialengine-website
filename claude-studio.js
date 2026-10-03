@@ -338,6 +338,7 @@
   }
 
   function restoreLastDesign() {
+    if (_csGenerating) return false;
     const snapshot = {
       generatedUrl: _csGeneratedUrl,
       html: _csHtml,
@@ -916,8 +917,11 @@
     if (aspectEl && ['9:16', '1:1', '4:5'].includes(String(s.aspect_ratio || ''))) {
       aspectEl.value = s.aspect_ratio;
     }
-    toast('Coach brief loaded — Generate design, or Redesign as carousel.', 'success');
+    toast('Coach brief loaded — generating now…', 'success');
     applyRedesignedSlides();
+    if (!_csGenerating && !masterImageUrl()) {
+      setTimeout(() => { generate(); }, 0);
+    }
   }
 
   function applyRedesignedSlides() {
@@ -1290,6 +1294,7 @@
     applyRedesignedSlides();
     renderSavedDesigns();
     restoreLastDesign();
+    restoreBusyUiIfGenerating();
     if (window.__SE_COACH_MASTER_IMAGE && !masterImageUrl()) {
       setReference({
         url: window.__SE_COACH_MASTER_IMAGE,
@@ -1299,6 +1304,7 @@
       });
     }
     hydrateDesignCoachLog();
+    restoreBusyUiIfGenerating();
     const seed = window.__SE_DESIGN_COACH_SEED;
     if (seed) {
       window.__SE_DESIGN_COACH_SEED = '';
@@ -1361,18 +1367,27 @@
     if (loadMsg && msg) loadMsg.textContent = msg;
     if (busy) {
       hidePreviewPanes();
+      const empty = document.getElementById('cs-empty');
+      if (empty) empty.style.display = 'none';
       const loading = document.getElementById('cs-loading');
       if (loading) loading.style.display = 'block';
+      setPreviewHeader('Stage · Generating');
     } else {
       const loading = document.getElementById('cs-loading');
       const loadingOn = loading && loading.style.display === 'block';
       if (loading) loading.style.display = 'none';
-      const shown = ['cs-frame', 'cs-carousel', 'cs-original-preview'].some((id) => {
+      const shown = ['cs-frame', 'cs-carousel', 'cs-original-preview', 'cs-scene-preview'].some((id) => {
         const el = document.getElementById(id);
         return el && el.style.display && el.style.display !== 'none';
       });
       if (loadingOn && !shown) restorePreview();
     }
+  }
+
+  /** Session poll / nav remount wipes #cs-loading; keep the purple spinner if a generate is in flight. */
+  function restoreBusyUiIfGenerating() {
+    if (!_csGenerating) return;
+    setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
   }
 
   function restorePreview() {
@@ -1838,21 +1853,28 @@
     renderCarouselPreview();
   }
 
-  async function generate() {
-    if (_csGenerating) return;
+  async function generate(opts = {}) {
+    const continueBusy = !!opts.continueBusy;
+    if (_csGenerating && !continueBusy) return;
     const briefEl = document.getElementById('cs-brief');
     let brief = briefEl?.value?.trim() || '';
     if (!brief) {
       toast('Describe your post first', 'warning');
+      if (continueBusy) setBusy(false);
       return;
     }
     const hero = heroUrlForGenerate();
     if (_csRef && _csRef.type === 'video' && !hero) {
       toast('This video has no still — upload a frame or use Video Studio', 'warning');
+      if (continueBusy) setBusy(false);
       return;
     }
     _csBrief = brief;
-    setBusy(true, 'Creating your design…');
+    const styleUrls = coachStyleHttpsUrls();
+    const busyMsg = styleUrls.length
+      ? 'Scientific Infographic can take up to ~5 minutes — keep this tab open…'
+      : 'Creating your design…';
+    setBusy(true, busyMsg);
     try {
       const payload = {
         brief,
@@ -1860,7 +1882,6 @@
         aspect_ratio: document.getElementById('cs-aspect')?.value || '9:16',
         model: selectedEngineId(),
       };
-      const styleUrls = coachStyleHttpsUrls();
       if (styleUrls.length) {
         payload.style_image_url = styleUrls[0];
         payload.style_image_urls = styleUrls;
@@ -1869,9 +1890,11 @@
         payload.reference = { ..._csRef, url: hero };
         payload.photo_url = hero;
       }
+      // FigureLabs generate (~180s) + retry + 4K upscale (~180s) — fail clearly instead of silent hang
       const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
         method: 'POST',
         headers: authHeaders(),
+        signal: AbortSignal.timeout(360_000),
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
@@ -1898,7 +1921,10 @@
       }
       toast('Design ready', 'success');
     } catch (e) {
-      toast(e.message || 'Generation failed', 'error');
+      const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      toast(timedOut
+        ? 'Generation timed out after 6 minutes — try again, or shorten the brief'
+        : (e.message || 'Generation failed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -2070,7 +2096,11 @@
     const waitingAsk = typeof window.isCoachWaitingOnCreateAsk === 'function'
       ? window.isCoachWaitingOnCreateAsk(next)
       : /\bare you (creating|generating)\b/i.test(next);
-    if (_csGenerating) return false;
+    if (_csGenerating) {
+      restoreBusyUiIfGenerating();
+      toast('Still generating — watch the Stage spinner', 'info');
+      return false;
+    }
     const current = briefEl ? (briefEl.value.trim() || _csBrief) : _csBrief;
     if (waitingAsk) {
       if (!current) {
@@ -2090,7 +2120,10 @@
       }
     }
     const before = _csGeneratedUrl;
-    await generate();
+    if (!_csGenerating) {
+      setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
+    }
+    await generate({ continueBusy: true });
     return Boolean(_csGeneratedUrl && _csGeneratedUrl !== before);
   }
 
@@ -2396,18 +2429,23 @@
         }
       } else if (decision.mode === 'apply_generate') {
         const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
-        const ok = await generateFromCoach(decision.prompt || '');
+        setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
+        const ok = await generateFromCoach(decision.prompt || message);
         if (status) status.textContent = ok ? '4K poster ready.' : 'Could not generate the poster.';
         if (ok) {
           _csCoachJob = typeof window.advanceCoachJob === 'function'
             ? window.advanceCoachJob(_csCoachJob || decision.job, 'generated')
             : _csCoachJob;
           offerNextCoachJobChip();
+        } else if (!_csGenerating) {
+          setBusy(false);
         }
       } else if (decision.mode === 'refine') {
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
+        setBusy(true, 'Updating the preview…');
         const ok = await generateFromCoach(decision.prompt || message);
         if (status) status.textContent = ok ? 'Preview updated.' : 'Could not update the preview.';
+        if (!ok && !_csGenerating) setBusy(false);
       }
     } catch (e) {
       typing.remove();
