@@ -30,7 +30,8 @@
   let _csWorkspaceCleared = false;
   let _csScene = null;
   let _csActiveDesignPoll = null; // { jobId, promise }
-  const CS_LEAVE_BUSY = 'Scientific Infographic usually takes a few minutes. You can leave Design Studio — we\'ll keep working.';
+  // Stage spinner only — never the Generate button (that button is a short CTA).
+  const CS_LEAVE_BUSY = 'A few minutes — you can leave; we\'ll keep working.';
 
   function queueReady() {
     return (typeof window !== 'undefined' && window.studioQueueReady) || {
@@ -1492,7 +1493,9 @@
     const gen = document.getElementById('cs-generate');
     if (gen) {
       gen.disabled = busy;
-      gen.textContent = busy ? (msg || 'Generating…') : 'Generate design';
+      // White CTA stays a short label. Long status copy belongs on #cs-loading-msg.
+      const shortBtn = msg && msg !== CS_LEAVE_BUSY && String(msg).length <= 32 ? msg : 'Generating…';
+      gen.textContent = busy ? shortBtn : 'Generate design';
     }
     const loadMsg = document.getElementById('cs-loading-msg');
     if (loadMsg && msg) loadMsg.textContent = msg;
