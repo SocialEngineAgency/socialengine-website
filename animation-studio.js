@@ -68,6 +68,24 @@
     return d.innerHTML;
   }
 
+  /** Short customer-facing shot line — never compiled Art Director wrap. */
+  function customerShotLine(s) {
+    if (!s) return '';
+    const action = String(s.action || '').trim();
+    if (action && !/ONE cinematic still/i.test(action)) return action;
+    const title = String(s.title || '').trim();
+    if (title) return title;
+    const prompt = String(s.prompt || '').trim();
+    if (!prompt) return '';
+    if (/ONE cinematic still/i.test(prompt)) {
+      const m = prompt.match(/Action:\s*([^.]*)/i);
+      if (m && m[1].trim()) return m[1].trim();
+      return 'Shot';
+    }
+    return prompt;
+  }
+
+
   /** Atlas / Aliyun OSS hotlink-blocks portal Referers — route through API proxy. */
   function mediaSrc(url) {
     if (!url) return '';
@@ -82,7 +100,7 @@
     const busy = !url && ['generating', 'pending', 'developing', 'assembling'].includes(status);
     if (busy) {
       return `<div class="anim-tile__ph anim-tile__ph--gen" aria-busy="true">
-        <span class="anim-tile__gen-label">${esc(status === 'assembling' ? 'Creating' : 'Generating')}</span>
+        <span class="anim-tile__gen-label">${esc(status === 'assembling' ? 'Finishing…' : 'Making…')}</span>
       </div>`;
     }
     if (!url) {
@@ -356,7 +374,7 @@
 
   function motionOptions() {
     const modes = _meta?.motion_modes || [
-      { id: 'auto', label: 'Auto (DreamActor)' },
+      { id: 'auto', label: 'Auto' },
       { id: 'drive', label: 'Upload drive' },
       { id: 'kling', label: 'I2V only' },
     ];
@@ -387,9 +405,9 @@
 
   function i2vOptions() {
     const models = _meta?.i2v_models || [
-      { id: 'seedance', label: 'Seedance 2.0' },
+      { id: 'seedance', label: 'Smooth motion' },
       { id: 'kling', label: 'Kling' },
-      { id: 'auto', label: 'Auto (Seedance→Kling)' },
+      { id: 'auto', label: 'Auto' },
     ];
     const cur = currentI2vModel();
     return models.map((m) =>
@@ -414,9 +432,9 @@
     const id = document.getElementById('anim-motion')?.value || currentMotionMode();
     const hit = (_meta?.motion_modes || []).find((m) => m.id === id);
     if (hit?.hint) return hit.hint;
-    if (id === 'drive') return 'Upload a driving video for motion — DreamActor maps your locked character onto it.';
-    if (id === 'kling') return 'I2V only (no DreamActor) — uses Seedance/Kling from the I2V select.';
-    return 'Seedream keyframe → Seedance motion (spatial-stable) → DreamActor identity.';
+    if (id === 'drive') return 'Upload a short driving video — we map your character onto that motion.';
+    if (id === 'kling') return 'Motion from the still only (no driving video).';
+    return 'We build each still, then add natural motion while keeping the same person.';
   }
 
   function assembleFlags() {
@@ -1199,17 +1217,16 @@
               </div>
               <div class="anim-shot__meta">
                 <div class="anim-shot__title">${esc(s.title || s.id)} ${statusBadge(s.status)}</div>
-                <label class="anim-shot__prompt-label">Shot prompt</label>
-                <textarea class="anim-shot__prompt-edit" data-scene="${esc(s.id)}" rows="3" ${s.status === 'generating' ? 'disabled' : ''} placeholder="Describe this shot, or tap Suggest…">${esc(_shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : (s.prompt || ''))}</textarea>
-                ${s.motion ? `<div style="font-size:0.65rem;color:rgba(167,139,250,0.9);margin:4px 0;">Motion: ${esc(s.motion)}${s.i2v_model ? ` · ${esc(s.i2v_model)}` : ''}${s.model_video ? ` · ${esc(String(s.model_video).split('/').pop())}` : ''}</div>` : ''}
+                <label class="anim-shot__prompt-label">What happens</label>
+                <textarea class="anim-shot__prompt-edit" data-scene="${esc(s.id)}" rows="2" ${s.status === 'generating' ? 'disabled' : ''} placeholder="Short description of this shot…">${esc(_shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : customerShotLine(s))}</textarea>
                 ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
                 ${s.persist_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.persist_warning)}</div>` : ''}
                 ${s.error ? `<div style="font-size:0.62rem;color:#FCA5A5;margin:2px 0 6px;line-height:1.35;">${esc(s.error)}</div>` : ''}
                 <div class="anim-shot__overrides">
                   <select class="anim-select anim-shot-i2v" data-scene="${esc(s.id)}" title="I2V model" style="font-size:0.65rem;padding:4px 6px;">
-                    <option value="">I2V: inherit</option>
-                    <option value="seedance" ${shotI2v === 'seedance' ? 'selected' : ''}>Seedance</option>
-                    <option value="kling" ${shotI2v === 'kling' ? 'selected' : ''}>Kling</option>
+                    <option value="">Motion: default</option>
+                    <option value="seedance" ${shotI2v === 'seedance' ? 'selected' : ''}>Smooth</option>
+                    <option value="kling" ${shotI2v === 'kling' ? 'selected' : ''}>Dynamic</option>
                     <option value="auto" ${shotI2v === 'auto' ? 'selected' : ''}>Auto</option>
                   </select>
                   <select class="anim-select anim-shot-template" data-scene="${esc(s.id)}" title="Motion template" style="font-size:0.65rem;padding:4px 6px;">
@@ -1235,13 +1252,13 @@
           })() : `
             <div class="anim-placeholder-row">${
               _briefing || p.status === 'briefing'
-              ? 'AI is writing the shots — stay here. This can take a minute.'
+              ? 'Writing your shots — stay here. This can take a minute.'
               : (p.status === 'failed' || p.error)
               ? (p.error || 'Generation stopped. Upload a Char still on the right, then Retry.')
               : p.status === 'developing'
-              ? 'Building the character sheet…'
+              ? 'Preparing your character…'
               : p.status === 'generating'
-              ? 'Generating shots…'
+              ? 'Making your shots…'
               : p.status === 'character_review'
               ? 'Shots wait until you Approve character lock.'
               : brief?.shots?.length
@@ -1385,6 +1402,7 @@
               }`;
             })() : ''}
             ${p.content_record_id && !p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
+            ${p.content_record_id ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:8px 0 0;line-height:1.35;">Ready for review — Approve there to post to Instagram, Facebook, and TikTok.</div>` : ''}
             ${p.content_record_id && p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review" title="Final may not be durable">Open in Content Review</button>` : ''}
           </div>
         </div>
@@ -1691,30 +1709,17 @@
           </div>`;
         document.getElementById('anim-retry-generate')?.addEventListener('click', acceptBrief);
       } else if (_project?.status === 'brief_ready' && brief) {
-        const optimized = String(brief.rewritten_prompt || '').trim()
-          || (brief.shots || []).map((s, i) => `${i + 1}. ${s.title || `Shot ${i + 1}`}: ${s.prompt || ''}`).join('\n\n');
-        const looksRaw = (() => {
-          const a = optimized.toLowerCase().replace(/\s+/g, ' ');
-          const b = String(_project.user_prompt || '').toLowerCase().replace(/\s+/g, ' ');
-          if (!optimized) return true;
-          if (!b) return false;
-          return a === b || (b.length > 60 && a.includes(b) && a.length < b.length * 1.25);
-        })();
+        const lines = (brief.shots || []).map((s, i) => {
+          const line = customerShotLine(s) || s.title || `Shot ${i + 1}`;
+          return `<div class="anim-brief-shot-line"><strong>${i + 1}.</strong> ${esc(line)}</div>`;
+        }).join('');
         actions.innerHTML = `
           <div class="anim-brief-card">
             <div class="anim-brief-card__title">${(brief.shots || []).length || 0} shots from your idea</div>
-            ${looksRaw
-              ? `<div style="font-size:0.68rem;color:#FCD34D;margin:0 0 8px;line-height:1.35;">This still looks like your raw draft — tap <strong>Re-brief</strong> to run it again (it will rewrite automatically).</div>`
-              : (brief._rewritten_repaired
-                ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:0 0 8px;line-height:1.35;">Recovered from shot plan — tap Re-brief if you want a fuller Art Director rewrite.</div>`
-                : '')}
-            <textarea id="anim-brief-edit" class="anim-brief-edit">${esc(optimized)}</textarea>
-            <div class="anim-brief-shots">${(brief.shots || []).map((s, i) =>
-              `<div class="anim-brief-shot"><strong>Shot ${i + 1}${s.title ? ` · ${esc(s.title)}` : ''}</strong><div style="margin-top:4px;line-height:1.4;">${esc(s.prompt || '')}</div></div>`
-            ).join('')}</div>
+            ${lines || '<div class="anim-brief-shot-line">No shots yet — try again.</div>'}
             <div class="anim-brief-btns">
               <button type="button" class="anim-btn" id="anim-accept">Accept & generate</button>
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-rebrief">Re-brief</button>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-rebrief">Try again</button>
             </div>
           </div>`;
         document.getElementById('anim-accept')?.addEventListener('click', acceptBrief);
@@ -1732,7 +1737,7 @@
           </div>`;
         document.getElementById('anim-accept-character')?.addEventListener('click', approveCharacter);
       } else if (['developing', 'generating', 'assembling'].includes(_project?.status)) {
-        actions.innerHTML = `<div class="anim-working">Generating — canvas updates live…</div>`;
+        actions.innerHTML = `<div class="anim-working">Making your video — the canvas updates as each shot lands…</div>`;
       } else {
         actions.innerHTML = '';
       }
@@ -1775,7 +1780,7 @@
     const prompt = String(ta?.value || prior || '').trim();
     if (!prompt) return toast('Enter a prompt to re-brief', 'error');
     if (ta) ta.value = prompt;
-    toast('Re-briefing with the Art Director…', 'info');
+    toast('Trying a new shot plan…', 'info');
     await sendPrompt();
   }
 
@@ -1817,7 +1822,7 @@
       _project.look = look;
       _project.motion_mode = motion_mode;
       await syncMotionSettings();
-      toast('AI is rewriting your brief…', 'info');
+      toast('Writing your shots…', 'info');
       const briefBody = {
         mode,
         look,
@@ -1848,9 +1853,9 @@
       const stillRaw = !rewritten
         || (userP && (opt === userP || (userP.length > 60 && opt.includes(userP) && opt.length < userP.length * 1.25)));
       if (stillRaw) {
-        toast('Brief still looks unoptimized — try Re-brief once more', 'error');
+        toast('Shot plan looks unfinished — tap Try again', 'error');
       } else {
-        toast('Optimized brief ready — review, then Accept & generate', 'success');
+        toast('Shot plan ready — review, then Accept & generate', 'success');
       }
     } catch (e) {
       toast(e.message || 'Brief failed', 'error', e.request_id);
@@ -1882,12 +1887,9 @@
     renderChat();
     startPoll();
     try {
-      const edited = document.getElementById('anim-brief-edit')?.value;
-      const agent_brief = { ...(_project.agent_brief || {}) };
-      if (edited) agent_brief.rewritten_prompt = edited;
       const data = await animFetch(`/api/animation/projects/${_project.id}/approve-brief`, {
         method: 'POST',
-        body: JSON.stringify({ agent_brief }),
+        body: JSON.stringify({ agent_brief: _project.agent_brief || {} }),
       });
       _project = data.project;
       renderCanvas();
@@ -2151,12 +2153,12 @@
     const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
     const promptEdit = (shotCard?.querySelector('.anim-shot__prompt-edit')?.value
       || _shotPromptDrafts[sceneId]
-      || scene?.prompt
+      || customerShotLine(scene)
       || '').trim();
-    if (!promptEdit) return toast('Shot prompt can’t be empty', 'error');
+    if (!promptEdit) return toast('Describe what happens in this shot first', 'error');
     _busy = true;
     try {
-      toast('Regenerating shot (compose → I2V → DreamActor)…', 'info');
+      toast('Remaking this shot…', 'info');
       const references = refsPayload();
       const shotI2v = shotCard?.querySelector('.anim-shot-i2v')?.value || '';
       const shotTpl = shotCard?.querySelector('.anim-shot-template')?.value || '';
@@ -2164,7 +2166,7 @@
       const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/regenerate`, {
         method: 'POST',
         body: JSON.stringify({
-          prompt: promptEdit,
+          action: promptEdit,
           motion_mode: document.getElementById('anim-motion')?.value || currentMotionMode(),
           i2v_model: shotI2v || currentI2vModel(),
           motion_template_id: shotTpl || null,
@@ -2176,7 +2178,7 @@
       _project = data.project;
       // Keep draft in sync with what we sent (server now has it on the scene).
       const updated = (_project.scenes || []).find((s) => s.id === sceneId);
-      if (updated?.prompt) _shotPromptDrafts[sceneId] = updated.prompt;
+      if (updated) _shotPromptDrafts[sceneId] = customerShotLine(updated) || promptEdit;
       renderCanvas();
       startPoll();
       toast(data.started ? 'Shot regenerating — canvas will update when ready' : 'Shot updated', 'success');
@@ -2710,9 +2712,19 @@
         .anim-chat-body::-webkit-scrollbar-track { background:rgba(255,255,255,0.06); border-radius:8px; }
         .anim-chat-body::-webkit-scrollbar-thumb { background:rgba(167,139,250,0.45); border-radius:8px; }
         .anim-chat-log { flex:0 0 auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
-        .anim-chat-compose { padding:12px 14px 12px; border-top:1px solid rgba(255,255,255,0.06); flex:0 1 auto; min-height:0; max-height:min(280px, 38vh); overflow:hidden; display:flex; flex-direction:column; }
-        .anim-chat-compose-fields { flex:1 1 auto; min-height:0; overflow-y:auto; }
+        .anim-chat-compose { padding:12px 14px 14px; border-top:1px solid rgba(255,255,255,0.06); flex:0 0 auto; background:#0F172A; display:flex; flex-direction:column; gap:0; }
+        .anim-chat-settings { margin:0 0 10px; border:1px solid rgba(255,255,255,0.08); border-radius:10px; background:rgba(255,255,255,0.02); }
+        .anim-chat-settings > summary { cursor:pointer; list-style:none; padding:10px 12px; font-size:0.75rem; font-weight:700; color:#CBD5E1; }
+        .anim-chat-settings > summary::-webkit-details-marker { display:none; }
+        .anim-chat-settings[open] > summary { border-bottom:1px solid rgba(255,255,255,0.06); }
+        .anim-chat-settings__body { padding:10px 12px 12px; max-height:min(220px, 30vh); overflow-y:auto; }
         .anim-chat-send { flex:0 0 auto; padding-top:8px; }
+        .anim-brief-card { padding:12px; margin:0 0 12px; border-radius:12px; border:1px solid rgba(167,139,250,0.35); background:rgba(124,58,237,0.1); }
+        .anim-brief-card__title { font-size:0.85rem; font-weight:700; color:#F8FAFC; margin-bottom:8px; }
+        .anim-brief-shot-line { font-size:0.78rem; color:#E2E8F0; line-height:1.4; padding:7px 0; border-top:1px solid rgba(255,255,255,0.06); }
+        .anim-brief-shot-line:first-of-type { border-top:none; }
+        .anim-brief-btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+        .anim-brief-btns .anim-btn { width:auto; flex:1; min-width:120px; }
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
@@ -2875,24 +2887,26 @@
         <aside class="anim-chat">
           <div class="anim-chat-header">
             <h3>AI Agent</h3>
-            <p>One idea → AI writes the shots → you accept</p>
+            <p>One idea → short shot list → you accept</p>
           </div>
           <div class="anim-chat-body">
             <div class="anim-chat-log" id="anim-chat-log"></div>
             <div id="anim-brief-actions" style="padding:0 14px;"></div>
           </div>
           <div class="anim-chat-compose">
-              <div class="anim-chat-compose-fields">
+              <details class="anim-chat-settings">
+                <summary>Settings &amp; references</summary>
+                <div class="anim-chat-settings__body">
               <div class="anim-row">
                 <select id="anim-mode" class="anim-select" title="Mode">${modeOptions()}</select>
                 <select id="anim-look" class="anim-select" title="Look">${lookOptions()}</select>
               </div>
               <div class="anim-row" style="margin-top:8px;">
                 <select id="anim-motion" class="anim-select" title="Motion" style="flex:1;">${motionOptions()}</select>
-                <select id="anim-i2v" class="anim-select" title="I2V model" style="flex:1;">${i2vOptions()}</select>
+                <select id="anim-i2v" class="anim-select" title="Motion style" style="flex:1;">${i2vOptions()}</select>
               </div>
               <div class="anim-row" style="margin-top:8px;">
-                <select id="anim-template" class="anim-select" title="Motion template" style="flex:1;">${templateOptions()}</select>
+                <select id="anim-template" class="anim-select" title="Motion style pack" style="flex:1;">${templateOptions()}</select>
               </div>
               <div id="anim-motion-hint" style="font-size:0.68rem;color:rgba(255,255,255,0.4);line-height:1.4;margin:6px 0 8px;">${esc(motionHint())}</div>
               <div id="anim-drive-wrap" hidden style="margin-bottom:10px;">
@@ -2903,10 +2917,8 @@
                 </div>
                 ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
               </div>
-              ${!(_meta?.providers?.fal_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:-2px 0 10px;line-height:1.35;">DreamActor needs FAL_KEY on the API — without it, Auto falls back to Kling only.</div>` : ''}
-              <div style="font-size:0.65rem;color:rgba(167,139,250,0.85);line-height:1.4;margin:0 0 10px;">AI can see tagged refs (Char = one person, Item = object, Setting = group, Scene = place). fal stack: Seedream compose → Seedance (Kling fallback) → DreamActor.</div>
               ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">Voiceover and music generation aren't enabled on this account — captions, uploaded music and outros still work.</div>` : ''}
-              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References <span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:0.7;">— Char = one person · Item = object · Setting = group · Scene = place · Style optional</span></div>
+              <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References</div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
                 <input type="file" id="anim-ref-file" accept="image/*" multiple hidden />
@@ -2915,12 +2927,13 @@
                 <input type="url" id="anim-ref-url" class="anim-ref-url" placeholder="Paste image URL…" />
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-ref-add-url" style="padding:7px 10px;font-size:0.72rem;width:auto;">Add</button>
               </div>
+                </div>
+              </details>
               <div id="anim-entry-mode" class="anim-entry-mode" role="tablist" aria-label="Animate input">
                 <button type="button" class="anim-entry-seg active" role="tab" data-entry="vo" aria-selected="true">Voiceover script</button>
                 <button type="button" class="anim-entry-seg" role="tab" data-entry="prompt" aria-selected="false">Describe a video</button>
               </div>
               <textarea id="anim-prompt" class="anim-prompt" placeholder="Write or paste the voiceover. We'll build the shots around it."></textarea>
-              </div>
               <div class="anim-chat-send">
                 <button type="button" class="anim-btn" id="anim-send">Write shots</button>
               </div>

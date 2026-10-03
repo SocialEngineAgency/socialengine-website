@@ -1707,7 +1707,7 @@
       return;
     }
     _csBrief = brief;
-    setBusy(true, 'Generating… FigureLabs then 4K upscale');
+    setBusy(true, 'Creating your design…');
     try {
       const payload = {
         brief,
