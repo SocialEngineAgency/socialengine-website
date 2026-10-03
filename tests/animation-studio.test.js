@@ -37,11 +37,11 @@ test('Accept & generate shows a working canvas before approve-brief returns', ()
 
 test('timeline copy does not say accept the brief while briefing, developing, or failed', () => {
   const empty = fnSlice(
-    'AI is writing the shots — stay here.',
+    'Writing your shots — stay here.',
     'Shot cards will land on this timeline.'
   );
   assert.match(empty, /failed|p\.error|_briefing/);
-  assert.match(empty, /Building the character sheet/);
+  assert.match(empty, /Preparing your character/);
   const readyAt = empty.indexOf('Ready to generate');
   assert.ok(readyAt > empty.indexOf('failed'), 'failed/briefing copy must come before the accept-the-brief fallback');
 });
@@ -49,7 +49,7 @@ test('timeline copy does not say accept the brief while briefing, developing, or
 test('chat shows a working line while AI writes shots', () => {
   const chat = fnSlice('function renderChat', 'async function ensureProject');
   assert.match(chat, /anim-working/);
-  assert.match(chat, /AI is writing|writing the shots/i);
+  assert.match(chat, /AI is writing|writing the shots|Making your video/i);
 });
 
 test('after /brief returns, briefing is cleared and the canvas re-renders', () => {
@@ -84,11 +84,13 @@ test('AI shots sit in a sidebar scroller; compose stays pinned', () => {
   assert.match(src, /\.anim-chat-body\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(src, /\.anim-chat-body\s*\{[^}]*min-height:\s*0/);
   assert.match(src, /anim-chat-body::-webkit-scrollbar/, 'shots list needs a visible side scrollbar');
-  assert.match(aside, /anim-chat-compose-fields/);
+  assert.match(aside, /anim-chat-settings/);
+  assert.match(aside, /anim-chat-settings__body/);
   const sendAt = aside.indexOf('id="anim-send"');
-  const fieldsAt = aside.indexOf('anim-chat-compose-fields');
-  const fieldsClose = aside.indexOf('</div>', aside.indexOf('<textarea id="anim-prompt"'));
-  assert.ok(sendAt > fieldsClose && sendAt > fieldsAt, 'Write shots must sit outside the scrolling compose fields');
+  const settingsAt = aside.indexOf('anim-chat-settings');
+  const promptAt = aside.indexOf('<textarea id="anim-prompt"');
+  assert.ok(sendAt > promptAt && promptAt > settingsAt, 'Write shots stays sticky below settings + idea box');
+  assert.doesNotMatch(aside, /ONE cinematic still|fal stack|FigureLabs|DreamActor needs/i);
 });
 
 test('Animate UI copy does not say Claude', () => {
