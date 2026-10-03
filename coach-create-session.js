@@ -490,8 +490,25 @@ function stripCoachPlanDump(text) {
     .trim();
 }
 
+/** Remove emojis from coach chat. Keep fenced blocks (caption / post drafts). */
+function stripCoachChatEmojis(text) {
+  const s = String(text || '');
+  const parts = s.split(/(```[\s\S]*?```)/g);
+  return parts.map((part, i) => {
+    if (i % 2 === 1 && /^```/.test(part)) return part;
+    return part
+      .replace(/\p{Extended_Pictographic}/gu, '')
+      .replace(/\p{Emoji_Presentation}/gu, '')
+      .replace(/[\uFE0F\u200D]/g, '')
+      .replace(/^[ \t]+/gm, '')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n');
+  }).join('').trim();
+}
+
 function formatCoachReplyHtml(text) {
-  const plain = coachReplyToPlain(stripCoachPlanDump(text));
+  const plain = stripCoachChatEmojis(coachReplyToPlain(stripCoachPlanDump(text)));
   if (!plain) return '';
   const blocks = plain.split(/\n\n+/);
   return blocks.map((block, i) => {
@@ -540,6 +557,7 @@ const coachSessionApi = {
   isCoachMetaBrief,
   persistCoachHistoryEntry,
   formatCoachReplyHtml,
+  stripCoachChatEmojis,
   coachReplyToPlain,
   studioGenerateMode,
   studioModelForMode,
