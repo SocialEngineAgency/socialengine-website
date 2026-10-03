@@ -1136,6 +1136,10 @@
             <button type="button" id="cs-coach-apply" style="width:100%;padding:10px;background:linear-gradient(135deg,#059669,#34D399);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Apply</button>
           </div>
           <div style="padding:10px 12px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;gap:8px;">
+            <div id="cs-coach-status" style="display:none;align-items:center;gap:8px;padding:7px 10px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.22);border-radius:8px;font-size:0.72rem;color:#DDD6FE;font-family:var(--font-body);line-height:1.35;">
+              <span style="width:8px;height:8px;border-radius:50%;background:#A78BFA;flex-shrink:0;animation:pulse-dot 1.2s ease-in-out infinite;"></span>
+              <span id="cs-coach-status-text">Coach is reading…</span>
+            </div>
             <div id="cs-coach-style-chip" style="display:none;flex-direction:column;gap:6px;"></div>
             <input id="cs-coach-style-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
             <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;min-height:52px;max-height:160px;overflow-y:auto;"></textarea>
@@ -2325,10 +2329,54 @@
     setDesignCoachApply(null);
   }
 
-  function setCoachInputBusy(busy) {
+  let _csCoachStatusTimer = null;
+
+  function scrollCoachLogToBottom() {
+    const log = document.getElementById('cs-coach-log');
+    if (!log) return;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function coachStatusPhrases(hasStyleRefs) {
+    const base = [
+      'Coach is reading…',
+      'Coach is drafting…',
+      'Coach is shaping the brief…',
+      'Coach is lining up next steps…',
+    ];
+    if (!hasStyleRefs) return base;
+    return [
+      'Coach is reading…',
+      'Coach is checking your references…',
+      'Coach is matching the style…',
+      'Coach is drafting…',
+      'Coach is shaping the brief…',
+    ];
+  }
+
+  function setCoachStatusBusy(busy, { hasStyleRefs = false } = {}) {
+    const wrap = document.getElementById('cs-coach-status');
+    const text = document.getElementById('cs-coach-status-text');
     const input = document.getElementById('cs-coach-input');
-    if (!input) return;
-    input.placeholder = busy ? 'Asking your coach…' : 'Ask your coach…';
+    if (_csCoachStatusTimer) {
+      clearInterval(_csCoachStatusTimer);
+      _csCoachStatusTimer = null;
+    }
+    if (!busy) {
+      if (wrap) wrap.style.display = 'none';
+      if (input) input.placeholder = 'Ask your coach…';
+      return;
+    }
+    const phrases = coachStatusPhrases(hasStyleRefs);
+    let i = 0;
+    if (text) text.textContent = phrases[0];
+    if (wrap) wrap.style.display = 'flex';
+    if (input) input.placeholder = phrases[0];
+    _csCoachStatusTimer = setInterval(() => {
+      i = (i + 1) % phrases.length;
+      if (text) text.textContent = phrases[i];
+      if (input) input.placeholder = phrases[i];
+    }, 2200);
   }
 
   async function designCoachAsk(preset) {
@@ -2355,8 +2403,8 @@
       }
     }
     _csCoachSending = true;
-    setCoachInputBusy(true);
     const styleUrls = coachStyleHttpsUrls();
+    setCoachStatusBusy(true, { hasStyleRefs: styleUrls.length > 0 });
     if (_csCoachStyleUrls.length && !styleUrls.length) {
       toast('Style photos need a stored https URL — re-upload them', 'error');
     }
@@ -2365,11 +2413,7 @@
       : message;
     appendDesignCoachBubble('user', shown);
     persistSharedCoach('user', shown);
-    const typing = document.createElement('div');
-    typing.id = 'cs-coach-typing';
-    typing.style.cssText = 'align-self:flex-start;color:rgba(255,255,255,0.4);font-size:0.72rem;';
-    typing.textContent = 'Coach is looking…';
-    document.getElementById('cs-coach-log')?.appendChild(typing);
+    scrollCoachLogToBottom();
     try {
       const attached = masterImageUrl() || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '';
       const outbound = styleUrls.length >= 4
@@ -2393,10 +2437,11 @@
       });
       if (!res.ok) throw new Error('Coach error');
       const data = await res.json().catch(() => ({}));
-      typing.remove();
+      setCoachStatusBusy(false);
       const reply = String(data.reply || 'Got it.');
       appendDesignCoachBubble('assistant', reply);
       persistSharedCoach('assistant', reply, { actions: data.coach_actions });
+      scrollCoachLogToBottom();
       const decide = typeof window.resolveDesignCoachApply === 'function'
         ? window.resolveDesignCoachApply
         : () => ({ mode: 'none' });
@@ -2419,6 +2464,7 @@
       _csCoachSending = false;
       if (decision.mode === 'apply_carousel') {
         const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
+        scrollCoachLogToBottom();
         const ok = await applyCarouselPlan(decision.action || {});
         if (status) status.textContent = ok ? 'Carousel ready.' : 'Could not generate the carousel.';
         if (ok) {
@@ -2429,6 +2475,7 @@
         }
       } else if (decision.mode === 'apply_generate') {
         const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
+        scrollCoachLogToBottom();
         setBusy(true, 'Scientific Infographic can take up to ~5 minutes — keep this tab open…');
         const ok = await generateFromCoach(decision.prompt || message);
         if (status) status.textContent = ok ? '4K poster ready.' : 'Could not generate the poster.';
@@ -2442,21 +2489,23 @@
         }
       } else if (decision.mode === 'refine') {
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
+        scrollCoachLogToBottom();
         setBusy(true, 'Updating the preview…');
         const ok = await generateFromCoach(decision.prompt || message);
         if (status) status.textContent = ok ? 'Preview updated.' : 'Could not update the preview.';
         if (!ok && !_csGenerating) setBusy(false);
       }
     } catch (e) {
-      typing.remove();
+      setCoachStatusBusy(false);
       const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
       appendDesignCoachBubble('assistant', timedOut
-        ? 'Coach took too long looking at those photos. Try again — if it stalls, send fewer references.'
+        ? 'Coach took too long with those photos. Try again — if it stalls, send fewer references.'
         : (e.message || 'Coach error — try again.'));
+      scrollCoachLogToBottom();
       setDesignCoachApply(null);
     } finally {
       _csCoachSending = false;
-      setCoachInputBusy(false);
+      setCoachStatusBusy(false);
     }
   }
 
