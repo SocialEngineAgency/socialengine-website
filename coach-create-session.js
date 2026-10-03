@@ -209,7 +209,7 @@ function isCoachDesignRefineAsk(userMessage, hasCanvas) {
   if (isCoachStyleMatchAsk(userMessage)) return false;
   const t = String(userMessage || '').toLowerCase();
   if (!t.trim()) return false;
-  const asksNew = /\b(make|create|generate)\b.{0,50}\b(new |a )?(poster|graphic|infographic|carousel)\b/.test(t)
+  const asksNew = /\b(make|create|generate|give me|need|want)\b.{0,60}\b(new |an? )?(poster|graphic|infogra\w*ic|carousel)\b/.test(t)
     && !/\b(bigger|smaller|tweak|change|fix|remove|darker|lighter|title|headline)\b/.test(t);
   if (asksNew) return false;
   return /\b(bigger|smaller|darker|lighter|tweak|change|fix|remove|drop|replace|move|redo|regenerat|another|title|headline|cta|button|color|font|background|spacing|make the)\b/.test(t);
@@ -248,7 +248,10 @@ function inferDesignJob({ userMessage = '', hasCanvas = false, lastJob = null } 
   const t = String(userMessage || '').toLowerCase();
   if (!t.trim()) return normalizeCoachJob(lastJob);
   const wantsCarousel = /\b(carousel|slides?|split)\b/.test(t);
-  const wantsStill = /\b(infographic|poster|graphic)\b/.test(t) || (/\bdesign\b/.test(t) && /\b(make|create|generate)\b/.test(t));
+  // infogra*ic catches common typos (infograhpic); give me / need / want count as create intent
+  const stillNoun = /\b(infogra\w*ic|poster|graphic)\b/.test(t);
+  const createVerb = /\b(make|create|generate|give me|need|want)\b/.test(t);
+  const wantsStill = stillNoun || (/\bdesign\b/.test(t) && createVerb);
   if (hasCanvas && wantsCarousel) {
     return normalizeCoachJob({ type: 'design.carousel', goal: userMessage, stage: 'split' });
   }
@@ -256,7 +259,7 @@ function inferDesignJob({ userMessage = '', hasCanvas = false, lastJob = null } 
     return normalizeCoachJob({ type: 'design.carousel', goal: userMessage, stage: 'produce' });
   }
   const asksNewStill = wantsStill && !wantsCarousel
-    && /\b(make|create|generate)\b.{0,50}\b(new |a )?(poster|graphic|infographic)\b/.test(t)
+    && /\b(make|create|generate|give me|need|want)\b.{0,60}\b(new |an? )?(poster|graphic|infogra\w*ic)\b/.test(t)
     && !/\b(bigger|smaller|tweak|change|fix|remove|darker|lighter|title|headline)\b/.test(t);
   if (!hasCanvas && wantsStill && !wantsCarousel) {
     return normalizeCoachJob({ type: 'design.still', goal: userMessage, stage: 'produce' });
@@ -321,7 +324,8 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
     return { mode: 'refine', prompt: userMessage, job };
   }
   const t = String(userMessage || '').toLowerCase();
-  if (!hasCanvas && /\b(make|create|generate|design)\b/.test(t) && /\b(poster|graphic|infographic|carousel|slides?|design)\b/.test(t)) {
+  if (!hasCanvas && /\b(make|create|generate|give me|need|want|design)\b/.test(t)
+    && /\b(poster|graphic|infogra\w*ic|carousel|slides?|design)\b/.test(t)) {
     return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
   }
   return { mode: 'none', job };

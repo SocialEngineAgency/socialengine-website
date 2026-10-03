@@ -312,6 +312,26 @@ test('Design Studio Coach rail attaches a style photo and formats replies', () =
   assert.match(src, /row\.innerHTML = fmt\(text\)/);
 });
 
+test('give me + typo infograhpic auto-starts generate (empty or occupied Stage)', () => {
+  assert.equal(inferDesignJob({
+    userMessage: 'give me an infograhpic on the best foods for gastric cancer',
+    hasCanvas: false,
+  }).stage, 'produce');
+  assert.equal(resolveDesignCoachApply({
+    reply: 'The brief is now with FigureLabs via Design Studio — generating your 4K portrait infographic now.',
+    userMessage: 'give me an infograhpic on the best foods; use the attached reference image for design style',
+    hasCanvas: true,
+  }).mode, 'apply_generate');
+});
+
+test('Stage keeps purple spinner across remount and times out design-generate', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(src, /AbortSignal\.timeout\(\s*360_000\s*\)/);
+  assert.match(src, /function restoreBusyUiIfGenerating/);
+  assert.match(src, /restoreBusyUiIfGenerating\(\)/);
+  assert.match(src, /Scientific Infographic can take up to/);
+});
+
 test('Design rail refines auto-apply; first poster generates now; split with a plan applies', () => {
   assert.equal(resolveDesignCoachApply({
     reply: 'Making the title larger.',
