@@ -14,7 +14,7 @@
   <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
-  <script src="./claude-studio.js?v=20261002-workspace" defer></script>
+  <script src="./claude-studio.js?v=20261002-atelier" defer></script>
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20260929-prompt"></script>
   <script src="./animation-studio.js?v=20260929-style" defer></script>
@@ -1967,33 +1967,68 @@
       }
     }
 
-    /* ── CREATE segmented control (design §3) ── */
+    /* ── CREATE mode strip (atelier): Video · Post · Animate ── */
     .create-segments {
       display: flex;
-      gap: 4px;
-      margin: 18px 32px 0;
-      padding: 4px;
-      width: max-content;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
+      align-items: baseline;
+      gap: 0;
+      margin: 10px 32px 0;
+      padding: 0 0 12px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      border-radius: 0;
     }
     .create-segments[hidden] { display: none; }
     .create-seg {
-      padding: 8px 16px;
+      position: relative;
+      padding: 8px 18px 10px;
       border: none;
-      border-radius: 9px;
+      border-radius: 0;
       background: transparent;
-      color: rgba(148,163,184,0.85);
-      font-family: var(--font-body);
-      font-size: 0.82rem;
-      font-weight: 600;
+      color: rgba(148,163,184,0.65);
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 500;
+      letter-spacing: -0.02em;
       cursor: pointer;
-      transition: background 0.15s, color 0.15s;
+      transition: color 0.15s;
     }
-    .create-seg:hover { color: #fff; }
-    .create-seg.active { background: rgba(124,58,237,0.18); color: #fff; box-shadow: inset 0 0 0 1px rgba(124,58,237,0.35); }
-    @media (max-width: 1024px) { .create-segments { margin: 14px 16px 0; } }
+    .create-seg:hover { color: rgba(255,255,255,0.85); }
+    .create-seg.active {
+      background: transparent;
+      color: #fff;
+      font-weight: 700;
+      box-shadow: none;
+    }
+    .create-seg.active::after {
+      content: '';
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: -1px;
+      height: 2px;
+      background: #fff;
+      border-radius: 2px 2px 0 0;
+    }
+    .create-seg + .create-seg::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 1px;
+      height: 14px;
+      background: rgba(255,255,255,0.1);
+    }
+    @media (max-width: 1024px) {
+      .create-segments { margin: 8px 16px 0; }
+      .create-seg { font-size: 0.95rem; padding: 8px 14px 10px; }
+      .create-seg.active::after { left: 14px; right: 14px; }
+    }
 
     /* ── SETTINGS tabs (design §3) ── */
     .settings-tabs { display: flex; gap: 4px; margin: 0 0 22px; border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; scrollbar-width: none; }
@@ -3082,10 +3117,10 @@
           </div>
         </div>
 
-        <!-- Create: segmented control. Lives outside #dash-content because both
-             studios own that element's innerHTML. Shown only while Create is active. -->
-        <div class="create-segments" id="create-segments" role="tablist" aria-label="Create" hidden>
-          <button type="button" class="create-seg active" role="tab" data-segment="creation-studio" aria-selected="true">Video &amp; Post</button>
+        <!-- Create mode strip. Outside #dash-content — studios own that innerHTML. -->
+        <div class="create-segments" id="create-segments" role="tablist" aria-label="Create mode" hidden>
+          <button type="button" class="create-seg active" role="tab" data-segment="creation-studio" aria-selected="true">Video</button>
+          <button type="button" class="create-seg" role="tab" data-segment="design-studio" aria-selected="false">Post</button>
           <button type="button" class="create-seg" role="tab" data-segment="animation-studio" aria-selected="false">Animate</button>
         </div>
 
@@ -6352,6 +6387,9 @@
       else if (activeNav === 'library') renderLibraryPage(clientData);
       else if (activeNav === 'competitor-intel') renderCompetitorIntel();
       else if (activeNav === 'video-studio' || activeNav === 'creation-studio') renderVideoStudio();
+      else if (activeNav === 'design-studio' && typeof (window.openClaudeDesignStudio || window.renderClaudeStudio) === 'function') {
+        (window.openClaudeDesignStudio || window.renderClaudeStudio)();
+      }
       else if (activeNav === 'animation-studio' && typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
       else if (activeNav === 'ad-studio') renderAdStudio();
       else if (activeNav === 'ai-studio') renderAIStudio();
@@ -6439,9 +6477,10 @@
         'library': 'Logo, colors, characters, items, and settings for every create',
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
-        'create': 'Video & Post from your catalog, or animate a multi-shot reel',
-        'creation-studio': 'Video + Post — catalog reference to queue',
-        'animation-studio': 'Canvas + AI agent — characters, scenes, multi-shot reels',
+        'create': 'Video, Post, or Animate — pick a mode and make something',
+        'creation-studio': 'Upload or generate video — music, caption, queue',
+        'design-studio': 'Still posts and carousels — brand locked, stage first',
+        'animation-studio': 'Multi-shot reels — canvas + agent',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'inbox': 'Comments, DMs and mentions in one place',
         'settings': 'Brand, account, connections and billing',
@@ -6458,6 +6497,7 @@
       'schedule': 'Calendar',
       'create': 'Create',
       'creation-studio': 'Create',
+      'design-studio': 'Create',
       'animation-studio': 'Create',
       'analytics': 'Analytics',
       'brand-voice': 'Settings',
@@ -6579,11 +6619,11 @@
       });
     });
 
-    // ━━━ URL hash = Settings tab / Create segment (design §3) ━━━
-    // #settings/<brand|account|connections|billing> · #create/<video|animate>
+    // ━━━ URL hash = Settings tab / Create mode (atelier) ━━━
+    // #settings/<brand|account|connections|billing> · #create/<video|post|animate>
     const SETTINGS_TABS = ['brand', 'account', 'connections', 'billing'];
-    const CREATE_SEGMENTS = { video: 'creation-studio', animate: 'animation-studio' };
-    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'animation-studio': 'animate' };
+    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', animate: 'animation-studio' };
+    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'animation-studio': 'animate' };
     function seReadHash() {
       const m = /^#(settings|create)(?:\/([a-z-]+))?$/.exec(window.location.hash || '');
       return m ? { page: m[1], sub: m[2] || '' } : null;
@@ -6606,21 +6646,27 @@
           else openSettingsTab(h.sub);
         } else if (h.page === 'create') {
           const seg = CREATE_SEGMENTS[h.sub];
-          if (activeNav !== 'creation-studio' && activeNav !== 'animation-studio') document.querySelector('[data-nav="create"]')?.click();
-          else if (seg) setCreateSegment(seg);
+          if (activeNav !== 'creation-studio' && activeNav !== 'design-studio' && activeNav !== 'animation-studio') {
+            document.querySelector('[data-nav="create"]')?.click();
+          } else if (seg) setCreateSegment(seg);
         }
       } finally { _hashRouting = false; }
     });
 
-    // ━━━ Create (design §3): segmented wrapper over the two untouched studios ━━━
-    // activeNav keeps holding the studio id ('creation-studio' | 'animation-studio')
-    // so every existing activeNav check (polls, refresh gates) still works; only
-    // the sidebar highlight is 'create'.
+    // ━━━ Create atelier: Video · Post · Animate (equal modes) ━━━
+    // activeNav holds studio id; sidebar highlight stays 'create'.
     const CREATE_SEGMENT_LS = 'se_create_segment';
     function currentCreateSegment() {
       const h = seReadHash();
       if (h && h.page === 'create' && CREATE_SEGMENTS[h.sub]) return CREATE_SEGMENTS[h.sub];
-      try { const s = localStorage.getItem(CREATE_SEGMENT_LS); if (CREATE_SEGMENT_SLUG[s]) return s; } catch (_) {}
+      try {
+        const s = localStorage.getItem(CREATE_SEGMENT_LS);
+        if (CREATE_SEGMENT_SLUG[s]) return s;
+        // Migrate legacy "video" bucket that used to bury Post inside Video Studio.
+        if (s === 'creation-studio' && localStorage.getItem('se_create_surface') === 'design') {
+          return 'design-studio';
+        }
+      } catch (_) {}
       return 'creation-studio';
     }
     function setCreateSegment(segment) {
@@ -6636,9 +6682,16 @@
       _navGeneration++;
       window._studioClientData = clientData;
       if (segment === 'animation-studio') {
+        window.__SE_CREATE_SURFACE = 'animate';
         if (typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
         else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Animation Studio failed to load — hard refresh.</div>';
+      } else if (segment === 'design-studio') {
+        window.__SE_CREATE_SURFACE = 'design';
+        const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
+        if (typeof open === 'function') open();
+        else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Post studio failed to load — hard refresh.</div>';
       } else {
+        window.__SE_CREATE_SURFACE = 'video';
         renderVideoStudio();
       }
     }
@@ -6650,22 +6703,17 @@
       b.addEventListener('click', () => setCreateSegment(b.dataset.segment));
     });
 
-    // Programmatic nav used by Fundraise/Ads/Coach handoffs and the old ids that
-    // no longer have a sidebar button (creation-studio, animation-studio, brand-voice).
+    // Programmatic nav used by Fundraise/Ads/Coach handoffs and legacy studio ids.
     window.switchNav = function(nav) {
       if (nav === 'design-studio') {
-        window.__SE_CREATE_SURFACE = 'design';
-        seWriteHash('create/' + CREATE_SEGMENT_SLUG['creation-studio']);
+        seWriteHash('create/post');
         showIf(true, document.getElementById('create-segments'));
         const createBtn = document.querySelector('[data-nav="create"]');
         if (createBtn) {
           document.querySelectorAll('.dash-nav-item').forEach((n) => n.classList.remove('active'));
           createBtn.classList.add('active');
         }
-        activeNav = 'creation-studio';
-        const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
-        if (typeof open === 'function') open();
-        else renderCreatePage('creation-studio');
+        setCreateSegment('design-studio');
         return;
       }
       if (nav === 'creation-studio' || nav === 'video-studio' || nav === 'animation-studio') {
@@ -6838,17 +6886,13 @@
           <div style="margin-bottom:32px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
               <div>
-                <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 6px;">Studio</h2>
-                <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">Upload a finished video or make one — add music, write the caption, then queue or post.</p>
+                <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 6px;letter-spacing:-0.02em;">Video</h2>
+                <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0;">Upload a finished clip or generate one — music, caption, then queue or post.</p>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
-                <div style="display:inline-flex;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;gap:2px;">
-                  <button type="button" onclick="window.__SE_CREATE_SURFACE='video'; renderVideoStudio()" style="padding:7px 12px;border:none;border-radius:8px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Video</button>
-                  <button type="button" onclick="(typeof openClaudeDesignStudio==='function'?openClaudeDesignStudio:renderClaudeStudio)()" style="padding:7px 12px;border:none;border-radius:8px;background:transparent;color:rgba(255,255,255,0.5);font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post</button>
-                </div>
-                <div style="padding:8px 16px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;display:flex;align-items:center;gap:8px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  <span id="ms-credits-display" style="font-size:0.82rem;font-weight:700;color:rgba(139,92,246,0.9);">— credits</span>
+                <div style="padding:8px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:999px;display:flex;align-items:center;gap:8px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <span id="ms-credits-display" style="font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.75);">— credits</span>
                 </div>
               </div>
             </div>

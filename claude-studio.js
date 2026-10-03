@@ -913,89 +913,95 @@
     }
 
     content.innerHTML = `
-      <div style="display:flex;height:calc(100vh - 56px);overflow:hidden;">
-        <div style="width:300px;min-width:300px;border-right:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;background:rgba(10,16,28,0.6);">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div>
-              <div style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;color:#fff;">Post</div>
-              <div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:2px;">Static square · brand + catalog</div>
-            </div>
-            <div style="display:inline-flex;padding:2px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;gap:2px;">
-              <button type="button" id="cs-back-video" style="padding:6px 10px;border:none;border-radius:7px;background:transparent;color:rgba(255,255,255,0.45);font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Video</button>
-              <button type="button" style="padding:6px 10px;border:none;border-radius:7px;background:rgba(124,58,237,0.28);color:#E9D5FF;font-size:0.7rem;font-weight:700;cursor:default;font-family:var(--font-body);">Post</button>
-            </div>
+      <div class="atelier-shell" style="display:flex;height:calc(100vh - 56px);overflow:hidden;">
+        <div class="atelier-essentials" style="width:300px;min-width:280px;border-right:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:22px 18px;display:flex;flex-direction:column;gap:16px;background:rgba(8,12,22,0.92);">
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:#fff;letter-spacing:-0.03em;">Post</div>
+            <div style="font-size:0.72rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.4;">Still · carousel · brand locked</div>
           </div>
-          <div id="cs-workspace-chip" style="display:none;padding:8px 10px;border-radius:8px;border:1px solid rgba(124,58,237,0.25);background:rgba(124,58,237,0.08);font-size:0.72rem;color:#E9D5FF;font-weight:600;line-height:1.35;"></div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;">
-            <button type="button" id="cs-new-post" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">New post</button>
-            <button type="button" id="cs-save-later" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid rgba(16,185,129,0.28);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save for later</button>
-            <button type="button" id="cs-archive-design" style="padding:7px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.55);font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Archive</button>
-            <button type="button" id="cs-delete-design" style="padding:7px 8px;border-radius:8px;border:1px solid rgba(248,113,113,0.28);background:rgba(248,113,113,0.08);color:#FCA5A5;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete</button>
+          <div id="cs-workspace-chip" style="display:none;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);font-size:0.72rem;color:rgba(255,255,255,0.72);font-weight:600;line-height:1.35;"></div>
+          <div style="display:flex;gap:4px;">
+            <button type="button" id="cs-new-post" title="New post" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.7);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">New</button>
+            <button type="button" id="cs-save-later" title="Save for later" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.7);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Save</button>
+            <button type="button" id="cs-archive-design" title="Archive" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.55);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Archive</button>
+            <button type="button" id="cs-delete-design" title="Delete" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(252,165,165,0.75);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Delete</button>
           </div>
 
           <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Reference</div>
-            <div id="cs-ref-summary" style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;"></div>
+            <div style="font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.32);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Reference</div>
+            <div id="cs-ref-summary" style="padding:12px;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:12px;"></div>
           </div>
 
           <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Saved</div>
-            <div id="cs-saved-designs" style="padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;"></div>
-            <button type="button" id="cs-save-template" style="width:100%;margin-top:8px;padding:9px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.28);border-radius:9px;color:#E9D5FF;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save as template</button>
+            <div style="font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.32);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Brief</div>
+            <textarea id="cs-brief" rows="5" placeholder="Caption for a finished graphic, or describe the design to generate…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);border-radius:12px;padding:12px;color:#fff;font-size:0.84rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
           </div>
 
-          <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Carousel</div>
-            <input id="cs-infographic-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
-            <input id="cs-slides-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
-            <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
-            <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
-            <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Redesign as carousel</button>
-            <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → Coach redesigns each slide as a 9:16 frame. Or pick 2–10 slides (filename order) if they are already cut. Instagram max is 10.</div>
+          <button type="button" id="cs-generate" style="width:100%;padding:14px;background:#fff;border:none;border-radius:12px;color:#0A0F1A;font-size:0.88rem;font-weight:700;cursor:pointer;font-family:var(--font-body);letter-spacing:-0.01em;">Generate design</button>
+
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
+              <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+                <span>Style &amp; aspect</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
+              </summary>
+              <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;">
+                <input id="cs-style" type="text" placeholder="Bold typographic, dark, minimal" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
+                <select id="cs-aspect" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
+                  <option value="9:16" selected>9:16 portrait</option>
+                  <option value="1:1">1:1 square</option>
+                  <option value="4:5">4:5 portrait</option>
+                </select>
+              </div>
+            </details>
+
+            <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
+              <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+                <span>Carousel</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
+              </summary>
+              <div style="padding:0 12px 12px;">
+                <input id="cs-infographic-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
+                <input id="cs-slides-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
+                <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
+                <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
+                <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Redesign as carousel</button>
+                <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → redesign each slide · or drop 2–10 cut slides (max 10).</div>
+              </div>
+            </details>
+
+            <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
+              <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+                <span>Saved &amp; templates</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
+              </summary>
+              <div style="padding:0 12px 12px;">
+                <div id="cs-saved-designs" style="padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;"></div>
+                <button type="button" id="cs-save-template" style="width:100%;margin-top:8px;padding:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save as template</button>
+              </div>
+            </details>
+
+            <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
+              <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+                <span>Advanced · URL</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
+              </summary>
+              <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;">
+                <input id="cs-photo" type="url" placeholder="Image URL or Shopify product URL" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
+                <button type="button" id="cs-resolve-url" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.65);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Use URL</button>
+              </div>
+            </details>
           </div>
 
-          <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Describe your post</div>
-            <textarea id="cs-brief" rows="5" placeholder="Already have the graphic? Paste the caption here, then Add to Queue. Or describe a new design to generate." style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:11px 12px;color:#fff;font-size:0.82rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;"></textarea>
-          </div>
-
-          <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Style hint (optional)</div>
-            <input id="cs-style" type="text" placeholder="Bold typographic, dark, minimal" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
-          </div>
-
-          <div>
-            <div style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Aspect</div>
-            <select id="cs-aspect" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
-              <option value="9:16" selected>9:16 portrait</option>
-              <option value="1:1">1:1 square</option>
-              <option value="4:5">4:5 portrait</option>
-            </select>
-          </div>
-
-          <details style="border:1px solid rgba(255,255,255,0.06);border-radius:9px;padding:8px 10px;">
-            <summary style="font-size:0.7rem;color:rgba(255,255,255,0.35);cursor:pointer;font-weight:600;">Advanced · paste URL</summary>
-            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">
-              <input id="cs-photo" type="url" placeholder="Image URL or Shopify product URL" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
-              <button type="button" id="cs-resolve-url" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.65);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Use URL</button>
-            </div>
-          </details>
-
-          <button type="button" id="cs-generate" style="width:100%;padding:13px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:10px;color:#fff;font-size:0.85rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Generate design</button>
-
-          <div style="margin-top:auto;padding:10px 12px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15);border-radius:9px;">
-            <div style="font-size:0.65rem;font-weight:700;color:rgba(124,58,237,0.6);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;">Auto-branded as</div>
-            <div style="font-size:0.8rem;font-weight:600;color:rgba(255,255,255,0.7);" id="cs-brand-pill">${escapeHtml(_csBrandName)}</div>
-            <div style="font-size:0.68rem;color:rgba(255,255,255,0.3);margin-top:2px;">Colors, logo & voice applied automatically</div>
+          <div style="margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:0.62rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Branded as</div>
+            <div style="font-size:0.82rem;font-weight:600;color:rgba(255,255,255,0.78);" id="cs-brand-pill">${escapeHtml(_csBrandName)}</div>
+            <div style="font-size:0.68rem;color:rgba(255,255,255,0.3);margin-top:2px;">Colors, logo &amp; voice applied</div>
           </div>
         </div>
 
-        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:rgba(8,14,24,0.8);">
-          <div id="cs-preview-header" style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:rgba(255,255,255,0.35);">Preview · 9:16</div>
-          <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:32px;">
-            <div id="cs-empty" style="text-align:center;max-width:420px;">
-              <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:rgba(255,255,255,0.7);margin-bottom:10px;">Design Studio</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.3);line-height:1.6;">Upload a finished photo, paste the caption, Add to Queue — or generate a 9:16 design, redesign a tall infographic as a carousel, or drop 2–10 already-cut slides.</div>
+        <div class="atelier-stage" style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(ellipse at 50% 30%,rgba(255,255,255,0.03),transparent 55%),rgba(6,10,18,0.95);">
+          <div id="cs-preview-header" style="padding:12px 18px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.7rem;color:rgba(255,255,255,0.35);letter-spacing:0.04em;text-transform:uppercase;font-weight:600;">Stage · 9:16</div>
+          <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:36px 28px;">
+            <div id="cs-empty" style="text-align:center;max-width:400px;">
+              <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:rgba(255,255,255,0.78);margin-bottom:10px;letter-spacing:-0.03em;">Stage</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.35);line-height:1.65;">Choose a reference, write a brief, Generate — or drop a finished graphic and Add to Queue. Carousel tools live under Carousel when you need them.</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
@@ -1043,8 +1049,8 @@
           </div>
         </div>
 
-        <div id="cs-coach-rail" style="width:340px;min-width:300px;border-left:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;background:rgba(10,16,28,0.6);min-height:0;">
-          <div style="padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;">Coach</div>
+        <div id="cs-coach-rail" class="atelier-inspector" style="width:320px;min-width:280px;border-left:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;background:rgba(8,12,22,0.92);min-height:0;">
+          <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.32);text-transform:uppercase;letter-spacing:0.08em;">Inspector · Coach</div>
           <div id="cs-coach-log" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;"></div>
           <div id="cs-coach-apply-wrap" style="display:none;padding:0 12px 8px;">
             <button type="button" id="cs-coach-apply" style="width:100%;padding:10px;background:linear-gradient(135deg,#059669,#34D399);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Apply</button>
@@ -1093,13 +1099,6 @@
     renderRefSummary();
     syncSplitButton();
 
-    document.getElementById('cs-back-video')?.addEventListener('click', () => {
-      if (typeof window.renderVideoStudio === 'function') {
-        window.renderVideoStudio();
-      } else if (typeof showToast === 'function') {
-        showToast('Video Studio unavailable — refresh and try again', 'error');
-      }
-    });
     document.getElementById('cs-new-post')?.addEventListener('click', () => {
       startFresh({ keepStyles: false });
       toast('Blank post', 'info');
@@ -2561,6 +2560,9 @@
   window.designCoachAsk = designCoachAsk;
   window.openClaudeDesignStudio = function openClaudeDesignStudio() {
     window.__SE_CREATE_SURFACE = 'design';
+    try {
+      if (typeof window.activeNav !== 'undefined') window.activeNav = 'design-studio';
+    } catch (_) {}
     try {
       const url = window.vsUploadedImageUrl || window._vsUploadedImageUrl;
       if (url && (!window._studioReference || !window._studioReference.url)) {

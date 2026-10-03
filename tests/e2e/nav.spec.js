@@ -84,16 +84,21 @@ for (const vp of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
   });
 }
 
-test('Create: segmented control switches between Video & Post and Animate and remembers the choice', async ({ page }) => {
+test('Create: mode strip switches Video · Post · Animate and remembers the choice', async ({ page }) => {
   await mockApi(page, srv.base);
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="create"]');
   const seg = page.locator('#create-segments');
   await expect(seg).toBeVisible();
-  await expect(seg.locator('[data-segment]')).toHaveText(['Video & Post', 'Animate']);
+  await expect(seg.locator('[data-segment]')).toHaveText(['Video', 'Post', 'Animate']);
   await expect(seg.locator('[data-segment="creation-studio"]')).toHaveClass(/active/);
   await expect(page.locator('#dash-content')).toContainText(/I already have the video/i);
   await expect(page.locator('#dash-breadcrumb-label')).toHaveText('Create');
+
+  await seg.locator('[data-segment="design-studio"]').click();
+  await expect(seg.locator('[data-segment="design-studio"]')).toHaveClass(/active/);
+  await expect(page.locator('#dash-content .atelier-shell')).toBeVisible({ timeout: 15000 });
+  expect(await page.evaluate(() => location.hash)).toBe('#create/post');
 
   await seg.locator('[data-segment="animation-studio"]').click();
   await expect(seg.locator('[data-segment="animation-studio"]')).toHaveClass(/active/);
@@ -110,13 +115,18 @@ test('Create: segmented control switches between Video & Post and Animate and re
   await expect(page.locator('#dash-content .anim-shell')).toBeVisible({ timeout: 15000 });
 });
 
-test('switchNav aliases: animation-studio lands on Create → Animate, brand-voice on Settings → Brand', async ({ page }) => {
+test('switchNav aliases: animation-studio / design-studio / creation-studio land on Create modes', async ({ page }) => {
   await mockApi(page, srv.base);
   await login(page, srv.base);
   await page.evaluate(() => window.switchNav('animation-studio'));
   await expect(page.locator('.dash-nav-item[data-nav="create"]')).toHaveClass(/active/);
   await expect(page.locator('#create-segments [data-segment="animation-studio"]')).toHaveClass(/active/);
   await expect(page.locator('#dash-content .anim-shell')).toBeVisible({ timeout: 15000 });
+
+  await page.evaluate(() => window.switchNav('design-studio'));
+  await expect(page.locator('#create-segments [data-segment="design-studio"]')).toHaveClass(/active/);
+  await expect(page.locator('#dash-content #cs-generate')).toBeVisible({ timeout: 15000 });
+  expect(await page.evaluate(() => location.hash)).toBe('#create/post');
 
   await page.evaluate(() => window.switchNav('creation-studio'));
   await expect(page.locator('#create-segments [data-segment="creation-studio"]')).toHaveClass(/active/);
