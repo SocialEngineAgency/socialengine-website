@@ -10,6 +10,7 @@ const {
   normalizeCoachCreateSession,
   persistCoachHistoryEntry,
   formatCoachReplyHtml,
+  stripCoachChatEmojis,
   resolveDesignCoachApply,
   isCoachDesignRefineAsk,
   inferDesignJob,
@@ -310,6 +311,13 @@ test('Design Studio Coach rail attaches a style photo and formats replies', () =
   assert.match(src, /multiple/);
   assert.match(src, /formatCoachReplyHtml/);
   assert.match(src, /row\.innerHTML = fmt\(text\)/);
+});
+
+test('Coach chat strips emojis but keeps fenced caption drafts', () => {
+  assert.equal(stripCoachChatEmojis('Ready. 💜\n\n✅ Eleven foods'), 'Ready.\n\nEleven foods');
+  const withCaption = 'Here is the caption:\n\n```\nWINTER SOUP 🥕\n```\n\nSay the word.';
+  assert.match(stripCoachChatEmojis(withCaption), /WINTER SOUP 🥕/);
+  assert.doesNotMatch(formatCoachReplyHtml('Great plan 💜'), /💜/);
 });
 
 test('Coach status sits above style chips and cycles progress phrases', () => {
