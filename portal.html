@@ -7906,7 +7906,7 @@
           const pub = await apiFetch(`${API}/api/approve-post`, {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ postId: qData.record_id, clientEmail, clientHash, editedCaption: draft.caption, publishNow: true }),
+            body: JSON.stringify({ postId: qData.record_id, clientEmail, editedCaption: draft.caption, publishNow: true }),
           });
           const pubData = await pub.json().catch(() => ({}));
           if (!pub.ok) throw new Error(pubData.error || 'Post failed');

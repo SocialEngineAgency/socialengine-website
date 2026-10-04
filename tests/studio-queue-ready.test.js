@@ -239,6 +239,16 @@ test('grid cards keep the date in a reserved footer, not the header', () => {
   assert.doesNotMatch(topRow, /studio-card__date/);
 });
 
+test('Video Post now uses the session, not the removed clientHash', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const start = src.indexOf('async function queueVSFinishedVideo');
+  assert.ok(start > 0);
+  const fn = src.slice(start, start + 2600);
+  assert.match(fn, /publishNow:\s*true/);
+  assert.match(fn, /apiFetch\(`\$\{API\}\/api\/approve-post`/);
+  assert.doesNotMatch(fn, /clientHash/);
+});
+
 test('Approve is not Post now, and the box caption is what we send', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /pick a date to schedule/i);
