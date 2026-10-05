@@ -70,13 +70,12 @@ const TAB_DEFINITIONS = [
     actualName: 'Create',
     nav: 'create',
     data: async (page) => {
-      await expect(page.getByText(/Marketing Studio/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
-      await expect(page.locator('#ms-credits-display')).toHaveText(/^\d+\s+credits$/, { timeout: TAB_TIMEOUT_MS });
-      await expect(page.locator('#dash-content').getByText(/Templates|AI Models|Recent Generations/i))
+      await expect(page.locator('#create-segments')).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(page.locator('#dash-content').getByText(/I already have the video|Make one|Generate from a still/i))
         .toBeVisible({ timeout: TAB_TIMEOUT_MS });
     },
     ctas: [
-      { name: 'Create Video', locator: (page) => page.getByRole('button', { name: /^Create Video$/ }).first() },
+      { name: 'Make one door', locator: (page) => page.locator('#vs-door-make') },
       { name: 'Generate Video', locator: (page) => page.locator('#vs-generate-btn') },
       { name: 'Template card', locator: (page) => page.locator('.vs-template-card').first() },
     ],

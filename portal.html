@@ -17,7 +17,7 @@
   <script src="./claude-studio.js?v=20261003-style-once" defer></script>
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20261003-stale-carousel"></script>
-  <script src="./animation-studio.js?v=20260929-style" defer></script>
+  <script src="./animation-studio.js?v=20261004-chrome" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -6877,15 +6877,15 @@
       const credits = parseInt(clientData?.client?.video_credits || 0);
 
       const templates = [
-        { id: 'ugc', name: 'UGC', icon: '📱', desc: 'Authentic social media videos with handheld camera feel', best: 'TikTok, Reels, Stories', color: '#7C3AED' },
-        { id: 'tutorial', name: 'Tutorial', icon: '📚', desc: 'Step-by-step product demos and how-to videos', best: 'Educational, How-To', color: '#60A5FA' },
-        { id: 'unboxing', name: 'Unboxing', icon: '📦', desc: 'Premium unboxing experience with anticipation build', best: 'E-commerce, Product Reveal', color: '#F59E0B' },
-        { id: 'hyper_motion', name: 'Hyper Motion', icon: '⚡', desc: 'Dynamic product showcase with dramatic camera movements', best: 'Product Showcase, Ads', color: '#EF4444' },
-        { id: 'product_review', name: 'Product Review', icon: '⭐', desc: 'Authentic product examination and review style', best: 'Reviews, Testimonials', color: '#8B5CF6' },
-        { id: 'tv_spot', name: 'TV Spot', icon: '🎬', desc: 'Broadcast-quality cinematic brand storytelling', best: 'Premium, Brand Story', color: '#EC4899' },
-        { id: 'wild_card', name: 'Wild Card', icon: '🎲', desc: 'Creative and experimental scroll-stopping content', best: 'Viral, Experimental', color: '#06B6D4' },
-        { id: 'ugc_virtual_tryon', name: 'UGC Virtual Try-On', icon: '👗', desc: 'Casual virtual try-on for fashion and accessories', best: 'Fashion, Clothing', color: '#F97316' },
-        { id: 'pro_virtual_tryon', name: 'Pro Virtual Try-On', icon: '✨', desc: 'Editorial-quality professional virtual try-on', best: 'Luxury, Editorial', color: '#A855F7' },
+        { id: 'ugc', name: 'UGC', desc: 'Authentic social media videos with handheld camera feel', best: 'TikTok, Reels, Stories', color: '#7C3AED' },
+        { id: 'tutorial', name: 'Tutorial', desc: 'Step-by-step product demos and how-to videos', best: 'Educational, How-To', color: '#60A5FA' },
+        { id: 'unboxing', name: 'Unboxing', desc: 'Premium unboxing experience with anticipation build', best: 'E-commerce, Product Reveal', color: '#F59E0B' },
+        { id: 'hyper_motion', name: 'Hyper Motion', desc: 'Dynamic product showcase with dramatic camera movements', best: 'Product Showcase, Ads', color: '#EF4444' },
+        { id: 'product_review', name: 'Product Review', desc: 'Authentic product examination and review style', best: 'Reviews, Testimonials', color: '#8B5CF6' },
+        { id: 'tv_spot', name: 'TV Spot', desc: 'Broadcast-quality cinematic brand storytelling', best: 'Premium, Brand Story', color: '#EC4899' },
+        { id: 'wild_card', name: 'Wild Card', desc: 'Creative and experimental scroll-stopping content', best: 'Viral, Experimental', color: '#06B6D4' },
+        { id: 'ugc_virtual_tryon', name: 'UGC Virtual Try-On', desc: 'Casual virtual try-on for fashion and accessories', best: 'Fashion, Clothing', color: '#F97316' },
+        { id: 'pro_virtual_tryon', name: 'Pro Virtual Try-On', desc: 'Editorial-quality professional virtual try-on', best: 'Luxury, Editorial', color: '#A855F7' },
       ];
 
       // Models — pulled from /api/models (UNIFIED_MODEL_CATALOG). See
@@ -7039,7 +7039,7 @@
             <div style="padding:24px;">
               <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;color:#fff;margin:0 0 16px;display:flex;align-items:center;gap:8px;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                Quick Generate
+                Generate from a still
                 <span style="font-size:0.68rem;font-weight:500;color:rgba(255,255,255,0.3);">(upload your own image)</span>
               </h3>
               <div id="vs-remix-banner" style="display:none;margin-bottom:16px;padding:14px 16px;background:linear-gradient(135deg,rgba(124,58,237,0.14),rgba(79,70,229,0.08));border:1px solid rgba(124,58,237,0.35);border-radius:12px;">
@@ -7083,13 +7083,13 @@
                   
                   <!-- Scene Presets -->
                   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Studio editorial — clean white background, professional lighting, fashion magazine aesthetic')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">📸 Studio Editorial</button>
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Street style — urban city backdrop, natural lighting, candid walking shot')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">🏙️ Street Style</button>
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Festival vibes — Coachella energy, desert sunset, golden hour, dancing crowd behind')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">🎪 Festival</button>
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Luxury bedroom — silk sheets, warm moody lighting, intimate boudoir atmosphere')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">🛏️ Boudoir</button>
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Beach golden hour — sand, waves, warm sunset glow, relaxed confident energy')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">🏖️ Beach</button>
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Night club — neon lights, dark atmosphere, strobe effects, high energy')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">🪩 Nightlife</button>
-                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Rooftop penthouse — cityscape backdrop, champagne glass, luxury lifestyle')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">🏙️ Rooftop</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Studio editorial — clean white background, professional lighting, fashion magazine aesthetic')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Studio Editorial</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Street style — urban city backdrop, natural lighting, candid walking shot')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Street Style</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Festival vibes — Coachella energy, desert sunset, golden hour, dancing crowd behind')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Festival</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Luxury bedroom — silk sheets, warm moody lighting, intimate boudoir atmosphere')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Boudoir</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Beach golden hour — sand, waves, warm sunset glow, relaxed confident energy')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Beach</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Night club — neon lights, dark atmosphere, strobe effects, high energy')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Nightlife</button>
+                    <button type="button" class="scene-preset-chip" onclick="setScenePreset('Rooftop penthouse — cityscape backdrop, champagne glass, luxury lifestyle')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Rooftop</button>
                   </div>
 
                   <textarea id="vs-creative-dir" rows="2" placeholder="Describe your scene, or pick a preset above and customize it..." style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:12px;"></textarea>
@@ -7176,33 +7176,13 @@
               </h3>
               <div id="vs-recent-list" style="margin-top:16px;">
                 <div style="text-align:center;padding:40px 20px;">
-                  <div style="font-size:2rem;margin-bottom:8px;opacity:0.3;">🎬</div>
+                  <div style="font-size:0.75rem;margin-bottom:8px;opacity:0.45;letter-spacing:0.06em;text-transform:uppercase;">No clips yet</div>
                   <div style="font-size:0.85rem;color:var(--color-text-muted);font-weight:500;">No videos generated yet</div>
                   <div style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:4px;">Upload a product image and generate your first video above</div>
                 </div>
               </div>
             </div>
           </div>
-          <!-- Create Video CTA -->
-          <div class="dash-card" style="margin-bottom:24px;overflow:hidden;">
-            <div style="padding:16px 24px;text-align:center;">
-              <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
-                <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(124,58,237,0.15));border:1px solid rgba(139,92,246,0.25);display:flex;align-items:center;justify-content:center;">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(139,92,246,0.8)" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                </div>
-                <div>
-                  <h3 style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:#fff;margin:0 0 8px;">${hasShopify(clientData) ? 'Create Video from Your Products' : 'Create Video'}</h3>
-                  <p style="font-size:0.85rem;color:var(--color-text-muted);margin:0 0 20px;max-width:500px;">${hasShopify(clientData) ? 'Browse your Shopify catalog, pick a product, choose a creative direction, and generate AI video — all with full product preservation.' : 'Upload a photo or reuse past content, choose a creative direction, and generate AI video in your brand voice.'}</p>
-                </div>
-                <button onclick="openVideoCreator()" style="display:flex;align-items:center;gap:8px;padding:12px 28px;background:linear-gradient(135deg,#7c3aed,#7C3AED);border:none;border-radius:10px;color:#fff;font-size:0.9rem;font-weight:700;cursor:pointer;font-family:var(--font-body);transition:all 0.2s;box-shadow:0 4px 15px rgba(139,92,246,0.3);" onmouseenter="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(139,92,246,0.4)'" onmouseleave="this.style.transform='';this.style.boxShadow='0 4px 15px rgba(139,92,246,0.3)'">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                  Create Video
-                </button>
-                <p style="font-size:0.72rem;color:rgba(255,255,255,0.25);margin:0;">Select from your Shopify products or upload a custom image</p>
-              </div>
-            </div>
-          </div>
-
           <!-- Templates Grid -->
           <div class="dash-card" style="margin-bottom:24px;">
             <div style="padding:20px 24px;">
@@ -7215,7 +7195,7 @@
                 ${templates.map(t => `
                   <div class="vs-template-card" data-template="${t.id}" onclick="selectVSTemplate('${t.id}', this);" style="padding:16px;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:12px;cursor:pointer;transition:all 0.2s;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                      <span style="font-size:1.2rem;">${t.icon}</span>
+                      <span style="width:8px;height:8px;border-radius:999px;background:${t.color};flex-shrink:0;"></span>
                       <span style="font-size:0.88rem;font-weight:600;color:#fff;">${t.name}</span>
                     </div>
                     <p style="font-size:0.75rem;color:var(--color-text-muted);margin:0 0 8px;line-height:1.4;">${t.desc}</p>
@@ -7226,14 +7206,10 @@
             </div>
           </div>
 
-          <!-- Models Reference -->
-          <div class="dash-card" style="margin-bottom:24px;">
-            <div style="padding:20px 24px;">
-              <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;color:#fff;margin:0 0 4px;display:flex;align-items:center;gap:8px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                AI Models
-              </h3>
-              <p style="font-size:0.78rem;color:var(--color-text-muted);margin:0 0 16px;">Fingerprint-matched model selection — preservation score drives ranking. Coming-soon models show the roadmap; they can't be selected until they're live on your plan.</p>
+          <details class="dash-card" style="margin-bottom:24px;">
+            <summary style="padding:16px 24px;cursor:pointer;list-style:none;font-family:var(--font-display);font-size:0.95rem;font-weight:600;color:#fff;">Available models</summary>
+            <div style="padding:0 24px 20px;">
+              <p style="font-size:0.78rem;color:var(--color-text-muted);margin:0 0 16px;">Models ranked for product preservation on your plan. Coming-soon rows show the roadmap.</p>
               <div style="display:grid;gap:8px;">
                 ${allModelsForRef.length === 0
                   ? '<div style="padding:14px 16px;color:var(--color-text-muted);font-size:0.82rem;">Loading models…</div>'
@@ -7266,7 +7242,7 @@
                   }).join('')}
               </div>
             </div>
-          </div>
+          </details>
           </div>
 
         </div>
