@@ -23,3 +23,14 @@ for (const route of SESSION_ROUTES) {
     assert.ok(src.includes(`apiFetch(\`\${API}${route}\``), `${route} should use apiFetch`);
   });
 }
+
+test('logout and account switch clear Create drafts so Post now cannot cross tenants', () => {
+  assert.match(src, /function clearCreateDrafts\s*\(/);
+  assert.match(src, /__SE_VS_UPLOAD\s*=\s*\{\}/);
+  assert.match(src, /localStorage\.removeItem\('se_anim_last_project'\)/);
+  const clearSession = src.slice(src.indexOf('function clearSession'), src.indexOf('function authHeaders'));
+  assert.match(clearSession, /clearCreateDrafts\s*\(/);
+  const saveSession = src.slice(src.indexOf('function saveSession'), src.indexOf('function clearSession'));
+  assert.match(saveSession, /prevEmail !== nextEmail/);
+  assert.match(saveSession, /clearCreateDrafts\s*\(/);
+});
