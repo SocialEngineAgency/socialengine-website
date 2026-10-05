@@ -92,6 +92,7 @@ test('Create: mode strip switches Video · Post · Animate and remembers the cho
   await expect(seg).toBeVisible();
   await expect(seg.locator('[data-segment]')).toHaveText(['Video', 'Post', 'Animate']);
   await expect(seg.locator('[data-segment="creation-studio"]')).toHaveClass(/active/);
+  await expect(page.locator('#dash-content .atelier-shell')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('#dash-content')).toContainText(/I already have the video/i);
   await expect(page.locator('#dash-breadcrumb-label')).toHaveText('Create');
 
