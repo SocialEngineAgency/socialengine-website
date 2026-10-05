@@ -153,10 +153,12 @@ test('design-studio nav opens Post without a Video remount race', () => {
   const start = src.indexOf("if (nav === 'design-studio')");
   assert.ok(start >= 0);
   const block = src.slice(start, start + 700);
-  assert.match(block, /__SE_CREATE_SURFACE\s*=\s*'design'/);
+  // Hash rewrite + Create segment — surface flag is set inside setCreateSegment.
+  assert.match(block, /setCreateSegment\('design-studio'\)/);
   assert.doesNotMatch(block, /setTimeout/);
+  assert.match(src, /__SE_CREATE_SURFACE\s*=\s*'design'/);
   assert.match(src, /__SE_CREATE_SURFACE === 'design'/);
-  assert.match(src, /onclick="window\.__SE_CREATE_SURFACE='video';\s*renderVideoStudio\(\)"/);
+  assert.match(src, /__SE_CREATE_SURFACE\s*=\s*'video'/);
   const gen = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   const useVideo = gen.match(/if \(data\.code === 'USE_VIDEO_STUDIO'\) \{[\s\S]*?\n        \}/);
   assert.ok(useVideo);
@@ -616,7 +618,10 @@ test('portal persists and restores coach_actions on refresh', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /persistCoachHistoryEntry/);
   assert.match(src, /saveToHistory\('assistant'/);
-  const restore = src.slice(src.indexOf('// Restore previous messages'), src.indexOf('function saveToHistory'));
+  const start = src.indexOf('function restoreChatHistoryFromStorage');
+  const end = src.indexOf('async function hydrateThreadFromServer');
+  assert.ok(start >= 0 && end > start, 'restoreChatHistoryFromStorage markers');
+  const restore = src.slice(start, end);
   assert.match(restore, /msg\.actions|entry\.actions/);
   assert.match(restore, /coach-action-btn/);
 });

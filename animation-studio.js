@@ -1846,6 +1846,7 @@
       });
       _pendingFormatTemplateId = null;
       _pendingStylePackId = null;
+      renderPendingPacks();
       _project = data.project;
       if (ta) ta.value = '';
       renderCanvas();
@@ -2554,6 +2555,41 @@
     toast('Ready for a new idea', 'info');
   }
 
+  const STYLE_PACK_LOOK = {
+    'flat-vector-explainer': 'stylized',
+    'cinematic-realistic': 'realistic',
+    'paper-cut-collage': 'cartoon',
+  };
+  const STYLE_PACK_LABEL = {
+    'flat-vector-explainer': 'Flat vector explainer',
+    'cinematic-realistic': 'Cinematic realistic',
+    'paper-cut-collage': 'Paper-cut collage',
+  };
+  const FORMAT_TEMPLATE_LABEL = {
+    'awareness-15s': 'Awareness 15s',
+    'mythbust-20s': 'Myth-bust 20s',
+    'remix-24s': 'Remix 24s',
+  };
+
+  function renderPendingPacks() {
+    const el = document.getElementById('anim-pending-packs');
+    if (!el) return;
+    const styleId = _pendingStylePackId;
+    const formatId = _pendingFormatTemplateId;
+    if (!styleId && !formatId) {
+      el.style.display = 'none';
+      el.innerHTML = '';
+      return;
+    }
+    const styleLabel = STYLE_PACK_LABEL[styleId] || styleId || null;
+    const formatLabel = FORMAT_TEMPLATE_LABEL[formatId] || formatId || null;
+    const bits = [];
+    if (styleLabel) bits.push(`Style: ${esc(styleLabel)}`);
+    if (formatLabel) bits.push(`Format: ${esc(formatLabel)}`);
+    el.style.display = 'flex';
+    el.innerHTML = `<span style="font-size:0.68rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:rgba(196,181,253,0.85);">${bits.join(' · ')}</span><span style="font-size:0.65rem;color:rgba(255,255,255,0.4);margin-left:8px;">Applied on Accept</span>`;
+  }
+
   async function applyAnimRemixSessionIfAny() {
     const s = window.__SE_ANIM_REMIX_SESSION;
     // Still-backed remix OR prompt-only charity Video → Animate recipe handoff
@@ -2572,6 +2608,13 @@
     if (ta) ta.value = s.prompt || '';
     _pendingFormatTemplateId = s.format_template_id || 'remix-24s';
     if (s.style_pack_id) _pendingStylePackId = s.style_pack_id;
+    // Sync Look dropdown to the style pack's look so Settings matches what Accept sends.
+    const lookFromPack = STYLE_PACK_LOOK[s.style_pack_id];
+    const lookEl = document.getElementById('anim-look');
+    if (lookEl && lookFromPack) lookEl.value = lookFromPack;
+    const settings = document.querySelector('.anim-chat-settings');
+    if (settings && s.kind === 'charity_recipe') settings.open = true;
+    renderPendingPacks();
     const kindLabel = s.kind === 'charity_recipe' ? 'Explainer recipe' : 'Remix';
     toast(kindLabel + ' loaded in Animate — review the brief, then Accept.', 'success');
     // Prompt-only charity handoff: seed the composer; do not auto-brief until they Accept.
@@ -2947,6 +2990,7 @@
                 <button type="button" class="anim-entry-seg" role="tab" data-entry="prompt" aria-selected="false">Describe a video</button>
               </div>
               <textarea id="anim-prompt" class="anim-prompt" placeholder="Write or paste the voiceover. We'll build the shots around it."></textarea>
+              <div id="anim-pending-packs" style="display:none;margin:6px 0 0;padding:8px 10px;border-radius:8px;border:1px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.1);align-items:center;flex-wrap:wrap;gap:4px;"></div>
               <div class="anim-chat-send">
                 <button type="button" class="anim-btn" id="anim-send">Write shots</button>
               </div>
