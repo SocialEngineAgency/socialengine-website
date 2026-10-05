@@ -45,3 +45,14 @@ test('Video AI Models catalog is collapsed, not a full page section', () => {
   assert.doesNotMatch(vs, /<!-- Models Reference -->[\s\S]*?<h3[^>]*>\s*<svg[^>]*>[\s\S]*?AI Models/);
   assert.match(vs, /<details[\s\S]*AI models|Available models/i);
 });
+
+test('Video uses shared atelier-shell chrome (essentials · stage · inspector)', () => {
+  const vs = renderVideoStudioSlice();
+  assert.match(vs, /class="atelier-shell"/);
+  assert.match(vs, /class="atelier-essentials"/);
+  assert.match(vs, /class="atelier-stage"/);
+  assert.match(vs, /class="atelier-inspector"/);
+  assert.match(vs, /id="vs-mode-upload"/);
+  assert.match(vs, /id="vs-mode-make"/);
+});
+

@@ -36,10 +36,10 @@ Make Create feel like a premium design atelier: simple on the surface, deep when
 
 ## Studio order
 
-1. **Hub + shell** (this PR) — mode strip + routing
-2. **Post** (this PR) — atelier left essentials + stage + inspector drawers
-3. **Video** (next) — upload/generate into same shell
-4. **Animate** (next) — agent as right panel; settings already progressive
+1. **Hub + shell** — mode strip + routing ✅
+2. **Post** — atelier left essentials + stage + inspector drawers ✅
+3. **Video** — upload/generate into same `atelier-shell` (essentials · stage · inspector) ✅ (2026-10-05)
+4. **Animate** (next) — align `anim-shell` panels to the same chrome vocabulary; agent stays right
 
 ## Post atelier (v1 of B)
 
