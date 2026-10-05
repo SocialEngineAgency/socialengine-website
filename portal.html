@@ -797,6 +797,23 @@
       background: rgba(124,58,237,0.1); color: #C4B5FD; border-color: rgba(124,58,237,0.25);
     }
     .studio-card__restore-btn:hover { background: rgba(124,58,237,0.2); }
+    /* Link-variant archive/restore keep selector classes for e2e without pill chrome */
+    .studio-card__link-btn.studio-card__archive-btn,
+    .studio-card__link-btn.studio-card__restore-btn {
+      display: inline; padding: 0; border: none; border-radius: 0;
+      background: none; color: rgba(255,255,255,0.42);
+    }
+    .studio-card__link-btn.studio-card__archive-btn:hover {
+      background: none; color: rgba(255,255,255,0.78);
+    }
+    .studio-card__link-btn.studio-card__restore-btn,
+    .studio-card__link-btn.studio-card__link-btn--accent.studio-card__restore-btn {
+      color: rgba(196,181,253,0.75);
+    }
+    .studio-card__link-btn.studio-card__restore-btn:hover,
+    .studio-card__link-btn.studio-card__link-btn--accent.studio-card__restore-btn:hover {
+      background: none; color: #DDD6FE;
+    }
 
     /* Studio card enhanced info */
     .studio-card__info { padding: 14px 16px 12px; }
@@ -8384,11 +8401,15 @@
       const id = String(post.id || '').replace(/'/g, "\\'");
       const link = !!(opts && opts.link);
       if (isArchivedPost(post)) {
-        const cls = link ? 'studio-card__link-btn studio-card__link-btn--accent' : 'studio-card__restore-btn';
+        const cls = link
+          ? 'studio-card__link-btn studio-card__link-btn--accent studio-card__restore-btn'
+          : 'studio-card__restore-btn';
         return `<button type="button" class="${cls}" onclick="event.stopPropagation();studioRestore('${id}',this)">Restore</button>`;
       }
       if (isLivePublishedPost(post)) return '';
-      const cls = link ? 'studio-card__link-btn' : 'studio-card__archive-btn';
+      const cls = link
+        ? 'studio-card__link-btn studio-card__archive-btn'
+        : 'studio-card__archive-btn';
       return `<button type="button" class="${cls}" onclick="event.stopPropagation();studioArchive('${id}',this)">Archive</button>`;
     }
     window.refreshContentReview = async function refreshContentReview() {
