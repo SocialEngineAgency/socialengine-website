@@ -2753,14 +2753,14 @@
     root.innerHTML = `
       <style>
         #dash-content.dash-content--animate { padding-bottom: 12px; }
-        .anim-shell { display:grid; grid-template-columns: 1fr minmax(320px,380px); gap:0; height:calc(100vh - 240px); min-height:400px; max-height:calc(100vh - 200px); border:1px solid rgba(255,255,255,0.08); border-radius:16px; overflow:hidden; background:#0B1220; }
-        .anim-canvas { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.08); background:radial-gradient(1200px 600px at 10% 0%, rgba(124,58,237,0.12), transparent 55%), #0B1220; }
-        .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
-        .anim-canvas-header h2 { margin:0; font-size:1.05rem; color:#F8FAFC; font-weight:700; }
+        .anim-shell.atelier-shell { display:grid; grid-template-columns: 1fr minmax(300px,320px); gap:0; height:calc(100vh - 56px); min-height:400px; border:none; border-radius:0; overflow:hidden; background:rgba(6,10,18,0.95); }
+        .anim-canvas.atelier-stage { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.07); background:radial-gradient(ellipse at 50% 30%,rgba(255,255,255,0.03),transparent 55%),rgba(6,10,18,0.95); }
+        .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+        .anim-canvas-header h2 { margin:0; font-family:var(--font-display); font-size:1.05rem; color:#fff; font-weight:700; letter-spacing:-0.02em; }
         .anim-canvas-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px 18px 40px; -webkit-overflow-scrolling:touch; }
-        .anim-chat { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; overflow:hidden; background:#0F172A; }
+        .anim-chat.atelier-inspector { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; overflow:hidden; background:rgba(8,12,22,0.92); }
         .anim-chat-header { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
-        .anim-chat-header h3 { margin:0 0 4px; font-size:0.95rem; color:#E2E8F0; }
+        .anim-chat-header h3 { margin:0 0 4px; font-size:0.65rem; font-weight:700; color:rgba(255,255,255,0.32); text-transform:uppercase; letter-spacing:0.08em; }
         .anim-chat-header p { margin:0; font-size:0.72rem; color:rgba(255,255,255,0.4); }
         /* Shots list scrolls; compose stays pinned (Coach pattern). */
         .anim-chat-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:flex; flex-direction:column; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:rgba(167,139,250,0.55) rgba(255,255,255,0.06); }
@@ -2924,13 +2924,13 @@
         .anim-expand__video { width:100%; max-height:70vh; border-radius:12px; background:#000; aspect-ratio:9/16; object-fit:contain; }
         .anim-expand__actions { display:flex; gap:8px; justify-content:flex-end; }
         @media (max-width: 960px) {
-          .anim-shell { grid-template-columns:1fr; height:auto; }
-          .anim-canvas { border-right:none; border-bottom:1px solid rgba(255,255,255,0.08); min-height:50vh; }
-          .anim-chat { min-height:50vh; }
+          .anim-shell.atelier-shell { grid-template-columns:1fr; height:auto; }
+          .anim-canvas.atelier-stage { border-right:none; border-bottom:1px solid rgba(255,255,255,0.08); min-height:50vh; }
+          .anim-chat.atelier-inspector { min-height:50vh; }
         }
       </style>
-      <div class="anim-shell">
-        <section class="anim-canvas">
+      <div class="anim-shell atelier-shell">
+        <section class="anim-canvas atelier-stage">
           <div class="anim-canvas-header">
             <h2>Animate</h2>
             <div style="display:flex;gap:8px;align-items:center;">
@@ -2940,9 +2940,9 @@
           </div>
           <div class="anim-canvas-body" id="anim-canvas-body"></div>
         </section>
-        <aside class="anim-chat">
+        <aside class="anim-chat atelier-inspector">
           <div class="anim-chat-header">
-            <h3>Coach</h3>
+            <h3>Inspector · Coach</h3>
             <p>One idea → short shot list → you accept</p>
           </div>
           <div class="anim-chat-body">

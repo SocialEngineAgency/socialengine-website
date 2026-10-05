@@ -39,7 +39,7 @@ Make Create feel like a premium design atelier: simple on the surface, deep when
 1. **Hub + shell** — mode strip + routing ✅
 2. **Post** — atelier left essentials + stage + inspector drawers ✅
 3. **Video** — upload/generate into same `atelier-shell` (essentials · stage · inspector) ✅ (2026-10-05)
-4. **Animate** (next) — align `anim-shell` panels to the same chrome vocabulary; agent stays right
+4. **Animate** — `anim-shell` + `atelier-shell` aliases; stage/inspector chrome matched; Coach stays right ✅ (2026-10-05)
 
 ## Post atelier (v1 of B)
 
