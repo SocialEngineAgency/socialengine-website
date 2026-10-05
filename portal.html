@@ -6875,8 +6875,9 @@
       const content = document.getElementById('dash-content');
       const isPaid = clientData?.client?.is_paid;
       const credits = parseInt(clientData?.client?.video_credits || 0);
+      const isCharityStudio = typeof isCharityClient === 'function' && isCharityClient(clientData);
 
-      const templates = [
+      const commerceTemplates = [
         { id: 'ugc', name: 'UGC', desc: 'Authentic social media videos with handheld camera feel', best: 'TikTok, Reels, Stories', color: '#7C3AED' },
         { id: 'tutorial', name: 'Tutorial', desc: 'Step-by-step product demos and how-to videos', best: 'Educational, How-To', color: '#60A5FA' },
         { id: 'unboxing', name: 'Unboxing', desc: 'Premium unboxing experience with anticipation build', best: 'E-commerce, Product Reveal', color: '#F59E0B' },
@@ -6887,6 +6888,25 @@
         { id: 'ugc_virtual_tryon', name: 'UGC Virtual Try-On', desc: 'Casual virtual try-on for fashion and accessories', best: 'Fashion, Clothing', color: '#F97316' },
         { id: 'pro_virtual_tryon', name: 'Pro Virtual Try-On', desc: 'Editorial-quality professional virtual try-on', best: 'Luxury, Editorial', color: '#A855F7' },
       ];
+      // Charity: only API-backed recipes (never invent IDs client-side).
+      const charityRecipes = Array.isArray(window._charityVideoRecipes) ? window._charityVideoRecipes : [];
+      if (isCharityStudio && !charityRecipes.length) {
+        loadCharityVideoRecipes(true).then((rows) => {
+          if (rows.length && typeof activeNav === 'string' && (activeNav === 'video-studio' || activeNav === 'creation-studio')) {
+            renderVideoStudio();
+          }
+        }).catch(() => {});
+      }
+      const templates = isCharityStudio
+        ? charityRecipes.map((r) => ({
+            id: r.id,
+            name: r.label,
+            desc: r.desc,
+            best: r.path === 'animate' ? ((r.best || 'Animate') + ' · Opens Animate') : (r.best || ''),
+            color: r.color || '#7C3AED',
+            path: r.path || 'clip',
+          }))
+        : commerceTemplates;
 
       // Models — pulled from /api/models (UNIFIED_MODEL_CATALOG). See
       // loadUnifiedVideoModels() above. First render uses the cache (may
@@ -7076,12 +7096,15 @@
                 </div>
                 <!-- Right: Settings -->
                 <div>
-                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Product Name <span style="font-weight:500;text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.35);">(optional)</span></label>
-                  <input type="text" id="vs-product-name" placeholder="or we use the first brief line" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;" />
+                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${isCharityStudio ? 'Campaign or story name' : 'Product Name'} <span style="font-weight:500;text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.35);">(optional)</span></label>
+                  <input type="text" id="vs-product-name" placeholder="${isCharityStudio ? 'e.g., Know the Signs — spring appeal' : 'or we use the first brief line'}" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;" />
 
                   <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Creative Direction</label>
                   
-                  <!-- Scene Presets -->
+                  <!-- Scene presets: commerce only. Charity recipes are the cards below (API-backed). -->
+                  ${isCharityStudio ? `
+                  <p style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin:0 0 12px;line-height:1.4;">Pick a recipe below — each one is wired to real camera, motion, and mission-safe defaults. Explainer opens Animate.</p>
+                  ` : `
                   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
                     <button type="button" class="scene-preset-chip" onclick="setScenePreset('Studio editorial — clean white background, professional lighting, fashion magazine aesthetic')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Studio Editorial</button>
                     <button type="button" class="scene-preset-chip" onclick="setScenePreset('Street style — urban city backdrop, natural lighting, candid walking shot')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Street Style</button>
@@ -7091,8 +7114,9 @@
                     <button type="button" class="scene-preset-chip" onclick="setScenePreset('Night club — neon lights, dark atmosphere, strobe effects, high energy')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Nightlife</button>
                     <button type="button" class="scene-preset-chip" onclick="setScenePreset('Rooftop penthouse — cityscape backdrop, champagne glass, luxury lifestyle')" style="padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;color:rgba(255,255,255,0.6);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;white-space:nowrap;" onmouseenter="this.style.borderColor='rgba(139,92,246,0.4)';this.style.color='#fff'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='rgba(255,255,255,0.6)'">Rooftop</button>
                   </div>
+                  `}
 
-                  <textarea id="vs-creative-dir" rows="2" placeholder="Describe your scene, or pick a preset above and customize it..." style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:12px;"></textarea>
+                  <textarea id="vs-creative-dir" rows="2" placeholder="${isCharityStudio ? 'Describe the moment — who is on screen, where, and what they are saying' : 'Describe your scene, or pick a preset above and customize it...'}" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:12px;"></textarea>
 
                   <!-- Camera & Lighting Controls -->
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
@@ -7188,12 +7212,16 @@
             <div style="padding:20px 24px;">
               <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;color:#fff;margin:0 0 4px;display:flex;align-items:center;gap:8px;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                Templates
+                ${isCharityStudio ? 'Recipes' : 'Templates'}
               </h3>
-              <p style="font-size:0.78rem;color:var(--color-text-muted);margin:0 0 16px;">Click a template to auto-select it for your next generation</p>
+              <p style="font-size:0.78rem;color:var(--color-text-muted);margin:0 0 16px;">${isCharityStudio
+                ? (templates.length
+                  ? 'Each recipe is backed by camera, motion, and mission-safe defaults. Explainer opens Animate.'
+                  : 'Loading recipes…')
+                : 'Click a template to auto-select it for your next generation'}</p>
               <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="vs-templates-grid">
                 ${templates.map(t => `
-                  <div class="vs-template-card" data-template="${t.id}" onclick="selectVSTemplate('${t.id}', this);" style="padding:16px;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:12px;cursor:pointer;transition:all 0.2s;">
+                  <div class="vs-template-card" data-template="${t.id}" data-path="${t.path || 'clip'}" onclick="selectVSTemplate('${t.id}', this);" style="padding:16px;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:12px;cursor:pointer;transition:all 0.2s;">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                       <span style="width:8px;height:8px;border-radius:999px;background:${t.color};flex-shrink:0;"></span>
                       <span style="font-size:0.88rem;font-weight:600;color:#fff;">${t.name}</span>
@@ -7578,7 +7606,26 @@
 
     // ━━━ Video Studio Helpers ━━━
     let vsSelectedTemplate = null;
+    let vsSelectedSceneId = null;
     let vsUploadedImageUrl = null;
+    window._charityVideoRecipes = window._charityVideoRecipes || null;
+
+    async function loadCharityVideoRecipes(force) {
+      if (!force && Array.isArray(window._charityVideoRecipes) && window._charityVideoRecipes.length) {
+        return window._charityVideoRecipes;
+      }
+      try {
+        const res = await apiFetch(`${API}/api/studio/charity-video-recipes`);
+        if (!res.ok) return window._charityVideoRecipes || [];
+        const data = await res.json().catch(() => ({}));
+        const list = Array.isArray(data.recipes) ? data.recipes : [];
+        window._charityVideoRecipes = list;
+        return list;
+      } catch (_) {
+        return window._charityVideoRecipes || [];
+      }
+    }
+    window.loadCharityVideoRecipes = loadCharityVideoRecipes;
 
     function vsUploadDraft() {
       if (!window.__SE_VS_UPLOAD) window.__SE_VS_UPLOAD = {};
@@ -7967,15 +8014,71 @@
     window.vsHydrateUploadDoor = vsHydrateUploadDoor;
     window.vsConnectedPlatforms = vsConnectedPlatforms;
 
+    function openAnimateFromVideoRecipe(recipe) {
+      if (!recipe || recipe.path !== 'animate') return false;
+      const briefEl = document.getElementById('vs-creative-dir');
+      const prompt = (briefEl && briefEl.value.trim()) || recipe.brief_scaffold || '';
+      window.__SE_ANIM_REMIX_SESSION = {
+        kind: 'charity_recipe',
+        entry: 'prompt',
+        prompt,
+        style_pack_id: recipe.style_pack_id || 'flat-vector-explainer',
+        format_template_id: recipe.format_template_id || 'awareness-15s',
+        target_seconds: (recipe.defaults && recipe.defaults.duration) || 15,
+        referenceUrl: vsUploadedImageUrl || undefined,
+      };
+      if (typeof switchNav === 'function') switchNav('animation-studio');
+      else if (typeof showToast === 'function') showToast('Open Animate to continue this explainer', 'info');
+      setTimeout(() => {
+        if (typeof window.applyAnimRemixSessionIfAny === 'function') window.applyAnimRemixSessionIfAny();
+      }, 160);
+      setTimeout(() => {
+        if (typeof window.applyAnimRemixSessionIfAny === 'function') window.applyAnimRemixSessionIfAny();
+      }, 480);
+      return true;
+    }
+    window.openAnimateFromVideoRecipe = openAnimateFromVideoRecipe;
+
     function selectVSTemplate(templateId, el) {
       document.querySelectorAll('.vs-template-card').forEach(c => {
         c.style.borderColor = 'var(--color-border)';
         c.style.background = 'var(--color-surface-2)';
       });
-      el.style.borderColor = 'rgba(124,58,237,0.5)';
-      el.style.background = 'rgba(124,58,237,0.04)';
+      if (el) {
+        el.style.borderColor = 'rgba(124,58,237,0.5)';
+        el.style.background = 'rgba(124,58,237,0.04)';
+      }
       vsSelectedTemplate = templateId;
-      showToast('Template selected: ' + el.querySelector('span:nth-child(2)')?.textContent || templateId);
+      vsSelectedSceneId = null;
+
+      const isCharityStudio = typeof isCharityClient === 'function' && isCharityClient(clientData || window.__clientData);
+      const recipes = Array.isArray(window._charityVideoRecipes) ? window._charityVideoRecipes : [];
+      const recipe = isCharityStudio ? recipes.find((r) => r && r.id === templateId) : null;
+      if (recipe) {
+        vsSelectedSceneId = recipe.scene_id || null;
+        const ta = document.getElementById('vs-creative-dir');
+        if (ta && recipe.brief_scaffold && !String(ta.value || '').trim()) {
+          ta.value = recipe.brief_scaffold;
+        }
+        const defs = recipe.defaults || {};
+        const aspect = document.getElementById('vs-aspect');
+        if (aspect && defs.aspectRatio) aspect.value = defs.aspectRatio;
+        const duration = document.getElementById('vs-duration');
+        if (duration && defs.duration && String(defs.duration) !== '15') {
+          // Clip recipes use 5/10; Animate explainers keep their own duration.
+          if ([...duration.options].some((o) => o.value === String(defs.duration))) {
+            duration.value = String(defs.duration);
+          }
+        }
+        if (recipe.path === 'animate') {
+          openAnimateFromVideoRecipe(recipe);
+          return;
+        }
+        showToast('Recipe ready: ' + (recipe.label || templateId));
+        return;
+      }
+      const label = el?.querySelector('span:nth-child(2)')?.textContent || templateId;
+      showToast('Template selected: ' + label);
     }
 
     function handleVSUpload(file) {
@@ -8134,6 +8237,16 @@
       if (cameraAngle) fullCreativeDir += (fullCreativeDir ? ', ' : '') + 'Camera angle: ' + cameraAngle.replace(/_/g,' ');
       if (lighting) fullCreativeDir += (fullCreativeDir ? ', ' : '') + 'Lighting: ' + lighting.replace(/_/g,' ');
 
+      const isCharityStudio = typeof isCharityClient === 'function' && isCharityClient(clientData || window.__clientData);
+      const recipes = Array.isArray(window._charityVideoRecipes) ? window._charityVideoRecipes : [];
+      const selectedRecipe = isCharityStudio && vsSelectedTemplate
+        ? recipes.find((r) => r && r.id === vsSelectedTemplate)
+        : null;
+      if (selectedRecipe && selectedRecipe.path === 'animate') {
+        openAnimateFromVideoRecipe(selectedRecipe);
+        return;
+      }
+
       if (!creativeDir) { showToast('Please enter a creative brief'); return; }
       const productTitle = (typeof titleFromCoachBrief === 'function')
         ? titleFromCoachBrief(productName, creativeDir)
@@ -8150,10 +8263,10 @@
       btn.style.opacity = '0.7';
 
       try {
-        const basePrompt = creativeDir || '';
-        const enrichedPrompt = typeof buildStopScrollHookPrompt === 'function'
-          ? buildStopScrollHookPrompt(basePrompt, getBrandDnaForClient())
-          : basePrompt;
+        const basePrompt = fullCreativeDir || creativeDir || '';
+        const enrichedPrompt = (isCharityStudio || typeof buildStopScrollHookPrompt !== 'function')
+          ? basePrompt
+          : buildStopScrollHookPrompt(basePrompt, getBrandDnaForClient());
         const res = await apiFetch(`${API}/api/studio/generate-video`, {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -8162,6 +8275,7 @@
             productTitle,
             prompt: enrichedPrompt,
             vibeId: vsSelectedTemplate || undefined,
+            sceneId: vsSelectedSceneId || (selectedRecipe && selectedRecipe.scene_id) || undefined,
             model: resolvedModel,
             aspectRatio: aspect,
             duration: duration,
