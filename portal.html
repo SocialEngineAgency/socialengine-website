@@ -3309,7 +3309,22 @@
     const SESSION_KEY = 'se_session';
     const LEGACY_AUTH_KEYS = ['se_saved_hash', 'se_hash'];
 
+    // Create drafts (Video upload door, last Animate project) must not survive
+    // logout / account switch — otherwise Post now on Brand B queues Brand A's media.
+    function clearCreateDrafts() {
+      try { window.__SE_VS_UPLOAD = {}; } catch (_) {}
+      try { window.__SE_ANIM_REMIX_SESSION = null; } catch (_) {}
+      try { window.__SE_COACH_CREATE_SESSION = null; } catch (_) {}
+      try {
+        localStorage.removeItem('se_anim_last_project');
+        localStorage.removeItem('se_create_segment');
+      } catch (_) {}
+    }
+
     function saveSession(token, email) {
+      const nextEmail = String(email || '').trim().toLowerCase();
+      const prevEmail = String(localStorage.getItem('se_saved_email') || clientEmail || '').trim().toLowerCase();
+      if (prevEmail && nextEmail && prevEmail !== nextEmail) clearCreateDrafts();
       try {
         localStorage.setItem(SESSION_KEY, token);
         localStorage.setItem('se_saved_email', email);
@@ -3318,6 +3333,7 @@
     }
     function clearSession() {
       clientToken = '';
+      clearCreateDrafts();
       try {
         localStorage.removeItem(SESSION_KEY);
         for (const k of LEGACY_AUTH_KEYS) { localStorage.removeItem(k); sessionStorage.removeItem(k); }
@@ -5160,6 +5176,7 @@
       window.__clientData = null;
       window.clientEmail = '';
       window._seEmail = '';
+      clearCreateDrafts();
       document.getElementById('portal-login-view').classList.remove('hidden');
       document.getElementById('dashboard-view').classList.remove('active');
       document.body.classList.remove('portal-logged-in');
