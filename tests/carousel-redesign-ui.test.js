@@ -69,7 +69,10 @@ test('Post tab can start fresh, save, archive, and delete a design', () => {
 
 test('Design generate shows customer-facing busy copy', () => {
   const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
-  const gen = design.slice(design.indexOf('async function generate()'), design.indexOf('function sharedCoachStorageKey'));
+  const start = design.indexOf('async function generate(');
+  const end = design.indexOf('function sharedCoachStorageKey');
+  assert.ok(start >= 0 && end > start, 'generate() and sharedCoachStorageKey markers');
+  const gen = design.slice(start, end);
   assert.match(gen, /Creating your design|Generating/i);
 });
 
@@ -84,7 +87,7 @@ test('Coach chat sends a durable image URL and can accept a redesign plan', () =
   assert.match(src, /__SE_DESIGN_COACH_SEED/);
   const openFn = src.slice(src.indexOf('function openCoachForCarouselRedesign'), src.indexOf('window.openCoachForCarouselRedesign'));
   assert.doesNotMatch(openFn, /switchNav\('ai-coach'\)/);
-  assert.match(src, /Make carousel/);
+  assert.match(src, /Redesign this infographic into a 9:16 Instagram carousel|Make carousel/);
   assert.match(src, /9:16 Instagram carousel/);
   assert.match(src, /Instagram max 10|no more than 10/);
   assert.doesNotMatch(src, /1:1 Instagram carousel/);
