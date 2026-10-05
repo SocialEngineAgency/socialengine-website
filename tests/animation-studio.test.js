@@ -66,7 +66,7 @@ test('after /brief returns, briefing is cleared and the canvas re-renders', () =
 });
 
 test('AI shots sit in a sidebar scroller; compose stays pinned', () => {
-  const asideAt = src.indexOf('<aside class="anim-chat">');
+  const asideAt = src.indexOf('<aside class="anim-chat atelier-inspector">');
   assert.ok(asideAt >= 0, 'missing anim-chat aside');
   const aside = src.slice(asideAt, src.indexOf('</aside>', asideAt));
   const from = aside.indexOf('<div class="anim-chat-body">');
