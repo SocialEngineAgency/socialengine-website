@@ -16,11 +16,16 @@ function renderVideoStudioSlice() {
 }
 
 test('Animate chrome uses merchant titles, not lab names', () => {
-  const asideAt = anim.indexOf('<aside class="anim-chat">');
+  const asideAt = anim.indexOf('<aside class="anim-chat atelier-inspector">');
   assert.ok(asideAt >= 0);
-  const shell = anim.slice(anim.indexOf('<div class="anim-shell">'), anim.indexOf('</aside>', asideAt) + 8);
+  const shellStart = anim.indexOf('<div class="anim-shell atelier-shell">');
+  assert.ok(shellStart >= 0);
+  const shell = anim.slice(shellStart, anim.indexOf('</aside>', asideAt) + 8);
   assert.match(shell, /<h2>Animate<\/h2>/);
-  assert.match(shell, /<h3>Coach<\/h3>/);
+  assert.match(shell, /<h3>Inspector · Coach<\/h3>/);
+  assert.match(shell, /class="anim-shell atelier-shell"/);
+  assert.match(shell, /atelier-stage/);
+  assert.match(shell, /atelier-inspector/);
   assert.doesNotMatch(shell, /Animation Studio|AI Agent/);
 });
 
