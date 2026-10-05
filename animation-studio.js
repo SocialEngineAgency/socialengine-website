@@ -17,6 +17,7 @@
   let _library = [];
   let _refs = []; // [{ url, title, role: 'character'|'item'|'setting'|'style'|'scene' }]
   let _pendingFormatTemplateId = null;
+  let _pendingStylePackId = null;
   let _pendingOutroUrl = null;
   let _pendingMusicUrl = null;
   const REF_ROLES = [
@@ -1831,6 +1832,7 @@
         character_ref_url: references.find((r) => r.role === 'character')?.url || null,
         force_rewrite: true,
         format_template_id: _pendingFormatTemplateId || undefined,
+        style_pack_id: _pendingStylePackId || undefined,
       };
       if (entry === 'vo') {
         briefBody.vo_script = text;
@@ -1843,6 +1845,7 @@
         body: JSON.stringify(briefBody),
       });
       _pendingFormatTemplateId = null;
+      _pendingStylePackId = null;
       _project = data.project;
       if (ta) ta.value = '';
       renderCanvas();
@@ -2553,18 +2556,28 @@
 
   async function applyAnimRemixSessionIfAny() {
     const s = window.__SE_ANIM_REMIX_SESSION;
-    if (!s || !s.referenceUrl) return false;
+    // Still-backed remix OR prompt-only charity Video → Animate recipe handoff
+    if (!s || (!s.referenceUrl && !String(s.prompt || '').trim())) return false;
     window.__SE_ANIM_REMIX_SESSION = null;
     const modeEl = document.getElementById('anim-mode');
     if (modeEl) modeEl.value = 'video';
-    writeAnimEntry('vo');
-    applyAnimEntryUI('vo');
-    _refs = [{ url: s.referenceUrl, title: 'Remix still', role: 'character' }];
-    renderRefs();
+    const entry = s.entry === 'prompt' || !s.referenceUrl ? 'prompt' : 'vo';
+    writeAnimEntry(entry);
+    applyAnimEntryUI(entry);
+    if (s.referenceUrl) {
+      _refs = [{ url: s.referenceUrl, title: 'Remix still', role: 'character' }];
+      renderRefs();
+    }
     const ta = document.getElementById('anim-prompt');
     if (ta) ta.value = s.prompt || '';
     _pendingFormatTemplateId = s.format_template_id || 'remix-24s';
-    toast('Remix loaded in Animate — ' + (s.target_seconds || 24) + 's target. Review the brief, then Accept.', 'success');
+    if (s.style_pack_id) _pendingStylePackId = s.style_pack_id;
+    const kindLabel = s.kind === 'charity_recipe' ? 'Explainer recipe' : 'Remix';
+    toast(kindLabel + ' loaded in Animate — review the brief, then Accept.', 'success');
+    // Prompt-only charity handoff: seed the composer; do not auto-brief until they Accept.
+    if (s.kind === 'charity_recipe' || (!s.referenceUrl && String(s.prompt || '').trim())) {
+      return true;
+    }
     await sendPrompt();
     return true;
   }
