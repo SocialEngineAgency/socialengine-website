@@ -338,7 +338,7 @@
     .dash-sidebar__avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.15)); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
     .dash-sidebar__user-name { font-size: 0.8125rem; font-weight: 600; color: #fff; }
     .dash-sidebar__user-email { font-size: 0.6875rem; color: rgba(255,255,255,0.5); }
-    .dash-main { background: var(--color-bg); overflow-y: auto; min-height: 100vh; min-width: 0; }
+    .dash-main { background: var(--color-bg); overflow-y: auto; overflow-x: hidden; min-height: 100vh; min-width: 0; }
     .dash-topbar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-5) var(--space-8); border-bottom: 1px solid var(--color-border); }
     .dash-topbar__greeting { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; color: var(--color-text); }
     .dash-topbar__breadcrumb { display: none; align-items: center; gap: 8px; margin-bottom: 2px; }
@@ -2023,8 +2023,10 @@
       display: flex;
       align-items: baseline;
       gap: 0;
-      margin: 10px 32px 0;
-      padding: 0 0 12px;
+      /* Padding (not margin) for horizontal inset — width:100% + side margins
+         was ~64px wider than .dash-main and caused page x-scroll under the sticky sidebar. */
+      margin: 10px 0 0;
+      padding: 0 32px 12px;
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
@@ -2076,7 +2078,7 @@
       background: rgba(255,255,255,0.1);
     }
     @media (max-width: 1024px) {
-      .create-segments { margin: 8px 16px 0; }
+      .create-segments { margin: 8px 0 0; padding: 0 16px 12px; }
       .create-seg { font-size: 0.95rem; padding: 8px 14px 10px; }
       .create-seg.active::after { left: 14px; right: 14px; }
     }
