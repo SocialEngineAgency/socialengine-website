@@ -375,8 +375,8 @@
   function motionOptions() {
     const modes = _meta?.motion_modes || [
       { id: 'auto', label: 'Auto' },
-      { id: 'drive', label: 'Upload drive' },
-      { id: 'kling', label: 'I2V only' },
+      { id: 'drive', label: 'Driving video' },
+      { id: 'kling', label: 'From still' },
     ];
     const cur = currentMotionMode();
     return modes.map((m) =>
@@ -1050,10 +1050,10 @@
       const data = await animFetch(`/api/animation/projects/${id}`);
       _project = data.project;
       if (projectMediaExpired(_project)) {
-        toast('Some media links died after a restart — re-upload Char refs. Project was kept.', 'warning');
+        toast('Some media links expired after a restart — re-upload Char refs. Project was kept.', 'warning');
         // Do NOT auto-delete. Prior behavior wiped multi-hour projects.
       } else if (projectNeedsCharReupload(_project)) {
-        toast('Char sheet links died after a restart — re-upload Char refs. Shots/Finals on CDN are still here.', 'warning');
+        toast('Character refs need a re-upload after a restart. Your shots and finals are still here.', 'warning');
       }
       _refs = (_project.references || []).map((r) => ({
         url: r.url,
@@ -1117,12 +1117,12 @@
               </div>`).join('')}
           </div>
         </div>` : `
-        <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">No saved projects yet — send a prompt to start one. Generated images now persist on CDN across refreshes.</div>`;
+        <div class="anim-placeholder-row" style="margin-top:22px;max-width:420px;margin-left:auto;margin-right:auto;">No saved projects yet — send a prompt to start one. Your shots stay with the project across refreshes.</div>`;
       el.innerHTML = `
         <div class="anim-empty">
-          <div class="anim-empty__title">Animation canvas</div>
+          <div class="anim-empty__title">Start a video</div>
           <div class="anim-empty__desc">Pick a mode, attach tagged refs, and describe one idea. AI looks at the images, then writes distinct shots. Accept to generate character views, scenes, and shots here.</div>
-          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong>, <strong>Item</strong>, <strong>Setting</strong>, or <strong>Scene</strong>, then run. Uploads must land on CDN (not ephemeral links).</div>
+          <div class="anim-empty__hint">Tip: tag refs as <strong>Char</strong>, <strong>Item</strong>, <strong>Setting</strong>, or <strong>Scene</strong>, then run. Uploads stay saved on your account.</div>
         </div>
         ${recentHtml}`;
       el.querySelectorAll('[data-open-project]').forEach((btn) => {
@@ -1166,8 +1166,8 @@
         </div>
         <div class="anim-expired-banner" id="anim-expired-banner" hidden>
           <div>${projectNeedsCharReupload(p) && !projectMediaExpired(p)
-            ? 'Char sheet links died after a server restart, but your shots/Finals on CDN are still here. Re-upload Char refs to keep regenerating.'
-            : 'Images expired after a server restart (old ephemeral links). Delete this project, re-upload refs (tag Char + Style), and run again — new runs persist on CDN.'}</div>
+            ? 'Character refs need a re-upload after a restart, but your shots and finals are still here.'
+            : 'Some images expired after a restart. Delete this project, re-upload refs (tag Char + Style), and run again — new uploads stay saved.'}</div>
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
             ${projectMediaExpired(p) ? `<button type="button" class="anim-btn" id="anim-delete-expired" style="width:auto;">Delete expired project</button>` : ''}
             <button type="button" class="anim-btn anim-btn--ghost" id="anim-new-from-expired" style="width:auto;">New project</button>
@@ -2682,8 +2682,8 @@
       }
       if (!_meta) {
         root.innerHTML = `<div style="padding:40px;max-width:520px;">
-          <div style="color:#F87171;font-weight:700;margin-bottom:8px;">Animation Studio API unavailable</div>
-          <div style="color:rgba(255,255,255,0.65);font-size:0.85rem;line-height:1.45;margin-bottom:14px;">${esc(lastErr?.message || 'Failed to fetch')} — usually the API is restarting after a deploy. Wait ~30s and retry.</div>
+          <div style="color:#F87171;font-weight:700;margin-bottom:8px;">Animate is briefly unavailable</div>
+          <div style="color:rgba(255,255,255,0.65);font-size:0.85rem;line-height:1.45;margin-bottom:14px;">${esc(lastErr?.message || 'Failed to fetch')} — usually a short restart. Wait about 30 seconds and retry.</div>
           <button type="button" class="anim-btn" id="anim-api-retry" style="width:auto;padding:10px 16px;">Retry</button>
         </div>`;
         document.getElementById('anim-api-retry')?.addEventListener('click', () => {
@@ -2876,7 +2876,7 @@
       <div class="anim-shell">
         <section class="anim-canvas">
           <div class="anim-canvas-header">
-            <h2>Animation Studio</h2>
+            <h2>Animate</h2>
             <div style="display:flex;gap:8px;align-items:center;">
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-home" style="padding:7px 12px;font-size:0.72rem;" title="Back to start">Home</button>
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-new" style="padding:7px 12px;font-size:0.72rem;">New project</button>
@@ -2886,7 +2886,7 @@
         </section>
         <aside class="anim-chat">
           <div class="anim-chat-header">
-            <h3>AI Agent</h3>
+            <h3>Coach</h3>
             <p>One idea → short shot list → you accept</p>
           </div>
           <div class="anim-chat-body">
