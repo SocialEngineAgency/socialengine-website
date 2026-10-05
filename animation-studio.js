@@ -2753,7 +2753,8 @@
     root.innerHTML = `
       <style>
         #dash-content.dash-content--animate { padding-bottom: 12px; }
-        .anim-shell.atelier-shell { display:grid; grid-template-columns: 1fr minmax(300px,320px); gap:0; height:calc(100vh - 56px); min-height:400px; border:none; border-radius:0; overflow:hidden; background:rgba(6,10,18,0.95); }
+        /* Leave room for dash topbar + Create mode strip above #dash-content. */
+        .anim-shell.atelier-shell { display:grid; grid-template-columns: 1fr minmax(300px,320px); gap:0; height:calc(100vh - 130px); min-height:400px; border:none; border-radius:0; overflow:hidden; background:rgba(6,10,18,0.95); }
         .anim-canvas.atelier-stage { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.07); background:radial-gradient(ellipse at 50% 30%,rgba(255,255,255,0.03),transparent 55%),rgba(6,10,18,0.95); }
         .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
         .anim-canvas-header h2 { margin:0; font-family:var(--font-display); font-size:1.05rem; color:#fff; font-weight:700; letter-spacing:-0.02em; }
