@@ -7120,44 +7120,6 @@
 
                   <textarea id="vs-creative-dir" rows="2" placeholder="${isCharityStudio ? 'Describe the moment — who is on screen, where, and what they are saying' : 'Describe your scene, or pick a preset above and customize it...'}" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:12px;"></textarea>
 
-                  <!-- Camera & Lighting Controls -->
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-                    <div>
-                      <label style="display:block;font-size:0.68rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Camera Angle</label>
-                      <select id="vs-camera-angle" style="width:100%;padding:8px 12px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;cursor:pointer;">
-                        <option value="">Auto (AI decides)</option>
-                        <option value="eye_level">Eye Level — Straight on</option>
-                        <option value="low_angle">Low Angle — Power shot</option>
-                        <option value="high_angle">High Angle — Editorial</option>
-                        <option value="dutch_angle">Dutch Angle — Dynamic</option>
-                        <option value="close_up">Close-Up — Detail focus</option>
-                        <option value="full_body">Full Body — Head to toe</option>
-                        <option value="over_shoulder">Over Shoulder — Intimate</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style="display:block;font-size:0.68rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Lighting</label>
-                      <select id="vs-lighting" style="width:100%;padding:8px 12px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;cursor:pointer;">
-                        <option value="">Auto</option>
-                        <option value="golden_hour">Golden Hour</option>
-                        <option value="studio">Studio Softbox</option>
-                        <option value="natural">Natural Daylight</option>
-                        <option value="neon">Neon / Club</option>
-                        <option value="dramatic">Dramatic / Rembrandt</option>
-                        <option value="backlit">Backlit / Silhouette</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">AI Model</label>
-                  <select id="vs-model" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;cursor:pointer;">
-                    ${selectableModels.length === 0
-                      ? (models.length
-                        ? '<option disabled>No models available for this plan</option>'
-                        : '<option disabled>Loading models…</option>')
-                      : selectableModels.map(m => '<option value="' + m.id + '">' + m.name + ' (' + m.provider + ') — Preservation ' + m.pres + '/10' + (m.badge ? ' [' + m.badge + ']' : '') + '</option>').join('')}
-                  </select>
-
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
                     <div>
                       <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Aspect Ratio</label>
@@ -7176,13 +7138,58 @@
                     </div>
                   </div>
 
-                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                      <input type="checkbox" id="vs-flf" checked style="width:16px;height:16px;accent-color:#7C3AED;cursor:pointer;" />
-                      <span style="font-size:0.82rem;color:rgba(255,255,255,0.6);font-weight:500;">First/Last Frame Lock</span>
-                    </label>
-                    <span style="font-size:0.65rem;color:rgba(124,58,237,0.5);background:rgba(124,58,237,0.08);padding:2px 8px;border-radius:4px;">Recommended</span>
-                  </div>
+                  <details id="vs-advanced" style="margin-bottom:16px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.02);">
+                    <summary style="padding:10px 14px;cursor:pointer;list-style:none;font-size:0.78rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:rgba(255,255,255,0.55);font-family:var(--font-body);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                      <span>Advanced</span>
+                      <span style="font-size:0.65rem;font-weight:600;text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.35);">Camera · lighting · model · lock</span>
+                    </summary>
+                    <div style="padding:0 14px 14px;">
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+                        <div>
+                          <label style="display:block;font-size:0.68rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Camera Angle</label>
+                          <select id="vs-camera-angle" style="width:100%;padding:8px 12px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;cursor:pointer;">
+                            <option value="">Auto (AI decides)</option>
+                            <option value="eye_level">Eye Level — Straight on</option>
+                            <option value="low_angle">Low Angle — Power shot</option>
+                            <option value="high_angle">High Angle — Editorial</option>
+                            <option value="dutch_angle">Dutch Angle — Dynamic</option>
+                            <option value="close_up">Close-Up — Detail focus</option>
+                            <option value="full_body">Full Body — Head to toe</option>
+                            <option value="over_shoulder">Over Shoulder — Intimate</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="display:block;font-size:0.68rem;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Lighting</label>
+                          <select id="vs-lighting" style="width:100%;padding:8px 12px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;cursor:pointer;">
+                            <option value="">Auto</option>
+                            <option value="golden_hour">Golden Hour</option>
+                            <option value="studio">Studio Softbox</option>
+                            <option value="natural">Natural Daylight</option>
+                            <option value="neon">Neon / Club</option>
+                            <option value="dramatic">Dramatic / Rembrandt</option>
+                            <option value="backlit">Backlit / Silhouette</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">AI Model</label>
+                      <select id="vs-model" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;margin-bottom:16px;cursor:pointer;">
+                        ${selectableModels.length === 0
+                          ? (models.length
+                            ? '<option disabled>No models available for this plan</option>'
+                            : '<option disabled>Loading models…</option>')
+                          : selectableModels.map(m => '<option value="' + m.id + '">' + m.name + ' (' + m.provider + ') — Preservation ' + m.pres + '/10' + (m.badge ? ' [' + m.badge + ']' : '') + '</option>').join('')}
+                      </select>
+
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                          <input type="checkbox" id="vs-flf" checked style="width:16px;height:16px;accent-color:#7C3AED;cursor:pointer;" />
+                          <span style="font-size:0.82rem;color:rgba(255,255,255,0.6);font-weight:500;">First/Last Frame Lock</span>
+                        </label>
+                        <span style="font-size:0.65rem;color:rgba(124,58,237,0.5);background:rgba(124,58,237,0.08);padding:2px 8px;border-radius:4px;">Recommended</span>
+                      </div>
+                    </div>
+                  </details>
 
                   <button id="vs-generate-btn" onclick="submitVideoGeneration();" style="width:100%;padding:14px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#0A1628;font-family:var(--font-body);font-weight:700;font-size:0.9rem;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;box-shadow:0 4px 20px rgba(124,58,237,0.2);">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -7204,7 +7211,7 @@
                 <div style="text-align:center;padding:40px 20px;">
                   <div style="font-size:0.75rem;margin-bottom:8px;opacity:0.45;letter-spacing:0.06em;text-transform:uppercase;">No clips yet</div>
                   <div style="font-size:0.85rem;color:var(--color-text-muted);font-weight:500;">No videos generated yet</div>
-                  <div style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:4px;">Upload a product image and generate your first video above</div>
+                  <div style="font-size:0.75rem;color:rgba(255,255,255,0.3);margin-top:4px;">${isCharityStudio ? 'Add a still or write a brief, then generate your first clip above' : 'Upload a product image and generate your first video above'}</div>
                 </div>
               </div>
             </div>
