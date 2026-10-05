@@ -732,24 +732,58 @@
     .dash-quick-action:hover { border-color:rgba(124,58,237,0.3);background:rgba(124,58,237,0.04); }
 
     /* ━━━ Card Quick Actions ━━━ */
+    .studio-card__actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+      min-width: 0;
+    }
+    .studio-card__actions-primary {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      min-width: 0;
+    }
+    .studio-card__actions-secondary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 14px;
+      min-width: 0;
+    }
     .studio-card__approve-btn, .studio-card__reject-btn, .studio-card__view-btn {
-      display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px;
-      font-size: 0.68rem; font-weight: 600; border-radius: 6px; cursor: pointer;
-      font-family: var(--font-body); border: 1px solid transparent; transition: all 0.15s;
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 10px; min-width: 0; width: 100%;
+      font-size: 0.72rem; font-weight: 600; border-radius: 8px; cursor: pointer;
+      font-family: var(--font-body); border: 1px solid transparent; transition: background 0.15s, border-color 0.15s, color 0.15s;
+      white-space: nowrap;
     }
     .studio-card__approve-btn {
-      background: rgba(124,58,237,0.1); color: #7C3AED; border-color: rgba(124,58,237,0.25);
+      background: rgba(124,58,237,0.16); color: #DDD6FE; border-color: rgba(124,58,237,0.35);
     }
-    .studio-card__approve-btn:hover { background: rgba(124,58,237,0.2); }
+    .studio-card__approve-btn:hover { background: rgba(124,58,237,0.28); border-color: rgba(167,139,250,0.5); color: #fff; }
     .studio-card__reject-btn {
-      background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.45); border-color: rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.55); border-color: rgba(255,255,255,0.1);
     }
-    .studio-card__reject-btn:hover { background: rgba(255,82,82,0.1); color: rgba(255,82,82,0.8); border-color: rgba(255,82,82,0.25); }
+    .studio-card__reject-btn:hover { background: rgba(255,82,82,0.1); color: rgba(255,140,140,0.95); border-color: rgba(255,82,82,0.28); }
     .studio-card__view-btn {
       background: rgba(255,255,255,0.03); color: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.08);
-      font-size: 0.65rem;
+      font-size: 0.65rem; width: auto; padding: 5px 10px;
     }
     .studio-card__view-btn:hover { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }
+    .studio-card__link-btn {
+      appearance: none; background: none; border: none; padding: 0;
+      margin: 0; font: inherit; cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 0.68rem; font-weight: 600;
+      color: rgba(255,255,255,0.42);
+      transition: color 0.15s;
+      white-space: nowrap;
+    }
+    .studio-card__link-btn:hover { color: rgba(255,255,255,0.78); }
+    .studio-card__link-btn--accent { color: rgba(196,181,253,0.75); }
+    .studio-card__link-btn--accent:hover { color: #DDD6FE; }
     .studio-card__archive-btn, .studio-card__restore-btn {
       display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px;
       font-size: 0.68rem; font-weight: 600; border-radius: 6px; cursor: pointer;
@@ -5664,27 +5698,31 @@
             <div class="studio-card__caption" onclick="openStudioModal(${index})" style="cursor:pointer;">${captionPreview}${captionPreview.length >= 90 ? '...' : ''}</div>
             ${hashtagPreview ? `<div style="font-size:0.65rem;color:rgba(124,58,237,0.6);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hashtagPreview}</div>` : ''}
             ${isArchivedPost(post) ? `
-            <div class="studio-card__actions" style="display:flex;gap:6px;margin-top:10px;">
-              ${studioArchiveRestoreHtml(post)}
-              <button class="studio-card__view-btn" onclick="openStudioModal(${index})" style="margin-left:auto;">Review</button>
+            <div class="studio-card__actions">
+              <div class="studio-card__actions-secondary">
+                ${studioArchiveRestoreHtml(post, { link: true })}
+                <button type="button" class="studio-card__link-btn studio-card__link-btn--accent" onclick="event.stopPropagation();openStudioModal(${index})">Review</button>
+              </div>
             </div>` : isActionable && !isRegenerating ? `
-            <div class="studio-card__actions" style="display:flex;gap:6px;margin-top:10px;">
-              <button class="studio-card__approve-btn" onclick="event.stopPropagation();studioQuickApprove('${post.id}',this)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Approve
-              </button>
-              <button class="studio-card__reject-btn" onclick="event.stopPropagation();openRejectModal('${post.id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Reject
-              </button>
-              ${studioArchiveRestoreHtml(post)}
-              ${hasImage && !hasVideo && formatKey !== 'carousel' && !isReel ? `<button class="studio-card__view-btn" onclick="event.stopPropagation();openCoachForCarouselRedesign('${String(imageUrl).replace(/'/g, "\\'")}')">Make carousel</button>` : ''}
-              <button class="studio-card__view-btn" onclick="openStudioModal(${index})" style="margin-left:auto;">
-                Review
-              </button>
+            <div class="studio-card__actions">
+              <div class="studio-card__actions-primary">
+                <button type="button" class="studio-card__approve-btn" onclick="event.stopPropagation();studioQuickApprove('${post.id}',this)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Approve
+                </button>
+                <button type="button" class="studio-card__reject-btn" onclick="event.stopPropagation();openRejectModal('${post.id}')">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Reject
+                </button>
+              </div>
+              <div class="studio-card__actions-secondary">
+                ${studioArchiveRestoreHtml(post, { link: true })}
+                ${hasImage && !hasVideo && formatKey !== 'carousel' && !isReel ? `<button type="button" class="studio-card__link-btn" onclick="event.stopPropagation();openCoachForCarouselRedesign('${String(imageUrl).replace(/'/g, "\\'")}')">Carousel</button>` : ''}
+                <button type="button" class="studio-card__link-btn studio-card__link-btn--accent" onclick="event.stopPropagation();openStudioModal(${index})">Review</button>
+              </div>
             </div>` : isRegenerating ? `
-            <div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;">
-              <div style="width:12px;height:12px;border:1.5px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-              <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);">Regenerating...</span>
-              ${studioArchiveRestoreHtml(post)}
+            <div class="studio-card__actions" style="flex-direction:row;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:8px;">
+              <div style="width:12px;height:12px;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.15);border-top-color:rgba(255,255,255,0.5);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+              <span style="font-size:0.68rem;color:rgba(255,255,255,0.4);flex:1;min-width:0;">Regenerating...</span>
+              ${studioArchiveRestoreHtml(post, { link: true })}
             </div>` : `
             ${metaFooter}`}
           </div>
@@ -8342,13 +8380,16 @@
       if (f === 'rejected') return live.filter((p) => p.status === 'Rejected');
       return live;
     }
-    function studioArchiveRestoreHtml(post) {
+    function studioArchiveRestoreHtml(post, opts) {
       const id = String(post.id || '').replace(/'/g, "\\'");
+      const link = !!(opts && opts.link);
       if (isArchivedPost(post)) {
-        return `<button type="button" class="studio-card__restore-btn" onclick="event.stopPropagation();studioRestore('${id}',this)">Restore</button>`;
+        const cls = link ? 'studio-card__link-btn studio-card__link-btn--accent' : 'studio-card__restore-btn';
+        return `<button type="button" class="${cls}" onclick="event.stopPropagation();studioRestore('${id}',this)">Restore</button>`;
       }
       if (isLivePublishedPost(post)) return '';
-      return `<button type="button" class="studio-card__archive-btn" onclick="event.stopPropagation();studioArchive('${id}',this)">Archive</button>`;
+      const cls = link ? 'studio-card__link-btn' : 'studio-card__archive-btn';
+      return `<button type="button" class="${cls}" onclick="event.stopPropagation();studioArchive('${id}',this)">Archive</button>`;
     }
     window.refreshContentReview = async function refreshContentReview() {
       const btn = document.getElementById('content-refresh');
