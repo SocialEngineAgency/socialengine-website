@@ -510,11 +510,9 @@
 
   function captionCuesForPreview() {
     if (Array.isArray(_project?.caption_cues) && _project.caption_cues.length) return _project.caption_cues;
-    const text = document.getElementById('anim-caption-text')?.value
-      || _project?.caption_text
-      || document.getElementById('anim-vo-script')?.value
+    // On-video words follow spoken VO only — never the social/post caption.
+    const text = document.getElementById('anim-vo-script')?.value
       || _project?.vo_script
-      || _project?.agent_brief?.caption
       || '';
     return estimatePhraseCues(text, 8);
   }
@@ -526,8 +524,8 @@
     if (s.mode === 'static' || !list.length) {
       const text = applyCaptionCase(
         list.map((c) => c.text).join(' ')
-          || document.getElementById('anim-caption-text')?.value
-          || _project?.caption_text
+          || document.getElementById('anim-vo-script')?.value
+          || _project?.vo_script
           || '',
         s.text_case
       );
@@ -763,9 +761,8 @@
     if (document.getElementById('anim-vo-direction')) {
       body.vo_direction = document.getElementById('anim-vo-direction').value;
     }
-    if (document.getElementById('anim-caption-text')) {
-      body.caption_text = document.getElementById('anim-caption-text').value;
-    }
+    // Clear legacy on-video caption_text (removed UI box — burn uses VO script).
+    body.caption_text = '';
     if (document.getElementById('anim-cap-mode') || _project.caption_style || _captionStyleDraft) {
       body.caption_style = currentCaptionStyle();
     }
@@ -1393,9 +1390,7 @@
             </div>
 
             <div class="anim-lane" data-lane="captions" ${(_assembleTab || 'vo') === 'captions' ? '' : 'hidden'}>
-              <label class="anim-lane__label">Post / on-video caption</label>
-              <input type="text" id="anim-caption-text" class="anim-ref-url anim-lane__primary-input" placeholder="Hashtags OK here — not spoken aloud" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
-              <p class="anim-lane__hint">Timed karaoke words follow the voiceover when VO is on. Style burn with Caption Studio.</p>
+              <p class="anim-lane__hint" style="margin:0 0 8px;">On-video words follow the Voiceover script when Captions + VO are on. Style only here — no separate caption box.</p>
               <div class="anim-lane__actions">
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-open">${_captionStudioOpen ? 'Style ✓' : 'Style captions'}</button>
               </div>
@@ -1614,7 +1609,7 @@
       'anim-cap-mode', 'anim-cap-size', 'anim-cap-width', 'anim-cap-y', 'anim-cap-wpl', 'anim-cap-outline-w',
       'anim-cap-color', 'anim-cap-highlight', 'anim-cap-outline', 'anim-cap-anim', 'anim-cap-case',
       'anim-cap-box', 'anim-cap-pad', 'anim-cap-radius',
-      'anim-caption-text', 'anim-vo-script', 'anim-vo-direction',
+      'anim-vo-script', 'anim-vo-direction',
     ].forEach((id) => {
       document.getElementById(id)?.addEventListener('input', () => {
         _captionStyleDraft = currentCaptionStyle();
@@ -2449,9 +2444,7 @@
           assemble: flags,
           // Only send style when burning — avoids any "style present ⇒ burn" coupling.
           ...(flags.captions ? { caption_style: style } : {}),
-          caption_text: document.getElementById('anim-caption-text')?.value
-            || _project.caption_text
-            || '',
+          caption_text: '',
           vo_script: document.getElementById('anim-vo-script')?.value
             || _project.vo_script
             || '',
