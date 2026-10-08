@@ -1376,7 +1376,7 @@
                 </div>
               </div>
             </details>
-            <details class="anim-drawer">
+            <details class="anim-drawer" open>
               <summary>Captions &amp; music</summary>
               <div class="anim-drawer__body">
                 <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;" title="On-video / post caption" placeholder="On-video caption (hashtags OK)…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
