@@ -12,6 +12,7 @@
   let _busy = false;
   let _briefing = false;
   let _captionStudioOpen = false;
+  let _assembleTab = 'vo'; // vo | captions | music | outro
   let _captionPreviewRaf = 0;
   let _recentLoading = false;
   let _library = [];
@@ -989,23 +990,22 @@
     const helpers = assetHelpers();
     const list = helpers.filterKind(_library, kind);
     const sel = helpers.selectedId(list, selectedUrl);
-    const heading = kind === 'music' ? 'Saved music' : 'Saved outros';
+    const heading = kind === 'music' ? 'Library' : 'Library';
     const preview = selectedUrl
       ? (kind === 'music'
-        ? `<audio class="anim-lib-preview" id="anim-${kind}-preview" src="${esc(mediaSrc(selectedUrl))}" controls preload="metadata" style="height:28px;max-width:180px;"></audio>`
-        : `<video class="anim-lib-preview" id="anim-${kind}-preview" src="${esc(mediaSrc(selectedUrl))}" muted preload="metadata" style="width:64px;height:36px;object-fit:cover;border-radius:6px;background:#000;" title="Preview"></video>`)
+        ? `<audio class="anim-lib-preview" id="anim-${kind}-preview" src="${esc(mediaSrc(selectedUrl))}" controls preload="metadata"></audio>`
+        : `<video class="anim-lib-preview" id="anim-${kind}-preview" src="${esc(mediaSrc(selectedUrl))}" muted playsinline preload="metadata" title="Preview"></video>`)
       : '';
     return `
-      <label class="anim-lib" style="display:flex;align-items:center;gap:8px;font-size:0.68rem;color:rgba(255,255,255,0.72);">
-        ${heading}
-        <select id="anim-${kind}-pick" class="anim-select" style="width:auto;min-width:120px;font-size:0.68rem;" title="${esc(selectedUrl || heading)}">
-          <option value="">None</option>
+      <div class="anim-asset-row">
+        <select id="anim-${kind}-pick" class="anim-select anim-asset-row__pick" title="${esc(selectedUrl || heading)}">
+          <option value="">None — choose or upload</option>
           ${list.map((a) => `<option value="${esc(a.id)}" ${a.id === sel ? 'selected' : ''} title="${esc(a.url || '')}">${esc(helpers.labelOf(a))}</option>`).join('')}
         </select>
-      </label>
-      ${preview}
-      <input type="file" id="anim-${kind}-file" accept="${esc(helpers.acceptFor(kind))}" hidden />
-      <button type="button" class="anim-btn anim-btn--ghost" id="anim-${kind}-upload" style="width:auto;padding:6px 10px;font-size:0.68rem;">Upload new</button>
+        <input type="file" id="anim-${kind}-file" accept="${esc(helpers.acceptFor(kind))}" hidden />
+        <button type="button" class="anim-btn anim-btn--ghost" id="anim-${kind}-upload">Upload</button>
+      </div>
+      ${preview ? `<div class="anim-asset-row__preview">${preview}</div>` : ''}
     `;
   }
 
@@ -1349,65 +1349,90 @@
               : '')}
           ${readyShotUrls.length ? `
           <div class="anim-assemble-panel">
-            <div class="anim-assemble-flags">
-              ${(() => { const f = assembleFlags(); return `
-              <label><input type="checkbox" id="anim-flag-vo" ${f.vo ? 'checked' : ''}/> VO</label>
-              <label><input type="checkbox" id="anim-flag-captions" ${f.captions ? 'checked' : ''}/> Captions</label>
-              <label><input type="checkbox" id="anim-flag-music" ${f.music ? 'checked' : ''}/> Music</label>
-              <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
+            <div class="anim-layers" role="group" aria-label="Include in final">
+              ${(() => { const f = assembleFlags();
+                const chip = (id, key, label, ready) => `
+                <label class="anim-layer ${f[key] ? 'is-on' : ''}" title="${ready || ''}">
+                  <input type="checkbox" id="${id}" ${f[key] ? 'checked' : ''}/>
+                  <span>${label}</span>
+                  ${ready ? `<em>${ready}</em>` : ''}
+                </label>`;
+                return [
+                  chip('anim-flag-vo', 'vo', 'Voiceover', p.vo_script ? 'script' : ''),
+                  chip('anim-flag-captions', 'captions', 'Captions', p.last_burned_caption_style ? 'styled' : ''),
+                  chip('anim-flag-music', 'music', 'Music', p.music_bed_url ? 'ready' : ''),
+                  chip('anim-flag-outro', 'outro', 'Outro', p.outro_url ? 'ready' : ''),
+                ].join('');
+              })()}
             </div>
-            <details class="anim-drawer" open>
-              <summary>Voiceover</summary>
-              <div class="anim-drawer__body">
-                <textarea id="anim-vo-direction" class="anim-brief-edit" style="min-height:44px;margin:0;" placeholder="VO direction (e.g. shorter, faster pace, warm pride — soft CTA)…">${esc(p.vo_direction || '')}</textarea>
-                <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:72px;margin-top:8px;" placeholder="Spoken VO — plain text only. Edit by hand anytime…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
-                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.vo_script ? 'Apply VO tweak' : 'Generate VO'}</button>
-                  ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Ignore the current draft and write a new script">Fresh VO</button>
-                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Remember this script as a winner">Keep ✓</button>
-                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-reject" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Avoid this pattern next time">Not this</button>` : ''}
-                </div>
-                <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;">
-                  <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
-                    VO vol
-                    <input type="range" id="anim-vo-volume" min="0" max="100" step="1" value="${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}" style="width:110px;" />
-                    <span id="anim-vo-volume-val">${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}%</span>
-                  </label>
-                </div>
+            <div class="anim-lane-tabs" role="tablist" aria-label="Edit layer">
+              ${['vo','captions','music','outro'].map((tab) => {
+                const labels = { vo: 'Voiceover', captions: 'Captions', music: 'Music', outro: 'Outro' };
+                const on = (_assembleTab || 'vo') === tab;
+                return `<button type="button" class="anim-lane-tab ${on ? 'is-on' : ''}" role="tab" data-assemble-tab="${tab}" aria-selected="${on ? 'true' : 'false'}">${labels[tab]}</button>`;
+              }).join('')}
+            </div>
+
+            <div class="anim-lane" data-lane="vo" ${(_assembleTab || 'vo') === 'vo' ? '' : 'hidden'}>
+              <textarea id="anim-vo-script" class="anim-brief-edit anim-lane__primary" placeholder="Spoken script — plain text only. Edit anytime…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
+              <div class="anim-lane__actions">
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate">${p.vo_script ? 'Apply tweak' : 'Generate'}</button>
+                ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" title="New script from shots + direction">Fresh</button>
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" title="Remember as a winner">Keep</button>
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-reject" title="Avoid this pattern">Skip</button>` : ''}
+                <label class="anim-vol anim-vol--inline">
+                  Vol
+                  <input type="range" id="anim-vo-volume" min="0" max="100" step="1" value="${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}" />
+                  <span id="anim-vo-volume-val">${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}%</span>
+                </label>
               </div>
-            </details>
-            <details class="anim-drawer" open>
-              <summary>Captions &amp; music</summary>
-              <div class="anim-drawer__body">
-                <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;" title="On-video / post caption" placeholder="On-video caption (hashtags OK)…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
-                ${renderCaptionStudioPanel(p)}
-                <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);margin-top:10px;">
-                  Music vol
-                  <input type="range" id="anim-music-volume" min="0" max="100" step="1" value="${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}" style="width:110px;" />
+              <details class="anim-lane__more">
+                <summary>AI direction</summary>
+                <textarea id="anim-vo-direction" class="anim-brief-edit" placeholder="e.g. shorter, faster pace, warm pride — soft CTA">${esc(p.vo_direction || '')}</textarea>
+              </details>
+            </div>
+
+            <div class="anim-lane" data-lane="captions" ${(_assembleTab || 'vo') === 'captions' ? '' : 'hidden'}>
+              <label class="anim-lane__label">Post / on-video caption</label>
+              <input type="text" id="anim-caption-text" class="anim-ref-url anim-lane__primary-input" placeholder="Hashtags OK here — not spoken aloud" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
+              <p class="anim-lane__hint">Timed karaoke words follow the voiceover when VO is on. Style burn with Caption Studio.</p>
+              <div class="anim-lane__actions">
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-open">${_captionStudioOpen ? 'Style ✓' : 'Style captions'}</button>
+              </div>
+              ${renderCaptionStudioPanel(p)}
+            </div>
+
+            <div class="anim-lane" data-lane="music" ${(_assembleTab || 'vo') === 'music' ? '' : 'hidden'}>
+              <label class="anim-lane__label">Bed prompt</label>
+              <textarea id="anim-music-prompt" class="anim-brief-edit anim-lane__primary" placeholder="e.g. warm lo-fi instrumental, soft pulse, no vocals">${esc(p.music_prompt || '')}</textarea>
+              <div class="anim-lane__actions">
+                <select id="anim-music-length" class="anim-select anim-select--compact" title="Length">
+                  ${[15, 30, 45, 60].map((s) => {
+                    const ms = s * 1000;
+                    const cur = Number(p.music_length_ms) || 30000;
+                    return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
+                  }).join('')}
+                </select>
+                <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen' : 'Generate'}</button>
+                <label class="anim-vol anim-vol--inline">
+                  Vol
+                  <input type="range" id="anim-music-volume" min="0" max="100" step="1" value="${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}" />
                   <span id="anim-music-volume-val">${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}%</span>
                 </label>
-                <textarea id="anim-music-prompt" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="Music bed prompt…">${esc(p.music_prompt || '')}</textarea>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
-                  <select id="anim-music-length" class="anim-select" style="width:auto;min-width:96px;font-size:0.68rem;" title="Music length">
-                    ${[15, 30, 45, 60].map((s) => {
-                      const ms = s * 1000;
-                      const cur = Number(p.music_length_ms) || 30000;
-                      return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
-                    }).join('')}
-                  </select>
-                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
-                  ${renderSavedPicker('music', p.music_bed_url)}
-                  ${renderSavedPicker('outro', p.outro_url)}
-                  ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
-                  ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
-                </div>
-                ${assembleFlags().outro && !p.outro_url ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 0;line-height:1.35;">Outro is on, but no clip is attached — upload an outro before Rebuild.</div>` : ''}
               </div>
-            </details>
+              <label class="anim-lane__label">Or pick / upload</label>
+              ${renderSavedPicker('music', p.music_bed_url)}
+            </div>
+
+            <div class="anim-lane" data-lane="outro" ${(_assembleTab || 'vo') === 'outro' ? '' : 'hidden'}>
+              <label class="anim-lane__label">End card</label>
+              <p class="anim-lane__hint">Pick a saved outro or upload one. Choose None to remove.</p>
+              ${renderSavedPicker('outro', p.outro_url)}
+              ${assembleFlags().outro && !p.outro_url ? `<div class="anim-lane__warn">Outro is on — attach a clip before Rebuild.</div>` : ''}
+            </div>
           </div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
             ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
-            ${readyShotUrls.length ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-open" style="width:auto;">${_captionStudioOpen ? 'Caption Studio ✓' : 'Edit captions'}</button>` : ''}
             ${readyShotUrls.length ? (() => {
               const stuck = assembleLooksStuck(p);
               const genBusy = (p.scenes || []).some((s) => s.status === 'generating');
@@ -1472,6 +1497,14 @@
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
     document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
     document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
+    document.querySelectorAll('[data-assemble-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-assemble-tab');
+        if (!tab || tab === _assembleTab) return;
+        _assembleTab = tab;
+        renderCanvas();
+      });
+    });
     document.getElementById('anim-vo-generate')?.addEventListener('click', () => generateVoScript({ revise: true }));
     document.getElementById('anim-vo-regen-fresh')?.addEventListener('click', () => generateVoScript({ revise: false }));
     document.getElementById('anim-vo-keep')?.addEventListener('click', () => rateVoScript('accept'));
@@ -1489,22 +1522,23 @@
     bindVol('anim-music-volume', 'anim-music-volume-val', 'music_volume');
     bindVol('anim-vo-volume', 'anim-vo-volume-val', 'vo_volume');
     document.getElementById('anim-cap-open')?.addEventListener('click', () => {
+      _assembleTab = 'captions';
       _captionStudioOpen = !_captionStudioOpen;
       _canvasFp = '';
       renderCanvas();
-      const btn = document.getElementById('anim-cap-open');
-      if (btn) btn.textContent = _captionStudioOpen ? 'Caption Studio ✓' : 'Edit captions';
       if (_captionStudioOpen) {
         const flag = document.getElementById('anim-flag-captions');
-        if (flag) flag.checked = true;
+        if (flag) {
+          flag.checked = true;
+          flag.closest('.anim-layer')?.classList.add('is-on');
+        }
       }
     });
     document.getElementById('anim-cap-close')?.addEventListener('click', () => {
       _captionStudioOpen = false;
+      _assembleTab = 'captions';
       _canvasFp = '';
       renderCanvas();
-      const btn = document.getElementById('anim-cap-open');
-      if (btn) btn.textContent = 'Edit captions';
     });
     document.getElementById('anim-cap-save')?.addEventListener('click', async () => {
       if (!_project) return;
@@ -1622,11 +1656,13 @@
       renderCanvas();
     });
     ['anim-flag-vo', 'anim-flag-captions', 'anim-flag-music', 'anim-flag-outro'].forEach((id) => {
-      document.getElementById(id)?.addEventListener('change', () => {
+      document.getElementById(id)?.addEventListener('change', (ev) => {
         if (_project) {
           _project.pipeline = _project.pipeline || {};
           _project.pipeline.assemble = assembleFlagsFromDom();
         }
+        const lab = ev.target?.closest?.('.anim-layer');
+        if (lab) lab.classList.toggle('is-on', !!ev.target.checked);
       });
     });
     el.querySelectorAll('.anim-take-prev').forEach((btn) => {
@@ -2958,7 +2994,39 @@
         .anim-saved-shot:disabled { opacity:0.45; cursor:not-allowed; }
         .anim-saved-shot img, .anim-saved-shot video { width:100%; aspect-ratio:9/16; object-fit:cover; display:block; border-radius:10px 10px 0 0; background:#0F172A; }
         .anim-saved-shot span { display:block; font-size:0.62rem; padding:5px 6px 6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .anim-assemble-panel { width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
+.anim-layers { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+        .anim-layer { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); font-size:0.68rem; color:rgba(255,255,255,0.55); cursor:pointer; user-select:none; }
+        .anim-layer input { accent-color:#A78BFA; margin:0; }
+        .anim-layer.is-on { border-color:rgba(167,139,250,0.45); background:rgba(124,58,237,0.16); color:#F1F5F9; }
+        .anim-layer em { font-style:normal; font-size:0.58rem; letter-spacing:0.04em; text-transform:uppercase; color:rgba(167,139,250,0.9); }
+        .anim-lane-tabs { display:flex; gap:2px; margin:0 0 10px; padding:3px; border-radius:10px; background:rgba(0,0,0,0.28); border:1px solid rgba(255,255,255,0.06); }
+        .anim-lane-tab { flex:1; padding:7px 6px; border:none; border-radius:8px; background:transparent; color:rgba(255,255,255,0.5); font-size:0.68rem; font-weight:650; cursor:pointer; font-family:inherit; }
+        .anim-lane-tab:hover { color:#E2E8F0; }
+        .anim-lane-tab.is-on { background:rgba(124,58,237,0.35); color:#F8FAFC; }
+        .anim-lane { display:flex; flex-direction:column; gap:8px; }
+        .anim-lane__label { font-size:0.62rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:rgba(255,255,255,0.4); }
+        .anim-lane__hint { margin:0; font-size:0.65rem; color:rgba(255,255,255,0.4); line-height:1.4; }
+        .anim-lane__warn { font-size:0.68rem; color:#FCD34D; line-height:1.35; }
+        .anim-lane__primary { min-height:88px !important; margin:0 !important; }
+        .anim-lane__primary-input { width:100%; margin:0; }
+        .anim-lane__actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .anim-lane__actions .anim-btn { width:auto; padding:6px 10px; font-size:0.68rem; }
+        .anim-lane__more { border:1px solid rgba(255,255,255,0.07); border-radius:8px; background:rgba(255,255,255,0.02); }
+        .anim-lane__more > summary { cursor:pointer; list-style:none; padding:8px 10px; font-size:0.68rem; font-weight:650; color:rgba(226,232,240,0.7); }
+        .anim-lane__more > summary::-webkit-details-marker { display:none; }
+        .anim-lane__more[open] > summary { border-bottom:1px solid rgba(255,255,255,0.06); }
+        .anim-lane__more .anim-brief-edit { margin:8px 10px 10px; min-height:52px; }
+        .anim-vol--inline { display:inline-flex; align-items:center; gap:6px; margin-left:auto; font-size:0.68rem; color:rgba(255,255,255,0.65); }
+        .anim-vol--inline input[type="range"] { width:90px; }
+        .anim-select--compact { width:auto; min-width:72px; font-size:0.68rem; }
+        .anim-asset-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .anim-asset-row__pick { flex:1 1 160px; min-width:140px; font-size:0.68rem; }
+        .anim-asset-row .anim-btn { width:auto; padding:6px 10px; font-size:0.68rem; }
+        .anim-asset-row__preview { margin-top:4px; }
+        .anim-asset-row__preview audio { width:100%; max-width:280px; height:32px; }
+        .anim-asset-row__preview video { width:72px; height:40px; object-fit:cover; border-radius:6px; background:#000; }
+        .anim-assemble-panel { width:100%; margin-top:8px; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.02); }
+
         .anim-assemble-flags { display:flex; flex-wrap:wrap; gap:12px; font-size:0.72rem; color:#CBD5E1; }
         .anim-assemble-flags label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
         .anim-final__stage { position:relative; width:280px; max-width:100%; border-radius:12px; overflow:hidden; background:#000; }

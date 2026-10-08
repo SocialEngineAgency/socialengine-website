@@ -68,6 +68,7 @@ test('Animate: pick a saved outro on a second project without re-uploading', asy
   await page.click('.dash-nav-item[data-nav="create"]');
   await page.click('#create-segments [data-segment="animation-studio"]');
   await expect(page.locator('#dash-content .anim-shell')).toBeVisible({ timeout: 15000 });
+  await page.click('[data-assemble-tab="outro"]');
   const pick = page.locator('#anim-outro-pick');
   await expect(pick).toBeVisible({ timeout: 15000 });
   await expect(pick.locator('option[value="ast_outro1"]')).toHaveText(/Silk end/);
@@ -92,6 +93,7 @@ test('Animate Upload new posts the file to /api/assets', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('se_anim_last_project', 'proj_ready'));
   await page.click('.dash-nav-item[data-nav="create"]');
   await page.click('#create-segments [data-segment="animation-studio"]');
+  await page.click('[data-assemble-tab="outro"]');
   await expect(page.locator('#anim-outro-pick')).toBeVisible({ timeout: 15000 });
   await page.setInputFiles('#anim-outro-file', {
     name: 'end.mp4',
