@@ -1447,8 +1447,13 @@
               }`;
             })() : ''}
             ${p.content_record_id && !p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
-            ${p.content_record_id ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:8px 0 0;line-height:1.35;">Ready for review — Approve there to post to Instagram, Facebook, and TikTok.</div>` : ''}
             ${p.content_record_id && p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review" title="Final may not be durable">Open in Content Review</button>` : ''}
+            ${readyShotUrls.length && p.final_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-send-new-review" title="Mint a new Pending card even if one already exists">Send new to Review</button>` : ''}
+            ${p.content_record_id
+              ? `<div style="font-size:0.68rem;color:rgba(167,139,250,0.95);margin:8px 0 0;line-height:1.35;">Linked to Content Review — Rebuild updates the Pending card, or mints a new one after publish/delete.</div>`
+              : (readyShotUrls.length
+                ? `<div style="font-size:0.68rem;color:rgba(255,255,255,0.45);margin:8px 0 0;line-height:1.35;">Rebuild Final to add a Pending card in Content Review.</div>`
+                : '')}
           </div>
         </div>
         ${pastList.length ? `
@@ -1726,7 +1731,8 @@
     });
     document.getElementById('anim-new-from-expired')?.addEventListener('click', () => newProject());
     document.getElementById('anim-approve-character')?.addEventListener('click', approveCharacter);
-    document.getElementById('anim-rebuild-final')?.addEventListener('click', rebuildFinal);
+    document.getElementById('anim-rebuild-final')?.addEventListener('click', () => rebuildFinal());
+    document.getElementById('anim-send-new-review')?.addEventListener('click', () => rebuildFinal({ forceNewContent: true }));
     document.getElementById('anim-open-review')?.addEventListener('click', () => {
       document.querySelector('[data-nav="content"]')?.click();
     });
@@ -2390,7 +2396,7 @@
     }
   }
 
-  async function rebuildFinal() {
+  async function rebuildFinal({ forceNewContent = false } = {}) {
     if (!_project?.id || _busy) return;
     if ((_project.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending')) {
       return toast('Wait for shots to finish before rebuilding Final', 'info');
@@ -2427,15 +2433,18 @@
         : `${ready.length} shots`;
       const capHint = flags.captions ? `${style.preset_id || 'custom'} captions` : 'no captions';
       toast(
-        forceRetry
-          ? `Retrying Final (${clipHint}, ${capHint})…`
-          : `Building Final (${clipHint}, ${capHint})…`,
+        forceNewContent
+          ? `Building Final + new Content Review card (${clipHint}, ${capHint})…`
+          : forceRetry
+            ? `Retrying Final (${clipHint}, ${capHint})…`
+            : `Building Final (${clipHint}, ${capHint})…`,
         'info'
       );
       const data = await animFetch(`/api/animation/projects/${projectId}/assemble`, {
         method: 'POST',
         body: JSON.stringify({
-          create_content: !_project.content_record_id,
+          create_content: true,
+          force_new_content: !!forceNewContent,
           force: forceRetry,
           assemble: flags,
           // Only send style when burning — avoids any "style present ⇒ burn" coupling.
