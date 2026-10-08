@@ -1356,46 +1356,54 @@
               <label><input type="checkbox" id="anim-flag-music" ${f.music ? 'checked' : ''}/> Music</label>
               <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
             </div>
-            <textarea id="anim-vo-direction" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="VO direction (e.g. shorter, faster pace, warm pride at the finish — soft CTA)…">${esc(p.vo_direction || '')}</textarea>
-            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:6px;" placeholder="Spoken VO — plain text only, no hashtags or emoji. Edit by hand anytime…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.vo_script ? 'Apply VO tweak' : 'Generate VO'}</button>
-              ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Ignore the current draft and write a new script from shots + direction">Fresh VO</button>
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Remember this script as a winner for future gens">Keep ✓</button>
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-reject" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Teach the generator to avoid this pattern">Not this</button>` : ''}
-            </div>
-            <div style="font-size:0.62rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.35;">Type a direction, Generate / Apply tweak with AI, or edit the script yourself — then Rebuild final.</div>
-            <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px;">
-              <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
-                VO vol
-                <input type="range" id="anim-vo-volume" min="0" max="100" step="1" value="${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}" style="width:120px;" />
-                <span id="anim-vo-volume-val">${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}%</span>
-              </label>
-              <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
-                Music vol
-                <input type="range" id="anim-music-volume" min="0" max="100" step="1" value="${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}" style="width:120px;" />
-                <span id="anim-music-volume-val">${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}%</span>
-              </label>
-            </div>
-            <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;margin-top:6px;" title="On-video / post caption (separate from spoken VO)" placeholder="On-video caption (hashtags OK; VO above is spoken)…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
-            ${renderCaptionStudioPanel(p)}
-            <textarea id="anim-music-prompt" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="Music bed prompt (e.g. warm lo-fi instrumental, soft pulse, no vocals)…">${esc(p.music_prompt || '')}</textarea>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
-              <select id="anim-music-length" class="anim-select" style="width:auto;min-width:96px;font-size:0.68rem;" title="Music length">
-                ${[15, 30, 45, 60].map((s) => {
-                  const ms = s * 1000;
-                  const cur = Number(p.music_length_ms) || 30000;
-                  return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
-                }).join('')}
-              </select>
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
-              ${renderSavedPicker('music', p.music_bed_url)}
-              ${renderSavedPicker('outro', p.outro_url)}
-              ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
-              ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
-            </div>
-            ${assembleFlags().outro && !p.outro_url ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 0;line-height:1.35;">Outro is on, but no clip is attached — upload an outro before Rebuild.</div>` : ''}
-            <div style="font-size:0.62rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.35;">Generate or upload a bed, then Rebuild final. ElevenLabs Music supports 3s–10min; pick 30–60s for typical reels.</div>
+            <details class="anim-drawer" open>
+              <summary>Voiceover</summary>
+              <div class="anim-drawer__body">
+                <textarea id="anim-vo-direction" class="anim-brief-edit" style="min-height:44px;margin:0;" placeholder="VO direction (e.g. shorter, faster pace, warm pride — soft CTA)…">${esc(p.vo_direction || '')}</textarea>
+                <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:72px;margin-top:8px;" placeholder="Spoken VO — plain text only. Edit by hand anytime…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
+                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.vo_script ? 'Apply VO tweak' : 'Generate VO'}</button>
+                  ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Ignore the current draft and write a new script">Fresh VO</button>
+                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Remember this script as a winner">Keep ✓</button>
+                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-reject" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Avoid this pattern next time">Not this</button>` : ''}
+                </div>
+                <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:10px;">
+                  <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
+                    VO vol
+                    <input type="range" id="anim-vo-volume" min="0" max="100" step="1" value="${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}" style="width:110px;" />
+                    <span id="anim-vo-volume-val">${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}%</span>
+                  </label>
+                </div>
+              </div>
+            </details>
+            <details class="anim-drawer" open>
+              <summary>Captions &amp; music</summary>
+              <div class="anim-drawer__body">
+                <input type="text" id="anim-caption-text" class="anim-ref-url" style="width:100%;" title="On-video / post caption" placeholder="On-video caption (hashtags OK)…" value="${esc(p.caption_text || p.agent_brief?.caption || p.agent_brief?.title || '')}" />
+                ${renderCaptionStudioPanel(p)}
+                <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);margin-top:10px;">
+                  Music vol
+                  <input type="range" id="anim-music-volume" min="0" max="100" step="1" value="${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}" style="width:110px;" />
+                  <span id="anim-music-volume-val">${Math.round((p.music_volume == null ? 0.18 : Number(p.music_volume)) * 100)}%</span>
+                </label>
+                <textarea id="anim-music-prompt" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="Music bed prompt…">${esc(p.music_prompt || '')}</textarea>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
+                  <select id="anim-music-length" class="anim-select" style="width:auto;min-width:96px;font-size:0.68rem;" title="Music length">
+                    ${[15, 30, 45, 60].map((s) => {
+                      const ms = s * 1000;
+                      const cur = Number(p.music_length_ms) || 30000;
+                      return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
+                    }).join('')}
+                  </select>
+                  <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen music' : 'Generate music'}</button>
+                  ${renderSavedPicker('music', p.music_bed_url)}
+                  ${renderSavedPicker('outro', p.outro_url)}
+                  ${p.music_bed_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-music-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear music</button>` : ''}
+                  ${p.outro_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-outro-clear" style="width:auto;padding:6px 8px;font-size:0.65rem;">Clear outro</button>` : ''}
+                </div>
+                ${assembleFlags().outro && !p.outro_url ? `<div style="font-size:0.68rem;color:#FCD34D;margin:6px 0 0;line-height:1.35;">Outro is on, but no clip is attached — upload an outro before Rebuild.</div>` : ''}
+              </div>
+            </details>
           </div>` : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
             ${showPlayer ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-expand-final" style="width:auto;">Expand</button>` : ''}
@@ -2831,31 +2839,38 @@
 
     root.innerHTML = `
       <style>
-        #dash-content.dash-content--animate { padding-bottom: 12px; }
-        /* Leave room for dash topbar + Create mode strip above #dash-content
-           so the pinned compose/send stays in the browser viewport. */
-        .anim-shell.atelier-shell { display:grid; grid-template-columns: 1fr minmax(300px,320px); gap:0; height:calc(100vh - 200px); min-height:400px; max-height:calc(100vh - 180px); border:none; border-radius:0; overflow:hidden; background:rgba(6,10,18,0.95); }
-        .anim-canvas.atelier-stage { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.07); background:radial-gradient(ellipse at 50% 30%,rgba(255,255,255,0.03),transparent 55%),rgba(6,10,18,0.95); }
-        .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
-        .anim-canvas-header h2 { margin:0; font-family:var(--font-display); font-size:1.05rem; color:#fff; font-weight:700; letter-spacing:-0.02em; }
-        .anim-canvas-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px 18px 40px; -webkit-overflow-scrolling:touch; }
-        .anim-chat.atelier-inspector { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; overflow:hidden; background:rgba(8,12,22,0.92); }
-        .anim-chat-header { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
-        .anim-chat-header h3 { margin:0 0 4px; font-size:0.65rem; font-weight:700; color:rgba(255,255,255,0.32); text-transform:uppercase; letter-spacing:0.08em; }
-        .anim-chat-header p { margin:0; font-size:0.72rem; color:rgba(255,255,255,0.4); }
-        /* Shots list scrolls; compose stays pinned (Coach pattern). */
-        .anim-chat-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:flex; flex-direction:column; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:rgba(167,139,250,0.55) rgba(255,255,255,0.06); }
+        #dash-content.dash-content--animate { padding: 0; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        /* Compact Create chrome (~88px). Wider Coach; stage shares the rest. */
+        .anim-shell.atelier-shell { display:grid; grid-template-columns: minmax(0,1fr) minmax(380px,42%); gap:0; height:calc(100vh - var(--create-chrome-h, 88px)); min-height:420px; max-height:calc(100vh - var(--create-chrome-h, 88px)); border:none; border-radius:0; overflow:hidden; background:#070b14; flex:1 1 auto; }
+        .anim-canvas.atelier-stage { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; border-right:1px solid rgba(255,255,255,0.06); background:radial-gradient(ellipse at 40% 0%,rgba(124,58,237,0.06),transparent 45%),#070b14; }
+        .anim-canvas-header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; background:rgba(8,12,22,0.65); }
+        .anim-canvas-header h2 { margin:0; font-family:var(--font-display); font-size:0.95rem; color:#fff; font-weight:700; letter-spacing:-0.02em; }
+        .anim-canvas-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:14px 16px 28px; -webkit-overflow-scrolling:touch; }
+        .anim-chat.atelier-inspector { display:flex; flex-direction:column; min-width:0; min-height:0; height:100%; overflow:hidden; background:rgba(10,14,24,0.98); }
+        .anim-chat-header { padding:12px 16px 10px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+        .anim-chat-header h3 { margin:0 0 2px; font-size:0.62rem; font-weight:700; color:rgba(255,255,255,0.38); text-transform:uppercase; letter-spacing:0.1em; }
+        .anim-chat-header p { margin:0; font-size:0.72rem; color:rgba(255,255,255,0.45); line-height:1.35; }
+        .anim-chat-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; display:flex; flex-direction:column; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:rgba(167,139,250,0.45) rgba(255,255,255,0.04); }
         .anim-chat-body::-webkit-scrollbar { width:8px; }
-        .anim-chat-body::-webkit-scrollbar-track { background:rgba(255,255,255,0.06); border-radius:8px; }
-        .anim-chat-body::-webkit-scrollbar-thumb { background:rgba(167,139,250,0.45); border-radius:8px; }
-        .anim-chat-log { flex:0 0 auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
-        .anim-chat-compose { padding:12px 14px 14px; border-top:1px solid rgba(255,255,255,0.06); flex:0 0 auto; background:#0F172A; display:flex; flex-direction:column; gap:0; }
-        .anim-chat-settings { margin:0 0 10px; border:1px solid rgba(255,255,255,0.08); border-radius:10px; background:rgba(255,255,255,0.02); }
-        .anim-chat-settings > summary { cursor:pointer; list-style:none; padding:10px 12px; font-size:0.75rem; font-weight:700; color:#CBD5E1; }
+        .anim-chat-body::-webkit-scrollbar-track { background:rgba(255,255,255,0.04); border-radius:8px; }
+        .anim-chat-body::-webkit-scrollbar-thumb { background:rgba(167,139,250,0.4); border-radius:8px; }
+        .anim-chat-log { flex:0 0 auto; padding:12px 16px; display:flex; flex-direction:column; gap:10px; }
+        .anim-chat-compose { padding:12px 14px 14px; border-top:1px solid rgba(255,255,255,0.07); flex:0 0 auto; background:linear-gradient(180deg, rgba(15,23,42,0.96), #0B1220); display:flex; flex-direction:column; gap:0; }
+        .anim-chat-settings { margin:0 0 10px; border:1px solid rgba(255,255,255,0.07); border-radius:10px; background:rgba(255,255,255,0.015); }
+        .anim-chat-settings > summary { cursor:pointer; list-style:none; padding:9px 12px; font-size:0.72rem; font-weight:700; color:#CBD5E1; }
         .anim-chat-settings > summary::-webkit-details-marker { display:none; }
+        .anim-chat-settings > summary::after { content:'▸'; float:right; color:rgba(255,255,255,0.35); font-size:0.7rem; }
+        .anim-chat-settings[open] > summary::after { content:'▾'; }
         .anim-chat-settings[open] > summary { border-bottom:1px solid rgba(255,255,255,0.06); }
-        .anim-chat-settings__body { padding:10px 12px 12px; max-height:min(220px, 30vh); overflow-y:auto; }
+        .anim-chat-settings__body { padding:10px 12px 12px; max-height:min(240px, 28vh); overflow-y:auto; }
         .anim-chat-send { flex:0 0 auto; padding-top:8px; }
+        .anim-drawer { margin-top:8px; border:1px solid rgba(255,255,255,0.07); border-radius:10px; background:rgba(255,255,255,0.015); }
+        .anim-drawer > summary { cursor:pointer; list-style:none; padding:9px 12px; font-size:0.7rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:rgba(226,232,240,0.75); }
+        .anim-drawer > summary::-webkit-details-marker { display:none; }
+        .anim-drawer > summary::after { content:'▸'; float:right; color:rgba(255,255,255,0.3); text-transform:none; letter-spacing:0; }
+        .anim-drawer[open] > summary::after { content:'▾'; }
+        .anim-drawer[open] > summary { border-bottom:1px solid rgba(255,255,255,0.06); }
+        .anim-drawer__body { padding:10px 12px 12px; }
         .anim-brief-card { padding:12px; margin:0 0 12px; border-radius:12px; border:1px solid rgba(167,139,250,0.35); background:rgba(124,58,237,0.1); }
         .anim-brief-card__title { font-size:0.85rem; font-weight:700; color:#F8FAFC; margin-bottom:8px; }
         .anim-brief-shot-line { font-size:0.78rem; color:#E2E8F0; line-height:1.4; padding:7px 0; border-top:1px solid rgba(255,255,255,0.06); }
@@ -2864,7 +2879,8 @@
         .anim-brief-btns .anim-btn { width:auto; flex:1; min-width:120px; }
         .anim-row { display:flex; gap:8px; margin-bottom:8px; }
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
-        .anim-prompt { width:100%; min-height:72px; resize:vertical; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:10px; padding:10px 12px; font-size:0.85rem; font-family:inherit; margin-bottom:8px; }
+        .anim-prompt { width:100%; min-height:110px; max-height:min(280px, 36vh); resize:none; overflow-y:auto; field-sizing:content; background:#111827; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:12px; padding:12px 14px; font-size:0.88rem; line-height:1.45; font-family:inherit; margin:0 0 8px; box-sizing:border-box; }
+        .anim-prompt:focus { outline:none; border-color:rgba(167,139,250,0.55); box-shadow:0 0 0 3px rgba(124,58,237,0.12); }
         .anim-refs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:8px; min-height:28px; }
         .anim-refs-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); padding:4px 0; line-height:1.4; }
         .anim-ref-card { display:flex; flex-direction:column; gap:4px; width:72px; }
@@ -3004,10 +3020,14 @@
         .anim-expand__title { font-size:0.85rem; font-weight:700; color:#F8FAFC; }
         .anim-expand__video { width:100%; max-height:70vh; border-radius:12px; background:#000; aspect-ratio:9/16; object-fit:contain; }
         .anim-expand__actions { display:flex; gap:8px; justify-content:flex-end; }
+        @media (max-width: 1100px) {
+          .anim-shell.atelier-shell { grid-template-columns: minmax(0,1fr) minmax(340px,46%); }
+        }
         @media (max-width: 960px) {
-          .anim-shell.atelier-shell { grid-template-columns:1fr; height:auto; }
-          .anim-canvas.atelier-stage { border-right:none; border-bottom:1px solid rgba(255,255,255,0.08); min-height:50vh; }
-          .anim-chat.atelier-inspector { min-height:50vh; }
+          .anim-shell.atelier-shell { grid-template-columns:1fr; height:auto; max-height:none; }
+          .anim-canvas.atelier-stage { border-right:none; border-bottom:1px solid rgba(255,255,255,0.08); min-height:42vh; }
+          .anim-chat.atelier-inspector { min-height:48vh; }
+          .anim-prompt { min-height:96px; max-height:220px; }
         }
       </style>
       <div class="anim-shell atelier-shell">
@@ -3023,8 +3043,8 @@
         </section>
         <aside class="anim-chat atelier-inspector">
           <div class="anim-chat-header">
-            <h3>Inspector · Coach</h3>
-            <p>One idea → short shot list → you accept</p>
+            <h3>Coach</h3>
+            <p>Brief → shots → you approve</p>
           </div>
           <div class="anim-chat-body">
             <div class="anim-chat-log" id="anim-chat-log"></div>
@@ -3088,6 +3108,16 @@
       applyAnimEntryUI(mode);
     });
     applyAnimEntryUI(readAnimEntry());
+    const growPrompt = () => {
+      const ta = document.getElementById('anim-prompt');
+      if (!ta) return;
+      ta.style.height = 'auto';
+      const max = Math.min(280, Math.round(window.innerHeight * 0.36));
+      const next = Math.max(110, Math.min(max, ta.scrollHeight));
+      ta.style.height = next + 'px';
+    };
+    document.getElementById('anim-prompt')?.addEventListener('input', growPrompt);
+    growPrompt();
     document.getElementById('anim-send')?.addEventListener('click', sendPrompt);
     document.getElementById('anim-new')?.addEventListener('click', newProject);
     document.getElementById('anim-home')?.addEventListener('click', goHome);

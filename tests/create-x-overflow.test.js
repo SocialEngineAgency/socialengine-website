@@ -17,9 +17,10 @@ function createSegmentsCss() {
 test('create-segments does not combine width 100% with horizontal margin (x-scroll)', () => {
   const css = createSegmentsCss();
   // Horizontal inset must be padding (inside the box), not margin on a 100%-wide block.
-  assert.match(css, /\.create-segments\s*\{[^}]*padding:\s*0\s+32px\s+12px/s);
+  assert.match(css, /\.create-segments\s*\{[^}]*padding:\s*0\s+20px/s);
   assert.doesNotMatch(css, /\.create-segments\s*\{[^}]*margin:\s*10px\s+32px\s+0/s);
   assert.match(css, /box-sizing:\s*border-box/);
+  assert.match(portal, /\.dash-main--create/);
 });
 
 test('dashboard main clips horizontal overflow', () => {

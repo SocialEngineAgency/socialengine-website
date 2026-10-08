@@ -17,7 +17,7 @@
   <script src="./claude-studio.js?v=20261003-style-once" defer></script>
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20261003-stale-carousel"></script>
-  <script src="./animation-studio.js?v=20261004-chrome" defer></script>
+  <script src="./animation-studio.js?v=20261008-atelier-density" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -2021,50 +2021,52 @@
     /* ── CREATE mode strip (atelier): Video · Post · Animate ── */
     .create-segments {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       gap: 0;
       /* Padding (not margin) for horizontal inset — width:100% + side margins
          was ~64px wider than .dash-main and caused page x-scroll under the sticky sidebar. */
-      margin: 10px 0 0;
-      padding: 0 32px 12px;
+      margin: 0;
+      padding: 0 20px;
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
-      background: transparent;
+      background: rgba(8,12,22,0.96);
       border: none;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
       border-radius: 0;
+      min-height: 40px;
     }
     .create-segments[hidden] { display: none; }
     .create-seg {
       position: relative;
-      padding: 8px 18px 10px;
+      padding: 10px 14px;
       border: none;
       border-radius: 0;
       background: transparent;
-      color: rgba(148,163,184,0.65);
-      font-family: var(--font-display);
-      font-size: 1.05rem;
-      font-weight: 500;
-      letter-spacing: -0.02em;
+      color: rgba(148,163,184,0.7);
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
       cursor: pointer;
       transition: color 0.15s;
     }
-    .create-seg:hover { color: rgba(255,255,255,0.85); }
+    .create-seg:hover { color: rgba(255,255,255,0.9); }
     .create-seg.active {
       background: transparent;
       color: #fff;
-      font-weight: 700;
+      font-weight: 750;
       box-shadow: none;
     }
     .create-seg.active::after {
       content: '';
       position: absolute;
-      left: 18px;
-      right: 18px;
-      bottom: -1px;
+      left: 14px;
+      right: 14px;
+      bottom: 0;
       height: 2px;
-      background: #fff;
+      background: #A78BFA;
       border-radius: 2px 2px 0 0;
     }
     .create-seg + .create-seg::before {
@@ -2074,13 +2076,61 @@
       top: 50%;
       transform: translateY(-50%);
       width: 1px;
-      height: 14px;
-      background: rgba(255,255,255,0.1);
+      height: 12px;
+      background: rgba(255,255,255,0.08);
+    }
+    /* Compact Create chrome — drop greeting hero, slim topbar, atelier fills viewport */
+    .dash-main--create {
+      --create-chrome-h: 88px;
+      overflow: hidden;
+      height: 100dvh;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .dash-main--create .dash-topbar {
+      padding: 6px 20px;
+      min-height: 0;
+      flex: 0 0 auto;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      background: rgba(8,12,22,0.96);
+    }
+    .dash-main--create .create-segments {
+      flex: 0 0 auto;
+    }
+    .dash-main--create .dash-topbar__greeting {
+      display: none;
+    }
+    .dash-main--create .dash-topbar__breadcrumb {
+      margin-bottom: 0;
+    }
+    .dash-main--create .dash-topbar__breadcrumb.visible {
+      display: flex;
+    }
+    .dash-main--create .dash-logout-btn {
+      padding: 5px 10px;
+      font-size: 0.68rem;
+    }
+    .dash-main--create .dash-content {
+      padding: 0;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .dash-main--create .dash-content.dash-content--animate {
+      padding: 0;
+    }
+    .dash-main--create .atelier-shell {
+      height: calc(100vh - var(--create-chrome-h)) !important;
+      max-height: calc(100vh - var(--create-chrome-h)) !important;
     }
     @media (max-width: 1024px) {
-      .create-segments { margin: 8px 0 0; padding: 0 16px 12px; }
-      .create-seg { font-size: 0.95rem; padding: 8px 14px 10px; }
-      .create-seg.active::after { left: 14px; right: 14px; }
+      .create-segments { margin: 0; padding: 0 12px; min-height: 38px; }
+      .create-seg { font-size: 0.72rem; padding: 9px 12px; }
+      .create-seg.active::after { left: 12px; right: 12px; }
+      .dash-main--create { --create-chrome-h: 96px; }
     }
 
     /* ── SETTINGS tabs (design §3) ── */
@@ -6670,7 +6720,9 @@
         // Sub-state (Settings tab / Create segment) lives in the URL hash; other
         // pages clear it so a stale #settings/brand never survives a nav click.
         if (nav !== 'settings' && nav !== 'create') seClearHash();
-        showIf(nav === 'create', document.getElementById('create-segments'));
+        const enteringCreate = nav === 'create';
+        showIf(enteringCreate, document.getElementById('create-segments'));
+        setCreateChrome(enteringCreate);
         document.getElementById('dash-content')?.classList.toggle('dash-content--chat', nav === 'ai-coach');
         // Scroll to top of content area on nav
         document.querySelector('.dash-main')?.scrollTo(0, 0);
@@ -6728,6 +6780,11 @@
     });
 
     // ━━━ Create atelier: Video · Post · Animate (equal modes) ━━━
+    function setCreateChrome(on) {
+      const main = document.querySelector('.dash-main');
+      if (main) main.classList.toggle('dash-main--create', !!on);
+      if (!on) document.getElementById('dash-content')?.classList.remove('dash-content--animate');
+    }
     // activeNav holds studio id; sidebar highlight stays 'create'.
     const CREATE_SEGMENT_LS = 'se_create_segment';
     function currentCreateSegment() {
@@ -6745,6 +6802,7 @@
     }
     function setCreateSegment(segment) {
       if (!CREATE_SEGMENT_SLUG[segment]) segment = 'creation-studio';
+      setCreateChrome(true);
       try { localStorage.setItem(CREATE_SEGMENT_LS, segment); } catch (_) {}
       seWriteHash('create/' + CREATE_SEGMENT_SLUG[segment]);
       document.querySelectorAll('#create-segments .create-seg').forEach((b) => {
@@ -6771,6 +6829,7 @@
     }
     function renderCreatePage(segment) {
       showIf(true, document.getElementById('create-segments'));
+      setCreateChrome(true);
       setCreateSegment(segment || currentCreateSegment());
     }
     document.querySelectorAll('#create-segments .create-seg').forEach((b) => {

@@ -22,7 +22,7 @@ test('Animate chrome uses merchant titles, not lab names', () => {
   assert.ok(shellStart >= 0);
   const shell = anim.slice(shellStart, anim.indexOf('</aside>', asideAt) + 8);
   assert.match(shell, /<h2>Animate<\/h2>/);
-  assert.match(shell, /<h3>Inspector · Coach<\/h3>/);
+  assert.match(shell, /<h3>Coach<\/h3>/);
   assert.match(shell, /class="anim-shell atelier-shell"/);
   assert.match(shell, /atelier-stage/);
   assert.match(shell, /atelier-inspector/);
