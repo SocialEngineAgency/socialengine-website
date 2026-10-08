@@ -759,6 +759,9 @@
     if (document.getElementById('anim-vo-script')) {
       body.vo_script = document.getElementById('anim-vo-script').value;
     }
+    if (document.getElementById('anim-vo-direction')) {
+      body.vo_direction = document.getElementById('anim-vo-direction').value;
+    }
     if (document.getElementById('anim-caption-text')) {
       body.caption_text = document.getElementById('anim-caption-text').value;
     }
@@ -1353,12 +1356,15 @@
               <label><input type="checkbox" id="anim-flag-music" ${f.music ? 'checked' : ''}/> Music</label>
               <label><input type="checkbox" id="anim-flag-outro" ${f.outro ? 'checked' : ''}/> Outro</label>`; })()}
             </div>
-            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:8px;" placeholder="Spoken VO — plain text only, no hashtags or emoji…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
+            <textarea id="anim-vo-direction" class="anim-brief-edit" style="min-height:44px;margin-top:8px;" placeholder="VO direction (e.g. shorter, faster pace, warm pride at the finish — soft CTA)…">${esc(p.vo_direction || '')}</textarea>
+            <textarea id="anim-vo-script" class="anim-brief-edit" style="min-height:56px;margin-top:6px;" placeholder="Spoken VO — plain text only, no hashtags or emoji. Edit by hand anytime…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;align-items:center;">
-              <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.vo_script ? 'Regen VO' : 'Generate VO'}</button>
-              ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Remember this script as a winner for future gens">Keep ✓</button>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate" style="width:auto;padding:6px 10px;font-size:0.68rem;">${p.vo_script ? 'Apply VO tweak' : 'Generate VO'}</button>
+              ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Ignore the current draft and write a new script from shots + direction">Fresh VO</button>
+              <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Remember this script as a winner for future gens">Keep ✓</button>
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-reject" style="width:auto;padding:6px 8px;font-size:0.65rem;" title="Teach the generator to avoid this pattern">Not this</button>` : ''}
             </div>
+            <div style="font-size:0.62rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.35;">Type a direction, Generate / Apply tweak with AI, or edit the script yourself — then Rebuild final.</div>
             <div class="anim-vol-row" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:8px;">
               <label class="anim-vol" style="display:flex;align-items:center;gap:8px;font-size:0.72rem;color:rgba(255,255,255,0.72);">
                 VO vol
@@ -1458,7 +1464,8 @@
     document.getElementById('anim-music-upload')?.addEventListener('click', () => document.getElementById('anim-music-file')?.click());
     document.getElementById('anim-outro-upload')?.addEventListener('click', () => document.getElementById('anim-outro-file')?.click());
     document.getElementById('anim-music-generate')?.addEventListener('click', () => generateMusicBed());
-    document.getElementById('anim-vo-generate')?.addEventListener('click', () => generateVoScript());
+    document.getElementById('anim-vo-generate')?.addEventListener('click', () => generateVoScript({ revise: true }));
+    document.getElementById('anim-vo-regen-fresh')?.addEventListener('click', () => generateVoScript({ revise: false }));
     document.getElementById('anim-vo-keep')?.addEventListener('click', () => rateVoScript('accept'));
     document.getElementById('anim-vo-reject')?.addEventListener('click', () => rateVoScript('reject'));
     const bindVol = (id, labelId, projectKey) => {
@@ -1560,7 +1567,7 @@
       'anim-cap-mode', 'anim-cap-size', 'anim-cap-width', 'anim-cap-y', 'anim-cap-wpl', 'anim-cap-outline-w',
       'anim-cap-color', 'anim-cap-highlight', 'anim-cap-outline', 'anim-cap-anim', 'anim-cap-case',
       'anim-cap-box', 'anim-cap-pad', 'anim-cap-radius',
-      'anim-caption-text', 'anim-vo-script',
+      'anim-caption-text', 'anim-vo-script', 'anim-vo-direction',
     ].forEach((id) => {
       document.getElementById(id)?.addEventListener('input', () => {
         _captionStyleDraft = currentCaptionStyle();
@@ -2242,27 +2249,41 @@
     }
   }
 
-  async function generateVoScript() {
+  async function generateVoScript({ revise = true } = {}) {
     if (!_project?.id || _busy) return;
+    const direction = String(document.getElementById('anim-vo-direction')?.value || '').trim();
+    const current = String(document.getElementById('anim-vo-script')?.value || _project.vo_script || '').trim();
+    const useDraft = revise && !!current;
     _busy = true;
     const btn = document.getElementById('anim-vo-generate');
+    const freshBtn = document.getElementById('anim-vo-regen-fresh');
     if (btn) btn.disabled = true;
+    if (freshBtn) freshBtn.disabled = true;
     try {
-      toast('Writing voiceover from shots and brand voice…', 'info');
+      toast(useDraft
+        ? (direction ? 'Applying your VO tweak…' : 'Tightening the current VO…')
+        : (direction ? 'Writing VO from your direction…' : 'Writing voiceover from shots and brand voice…'), 'info');
       const data = await animFetch(`/api/animation/projects/${_project.id}/generate-vo`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          direction,
+          vo_direction: direction,
+          vo_script: useDraft ? current : '',
+        }),
       });
       _project = data.project || _project;
       if (data.vo_script) _project.vo_script = data.vo_script;
+      if (data.vo_direction != null) _project.vo_direction = data.vo_direction;
+      else _project.vo_direction = direction;
       renderCanvas();
       const visionHint = data.vision_count ? ` · saw ${data.vision_count} keyframe${data.vision_count === 1 ? '' : 's'}` : '';
-      toast(`VO ready${visionHint} — Rebuild final to voice it`, 'success');
+      toast(`${data.revised ? 'VO tweaked' : 'VO ready'}${visionHint} — edit more or Rebuild final`, 'success');
     } catch (e) {
       toast(e.message || 'VO generation failed', 'error', e.request_id);
     } finally {
       _busy = false;
       if (btn) btn.disabled = false;
+      if (freshBtn) freshBtn.disabled = false;
     }
   }
 
