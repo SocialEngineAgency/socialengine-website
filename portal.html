@@ -20,6 +20,7 @@
   <script src="./animation-studio.js?v=20261008-assemble-lanes" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
+  <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
   <script src="./stories-composer.js?v=20261009" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -9806,7 +9807,7 @@
       const three = (key, placeholder) => [0, 1, 2].map((i) =>
         `<input type="text" class="se-bw-input" data-bw-list="${key}" maxlength="80" placeholder="${placeholder} ${i + 1}" value="${esc((w[key] || [])[i])}" />`).join('');
       const formality = Number(w.formality) || 3;
-      return `<section id="se-brand-worksheet" class="se-bw">
+      return `<div class="se-bw-wrap"><section id="se-brand-worksheet" class="se-bw">
         <div class="se-bw__head">
           <div>
             <h3 class="se-bw__title">Brand worksheet</h3>
@@ -9825,12 +9826,13 @@
         <div class="se-bw__row">${three('embrace', 'Phrase')}</div>
         <label class="se-bw__label">3 phrases we never use</label>
         <div class="se-bw__row">${three('avoid', 'Never say')}</div>
-      </section>`;
+      </section><aside id="se-bw-suggest" class="bws" aria-label="Suggestions from your posts"></aside></div>`;
     }
 
     function mountBrandWorksheet(panel) {
       if (!panel || panel.querySelector('#se-brand-worksheet')) return;
       panel.insertAdjacentHTML('afterbegin', seBrandWorksheetCardHtml(clientData));
+      if (typeof window.seMountWorksheetSuggest === 'function') window.seMountWorksheetSuggest(panel);
       const range = panel.querySelector('#se-bw-formality');
       range?.addEventListener('input', () => {
         const lab = panel.querySelector('#se-bw-formality-val');
@@ -9863,6 +9865,7 @@
         } finally {
           btn.disabled = false;
           btn.textContent = 'Save';
+          delete btn.dataset.bwsDirty;
         }
       });
     }
