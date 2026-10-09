@@ -642,6 +642,21 @@
     .social-stat { }
     .social-stat__num { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; color: var(--color-text); }
     .social-stat__label { font-size: 0.7rem; color: var(--color-text-muted); font-weight: 500; }
+    .se-bw { background: rgba(255,255,255,0.02); border: 1px solid rgba(124,58,237,0.25); border-radius: 12px; padding: 18px 20px; margin: 0 0 24px; max-width: 800px; }
+    .se-bw__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .se-bw__title { font-size: 1rem; font-weight: 700; color: #fff; margin: 0; }
+    .se-bw__sub { font-size: 0.78rem; color: var(--color-text-muted); margin: 4px 0 0; line-height: 1.45; }
+    .se-bw__save { padding: 7px 16px; border-radius: 8px; border: none; background: #7C3AED; color: #fff; font-weight: 600; font-size: 0.78rem; cursor: pointer; font-family: var(--font-body); }
+    .se-bw__save:disabled { opacity: 0.6; cursor: default; }
+    .se-bw__label { display: block; font-size: 0.72rem; font-weight: 600; color: rgba(226,232,240,0.85); margin: 14px 0 6px; }
+    .se-bw__label strong { color: #A78BFA; font-weight: 700; margin-left: 4px; }
+    .se-bw__hint { font-weight: 400; color: rgba(148,163,184,0.6); margin-left: 6px; }
+    .se-bw__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .se-bw-input { width: 100%; box-sizing: border-box; padding: 8px 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text); font-size: 0.8rem; font-family: var(--font-body); outline: none; }
+    .se-bw-input:focus { border-color: var(--color-accent); }
+    .se-bw__range { width: 100%; accent-color: #7C3AED; }
+    .se-bw__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: rgba(148,163,184,0.55); }
+    @media (max-width: 640px) { .se-bw__row { grid-template-columns: 1fr; } }
     /* Brand voice summary */
     .bv-tag { display: inline-flex; padding: 3px 10px; background: rgba(20,184,166,0.12); border: 1px solid rgba(20,184,166,0.2); border-radius: var(--radius-full); font-size: 0.75rem; color: var(--color-accent); font-weight: 500; margin: 3px; }
     .archetype-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(255,255,255,0.04)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); font-weight: 600; color: var(--color-text); font-size: var(--text-sm); margin-bottom: var(--space-4); }
@@ -9734,6 +9749,76 @@
 
     // ━━━ Brand Voice Page ━━━
     // Renders into `target` when given (the Settings → Brand tab), else #dash-content.
+    const SE_FORMALITY_LABELS = ['', 'Very formal', 'Mostly formal', 'Balanced', 'Mostly casual', 'Very casual'];
+
+    function seBrandWorksheetCardHtml(data) {
+      const bw = (data && data.brand_worksheet) || {};
+      const w = bw.worksheet || {};
+      const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      const three = (key, placeholder) => [0, 1, 2].map((i) =>
+        `<input type="text" class="se-bw-input" data-bw-list="${key}" maxlength="80" placeholder="${placeholder} ${i + 1}" value="${esc((w[key] || [])[i])}" />`).join('');
+      const formality = Number(w.formality) || 3;
+      return `<section id="se-brand-worksheet" class="se-bw">
+        <div class="se-bw__head">
+          <div>
+            <h3 class="se-bw__title">Brand worksheet</h3>
+            <p class="se-bw__sub">Two minutes. Every caption, script and Coach answer follows this.${bw.complete ? '' : ' <strong style="color:#F59E0B;">Not finished yet.</strong>'}</p>
+          </div>
+          <button type="button" class="se-bw__save" id="se-bw-save">Save</button>
+        </div>
+        <label class="se-bw__label">How formal? <strong id="se-bw-formality-val">${SE_FORMALITY_LABELS[formality]}</strong></label>
+        <input type="range" id="se-bw-formality" min="1" max="5" step="1" value="${formality}" class="se-bw__range" />
+        <div class="se-bw__scale"><span>Formal</span><span>Casual</span></div>
+        <label class="se-bw__label">People expect us to sound… <span class="se-bw__hint">up to 5 words, comma separated</span></label>
+        <input type="text" class="se-bw-input" id="se-bw-adjectives" maxlength="200" placeholder="warm, local, honest, plain-spoken" value="${esc((w.expectation_adjectives || []).join(', '))}" />
+        <label class="se-bw__label">Our 3 values</label>
+        <div class="se-bw__row">${three('values', 'Value')}</div>
+        <label class="se-bw__label">3 phrases we love</label>
+        <div class="se-bw__row">${three('embrace', 'Phrase')}</div>
+        <label class="se-bw__label">3 phrases we never use</label>
+        <div class="se-bw__row">${three('avoid', 'Never say')}</div>
+      </section>`;
+    }
+
+    function mountBrandWorksheet(panel) {
+      if (!panel || panel.querySelector('#se-brand-worksheet')) return;
+      panel.insertAdjacentHTML('afterbegin', seBrandWorksheetCardHtml(clientData));
+      const range = panel.querySelector('#se-bw-formality');
+      range?.addEventListener('input', () => {
+        const lab = panel.querySelector('#se-bw-formality-val');
+        if (lab) lab.textContent = SE_FORMALITY_LABELS[Number(range.value)] || '';
+      });
+      panel.querySelector('#se-bw-save')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const list = (key) => [...panel.querySelectorAll(`[data-bw-list="${key}"]`)].map((i) => i.value.trim()).filter(Boolean);
+        const body = {
+          formality: Number(range?.value) || 3,
+          expectation_adjectives: String(panel.querySelector('#se-bw-adjectives')?.value || ''),
+          values: list('values'),
+          embrace: list('embrace'),
+          avoid: list('avoid'),
+        };
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+          const res = await apiFetch(`${API}/api/brand-worksheet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || 'Save failed');
+          if (clientData) clientData.brand_worksheet = { worksheet: data.worksheet, exists: true, complete: !!data.complete };
+          showToast(data.complete ? '✓ Brand worksheet saved — new content will follow it' : 'Saved — add values and a phrase to finish it');
+        } catch (err) {
+          showToast(err.message || 'Could not save the worksheet');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Save';
+        }
+      });
+    }
+
     function renderBrandVoicePage(data, target) {
       const content = target || document.getElementById('dash-content');
       const isCharityBrand = isCharityClient(data);
@@ -11068,6 +11153,7 @@
           panel.dataset.mounted = '1';
           renderBrandVoicePage(clientData, panel);
         }
+        mountBrandWorksheet(panel);
       }
       seWriteHash('settings/' + tab);
     }
