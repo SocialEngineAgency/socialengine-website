@@ -33,6 +33,7 @@ const ALLOWLIST = [
   'portal-native-oauth.js', // portal.html
   'portal-assets.js', // portal.html
   'analytics-cockpit.js', // portal.html
+  'stories-composer.js', // portal.html — Instagram Stories composer
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'claude-studio.js', // portal.html

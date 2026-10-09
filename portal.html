@@ -19,6 +19,7 @@
   <script src="./coach-create-session.js?v=20261003-stale-carousel"></script>
   <script src="./animation-studio.js?v=20261008-assemble-lanes" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
+  <script src="./stories-composer.js?v=20261009" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -662,6 +663,8 @@
     .mwp__track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.07); margin-top: 5px; overflow: hidden; }
     .mwp__fill { height: 100%; background: linear-gradient(90deg, #7C3AED, #A78BFA); }
     .mwp__note { font-size: 0.64rem; color: rgba(255,255,255,0.4); margin-top: 4px; line-height: 1.35; }
+    .mwp__story-actions { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+    .mwp__linkbtn { background: transparent; border: none; color: #A78BFA; font-size: 0.7rem; font-weight: 600; cursor: pointer; padding: 0; }
     .mwp__slots { display: flex; gap: 8px; overflow-x: auto; margin-top: 12px; padding-bottom: 2px; }
     .mwp__slot { flex: 0 0 auto; min-width: 118px; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); cursor: pointer; font-family: var(--font-body); color: #fff; }
     .mwp__slot:hover { border-color: rgba(167,139,250,0.5); }
@@ -19629,6 +19632,7 @@
   const MWP_FORMAT = { reel: 'Reel', feed: 'Feed post' };
   const MWP_STATUS = { filled: 'Scheduled', in_review: 'In review', open: 'Open', missed: 'Missed' };
 
+  window.onStoriesChanged = () => _loadMetaPlanner();
   async function _loadMetaPlanner(week) {
     const el = document.getElementById('meta-week-planner');
     if (!el) return;
@@ -19730,8 +19734,12 @@
         ${bar('Reels', p.counts.reels)}
         ${bar('Feed', p.counts.feed)}
         <div class="mwp__meter mwp__meter--stories" title="${esc(p.stories.note)}">
-          <div class="mwp__meter-top"><span>Stories</span><strong>${p.stories.per_day}/day</strong></div>
-          <div class="mwp__note">${esc(p.stories.frames)} · post from the app</div>
+          <div class="mwp__meter-top"><span>Stories</span><strong>${p.stories.posted || 0}/${p.stories.target || p.stories.per_day * 7}</strong>${p.stories.planned ? `<em>+${p.stories.planned} planned</em>` : ''}</div>
+          <div class="mwp__track"><div class="mwp__fill" style="width:${p.stories.target ? Math.min(100, Math.round(((p.stories.posted || 0) / p.stories.target) * 100)) : 0}%"></div></div>
+          <div class="mwp__story-actions">
+            <button type="button" class="mwp__save" data-mwp-story="new">Make a Story</button>
+            <button type="button" class="mwp__linkbtn" data-mwp-story="list">This week</button>
+          </div>
         </div>
       </div>
       <div class="mwp__slots">${slots || '<div class="mwp__note">No Reels or Feed posts planned — set targets below.</div>'}</div>
@@ -19749,6 +19757,12 @@
           <div class="mwp__note">Meta's guide: Reels 3–4 a week, Feed 1–2, Stories 1–2 a day. Engage weeks swap one Reel for an extra Story a day.</div>
         </details>
       </div>`;
+    el.querySelectorAll('[data-mwp-story]').forEach((b) => b.addEventListener('click', () => {
+      if (typeof window.openStoriesComposer !== 'function') return;
+      const date = isThisWeek ? p.today : p.week_start;
+      const open = p.slots.find((sl) => sl.status === 'open');
+      window.openStoriesComposer({ date, story_type: open ? open.story_type : '', goal: p.mode, view: b.dataset.mwpStory === 'list' ? 'list' : 'compose' });
+    }));
     el.querySelectorAll('[data-mwp-mode]').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.mwpMode === p.mode) return;
       _mwpSave({ week: p.week_start, mode: b.dataset.mwpMode });
