@@ -35,6 +35,7 @@ const ALLOWLIST = [
   'analytics-cockpit.js', // portal.html
   'stories-composer.js', // portal.html — Instagram Stories composer
   'inbox-moderation.js', // portal.html — Inbox hidden words
+  'brand-worksheet-suggest.js', // portal.html — worksheet suggestions from past posts
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'claude-studio.js', // portal.html
