@@ -23,11 +23,16 @@ test('VO is the default entry; Send posts vo_script with prompt null', async ({ 
   await expect(page.locator('#anim-prompt')).toHaveAttribute('placeholder', "Write or paste the voiceover. We'll build the shots around it.");
   await page.fill('#anim-prompt', 'Warm hello. This week only, twenty percent off the silk set.');
   await page.click('#anim-send');
+  await expect(page.locator('#anim-story-type')).toBeFocused();
+  expect(calls.some((c) => c.path.endsWith('/brief')), 'no brief without a story type').toBe(false);
+  await page.selectOption('#anim-story-type', 'bts');
+  await page.click('#anim-send');
   await expect.poll(() => calls.some((c) => c.path.includes('/brief'))).toBeTruthy();
   const brief = calls.find((c) => c.path.endsWith('/brief'));
   const body = JSON.parse(brief.body);
   expect(body.vo_script).toMatch(/Warm hello/);
   expect(body.prompt).toBeNull();
+  expect(body.story_brief.story_type).toBe('bts');
 });
 
 test('Describe a video keeps the old prompt path and is remembered per client', async ({ page }) => {
@@ -36,6 +41,7 @@ test('Describe a video keeps the old prompt path and is remembered per client', 
   await expect(page.locator('#anim-prompt')).toHaveAttribute('placeholder', /Describe a character/);
   expect(await page.evaluate((email) => localStorage.getItem('se_anim_entry:' + email), EMAIL)).toBe('prompt');
   await page.fill('#anim-prompt', 'A woman walks through a sunlit loft holding the silk robe.');
+  await page.selectOption('#anim-story-type', 'auto');
   await page.click('#anim-send');
   await expect.poll(() => calls.some((c) => c.path.includes('/brief'))).toBeTruthy();
   const body = JSON.parse(calls.find((c) => c.path.endsWith('/brief')).body);
@@ -88,4 +94,5 @@ test('remix session sends via the VO path', async ({ page }) => {
   const body = JSON.parse(calls.find((c) => c.path.endsWith('/brief')).body);
   expect(body.vo_script).toMatch(/silk set/);
   expect(body.prompt).toBeNull();
+  expect(body.story_brief.story_type).toBe('');
 });

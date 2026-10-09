@@ -175,6 +175,7 @@
       p.caption_burn_error || '', p.last_burned_caption_style?.preset_id || '',
       p.last_burned_caption_style?.burned_at || '', p.last_assemble_summary || '',
       (p.final_history || []).length, _captionStudioOpen ? 1 : 0, scenes,
+      JSON.stringify(p.story_brief || p.agent_brief?.story_brief || null),
     ]);
   }
   let _canvasFp = '';
@@ -183,6 +184,120 @@
   const _shotPromptDrafts = Object.create(null);
   /** Caption style draft — survives canvas remounts so Rebuild burns what you picked. */
   let _captionStyleDraft = null;
+  /** Composer story choice (type + why) — sent with Write shots. */
+  let _storyDraft = { story_type: '', motivator: '', barrier: '', benefit: '', message: '' };
+  /** Arc edits on the canvas — survive poll remounts until saved. */
+  let _storyArcDraft = null;
+  const ANIM_STORY_TYPES_FALLBACK = [
+    { id: 'tutorial', label: 'Tutorial / how-to' }, { id: 'qa', label: 'Q&A' }, { id: 'listicle', label: 'Listicle' },
+    { id: 'pov', label: 'POV' }, { id: 'types_of', label: 'Types of…' }, { id: 'bts', label: 'Behind the scenes' },
+    { id: 'town_hall', label: 'Town hall / update' }, { id: 'before_after', label: 'Before & after' }, { id: 'facts_list', label: 'Facts list' },
+  ];
+  function animStoryTypes() {
+    const list = window.__clientData?.story_types;
+    return Array.isArray(list) && list.length ? list : ANIM_STORY_TYPES_FALLBACK;
+  }
+  function animStoryTypeLabel(id) {
+    return animStoryTypes().find((t) => t.id === id)?.label || '';
+  }
+  function animStoryBriefFromDraft() {
+    const d = _storyDraft || {};
+    return {
+      story_type: d.story_type === 'auto' ? '' : (d.story_type || ''),
+      motivator: d.motivator || '',
+      barrier: d.barrier || '',
+      benefit: d.benefit || '',
+      message: d.message || '',
+    };
+  }
+  function renderStoryComposer() {
+    const d = _storyDraft || {};
+    const opts = animStoryTypes().map((t) => `<option value="${esc(t.id)}" ${d.story_type === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+    const field = (key, label, ph) => `<label class="anim-story__field"><span>${label}</span><input type="text" data-story-why="${key}" maxlength="${key === 'message' ? 200 : 300}" placeholder="${ph}" value="${esc(d[key] || '')}" /></label>`;
+    const ws = window.__clientData?.brand_worksheet;
+    const nudge = ws && !ws.complete
+      ? `<button type="button" class="anim-story__nudge" id="anim-story-worksheet">Brand worksheet not finished — scripts will sound generic. Fill it in (2 min)</button>`
+      : '';
+    return `<div class="anim-story" id="anim-story">
+      <select id="anim-story-type" class="anim-select" title="Story type (Meta storytelling formats)">
+        <option value="" ${d.story_type ? '' : 'selected'} disabled>Story type…</option>
+        <option value="auto" ${d.story_type === 'auto' ? 'selected' : ''}>Let AI pick</option>
+        ${opts}
+      </select>
+      <details class="anim-story__why">
+        <summary>Why this post? <em>optional</em></summary>
+        ${field('motivator', 'Audience wants…', 'to feel part of something')}
+        ${field('barrier', 'What stops them…', 'thinks they are not a runner')}
+        ${field('benefit', 'What they get…', 'a reason to start and a team behind them')}
+        ${field('message', 'One message', 'Every mile counts — start with one')}
+      </details>
+      ${nudge}
+    </div>`;
+  }
+  function bindStoryComposer() {
+    const root = document.getElementById('anim-story');
+    if (!root) return;
+    root.querySelector('#anim-story-type')?.addEventListener('change', (e) => {
+      _storyDraft = Object.assign({}, _storyDraft, { story_type: e.target.value });
+    });
+    root.querySelectorAll('[data-story-why]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        _storyDraft = Object.assign({}, _storyDraft, { [inp.dataset.storyWhy]: inp.value });
+      });
+    });
+    root.querySelector('#anim-story-worksheet')?.addEventListener('click', () => {
+      if (typeof window.switchNav === 'function') window.switchNav('brand-voice');
+    });
+  }
+  function renderStoryArcSection(p) {
+    const sb = p?.story_brief || p?.agent_brief?.story_brief;
+    if (!p?.agent_brief || !sb) return '';
+    const arc = Object.assign({}, sb.arc || {}, _storyArcDraft && _storyArcDraft.id === p.id ? _storyArcDraft.arc : {});
+    const typeLabel = animStoryTypeLabel(sb.story_type);
+    const row = (key, label, ph) => `<label class="anim-arc__row"><span>${label}</span><textarea rows="2" data-arc="${key}" maxlength="${key === 'middle' ? 500 : 240}" placeholder="${ph}">${esc(arc[key] || '')}</textarea></label>`;
+    return `<div class="anim-section">
+      <div class="anim-section__label">Story${typeLabel ? ` · ${esc(typeLabel)}` : ''}${sb.message ? ` · <span style="text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.55);">${esc(sb.message)}</span>` : ''}</div>
+      <div class="anim-arc">
+        ${row('hook', 'Hook (first 1–3s)', 'What stops the scroll')}
+        ${row('middle', 'Middle', 'The proof or the turn')}
+        ${row('payoff', 'Pay-off', 'The feeling or result')}
+        ${row('cta', 'One ask', 'The single CTA')}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+        <button type="button" class="anim-btn anim-btn--ghost" id="anim-arc-save" style="width:auto;padding:5px 12px;font-size:0.7rem;">Save story</button>
+        <span style="font-size:0.62rem;color:rgba(255,255,255,0.4);">The voiceover writer and caption follow this arc.</span>
+      </div>
+    </div>`;
+  }
+  function bindStoryArcSection(el) {
+    const p = _project;
+    if (!p || !el) return;
+    el.querySelectorAll('[data-arc]').forEach((ta) => {
+      ta.addEventListener('input', () => {
+        const base = _storyArcDraft && _storyArcDraft.id === p.id ? _storyArcDraft.arc : {};
+        _storyArcDraft = { id: p.id, arc: Object.assign({}, base, { [ta.dataset.arc]: ta.value }) };
+      });
+    });
+    el.querySelector('#anim-arc-save')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const sb = p.story_brief || p.agent_brief?.story_brief || {};
+      const arc = Object.assign({}, sb.arc || {}, _storyArcDraft && _storyArcDraft.id === p.id ? _storyArcDraft.arc : {});
+      btn.disabled = true;
+      try {
+        const data = await animFetch(`/api/animation/projects/${p.id}/story-brief`, {
+          method: 'POST',
+          body: JSON.stringify({ story_brief: Object.assign({}, sb, { arc }) }),
+        });
+        _project = data.project;
+        _storyArcDraft = null;
+        toast('Story saved', 'success');
+      } catch (err) {
+        toast(err.message || 'Could not save story', 'error', err.request_id);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
   const ANIM_LAST_OPEN_LS = 'se_anim_last_project';
   const VO_PLACEHOLDER = "Write or paste the voiceover. We'll build the shots around it.";
   const PROMPT_PLACEHOLDER = 'Describe a character, scene, product, or full video idea…';
@@ -1170,6 +1285,8 @@
         ${statusBadge(p.status)}
       </div>
 
+      ${renderStoryArcSection(p)}
+
       <div class="anim-section">
         <div class="anim-section__label">Character / asset lock ${p.character_pack?.locked ? '· Locked' : ''}${(p.character_pack?.cast || []).length > 1 ? ` · Cast ${(p.character_pack.cast || []).length}` : ''}</div>
         ${modelLine(p)}
@@ -1487,6 +1604,7 @@
       ${p.error ? `<div class="anim-error">${esc(p.error)}</div>` : ''}
     `;
 
+    bindStoryArcSection(el);
     el.querySelectorAll('.anim-shot__prompt-edit').forEach((ta) => {
       ta.addEventListener('input', () => {
         _shotPromptDrafts[ta.dataset.scene] = ta.value;
@@ -1859,15 +1977,22 @@
     if (!prompt) return toast('Enter a prompt to re-brief', 'error');
     if (ta) ta.value = prompt;
     toast('Trying a new shot plan…', 'info');
-    await sendPrompt();
+    await sendPrompt({ auto: true });
   }
 
-  async function sendPrompt() {
+  async function sendPrompt(opts = {}) {
     if (_busy) return;
     const ta = document.getElementById('anim-prompt');
     const entry = document.querySelector('#anim-entry-mode [data-entry].active')?.dataset.entry || readAnimEntry();
     const text = (ta?.value || '').trim();
     if (!text) return toast(entry === 'vo' ? 'Enter a voiceover script' : 'Enter a prompt', 'error');
+    if (!_storyDraft?.story_type && opts.auto === true) {
+      _storyDraft = Object.assign({}, _storyDraft, { story_type: _project?.story_brief?.story_type || 'auto' });
+    }
+    if (!_storyDraft?.story_type) {
+      document.getElementById('anim-story-type')?.focus();
+      return toast('Pick a story type (or "Let AI pick") — Meta rewards a clear format', 'error');
+    }
     if (_refs.length && !_refs.some((r) => r.role === 'character')) {
       return toast('Tag one reference as Character (identity)', 'error');
     }
@@ -1910,6 +2035,7 @@
         force_rewrite: true,
         format_template_id: _pendingFormatTemplateId || undefined,
         style_pack_id: _pendingStylePackId || undefined,
+        story_brief: animStoryBriefFromDraft(),
       };
       if (entry === 'vo') {
         briefBody.vo_script = text;
@@ -2763,7 +2889,7 @@
     if (s.kind === 'charity_recipe' || (!s.referenceUrl && String(s.prompt || '').trim())) {
       return true;
     }
-    await sendPrompt();
+    await sendPrompt({ auto: true });
     return true;
   }
   window.applyAnimRemixSessionIfAny = applyAnimRemixSessionIfAny;
@@ -2936,6 +3062,19 @@
         .anim-select { flex:1; background:#1E293B; border:1px solid rgba(255,255,255,0.1); color:#E2E8F0; border-radius:8px; padding:8px 10px; font-size:0.78rem; font-family:inherit; }
         .anim-prompt { width:100%; min-height:110px; max-height:min(280px, 36vh); resize:none; overflow-y:auto; field-sizing:content; background:#111827; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:12px; padding:12px 14px; font-size:0.88rem; line-height:1.45; font-family:inherit; margin:0 0 8px; box-sizing:border-box; }
         .anim-prompt:focus { outline:none; border-color:rgba(167,139,250,0.55); box-shadow:0 0 0 3px rgba(124,58,237,0.12); }
+        .anim-story { display:flex; flex-direction:column; gap:6px; margin:0 0 8px; }
+        .anim-story .anim-select { width:100%; }
+        .anim-story__why { border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:6px 10px; background:rgba(255,255,255,0.02); }
+        .anim-story__why summary { cursor:pointer; font-size:0.72rem; font-weight:600; color:#CBD5E1; }
+        .anim-story__why summary em { font-style:normal; font-weight:400; color:rgba(255,255,255,0.4); margin-left:4px; }
+        .anim-story__field { display:block; margin-top:6px; }
+        .anim-story__field span { display:block; font-size:0.62rem; color:rgba(255,255,255,0.5); margin-bottom:2px; }
+        .anim-story__field input { width:100%; box-sizing:border-box; background:#111827; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:8px; padding:6px 8px; font-size:0.75rem; font-family:inherit; }
+        .anim-story__nudge { text-align:left; font-size:0.66rem; line-height:1.35; color:#FCD34D; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3); border-radius:8px; padding:6px 8px; cursor:pointer; font-family:inherit; }
+        .anim-arc { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+        .anim-arc__row span { display:block; font-size:0.62rem; color:rgba(255,255,255,0.5); margin-bottom:2px; }
+        .anim-arc__row textarea { width:100%; box-sizing:border-box; resize:vertical; background:#111827; border:1px solid rgba(255,255,255,0.1); color:#F8FAFC; border-radius:8px; padding:6px 8px; font-size:0.74rem; line-height:1.4; font-family:inherit; }
+        @media (max-width: 720px) { .anim-arc { grid-template-columns:1fr; } }
         .anim-refs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:8px; min-height:28px; }
         .anim-refs-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); padding:4px 0; line-height:1.4; }
         .anim-ref-card { display:flex; flex-direction:column; gap:4px; width:72px; }
@@ -3179,6 +3318,7 @@
               </div>
                 </div>
               </details>
+              ${renderStoryComposer()}
               <div id="anim-entry-mode" class="anim-entry-mode" role="tablist" aria-label="Animate input">
                 <button type="button" class="anim-entry-seg active" role="tab" data-entry="vo" aria-selected="true">Voiceover script</button>
                 <button type="button" class="anim-entry-seg" role="tab" data-entry="prompt" aria-selected="false">Describe a video</button>
@@ -3201,6 +3341,7 @@
       applyAnimEntryUI(mode);
     });
     applyAnimEntryUI(readAnimEntry());
+    bindStoryComposer();
     const growPrompt = () => {
       const ta = document.getElementById('anim-prompt');
       if (!ta) return;
