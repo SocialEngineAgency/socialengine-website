@@ -4008,12 +4008,8 @@
           return;
         }
         try {
-          const r = await apiFetch(`${API}/api/approve-post`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postId: post.id, clientEmail, publishNow: true }),
-          });
-          await r.json().catch(() => ({}));
+          const { res, data } = await seApprovePost({ postId: post.id, clientEmail, publishNow: true });
+          if (!res.ok) showToast(data.error || 'Could not publish — open it in Content to review');
         } catch (_) {}
         seCloseOnboardingComplete();
       });
@@ -4487,6 +4483,7 @@
             </div>
             <textarea class="studio-modal__caption-area post-caption-edit" data-post-id="${post.id}" ${isRegenerating ? 'disabled' : ''} oninput="document.getElementById('modal-char-count').textContent=this.value.length+' chars'">${(window.studioQueueReady && typeof window.studioQueueReady.escapeCaptionForTextarea === 'function') ? window.studioQueueReady.escapeCaptionForTextarea(fullText) : fullText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
             <div class="studio-modal__caption-hint">What's in this box is what we post. Edits save automatically.</div>
+            ${seRuleOfFiveChecklistHtml(post)}
             ${(() => { const ht = fullText.match(/#[\w]+/g) || []; return ht.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">' + ht.map(h => '<span style="font-size:0.65rem;padding:2px 8px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.12);border-radius:4px;color:rgba(124,58,237,0.7);">' + h + '</span>').join('') + '</div>' : ''; })()}
             ${renderPinnedCommentEditor(post, isRegenerating)}
           </div>
@@ -4620,18 +4617,79 @@
       }, 3000);
     }
 
+    const SE_R5_COLORS = { pass: '#22C55E', warn: '#F59E0B', block: '#EF4444' };
+    const SE_R5_ICONS = { pass: '✓', miss: '✗', unknown: '?', na: '–' };
+
+    function seRuleOfFive(post) {
+      const r5 = post && post.rule_of_five;
+      return r5 && Array.isArray(r5.checks) ? r5 : null;
+    }
+
+    function seRuleOfFiveBadgeHtml(post) {
+      const r5 = seRuleOfFive(post);
+      if (!r5) return '';
+      const color = SE_R5_COLORS[r5.gate] || '#A78BFA';
+      const title = (`Meta Rule of five: ${r5.score}/8 tactics. ${r5.reason || ''}`).replace(/"/g, '&quot;');
+      return `<span class="studio-card__r5-badge" title="${title}" style="font-size:0.58rem;padding:2px 6px;border-radius:4px;background:rgba(124,58,237,0.08);color:${color};font-weight:700;white-space:nowrap;cursor:help;letter-spacing:0.03em;">R5 ${r5.score}/8</span>`;
+    }
+
+    function seRuleOfFiveChecklistHtml(post) {
+      const r5 = seRuleOfFive(post);
+      if (!r5) return '';
+      const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const color = SE_R5_COLORS[r5.gate] || '#A78BFA';
+      const rows = r5.checks.map((c) => {
+        const ic = SE_R5_ICONS[c.status] || '?';
+        const ic_color = c.status === 'pass' ? '#22C55E' : c.status === 'miss' ? '#EF4444' : 'rgba(255,255,255,0.35)';
+        return `<div style="display:flex;gap:8px;align-items:flex-start;font-size:0.7rem;line-height:1.4;padding:2px 0;">
+          <span style="color:${ic_color};font-weight:700;width:12px;flex-shrink:0;">${ic}</span>
+          <span style="color:rgba(255,255,255,0.75);">${esc(c.label)}${c.hint && c.status !== 'pass' ? `<span style="color:rgba(255,255,255,0.4);"> — ${esc(c.hint)}</span>` : ''}</span>
+        </div>`;
+      }).join('');
+      const violations = (r5.violations || []).map((v) => `<div style="font-size:0.7rem;color:${v.severity === 'block' ? '#EF4444' : '#F59E0B'};padding:2px 0;">⚠ ${esc(v.message)}</div>`).join('');
+      return `<details class="studio-modal__r5" style="margin-top:10px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 12px;background:rgba(255,255,255,0.02);" ${r5.gate !== 'pass' ? 'open' : ''}>
+        <summary style="cursor:pointer;font-size:0.72rem;font-weight:700;color:${color};">Meta Rule of five · ${r5.score}/8 ${r5.gate === 'pass' ? 'ready' : r5.gate === 'warn' ? 'check before posting' : 'fix before posting'}</summary>
+        <div style="margin-top:6px;">${violations}${rows}</div>
+        <div style="font-size:0.62rem;color:rgba(255,255,255,0.35);margin-top:6px;">Meta recommends hitting at least 5 of these 8. "?" means we can't verify it from the post data. Scored on the saved caption.</div>
+      </details>`;
+    }
+
+    /**
+     * POST /api/approve-post. When the API blocks on Meta's Rule of five, asks
+     * for a reason and retries with the override. `interactive: false` returns
+     * the 422 untouched (bulk approve).
+     */
+    async function seApprovePost(body, { interactive = true, headers } = {}) {
+      const send = (extra) => apiFetch(`${API}/api/approve-post`, {
+        method: 'POST',
+        headers: headers || { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, ...extra }),
+      }).then(async (res) => ({ res, data: await res.json().catch(() => ({})) }));
+      const first = await send({});
+      if (first.res.ok || first.data.code !== 'RULE_OF_FIVE' || !interactive) return first;
+      const r5 = first.data.rule_of_five || {};
+      const misses = (r5.checks || []).filter((c) => c.status === 'miss').map((c) => `• ${c.label}${c.hint ? ' — ' + c.hint : ''}`);
+      const blocks = (r5.violations || []).filter((v) => v.severity === 'block').map((v) => `• ${v.message}`);
+      const reason = window.prompt(
+        `This post scores ${r5.score ?? '?'}/8 on Meta's Rule of five and is likely to under-perform or be demoted.\n\n`
+        + [...blocks, ...misses].slice(0, 8).join('\n')
+        + `\n\nTo approve anyway, type a short reason (it's logged). Cancel to go back and fix it.`,
+        '',
+      );
+      if (!reason || reason.trim().length < 3) {
+        return { res: first.res, data: { ...first.data, error: 'Not approved — fix the Rule of five items or give a reason to override.' } };
+      }
+      return send({ ruleOfFiveOverride: reason.trim() });
+    }
+    window.seApprovePost = seApprovePost;
+
     window.studioApprove = async function(postId, btn) {
       const captionEl = document.querySelector(`.studio-modal__caption-area[data-post-id="${postId}"]`);
       const editedCaption = captionEl ? captionEl.value.trim() : '';
       btn.textContent = 'Approving...';
       btn.disabled = true;
       try {
-        const res = await apiFetch(`${API}/api/approve-post`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId, clientEmail, editedCaption }),
-        });
-        const data = await res.json().catch(() => ({}));
+        const { res, data } = await seApprovePost({ postId, clientEmail, editedCaption });
         if (!res.ok) {
           showToast(data.error || 'Failed to approve — try again');
           btn.textContent = 'Approve';
@@ -4691,12 +4749,7 @@
       btn.innerHTML = '<div style="width:13px;height:13px;border:1.5px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"></div>';
       btn.disabled = true;
       try {
-        const res = await apiFetch(`${API}/api/approve-post`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ postId, clientEmail }),
-        });
-        const data = await res.json().catch(() => ({}));
+        const { res, data } = await seApprovePost({ postId, clientEmail });
         if (!res.ok) {
           showToast(data.error || 'Failed to approve — try again');
           btn.innerHTML = origHTML;
@@ -4734,18 +4787,27 @@
       const bulkBtn = document.getElementById('bulk-approve-btn');
       if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.textContent = 'Approving...'; }
       let approved = 0;
+      let blocked = 0;
+      let failed = 0;
       for (const post of pendingPosts) {
         try {
-          await apiFetch(`${API}/api/approve-post`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ postId: post.id, clientEmail }),
-          });
-          post.status = 'Approved';
-          approved++;
-        } catch {}
+          const { res, data } = await seApprovePost({ postId: post.id, clientEmail }, { interactive: false });
+          if (res.ok) {
+            post.status = 'Approved';
+            approved++;
+          } else if (data.code === 'RULE_OF_FIVE') {
+            if (data.rule_of_five) post.rule_of_five = data.rule_of_five;
+            blocked++;
+          } else {
+            failed++;
+          }
+        } catch { failed++; }
       }
-      showToast(`✓ ${approved} post${approved !== 1 ? 's' : ''} approved!`);
+      const extra = [
+        blocked ? `${blocked} held back by Meta Rule of five — open them to fix or override` : '',
+        failed ? `${failed} failed` : '',
+      ].filter(Boolean).join(' · ');
+      showToast(`✓ ${approved} post${approved !== 1 ? 's' : ''} approved${extra ? ` · ${extra}` : '!'}`);
       if (clientData) renderContentPage(clientData);
     };
 
@@ -5780,6 +5842,7 @@
                   return `<span class="studio-card__qa-badge" title="${title}" style="font-size:0.58rem;padding:2px 6px;border-radius:4px;background:rgba(124,58,237,0.08);color:${qaColor};font-weight:700;white-space:nowrap;cursor:help;letter-spacing:0.03em;">${qaLabel}</span>`;
                 } catch { return ''; }
               })()}
+              ${seRuleOfFiveBadgeHtml(post)}
             </div>
             <div class="studio-card__caption" onclick="openStudioModal(${index})" style="cursor:pointer;">${captionPreview}${captionPreview.length >= 90 ? '...' : ''}</div>
             ${hashtagPreview ? `<div style="font-size:0.65rem;color:rgba(124,58,237,0.6);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${hashtagPreview}</div>` : ''}
@@ -8092,12 +8155,10 @@
         const qData = await q.json().catch(() => ({}));
         if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
         if (postNow && qData.record_id) {
-          const pub = await apiFetch(`${API}/api/approve-post`, {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ postId: qData.record_id, clientEmail, editedCaption: draft.caption, publishNow: true }),
-          });
-          const pubData = await pub.json().catch(() => ({}));
+          const { res: pub, data: pubData } = await seApprovePost(
+            { postId: qData.record_id, clientEmail, editedCaption: draft.caption, publishNow: true },
+            { headers: authHeaders({ 'Content-Type': 'application/json' }) },
+          );
           if (!pub.ok) throw new Error(pubData.error || 'Post failed');
           showToast('Posted', 'success');
         } else {

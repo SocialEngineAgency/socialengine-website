@@ -245,8 +245,10 @@ test('Video Post now uses the session, not the removed clientHash', () => {
   assert.ok(start > 0);
   const fn = src.slice(start, start + 2600);
   assert.match(fn, /publishNow:\s*true/);
-  assert.match(fn, /apiFetch\(`\$\{API\}\/api\/approve-post`/);
+  assert.match(fn, /seApprovePost\(/);
   assert.doesNotMatch(fn, /clientHash/);
+  const helper = src.slice(src.indexOf('async function seApprovePost'), src.indexOf('window.seApprovePost'));
+  assert.match(helper, /apiFetch\(`\$\{API\}\/api\/approve-post`/);
 });
 
 test('Approve is not Post now, and the box caption is what we send', () => {
