@@ -19,6 +19,7 @@
   <script src="./coach-create-session.js?v=20261003-stale-carousel"></script>
   <script src="./animation-studio.js?v=20261008-assemble-lanes" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
+  <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./stories-composer.js?v=20261009" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -12959,11 +12960,11 @@
                   <div style="display:flex;gap:8px;">
                     <button class="inbox-mode-btn active" data-mode="draft" id="inbox-mode-draft" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:rgba(124,58,237,0.08);color:#7C3AED;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-align:center;">
                       <div style="font-weight:700;margin-bottom:2px;">Draft Mode</div>
-                      <div style="font-size:0.7rem;opacity:0.7;">AI drafts, you approve</div>
+                      <div style="font-size:0.7rem;opacity:0.7;">Click Generate, check, send</div>
                     </button>
                     <button class="inbox-mode-btn" data-mode="auto" id="inbox-mode-auto" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-align:center;">
                       <div style="font-weight:700;margin-bottom:2px;">Auto Mode</div>
-                      <div style="font-size:0.7rem;opacity:0.7;">AI replies automatically</div>
+                      <div style="font-size:0.7rem;opacity:0.7;">AI replies to new comments. DMs are never auto-sent.</div>
                     </button>
                   </div>
                 </div>
@@ -13230,6 +13231,11 @@
 
           ${data.source === 'upload-post' ? `<div style="margin-bottom:16px;padding:12px 14px;border-radius:10px;border:1px solid rgba(124,58,237,0.2);background:rgba(124,58,237,0.06);font-size:0.78rem;color:rgba(226,232,240,0.85);line-height:1.5;">Inbox is synced via your <strong style="color:#E9D5FF;">Upload-Post</strong> Instagram connection (same as publishing). Replies use Upload-Post when Meta tokens are not stored on this account.</div>` : ''}
 
+          <div id="inbox-tip" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);">
+            <span style="flex:1;min-width:220px;font-size:0.76rem;color:rgba(226,232,240,0.8);line-height:1.45;">${escapeHtml(data.ranking_tip || '')}</span>
+            <button type="button" id="inbox-hidden-words-btn" style="width:auto;padding:6px 12px;border-radius:7px;border:1px solid rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);color:#FCA5A5;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Hidden words${items.some(i => i.hidden_match) ? ` · ${items.filter(i => i.hidden_match).length} flagged` : ''}</button>
+          </div>
+
           <!-- Filter tabs -->
           <div style="display:flex;gap:4px;margin-bottom:16px;padding:3px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.05);width:fit-content;">
             <button class="inbox-filter active" data-filter="all" style="padding:7px 16px;border-radius:8px;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;background:rgba(124,58,237,0.15);color:#7C3AED;">All (${total})</button>
@@ -13271,6 +13277,11 @@
             if (isAuto) b.classList.add('active'); else b.classList.remove('active');
           });
         }
+        const _hwBtn = document.getElementById('inbox-hidden-words-btn');
+        if (_hwBtn) _hwBtn.addEventListener('click', () => {
+          if (typeof window.openHiddenWordsModal === 'function') window.openHiddenWordsModal();
+        });
+        window.onHiddenWordsChanged = () => loadInboxData(null, { forceRefresh: true });
         bindInboxEvents(items, data);
       }
 
@@ -13368,6 +13379,7 @@
                   <span style="display:inline-flex;align-items:center;gap:4px;">${platformIcon}</span>
                   <span style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:${typeBg};color:${typeColor};">${typeLabel}</span>
                   ${statusBadge}
+                  ${item.hidden_match ? `<span class="inbox-hidden-badge" title="Matches your hidden words — sync the list to Instagram/Facebook to hide it. Auto-replies skip it." style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;letter-spacing:0.03em;background:rgba(248,113,113,0.12);color:#FCA5A5;">Hidden word: ${escapeHtml(item.hidden_match)}</span>` : ''}
                   <span style="font-size:0.72rem;color:var(--color-text-faint);margin-left:auto;white-space:nowrap;">${timeAgo}</span>
                 </div>
                 <div class="inbox-preview-block" id="inbox-preview-${idx}">
@@ -13394,6 +13406,7 @@
                     <div class="inbox-canned-row" data-idx="${idx}" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
                   </div>
                   <textarea class="inbox-reply-text" id="inbox-text-${idx}" placeholder="Type your reply or generate one with AI..." style="width:100%;min-height:60px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.84rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.3)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
+                  <div class="inbox-bait-warn" id="inbox-bait-${idx}" style="display:none;margin-top:6px;padding:8px 10px;border-radius:7px;border:1px solid rgba(251,191,36,0.25);background:rgba(251,191,36,0.06);color:#FCD34D;font-size:0.74rem;line-height:1.45;"></div>
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;">
                     <button type="button" class="inbox-save-canned-btn" data-idx="${idx}" style="background:none;border:none;color:rgba(167,139,250,0.75);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);padding:0;">+ Save as canned response</button>
                     <div style="display:flex;gap:8px;margin-left:auto;">
@@ -13594,6 +13607,14 @@
                 body: JSON.stringify({ message: item.text, username: item.username, type: item.type, postCaption: item.post_caption })
               });
               const result = await res.json().catch(() => ({}));
+              const warnEl = document.getElementById(`inbox-bait-${idx}`);
+              const baits = Array.isArray(result.bait_warnings) ? result.bait_warnings : [];
+              if (warnEl) {
+                warnEl.style.display = baits.length ? 'block' : 'none';
+                warnEl.textContent = baits.length
+                  ? `This may read as engagement bait (${baits.map(b => `${b.kind}: "${b.match}"`).join('; ')}). Meta shows bait to fewer people — edit before sending.`
+                  : '';
+              }
               if (result.suggested_reply) {
                 const ta = document.getElementById(`inbox-text-${idx}`);
                 ta.value = result.suggested_reply;
