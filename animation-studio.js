@@ -475,7 +475,7 @@
       color: '#FFFFFF', highlight_color: '#FFE14D', outline_color: '#000000', outline_width: 4,
       shadow: { x: 0, y: 3, blur: 0, color: 'rgba(0,0,0,0.65)' },
       background: { enabled: false, color: 'rgba(0,0,0,0.45)', padding: 12, radius: 10 },
-      position: { y_pct: 78, align: 'center' }, animation: 'pop', words_per_line: 4, text_case: 'as_is',
+      position: { y_pct: 62, align: 'center' }, animation: 'pop', words_per_line: 4, text_case: 'as_is',
     };
     const s = input && typeof input === 'object' ? { ...fallback, ...input } : { ...fallback };
     if (!['karaoke', 'phrase', 'static'].includes(s.mode)) s.mode = 'karaoke';
@@ -485,7 +485,7 @@
     s.font_size = Math.max(16, Math.min(96, Number(s.font_size) || 42));
     s.max_width_pct = Math.max(40, Math.min(96, Number(s.max_width_pct) || 78));
     s.letter_spacing = Math.max(0, Math.min(6, Number(s.letter_spacing) || 0));
-    s.position = s.position || { y_pct: 74, align: 'center' };
+    s.position = s.position || { y_pct: 62, align: 'center' };
     s.shadow = s.shadow || fallback.shadow;
     s.background = s.background || fallback.background;
     return s;
@@ -580,7 +580,7 @@
       outline_color: document.getElementById('anim-cap-outline')?.value || base.outline_color,
       outline_width: num('anim-cap-outline-w', base.outline_width ?? 0),
       position: {
-        y_pct: num('anim-cap-y', base.position?.y_pct || 74),
+        y_pct: num('anim-cap-y', base.position?.y_pct || 62),
         align: 'center',
       },
       animation: document.getElementById('anim-cap-anim')?.value || base.animation,
@@ -604,22 +604,34 @@
     return normalizeCaptionStyle(_project?.caption_style || _meta?.default_caption_style);
   }
 
+  // Meta Reels/Stories: keep the bottom 35% clear of text.
+  const CAPTION_SAFE_MAX_Y = 65;
+
   function paintCaptionOverlay(t) {
     const stage = document.getElementById('anim-cap-overlay');
     if (!stage) return;
     // Live overlay is edit-preview only. After Rebuild, captions are burned into
     // the Final — leaving the overlay on stacks a second caption on top.
+    const safeZone = document.getElementById('anim-safe-zone');
     if (!_captionStudioOpen) {
       stage.innerHTML = '';
       stage.hidden = true;
       stage.setAttribute('aria-hidden', 'true');
+      if (safeZone) safeZone.hidden = true;
       return;
     }
     stage.hidden = false;
     stage.setAttribute('aria-hidden', 'false');
+    if (safeZone) safeZone.hidden = false;
     const style = readCaptionStyleFromDom();
     const layout = captionLayoutAtTime(captionCuesForPreview(), style, t);
-    const y = style.position?.y_pct ?? 74;
+    const y = style.position?.y_pct ?? 62;
+    const yLabel = document.getElementById('anim-cap-y-val');
+    if (yLabel) yLabel.textContent = `${y}%`;
+    const unsafe = y > CAPTION_SAFE_MAX_Y;
+    const warn = document.getElementById('anim-cap-safe-warn');
+    if (warn) warn.hidden = !unsafe;
+    if (safeZone) safeZone.classList.toggle('is-violated', unsafe);
     const outline = Math.max(0, style.outline_width || 0);
     const widthPct = style.max_width_pct || 78;
     const pad = style.background?.padding ?? 8;
@@ -629,9 +641,10 @@
       : '';
     // Preview is ~280px wide vs 1080 design; scale font ~0.38 so Size slider feels true.
     const previewPx = Math.max(11, Math.round((style.font_size || 42) * 0.38));
+    // Burn uses ASS \an2: y_pct is the caption's bottom edge, not its centre.
     stage.style.top = `${y}%`;
     stage.style.width = `${widthPct}%`;
-    stage.style.transform = 'translate(-50%, -50%)';
+    stage.style.transform = 'translate(-50%, -100%)';
     const sizeLabel = document.getElementById('anim-cap-size-val');
     if (sizeLabel) sizeLabel.textContent = String(style.font_size || 42);
     const widthLabel = document.getElementById('anim-cap-width-val');
@@ -702,9 +715,12 @@
           <label class="anim-cap-slider">Caption width <strong id="anim-cap-width-val">${widthPct}%</strong>
             <input id="anim-cap-width" type="range" min="45" max="94" value="${widthPct}" />
           </label>
-          <label class="anim-cap-slider">Vertical <strong>${style.position?.y_pct || 74}%</strong>
-            <input id="anim-cap-y" type="range" min="50" max="92" value="${style.position?.y_pct || 74}" />
+          <label class="anim-cap-slider">Vertical <strong id="anim-cap-y-val">${style.position?.y_pct || 62}%</strong>
+            <input id="anim-cap-y" type="range" min="50" max="92" value="${style.position?.y_pct || 62}" />
           </label>
+          <div id="anim-cap-safe-warn" class="anim-cap-safe-warn" ${(style.position?.y_pct || 62) > CAPTION_SAFE_MAX_Y ? '' : 'hidden'}>
+            Captions sit in the bottom 35% — Reels/Stories buttons and the caption cover this area. Keep Vertical at ${CAPTION_SAFE_MAX_Y}% or less.
+          </div>
           <div class="anim-cap-inline">
             <label>Words/line <input id="anim-cap-wpl" type="number" min="1" max="8" value="${style.words_per_line || 3}" /></label>
             <label class="anim-cap-check"><input type="checkbox" id="anim-cap-box" ${style.background?.enabled ? 'checked' : ''}/> Box</label>
@@ -1326,6 +1342,7 @@
             ? (/\.(mp4|webm|mov)(\?|$)/i.test(finalUrl) || readyShotUrls.length
               ? `<div class="anim-final__stage">
                   <video class="anim-final__video" src="${esc(mediaSrc(previewBaseUrl))}${esc(finalCacheBust)}" controls playsinline></video>
+                  <div class="anim-safe-zone" id="anim-safe-zone" hidden aria-hidden="true"><span>Reels UI zone</span></div>
                   <div class="anim-cap-overlay" id="anim-cap-overlay" hidden aria-hidden="true"></div>
                 </div>
                 ${_captionStudioOpen && p.final_pre_caption_url
@@ -3034,6 +3051,12 @@
         .anim-final__stage { position:relative; width:280px; max-width:100%; border-radius:12px; overflow:hidden; background:#000; }
         .anim-final__video { display:block; width:100%; max-width:280px; border-radius:12px; background:#000; }
         .anim-cap-overlay { position:absolute; left:50%; width:78%; pointer-events:none; z-index:2; text-align:center; }
+        .anim-safe-zone { position:absolute; left:0; right:0; bottom:0; height:35%; pointer-events:none; z-index:1; background:repeating-linear-gradient(135deg, rgba(239,68,68,0.10) 0 6px, rgba(239,68,68,0.04) 6px 12px); border-top:1px dashed rgba(239,68,68,0.55); }
+        .anim-safe-zone[hidden] { display:none; }
+        .anim-safe-zone span { position:absolute; top:3px; right:6px; font-size:0.55rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:rgba(252,165,165,0.85); }
+        .anim-safe-zone.is-violated { background:repeating-linear-gradient(135deg, rgba(239,68,68,0.22) 0 6px, rgba(239,68,68,0.10) 6px 12px); border-top-color:#EF4444; }
+        .anim-cap-safe-warn { font-size:0.62rem; line-height:1.35; color:#FCA5A5; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:5px 8px; margin:2px 0 6px; }
+        .anim-cap-safe-warn[hidden] { display:none; }
         .anim-cap-line { display:inline-block; line-height:1.12; letter-spacing:0.01em; max-width:100%; }
         .anim-cap-word { display:inline; margin:0 0.08em; transition: color 80ms linear, transform 120ms ease; }
         .anim-cap-word.is-active { transform: scale(1.05); }
