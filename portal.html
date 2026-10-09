@@ -642,6 +642,50 @@
     .social-stat { }
     .social-stat__num { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; color: var(--color-text); }
     .social-stat__label { font-size: 0.7rem; color: var(--color-text-muted); font-weight: 500; }
+    .mwp { margin: 0 0 18px; }
+    .mwp:empty { display: none; }
+    .mwp { background: rgba(255,255,255,0.02); border: 1px solid rgba(124,58,237,0.22); border-radius: 12px; padding: 14px 16px; }
+    .mwp__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+    .mwp__title { font-size: 0.92rem; font-weight: 700; color: #fff; }
+    .mwp__title span { font-weight: 500; color: rgba(255,255,255,0.45); font-size: 0.78rem; margin-left: 6px; }
+    .mwp__focus { font-size: 0.72rem; color: rgba(255,255,255,0.5); margin-top: 2px; }
+    .mwp__controls { display: flex; align-items: center; gap: 6px; }
+    .mwp__nav { width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: transparent; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 0.9rem; }
+    .mwp__modes { display: inline-flex; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden; }
+    .mwp__mode { padding: 5px 12px; font-size: 0.74rem; font-weight: 600; background: transparent; border: none; color: rgba(255,255,255,0.6); cursor: pointer; font-family: var(--font-body); }
+    .mwp__mode.is-on { background: #7C3AED; color: #fff; }
+    .mwp__quiet { margin-top: 10px; font-size: 0.74rem; color: #FCD34D; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 7px 10px; }
+    .mwp__meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .mwp__meter-top { display: flex; align-items: baseline; gap: 6px; font-size: 0.72rem; color: rgba(255,255,255,0.6); }
+    .mwp__meter-top strong { color: #fff; font-size: 0.85rem; }
+    .mwp__meter-top em { font-style: normal; color: #A78BFA; font-size: 0.66rem; }
+    .mwp__track { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.07); margin-top: 5px; overflow: hidden; }
+    .mwp__fill { height: 100%; background: linear-gradient(90deg, #7C3AED, #A78BFA); }
+    .mwp__note { font-size: 0.64rem; color: rgba(255,255,255,0.4); margin-top: 4px; line-height: 1.35; }
+    .mwp__slots { display: flex; gap: 8px; overflow-x: auto; margin-top: 12px; padding-bottom: 2px; }
+    .mwp__slot { flex: 0 0 auto; min-width: 118px; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); cursor: pointer; font-family: var(--font-body); color: #fff; }
+    .mwp__slot:hover { border-color: rgba(167,139,250,0.5); }
+    .mwp__slot--filled { border-color: rgba(34,197,94,0.35); }
+    .mwp__slot--in_review { border-color: rgba(167,139,250,0.35); }
+    .mwp__slot--missed { opacity: 0.55; border-style: dashed; }
+    .mwp__slot--open { border-style: dashed; border-color: rgba(255,255,255,0.18); }
+    .mwp__slot-day { font-size: 0.62rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.04em; }
+    .mwp__slot-format { font-size: 0.78rem; font-weight: 700; }
+    .mwp__slot-type { font-size: 0.68rem; color: rgba(255,255,255,0.7); }
+    .mwp__slot-tags { display: flex; align-items: center; gap: 5px; font-size: 0.6rem; color: rgba(255,255,255,0.45); }
+    .mwp__goal { font-style: normal; padding: 1px 5px; border-radius: 4px; font-weight: 700; }
+    .mwp__goal--grow { background: rgba(34,197,94,0.12); color: #4ADE80; }
+    .mwp__goal--engage { background: rgba(56,189,248,0.12); color: #38BDF8; }
+    .mwp__foot { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+    .mwp__kpis { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+    .mwp__kpis-label { font-size: 0.66rem; color: rgba(255,255,255,0.45); }
+    .mwp__kpi { font-size: 0.64rem; padding: 2px 7px; border-radius: 10px; background: rgba(124,58,237,0.1); color: #C4B5FD; cursor: help; }
+    .mwp__settings summary { cursor: pointer; font-size: 0.7rem; color: rgba(255,255,255,0.55); }
+    .mwp__settings-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
+    .mwp__settings-row label { display: flex; flex-direction: column; gap: 3px; font-size: 0.62rem; color: rgba(255,255,255,0.5); }
+    .mwp__settings-row input, .mwp__settings-row select { width: 84px; padding: 5px 7px; background: rgba(255,255,255,0.03); border: 1px solid var(--color-border); border-radius: 6px; color: var(--color-text); font-size: 0.76rem; font-family: var(--font-body); }
+    .mwp__save { padding: 6px 12px; border-radius: 6px; border: none; background: #7C3AED; color: #fff; font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+    @media (max-width: 720px) { .mwp__meters { grid-template-columns: 1fr; } }
     .se-bw { background: rgba(255,255,255,0.02); border: 1px solid rgba(124,58,237,0.25); border-radius: 12px; padding: 18px 20px; margin: 0 0 24px; max-width: 800px; }
     .se-bw__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .se-bw__title { font-size: 1rem; font-weight: 700; color: #fff; margin: 0; }
@@ -19548,6 +19592,7 @@
       <button onclick="_openBatchUpload()" style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:#7C3AED;color:#fff;border:none;border-radius:9px;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">↑ Upload Batch</button>
     </div>
     <div style="flex:1;overflow-y:auto;padding:20px 24px;position:relative;">
+      <div id="meta-week-planner" class="mwp" aria-live="polite"></div>
       <div id="sched-cal-wrap"><div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div></div>
     </div>
   </div>
@@ -19576,7 +19621,148 @@
       _renderBatchQueue();
     }
     _loadCalendar();
+    _loadMetaPlanner();
   }
+
+  let _mwpWeek = '';
+  let _mwpPlan = null;
+  const MWP_FORMAT = { reel: 'Reel', feed: 'Feed post' };
+  const MWP_STATUS = { filled: 'Scheduled', in_review: 'In review', open: 'Open', missed: 'Missed' };
+
+  async function _loadMetaPlanner(week) {
+    const el = document.getElementById('meta-week-planner');
+    if (!el) return;
+    if (week !== undefined) _mwpWeek = week;
+    try {
+      const q = _mwpWeek ? `?week=${encodeURIComponent(_mwpWeek)}` : '';
+      const res = await apiFetch(`${API}/api/meta-planner${q}`, { headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Planner unavailable');
+      _mwpPlan = data;
+      _renderMetaPlanner();
+    } catch (e) {
+      el.innerHTML = '';
+    }
+  }
+
+  function _mwpShift(days) {
+    if (!_mwpPlan) return;
+    const d = new Date(`${_mwpPlan.week_start}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    _loadMetaPlanner(d.toISOString().slice(0, 10));
+  }
+
+  async function _mwpSave(body) {
+    try {
+      const res = await apiFetch(`${API}/api/meta-planner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      _mwpPlan = data.plan;
+      _renderMetaPlanner();
+      return true;
+    } catch (e) {
+      showToast(e.message || 'Could not save');
+      return false;
+    }
+  }
+
+  function _mwpOpenSlot(i) {
+    const slot = _mwpPlan && _mwpPlan.slots[i];
+    if (!slot) return;
+    if (slot.post_id) {
+      document.querySelector('[data-nav="content"]')?.click();
+      return;
+    }
+    if (slot.format === 'reel') {
+      window.__SE_ANIM_STORY_PRESET = { story_type: slot.story_type };
+      window.switchNav('animation-studio');
+    } else {
+      window.switchNav('design-studio');
+      showToast(`Feed post · ${slot.story_type_label || 'any story type'} · ${slot.goal === 'grow' ? 'Grow' : 'Engage'}`);
+    }
+  }
+
+  function _renderMetaPlanner() {
+    const el = document.getElementById('meta-week-planner');
+    const p = _mwpPlan;
+    if (!el || !p) return;
+    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const fmtDay = (iso, opts) => new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, Object.assign({ timeZone: 'UTC' }, opts));
+    const range = `${fmtDay(p.week_start, { month: 'short', day: 'numeric' })} – ${fmtDay(p.week_end, { month: 'short', day: 'numeric' })}`;
+    const isThisWeek = p.today >= p.week_start && p.today <= p.week_end;
+    const bar = (label, c) => {
+      const pct = c.target ? Math.min(100, Math.round((c.filled / c.target) * 100)) : 100;
+      return `<div class="mwp__meter">
+        <div class="mwp__meter-top"><span>${label}</span><strong>${c.filled}/${c.target}</strong>${c.in_review ? `<em>+${c.in_review} in review</em>` : ''}</div>
+        <div class="mwp__track"><div class="mwp__fill" style="width:${pct}%"></div></div>
+      </div>`;
+    };
+    const slots = p.slots.map((s, i) => `<button type="button" class="mwp__slot mwp__slot--${s.status}" onclick="_mwpOpenSlot(${i})" title="${esc(s.status === 'open' || s.status === 'missed' ? 'Create this post' : 'Open in Content')}">
+        <span class="mwp__slot-day">${esc(fmtDay(s.date, { weekday: 'short' }))}</span>
+        <span class="mwp__slot-format">${MWP_FORMAT[s.format] || s.format}</span>
+        <span class="mwp__slot-type">${esc(s.story_type_label || '—')}</span>
+        <span class="mwp__slot-tags"><i class="mwp__goal mwp__goal--${s.goal}">${s.goal === 'grow' ? 'Grow' : 'Engage'}</i>${MWP_STATUS[s.status] || ''}</span>
+      </button>`).join('');
+    const kpis = (p.mode_info?.kpis || []).map((k) => `<span class="mwp__kpi" title="${esc(k.why)}">${esc(k.label)}</span>`).join('');
+    const st = p.settings || {};
+    const lim = p.limits || {};
+    const num = (key, label) => `<label>${label}<input type="number" data-mwp-setting="${key}" min="${(lim[key] || [0])[0]}" max="${(lim[key] || [0, 8])[1]}" value="${st[key]}" /></label>`;
+    el.innerHTML = `
+      <div class="mwp__head">
+        <div>
+          <div class="mwp__title">This week on Meta <span>${esc(range)}${isThisWeek ? '' : ' · not this week'}</span></div>
+          <div class="mwp__focus">${esc(p.mode_info?.focus || '')}</div>
+        </div>
+        <div class="mwp__controls">
+          <button type="button" class="mwp__nav" onclick="_mwpShift(-7)" aria-label="Previous week">‹</button>
+          <div class="mwp__modes" role="radiogroup" aria-label="Week goal">
+            ${['grow', 'engage'].map((m) => `<button type="button" role="radio" aria-checked="${p.mode === m}" class="mwp__mode${p.mode === m ? ' is-on' : ''}" data-mwp-mode="${m}">${m === 'grow' ? 'Grow' : 'Engage'}</button>`).join('')}
+          </div>
+          <button type="button" class="mwp__nav" onclick="_mwpShift(7)" aria-label="Next week">›</button>
+        </div>
+      </div>
+      ${p.quiet_streak?.message && isThisWeek ? `<div class="mwp__quiet">${esc(p.quiet_streak.message)}</div>` : ''}
+      <div class="mwp__meters">
+        ${bar('Reels', p.counts.reels)}
+        ${bar('Feed', p.counts.feed)}
+        <div class="mwp__meter mwp__meter--stories" title="${esc(p.stories.note)}">
+          <div class="mwp__meter-top"><span>Stories</span><strong>${p.stories.per_day}/day</strong></div>
+          <div class="mwp__note">${esc(p.stories.frames)} · post from the app</div>
+        </div>
+      </div>
+      <div class="mwp__slots">${slots || '<div class="mwp__note">No Reels or Feed posts planned — set targets below.</div>'}</div>
+      <div class="mwp__foot">
+        <div class="mwp__kpis"><span class="mwp__kpis-label">Watch in Meta Insights:</span>${kpis}</div>
+        <details class="mwp__settings">
+          <summary>Targets</summary>
+          <div class="mwp__settings-row">
+            ${num('reels_per_week', 'Reels / week')}
+            ${num('feed_per_week', 'Feed / week')}
+            ${num('stories_per_day', 'Stories / day')}
+            <label>Default goal<select data-mwp-setting="default_mode">${['grow', 'engage'].map((m) => `<option value="${m}" ${st.default_mode === m ? 'selected' : ''}>${m === 'grow' ? 'Grow' : 'Engage'}</option>`).join('')}</select></label>
+            <button type="button" class="mwp__save" id="mwp-save-settings">Save</button>
+          </div>
+          <div class="mwp__note">Meta's guide: Reels 3–4 a week, Feed 1–2, Stories 1–2 a day. Engage weeks swap one Reel for an extra Story a day.</div>
+        </details>
+      </div>`;
+    el.querySelectorAll('[data-mwp-mode]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.mwpMode === p.mode) return;
+      _mwpSave({ week: p.week_start, mode: b.dataset.mwpMode });
+    }));
+    el.querySelector('#mwp-save-settings')?.addEventListener('click', async () => {
+      const settings = {};
+      el.querySelectorAll('[data-mwp-setting]').forEach((inp) => {
+        settings[inp.dataset.mwpSetting] = inp.tagName === 'SELECT' ? inp.value : Number(inp.value);
+      });
+      if (await _mwpSave({ settings, week: p.week_start })) showToast('✓ Targets saved');
+    });
+  }
+  window._mwpShift = _mwpShift;
+  window._mwpOpenSlot = _mwpOpenSlot;
 
   function _openBatchUpload() {
     const el = document.getElementById('sched-file-input');

@@ -2951,6 +2951,11 @@
 
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
     window.__clientData = data || window.__clientData || window.clientData;
+    const storyPreset = window.__SE_ANIM_STORY_PRESET;
+    if (storyPreset && storyPreset.story_type) {
+      window.__SE_ANIM_STORY_PRESET = null;
+      _storyDraft = Object.assign({}, _storyDraft, { story_type: storyPreset.story_type });
+    }
     window.__clientEmail = window.clientEmail || window.__clientEmail || '';
     window.API = typeof API !== 'undefined' ? API : window._seAPI;
 
