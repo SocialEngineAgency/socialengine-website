@@ -34,6 +34,8 @@
   let _csDesignId = null;
   let _csWorkspaceCleared = false;
   let _csScene = null;
+  let _csTpl = null;
+  let _csTplListening = false;
   let _csActiveDesignPoll = null; // { jobId, promise }
   // Stage spinner only — never the Generate button (that button is a short CTA).
   const CS_LEAVE_BUSY = 'A few minutes — you can leave; we\'ll keep working.';
@@ -681,7 +683,7 @@
   }
 
   function isAssembledCarousel() {
-    return hasCarousel() && (_csCarousel.method === 'assembled' || _csCarousel.method === 'redesign');
+    return hasCarousel() && (_csCarousel.method === 'assembled' || _csCarousel.method === 'redesign' || _csCarousel.method === 'template');
   }
 
   function identityQueueOrder(n) {
@@ -709,6 +711,7 @@
   }
 
   function syncSplitButton() {
+    syncTemplateButton();
     const btn = document.getElementById('cs-split-carousel');
     if (!btn) return;
     const on = /^https?:\/\//i.test(masterImageUrl());
@@ -1267,7 +1270,13 @@
                 <button type="button" id="cs-upload-infographic" style="width:100%;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload infographic</button>
                 <button type="button" id="cs-upload-slides" style="width:100%;margin-top:8px;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.8);font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Upload slides</button>
                 <button type="button" id="cs-split-carousel" disabled style="width:100%;margin-top:8px;padding:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.28);border-radius:9px;color:rgba(255,255,255,0.35);font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Redesign as carousel</button>
-                <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → redesign each slide · or drop 2–10 cut slides (max 10).</div>
+                <div style="display:flex;gap:6px;align-items:center;margin-top:8px;">
+                  <button type="button" id="cs-build-template" disabled style="flex:1;padding:10px;background:rgba(124,58,237,0.14);border:1px solid rgba(124,58,237,0.4);border-radius:9px;color:#E9D5FF;font-size:0.78rem;font-weight:700;cursor:not-allowed;font-family:var(--font-body);opacity:0.5;">Build in brand template</button>
+                  <select id="cs-tpl-count" title="Slides" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;padding:8px 6px;font-size:0.75rem;font-family:var(--font-body);">
+                    ${[3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}" ${n === 6 ? 'selected' : ''}>${n}</option>`).join('')}
+                  </select>
+                </div>
+                <div style="font-size:0.65rem;color:rgba(255,255,255,0.32);line-height:1.45;margin-top:8px;">Tall graphic → redesign each slide · or drop 2–10 cut slides (max 10). Brand template uses your saved layout, fonts and colours.</div>
               </div>
             </details>
 
@@ -1278,6 +1287,7 @@
               <div style="padding:0 12px 12px;">
                 <div id="cs-saved-designs" style="padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;"></div>
                 <button type="button" id="cs-save-template" style="width:100%;margin-top:8px;padding:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save as template</button>
+                <div id="cs-brand-templates" style="margin-top:12px;"></div>
               </div>
             </details>
 
@@ -1321,6 +1331,7 @@
               <div id="cs-slide-hero" style="display:none;margin:0 auto 16px;max-width:min(420px,100%);text-align:center;"></div>
               <div id="cs-slide-strip" style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;"></div>
               <div id="cs-cut-canvas" style="margin-top:12px;"></div>
+              <div id="cs-tpl-editor"></div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
                 <button type="button" id="cs-slide-delete" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(248,113,113,0.35);background:rgba(248,113,113,0.1);color:#FCA5A5;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Delete selected</button>
                 <button type="button" id="cs-slide-redo" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#6EE7B7;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Redo selected</button>
@@ -1509,6 +1520,18 @@
     });
     document.getElementById('cs-slide-delete')?.addEventListener('click', () => deleteSelectedSlide());
     document.getElementById('cs-slide-redo')?.addEventListener('click', () => redoSelectedSlide());
+    document.getElementById('cs-build-template')?.addEventListener('click', () => {
+      const plan = window.__SE_CAROUSEL_PLAN && Array.isArray(window.__SE_CAROUSEL_PLAN.slides) ? window.__SE_CAROUSEL_PLAN.slides : null;
+      buildTemplateCarousel({ plan });
+    });
+    if (window.seCarouselTemplates) {
+      window.seCarouselTemplates.mountSection(document.getElementById('cs-brand-templates'), { uploadImage: uploadStudioImage });
+      if (!_csTplListening) {
+        _csTplListening = true;
+        window.seCarouselTemplates.onChange(() => syncTemplateButton());
+      }
+    }
+    syncTemplateButton();
     document.getElementById('cs-slide-left')?.addEventListener('click', () => moveSelectedSlide(-1));
     document.getElementById('cs-slide-right')?.addEventListener('click', () => moveSelectedSlide(1));
     document.getElementById('cs-picker-close')?.addEventListener('click', closePicker);
@@ -1948,14 +1971,92 @@
       countSel.value = String(n);
     }
     renderCutCanvas();
+    renderTemplateEditor();
     refreshActionButtons();
+  }
+
+  function renderTemplateEditor() {
+    const el = document.getElementById('cs-tpl-editor');
+    const redo = document.getElementById('cs-slide-redo');
+    const on = hasCarousel() && _csCarousel.method === 'template' && _csTpl && window.seCarouselTemplates;
+    if (redo) redo.style.display = on ? 'none' : '';
+    if (!el) return;
+    if (!on) { el.innerHTML = ''; return; }
+    const order = carouselQueueOrder();
+    _csTpl.selected = order[_csCarousel.selected || 0] || 0;
+    window.seCarouselTemplates.mountEditor(el, _csTpl, (idx, url) => {
+      if (_csCarousel && _csCarousel.slides[idx]) _csCarousel.slides[idx].url = url;
+      renderCarouselPreview();
+    });
+  }
+
+  async function buildTemplateCarousel({ plan, count } = {}) {
+    const api = window.seCarouselTemplates;
+    const master = String(masterImageUrl() || '').trim();
+    if (!api || !/^https:\/\//i.test(master)) {
+      toast('Generate or upload the 4K poster first', 'warning');
+      return false;
+    }
+    await api.list().catch(() => null);
+    const tpl = api.defaultTemplate();
+    if (!tpl) {
+      toast('Save a brand template first — Saved & templates → New template from example slides', 'warning');
+      return false;
+    }
+    setBusy(true, 'Writing the slides from your poster…');
+    try {
+      const out = await api.build({
+        master,
+        plan,
+        count: count || Number(document.getElementById('cs-tpl-count')?.value) || 6,
+        templateId: tpl.id,
+        onProgress: (m) => setBusy(true, m),
+      });
+      _csTpl = {
+        templateId: out.templateId,
+        master,
+        masterDisplay: mediaSrc(master),
+        specs: out.specs,
+        overflow: out.slides.map((s) => s.overflow || []),
+        selected: 0,
+      };
+      _csCarousel = {
+        originalUrl: master,
+        method: 'template',
+        slides: out.slides.map((s, i) => ({ url: s.url, y0: 0, y1: 1, title: (out.specs[i] && out.specs[i].title) || `Slide ${i + 1}` })),
+        selected: 0,
+        queueOrder: identityQueueOrder(out.slides.length),
+      };
+      _csOriginalPreviewUrl = master;
+      _csQueueSingleUrl = null;
+      setBusy(false);
+      renderCarouselPreview();
+      const cut = out.slides.filter((s) => s.overflow && s.overflow.length).length;
+      toast(cut ? `${out.slides.length} slides ready — ${cut} need shorter text` : `${out.slides.length} slides ready in "${tpl.name}"`, cut ? 'warning' : 'success');
+      return true;
+    } catch (e) {
+      setBusy(false);
+      toast(e.message || 'Could not build the carousel', 'error');
+      return false;
+    }
+  }
+
+  function syncTemplateButton() {
+    const btn = document.getElementById('cs-build-template');
+    if (!btn) return;
+    const api = window.seCarouselTemplates;
+    const on = /^https:\/\//i.test(masterImageUrl()) && !!(api && api.defaultTemplate());
+    btn.disabled = !on;
+    btn.style.cursor = on ? 'pointer' : 'not-allowed';
+    btn.style.opacity = on ? '1' : '0.5';
+    btn.title = on ? '' : (api && api.defaultTemplate() ? 'Generate or upload the poster first' : 'Save a brand template first (Saved & templates)');
   }
 
   function renderCutCanvas() {
     const canvas = document.getElementById('cs-cut-canvas');
     if (!canvas || !hasCarousel()) return;
     if (isAssembledCarousel()) {
-      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">${_csCarousel.method === 'redesign' ? 'These slides were redesigned as complete 9:16 frames. Reorder, delete, or Redo selected. Ask Coach to change the plan.' : 'These slides were uploaded separately. Reorder with Move left/right, or delete a slide.'}</div>`;
+      canvas.innerHTML = `<div style="font-size:0.68rem;color:rgba(255,255,255,0.35);line-height:1.5;">${_csCarousel.method === 'template' ? 'Built in your brand template. Pick a slide to edit its words or picture. Slide numbers are drawn on the slides, so redo a slide after moving it.' : _csCarousel.method === 'redesign' ? 'These slides were redesigned as complete 9:16 frames. Reorder, delete, or Redo selected. Ask Coach to change the plan.' : 'These slides were uploaded separately. Reorder with Move left/right, or delete a slide.'}</div>`;
       return;
     }
     const orig = _csCarousel.originalUrl;
@@ -2433,6 +2534,12 @@
   }
 
   async function applyCarouselPlan(plan) {
+    if (window.seCarouselTemplates) {
+      await window.seCarouselTemplates.list().catch(() => null);
+      if (window.seCarouselTemplates.defaultTemplate()) {
+        return buildTemplateCarousel({ plan: plan && Array.isArray(plan.slides) ? plan.slides : null });
+      }
+    }
     const canvasMaster = String(masterImageUrl() || window._seCoachAttachedImage || '').trim();
     const planMaster = String((plan && plan.master_image_url) || '').trim();
     const master = /^https:\/\//i.test(canvasMaster) ? canvasMaster : planMaster;
