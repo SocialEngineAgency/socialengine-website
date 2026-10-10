@@ -35,6 +35,7 @@
   let _csWorkspaceCleared = false;
   let _csScene = null;
   let _csTpl = null;
+  let _csCarouselError = '';
   let _csTplListening = false;
   let _csActiveDesignPoll = null; // { jobId, promise }
   // Stage spinner only — never the Generate button (that button is a short CTA).
@@ -1990,17 +1991,23 @@
     });
   }
 
+  function carouselFail(reason) {
+    _csCarouselError = String(reason || '');
+    toast(`Carousel: ${_csCarouselError}`, 'error');
+    return false;
+  }
+
   async function buildTemplateCarousel({ plan, count } = {}) {
     const api = window.seCarouselTemplates;
     const master = String(masterImageUrl() || '').trim();
     if (!api || !/^https:\/\//i.test(master)) {
-      toast('Generate or upload the 4K poster first', 'warning');
+      carouselFail('there is no stored poster on the canvas yet — generate or upload the 4K poster first');
       return false;
     }
     await api.list().catch(() => null);
     const tpl = api.defaultTemplate();
     if (!tpl) {
-      toast('Save a brand template first — Saved & templates → New template from example slides', 'warning');
+      carouselFail('no brand template saved — Saved & templates → New template from example slides');
       return false;
     }
     setBusy(true, 'Writing the slides from your poster…');
@@ -2036,7 +2043,7 @@
       return true;
     } catch (e) {
       setBusy(false);
-      toast(e.message || 'Could not build the carousel', 'error');
+      carouselFail(e.message || 'the server did not say why');
       return false;
     }
   }
@@ -2559,7 +2566,7 @@
         toast('Template filled from the poster — FigureLabs did not redraw the slides', 'success');
         return true;
       } catch (e) {
-        toast(e.message || 'Template fill failed', 'error');
+        carouselFail(e.message || 'template fill failed');
         return false;
       } finally {
         setBusy(false);
@@ -2568,7 +2575,7 @@
     const aligned = alignCarouselPlanToStyleRefs(plan, coachStyleHttpsUrls());
     const slides = aligned && Array.isArray(aligned.slides) ? aligned.slides : [];
     if (!/^https:\/\//i.test(master) || slides.length < 2) {
-      toast('Need a stored master and a 2–10 slide plan', 'warning');
+      carouselFail('need a stored poster and a 2–10 slide plan');
       return false;
     }
     const painted = [];
@@ -2607,7 +2614,7 @@
       toast('Carousel ready', 'success');
       return true;
     } catch (e) {
-      toast(e.message || 'Carousel redesign failed', 'error');
+      carouselFail(e.message || 'carousel redesign failed');
       if (painted.length >= 2) applyRedesignedSlides();
       return painted.length >= 2;
     } finally {
@@ -2839,8 +2846,9 @@
       if (decision.mode === 'apply_carousel') {
         const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
         scrollCoachLogToBottom();
+        _csCarouselError = '';
         const ok = await applyCarouselPlan(decision.action || {});
-        if (status) status.textContent = ok ? 'Carousel ready.' : 'Could not generate the carousel.';
+        if (status) status.textContent = ok ? 'Carousel ready.' : `Could not generate the carousel: ${_csCarouselError || 'no reason given'}.`;
         if (ok) {
           _csCoachJob = typeof window.advanceCoachJob === 'function'
             ? window.advanceCoachJob(_csCoachJob || decision.job, 'split')
