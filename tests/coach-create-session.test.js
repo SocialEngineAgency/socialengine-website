@@ -635,3 +635,12 @@ test('animate apply uses session format and entry', () => {
   assert.match(fn, /format_template_id/);
   assert.match(fn, /writeAnimEntry\((result|session)\.entry|writeAnimEntry\(result\.entry/);
 });
+
+test('carousel briefs never open Animate, even if the model asks for it', () => {
+  const s = normalizeCoachCreateSession({
+    prompt: 'Instagram carousel on reflux. Slide 1: hook. Slide 2: animation-style diagram. Voice-over notes in caption.',
+    destination: 'animate',
+  });
+  assert.equal(s.destination, 'design');
+  assert.equal(coachCreateNav(s), 'design-studio');
+});

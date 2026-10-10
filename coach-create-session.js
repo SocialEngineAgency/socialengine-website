@@ -103,7 +103,14 @@ function inferCoachDestination(text, userMessage) {
   return inferCoachDestinationFromText(text);
 }
 
+function isCoachCarouselBrief(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\bcarousel\b/.test(t)) return true;
+  return /\bslide\s*\d/.test(t) && !/\b(reels?|video|clip)\b/.test(t);
+}
+
 function normalizeCoachDestination(value, text) {
+  if (isCoachCarouselBrief(text)) return 'design';
   const inferred = inferCoachDestination(text);
   const d = String(value || '').trim().toLowerCase();
   let dest = (d === 'animate' || d === 'design' || d === 'studio')
