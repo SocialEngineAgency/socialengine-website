@@ -2725,6 +2725,10 @@
       }
       setDesignCoachApply(decision);
       _csCoachSending = false;
+      if (decision.hint === 'carousel_plan_missing') {
+        appendDesignCoachBubble('assistant', 'The slide plan did not come through complete, so I left your poster alone. Say "send the slide plan again" and I will build the slides from it.');
+        scrollCoachLogToBottom();
+      }
       if (decision.mode === 'apply_carousel') {
         const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
         scrollCoachLogToBottom();
