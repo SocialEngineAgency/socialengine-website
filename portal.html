@@ -20679,52 +20679,112 @@
     return (posts || []).filter(p => !hidden.has(String(p.id)));
   }
 
+  const CAL_HIST_LS = 'se_cal_hist_v1';
+  const CAL_HIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+  function _calHistKey() {
+    const id = window.__clientData && window.__clientData.client && window.__clientData.client.id;
+    return id ? `${CAL_HIST_LS}:${id}` : '';
+  }
+  function _calHistRead() {
+    try {
+      const k = _calHistKey();
+      if (!k) return null;
+      const v = JSON.parse(localStorage.getItem(k) || 'null');
+      if (!v || !Array.isArray(v.posts) || Date.now() - v.ts > CAL_HIST_MAX_AGE_MS) return null;
+      return v.posts;
+    } catch (_) { return null; }
+  }
+  function _calHistWrite(posts) {
+    try {
+      const k = _calHistKey();
+      if (!k) return;
+      const slim = (posts || []).slice(0, 400).map((p) => ({ ...p, caption: String(p.caption || '').slice(0, 300) }));
+      localStorage.setItem(k, JSON.stringify({ ts: Date.now(), posts: slim }));
+    } catch (_) { /* storage full or blocked — just skip the cache */ }
+  }
+
+  function _calApplyContent(cd) {
+    const rows = (cd && cd.content) || [];
+    _calPosts = rows.filter(r => {
+      const f = r.fields || r;
+      return !!(f.scheduled_date || f.scheduledDate);
+    });
+    _calReadyPosts = rows.filter(r => {
+      const f = r.fields || r;
+      const s = String(f.status || '').toLowerCase();
+      const dated = !!(f.scheduled_date || f.scheduledDate);
+      return !dated && (s === 'approved' || s === 'ready' || s === 'scheduled');
+    }).map(r => ({ ...(r.fields || r), id: r.id || (r.fields || r).id }));
+    window._calReadyPosts = _calReadyPosts;
+  }
+
+  function _calHonorPendingOpen() {
+    // Honor Content Review → View in calendar deep-link after load finishes
+    if (!window._pendingOpenDate || typeof openDatePanel !== 'function') return;
+    const pending = String(window._pendingOpenDate).slice(0, 10);
+    window._pendingOpenDate = null;
+    try {
+      const parts = pending.split('-');
+      if (parts.length === 3) {
+        _calYear = parseInt(parts[0], 10);
+        _calMonth = parseInt(parts[1], 10) - 1;
+        _renderCalendar();
+      }
+    } catch (_) {}
+    setTimeout(() => openDatePanel(pending, window.__clientData), 50);
+  }
+
+  let _calLoadSeq = 0;
+  // First paint comes from data the portal already holds (client data + last
+  // visit's published posts); fresh client data and social history then land
+  // independently. Silent reloads (after an edit) skip the cached paint so a
+  // just-made change never flashes back to stale data.
   async function _loadCalendar(opts) {
     opts = opts || {};
     const el = document.getElementById('sched-cal-wrap');
     if (!el) return;
-    if (!opts.silent) el.innerHTML = '<div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div>';
-    try {
-      const hdrs = {
-        ...authHeaders(),
-      };
-      const [cdResp, histResp] = await Promise.all([
-        fetch(`${API}/api/client-data`,      { headers: hdrs }),
-        fetch(`${API}/api/calendar-history`, { headers: hdrs }),
-      ]);
-      const cdData   = cdResp.ok   ? await cdResp.json()   : {};
-      const histData = histResp.ok ? await histResp.json() : { posts: [] };
+    const seq = ++_calLoadSeq;
+    const current = () => seq === _calLoadSeq && !!document.getElementById('sched-cal-wrap');
+    let shown = false;
+    let contentReady = false;
+    const show = () => {
+      if (!current() || !contentReady) return;
+      _renderCalendar();
+      if (!shown) { shown = true; _calHonorPendingOpen(); }
+    };
 
-      _calPosts = (cdData.content || []).filter(r => {
-        const f = r.fields || r;
-        return !!(f.scheduled_date || f.scheduledDate);
-      });
-      _calReadyPosts = (cdData.content || []).filter(r => {
-        const f = r.fields || r;
-        const s = String(f.status || '').toLowerCase();
-        const dated = !!(f.scheduled_date || f.scheduledDate);
-        return !dated && (s === 'approved' || s === 'ready' || s === 'scheduled');
-      }).map(r => ({ ...(r.fields || r), id: r.id || (r.fields || r).id }));
-      window._calReadyPosts = _calReadyPosts;
-      _calHistoryPosts = _filterHiddenSocial(histData.posts || []);
-    } catch (e) {
-      el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${escapeHtml(e.message)}</div>`;
-      return;
+    const cachedCd = window.__clientData;
+    if (!opts.silent && cachedCd && Array.isArray(cachedCd.content)) {
+      _calApplyContent(cachedCd);
+      _calHistoryPosts = _filterHiddenSocial(_calHistRead() || []);
+      contentReady = true;
+      show();
+    } else if (!opts.silent) {
+      el.innerHTML = '<div style="text-align:center;padding:48px 0;color:rgba(255,255,255,0.2);font-size:0.83rem;">Loading calendar…</div>';
     }
-    _renderCalendar();
-    // Honor Content Review → View in calendar deep-link after load finishes
-    if (window._pendingOpenDate && typeof openDatePanel === 'function') {
-      const pending = String(window._pendingOpenDate).slice(0, 10);
-      window._pendingOpenDate = null;
-      try {
-        const parts = pending.split('-');
-        if (parts.length === 3) {
-          _calYear = parseInt(parts[0], 10);
-          _calMonth = parseInt(parts[1], 10) - 1;
-          _renderCalendar();
-        }
-      } catch (_) {}
-      setTimeout(() => openDatePanel(pending, window.__clientData), 50);
+
+    const hdrs = { ...authHeaders() };
+    const cdTask = fetch(`${API}/api/client-data`, { headers: hdrs })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`client data ${r.status}`))))
+      .then(cd => {
+        if (!current()) return;
+        window.__clientData = cd;
+        _calApplyContent(cd);
+        contentReady = true;
+        show();
+      });
+    const histTask = fetch(`${API}/api/calendar-history${opts.refresh ? '?refresh=1' : ''}`, { headers: hdrs })
+      .then(r => (r.ok ? r.json() : { posts: [] }))
+      .then(h => {
+        if (!current()) return;
+        _calHistWrite(h.posts || []);
+        _calHistoryPosts = _filterHiddenSocial(h.posts || []);
+        show();
+      });
+
+    const [cdRes] = await Promise.allSettled([cdTask, histTask]);
+    if (cdRes.status === 'rejected' && !shown && current()) {
+      el.innerHTML = `<div style="text-align:center;padding:32px;color:rgba(239,68,68,0.5);font-size:0.82rem;">Couldn't load calendar: ${escapeHtml(cdRes.reason && cdRes.reason.message || 'network error')}</div>`;
     }
   }
 
@@ -20893,7 +20953,7 @@
           <button onclick="_calToday()" style="padding:4px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);">Today</button>
           <button onclick="_calPrevMonth()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.8rem;cursor:pointer;">←</button>
           <button onclick="_calNextMonth()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.55);font-size:0.8rem;cursor:pointer;">→</button>
-          <button onclick="_loadCalendar()" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.35);font-size:0.8rem;cursor:pointer;" title="Refresh">↻</button>
+          <button onclick="_loadCalendar({ refresh: true })" style="padding:4px 9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.35);font-size:0.8rem;cursor:pointer;" title="Refresh">↻</button>
         </div>
       </div>
       <div style="margin-bottom:12px;">${legendItems}</div>
