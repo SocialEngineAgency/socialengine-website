@@ -17,7 +17,7 @@
   <script src="./claude-studio.js?v=20261010-carousel-plan" defer></script>
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20261010-carousel-plan"></script>
-  <script src="./animation-studio.js?v=20261008-assemble-lanes" defer></script>
+  <script src="./animation-studio.js?v=20261010-music-3min" defer></script>
   <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
@@ -7229,10 +7229,7 @@
               <textarea id="vs-music-prompt" rows="2" placeholder="Music bed prompt (e.g. warm lo-fi instrumental, soft pulse, no vocals)…" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:8px;">${uploadDraft.musicPrompt || ''}</textarea>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
                 <select id="vs-music-length" style="padding:8px 10px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.75rem;">
-                  <option value="15000" ${String(uploadDraft.musicLengthMs || 30000) === '15000' ? 'selected' : ''}>15s</option>
-                  <option value="30000" ${String(uploadDraft.musicLengthMs || 30000) === '30000' ? 'selected' : ''}>30s</option>
-                  <option value="45000" ${String(uploadDraft.musicLengthMs || 30000) === '45000' ? 'selected' : ''}>45s</option>
-                  <option value="60000" ${String(uploadDraft.musicLengthMs || 30000) === '60000' ? 'selected' : ''}>60s</option>
+                  ${vsMusicLengthOptions(uploadDraft.musicLengthMs)}
                 </select>
                 <button type="button" id="vs-music-generate" onclick="generateVSMusicBed()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">${uploadDraft.musicUrl ? 'Regen music' : 'Generate music'}</button>
                 <input type="file" id="vs-music-file" accept="audio/*,video/*" style="display:none;" onchange="uploadVSMusicFile(this.files[0]);">
@@ -7962,6 +7959,23 @@
       } catch (_) {}
     }
 
+    const VS_MUSIC_MAX_S = 180;
+    function vsMusicLengthOptions(saved) {
+      const cur = saved ? String(saved) : 'auto';
+      const label = (s) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+      const opts = [`<option value="auto" ${cur === 'auto' ? 'selected' : ''}>Match video</option>`];
+      for (let s = 15; s <= VS_MUSIC_MAX_S; s += 15) {
+        opts.push(`<option value="${s * 1000}" ${cur === String(s * 1000) ? 'selected' : ''}>${label(s)}</option>`);
+      }
+      return opts.join('');
+    }
+    function vsMusicLengthMs() {
+      const raw = document.getElementById('vs-music-length')?.value || 'auto';
+      if (raw !== 'auto') return Number(raw) || 30000;
+      const secs = Number(document.getElementById('vs-finished-video')?.duration);
+      if (!Number.isFinite(secs) || secs <= 0) return 30000;
+      return Math.min(VS_MUSIC_MAX_S, Math.max(15, Math.ceil(secs / 15) * 15)) * 1000;
+    }
     async function generateVSMusicBed() {
       const draft = vsUploadDraft();
       const prompt = String(document.getElementById('vs-music-prompt')?.value || '').trim();
@@ -7975,14 +7989,14 @@
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             music_prompt: prompt,
-            music_length_ms: Number(document.getElementById('vs-music-length')?.value) || 30000,
+            music_length_ms: vsMusicLengthMs(),
           }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.music_bed_url) throw new Error(data.error || 'Music failed — your video is still here');
         draft.musicUrl = data.music_bed_url;
         draft.musicPrompt = prompt;
-        draft.musicLengthMs = data.length_ms || 30000;
+        draft.musicLengthMs = document.getElementById('vs-music-length')?.value === 'auto' ? '' : (data.length_ms || 30000);
         draft.musicName = prompt.slice(0, 60);
         draft.mixedVideoUrl = '';
         draft.mixKey = '';
