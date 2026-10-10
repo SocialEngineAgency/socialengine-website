@@ -695,3 +695,11 @@ test('Design Studio asks which poster before slicing a pre-existing one', () => 
   assert.match(src, /Make a new poster first/);
   assert.match(src, /coachStartsNewDesignTopic\(message\)\) _csPosterOk = ''/);
 });
+
+test('Make a new poster first sends the new brief, not an edit of the old poster', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(src, /generateFromCoach\(posterBriefFromPlan\(decision\), \{ fresh: true \}\)/);
+  assert.match(src, /briefEl && opts\.fresh\) \{\s*briefEl\.value = next;/);
+  assert.match(src, /heroUrlForGenerate\(\) === replacing \? ''/);
+  assert.match(src, /Could not generate the poster: \$\{_csGenerateError/);
+});
