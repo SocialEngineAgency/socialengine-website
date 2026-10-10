@@ -38,6 +38,7 @@ const ALLOWLIST = [
   'brand-worksheet-suggest.js', // portal.html — worksheet suggestions from past posts
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
+  'carousel-templates.js', // portal.html
   'claude-studio.js', // portal.html
   'design-workspace.js', // portal.html — Post save/archive/template helpers
   'design-scene.js', // portal.html — carousel template scene graph

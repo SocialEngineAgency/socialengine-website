@@ -669,3 +669,10 @@ test('carousel ask with a poster on Stage but no usable plan never redraws the p
   assert.notEqual(remake.mode, 'confirm_generate');
   assert.notEqual(remake.mode, 'apply_generate');
 });
+
+test('Coach carousel apply uses the saved brand template before any FigureLabs painting', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const fn = src.slice(src.indexOf('async function applyCarouselPlan'), src.indexOf('const canvasMaster', src.indexOf('async function applyCarouselPlan')));
+  assert.match(fn, /defaultTemplate\(\)/);
+  assert.match(fn, /buildTemplateCarousel\(/);
+});
