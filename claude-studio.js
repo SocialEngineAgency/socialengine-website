@@ -37,6 +37,7 @@
   let _csTpl = null;
   let _csCarouselError = '';
   let _csPosterOk = '';
+  let _csGenerateError = '';
   let _csTplListening = false;
   let _csActiveDesignPoll = null; // { jobId, promise }
   // Stage spinner only — never the Generate button (that button is a short CTA).
@@ -2212,7 +2213,8 @@
       if (continueBusy) setBusy(false);
       return;
     }
-    const hero = heroUrlForGenerate();
+    const replacing = opts.fresh ? masterImageUrl() : '';
+    const hero = replacing && heroUrlForGenerate() === replacing ? '' : heroUrlForGenerate();
     if (_csRef && _csRef.type === 'video' && !hero) {
       toast('This video has no still — upload a frame or use Video Studio', 'warning');
       if (continueBusy) setBusy(false);
@@ -2247,6 +2249,7 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         if (data.code === 'USE_VIDEO_STUDIO') {
+          _csGenerateError = data.error || 'Use Video Studio for animation';
           toast(data.error || 'Use Video Studio for animation', 'warning');
           return;
         }
@@ -2276,9 +2279,10 @@
       }
     } catch (e) {
       const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
-      toast(timedOut
+      _csGenerateError = timedOut
         ? 'Generation timed out — try again, or shorten the brief'
-        : (e.message || 'Generation failed'), 'error');
+        : (e.message || 'Generation failed');
+      toast(_csGenerateError, 'error');
     } finally {
       setBusy(false);
     }
@@ -2463,7 +2467,7 @@
     }
   }
 
-  async function generateFromCoach(prompt) {
+  async function generateFromCoach(prompt, opts = {}) {
     const briefEl = document.getElementById('cs-brief');
     const next = String(prompt || '').trim();
     const waitingAsk = typeof window.isCoachWaitingOnCreateAsk === 'function'
@@ -2482,6 +2486,8 @@
       }
     } else if (!next) {
       return false;
+    } else if (briefEl && opts.fresh) {
+      briefEl.value = next;
     } else if (briefEl) {
       const styles = coachStyleHttpsUrls();
       if (styles.length && current) {
@@ -2493,10 +2499,11 @@
       }
     }
     const before = _csGeneratedUrl;
+    _csGenerateError = '';
     if (!_csGenerating) {
       setBusy(true, CS_LEAVE_BUSY);
     }
-    await generate({ continueBusy: true });
+    await generate({ continueBusy: true, fresh: !!opts.fresh });
     return Boolean(_csGeneratedUrl && _csGeneratedUrl !== before);
   }
 
@@ -2797,9 +2804,9 @@
       }
       const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster first…');
       scrollCoachLogToBottom();
-      const ok = await generateFromCoach(posterBriefFromPlan(decision));
+      const ok = await generateFromCoach(posterBriefFromPlan(decision), { fresh: true });
       if (ok !== true) {
-        if (status) status.textContent = ok === 'busy' ? 'Still generating — try again when the Stage is free.' : 'Could not generate the poster.';
+        if (status) status.textContent = ok === 'busy' ? 'Still generating — try again when the Stage is free.' : `Could not generate the poster: ${_csGenerateError || 'no reason given'}.`;
         bar.querySelectorAll('button').forEach((x) => { x.disabled = false; x.style.opacity = ''; });
         return;
       }
