@@ -15,6 +15,7 @@ const {
   isCoachDesignRefineAsk,
   inferDesignJob,
   advanceCoachJob,
+  coachStartsNewDesignTopic,
   REDESIGN_SEED,
   studioGenerateMode,
   studioModelForMode,
@@ -675,4 +676,22 @@ test('Coach carousel apply uses the saved brand template before any FigureLabs p
   const fn = src.slice(src.indexOf('async function applyCarouselPlan'), src.indexOf('const canvasMaster', src.indexOf('async function applyCarouselPlan')));
   assert.match(fn, /defaultTemplate\(\)/);
   assert.match(fn, /buildTemplateCarousel\(/);
+});
+
+test('coachStartsNewDesignTopic: new briefs reset the poster, follow-ups do not', () => {
+  assert.equal(coachStartsNewDesignTopic('Create a carousel about the OPA helpline hours'), true);
+  assert.equal(coachStartsNewDesignTopic('new task: a carousel for open house weekend'), true);
+  assert.equal(coachStartsNewDesignTopic('yes generate the carousel'), false);
+  assert.equal(coachStartsNewDesignTopic('remake the carousel'), false);
+  assert.equal(coachStartsNewDesignTopic('turn this poster into a carousel'), false);
+  assert.equal(coachStartsNewDesignTopic('make the title bigger'), false);
+});
+
+test('Design Studio asks which poster before slicing a pre-existing one', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const branch = src.slice(src.indexOf("decision.mode === 'apply_carousel'"), src.indexOf("decision.mode === 'apply_carousel'") + 300);
+  assert.match(branch, /_csPosterOk !== master/);
+  assert.match(branch, /askPosterForCarousel\(decision\)/);
+  assert.match(src, /Make a new poster first/);
+  assert.match(src, /coachStartsNewDesignTopic\(message\)\) _csPosterOk = ''/);
 });

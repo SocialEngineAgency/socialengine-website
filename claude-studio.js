@@ -36,6 +36,7 @@
   let _csScene = null;
   let _csTpl = null;
   let _csCarouselError = '';
+  let _csPosterOk = '';
   let _csTplListening = false;
   let _csActiveDesignPoll = null; // { jobId, promise }
   // Stage spinner only — never the Generate button (that button is a short CTA).
@@ -2663,6 +2664,7 @@
       } else if (pending.mode === 'confirm_generate' || pending.mode === 'apply_generate') {
         const ok = await generateFromCoach(pending.prompt);
         if (ok === true) {
+          _csPosterOk = masterImageUrl();
           _csCoachJob = typeof window.advanceCoachJob === 'function'
             ? window.advanceCoachJob(_csCoachJob || pending.job, 'generated')
             : _csCoachJob;
@@ -2753,6 +2755,60 @@
     }, 2200);
   }
 
+  async function runCarouselFromPlan(decision) {
+    const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
+    scrollCoachLogToBottom();
+    _csCarouselError = '';
+    const ok = await applyCarouselPlan(decision.action || {});
+    if (status) status.textContent = ok ? 'Carousel ready.' : `Could not generate the carousel: ${_csCarouselError || 'no reason given'}.`;
+    if (ok) {
+      _csCoachJob = typeof window.advanceCoachJob === 'function'
+        ? window.advanceCoachJob(_csCoachJob || decision.job, 'split')
+        : _csCoachJob;
+      offerNextCoachJobChip();
+    }
+    return ok;
+  }
+
+  function posterBriefFromPlan(decision) {
+    const job = decision.job || _csCoachJob || {};
+    const slides = (decision.action && Array.isArray(decision.action.slides)) ? decision.action.slides : [];
+    const points = slides.map((s, i) => `${i + 1}. ${s.title || ''}${s.keep ? ` — ${s.keep}` : ''}`).join('\n');
+    return [job.goal || 'Infographic for this carousel', points ? `Cover these points:\n${points}` : ''].filter(Boolean).join('\n\n');
+  }
+
+  // The poster on Stage predates this request — ask before slicing slides from it.
+  function askPosterForCarousel(decision) {
+    const row = appendDesignCoachBubble('assistant', 'The poster on the canvas was made before this request. Which poster should the carousel come from?');
+    if (!row) return;
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;';
+    const btn = 'padding:6px 10px;border-radius:8px;color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
+    bar.innerHTML = `<button type="button" data-poster="keep" class="cs-poster-choice" style="${btn}border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);">Use the poster on the canvas</button>`
+      + `<button type="button" data-poster="new" class="cs-poster-choice" style="${btn}border:1px solid #7C3AED;background:#7C3AED;">Make a new poster first</button>`;
+    row.appendChild(bar);
+    scrollCoachLogToBottom();
+    bar.querySelectorAll('button').forEach((b) => b.addEventListener('click', async () => {
+      bar.querySelectorAll('button').forEach((x) => { x.disabled = true; x.style.opacity = '0.5'; });
+      if (b.getAttribute('data-poster') === 'keep') {
+        _csPosterOk = masterImageUrl();
+        await runCarouselFromPlan(decision);
+        return;
+      }
+      const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster first…');
+      scrollCoachLogToBottom();
+      const ok = await generateFromCoach(posterBriefFromPlan(decision));
+      if (ok !== true) {
+        if (status) status.textContent = ok === 'busy' ? 'Still generating — try again when the Stage is free.' : 'Could not generate the poster.';
+        bar.querySelectorAll('button').forEach((x) => { x.disabled = false; x.style.opacity = ''; });
+        return;
+      }
+      if (status) status.textContent = '4K poster ready. Building the carousel from it…';
+      _csPosterOk = masterImageUrl();
+      await runCarouselFromPlan(decision);
+    }));
+  }
+
   async function designCoachAsk(preset) {
     const input = document.getElementById('cs-coach-input');
     const message = String(preset || input?.value || '').trim();
@@ -2777,6 +2833,7 @@
       }
     }
     _csCoachSending = true;
+    if (typeof window.coachStartsNewDesignTopic === 'function' && window.coachStartsNewDesignTopic(message)) _csPosterOk = '';
     const allStyleUrls = coachStyleHttpsUrls();
     // Inject style vision once per attach. Re-sending on every turn floods the model.
     const styleUrls = coachStylesPendingForChat();
@@ -2844,23 +2901,16 @@
         scrollCoachLogToBottom();
       }
       if (decision.mode === 'apply_carousel') {
-        const status = appendDesignCoachBubble('assistant', 'Generating the carousel…');
-        scrollCoachLogToBottom();
-        _csCarouselError = '';
-        const ok = await applyCarouselPlan(decision.action || {});
-        if (status) status.textContent = ok ? 'Carousel ready.' : `Could not generate the carousel: ${_csCarouselError || 'no reason given'}.`;
-        if (ok) {
-          _csCoachJob = typeof window.advanceCoachJob === 'function'
-            ? window.advanceCoachJob(_csCoachJob || decision.job, 'split')
-            : _csCoachJob;
-          offerNextCoachJobChip();
-        }
+        const master = masterImageUrl();
+        if (/^https:\/\//i.test(master) && _csPosterOk !== master) askPosterForCarousel(decision);
+        else await runCarouselFromPlan(decision);
       } else if (decision.mode === 'apply_generate') {
         const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
         scrollCoachLogToBottom();
         // generateFromCoach owns setBusy — do not set busy before calling it
         // (that races the in-flight guard and leaves Stage stuck forever).
         const ok = await generateFromCoach(decision.prompt || message);
+        if (ok === true) _csPosterOk = masterImageUrl();
         if (status) {
           status.textContent = ok === true
             ? '4K poster ready.'
@@ -2880,6 +2930,7 @@
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
         scrollCoachLogToBottom();
         const ok = await generateFromCoach(decision.prompt || message);
+        if (ok === true) _csPosterOk = masterImageUrl();
         if (status) {
           status.textContent = ok === true
             ? 'Preview updated.'
