@@ -644,3 +644,28 @@ test('carousel briefs never open Animate, even if the model asks for it', () => 
   assert.equal(s.destination, 'design');
   assert.equal(coachCreateNav(s), 'design-studio');
 });
+
+test('carousel ask with a poster on Stage but no usable plan never redraws the poster', () => {
+  const create = {
+    type: 'create',
+    destination: 'design',
+    prompt: '{"index":4,"role":"fact","title":"Stage I","keep":"Card 4"},{"index":5,"role":"visual","title":"Stage 2"}',
+  };
+  const confirmed = resolveDesignCoachApply({
+    reply: 'Generating the 9-slide carousel now.',
+    userMessage: 'yes generate it',
+    hasCanvas: true,
+    actions: [create],
+    lastJob: { type: 'design.carousel', stage: 'split' },
+  });
+  assert.equal(confirmed.mode, 'none');
+  assert.equal(confirmed.hint, 'carousel_plan_missing');
+  const remake = resolveDesignCoachApply({
+    reply: 'You are right. Here is the corrected plan…',
+    userMessage: 'it created one slide broken into boxes, please remake the carousel',
+    hasCanvas: true,
+    actions: [create],
+  });
+  assert.notEqual(remake.mode, 'confirm_generate');
+  assert.notEqual(remake.mode, 'apply_generate');
+});

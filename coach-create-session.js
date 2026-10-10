@@ -297,6 +297,10 @@ function advanceCoachJob(job, event) {
   return cur;
 }
 
+function looksLikeSlidePlanText(text) {
+  return /"(index|slides)"\s*:/.test(String(text || ''));
+}
+
 function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = false, actions = [], lastPlan = null, lastJob = null } = {}) {
   if (isCoachFailedReply(reply)) return { mode: 'none' };
   const job = inferDesignJob({ userMessage, hasCanvas, lastJob: normalizeCoachJob(lastJob) });
@@ -314,6 +318,10 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
   }
   if (carousel && carouselHasStoredMaster(carousel, hasCanvas) && !hasCanvas && confirmCarousel && !/\b(infogra\w*ic|poster|graphic)\b/.test(String(userMessage || '').toLowerCase())) {
     return { mode: 'apply_carousel', action: carousel, job };
+  }
+  // A carousel ask with art on Stage but no usable plan must not redraw the poster.
+  if (hasCanvas && !carousel && ((job && job.type === 'design.carousel') || looksLikeSlidePlanText(create && create.prompt))) {
+    return confirmCarousel ? { mode: 'none', job, hint: 'carousel_plan_missing' } : { mode: 'none', job };
   }
   if (!hasCanvas && isCoachWaitingOnCreateAsk(userMessage)) {
     return { mode: 'apply_generate', prompt: (create && create.prompt) || userMessage, action: create || null, job };
