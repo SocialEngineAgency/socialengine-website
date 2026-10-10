@@ -21,7 +21,7 @@ const TOKEN = 'ses_dGVzdA.c2ln';
 const EMAIL = 'owner@example.com';
 const PASSWORD = 'Correct-Horse-2026!';
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webm': 'video/webm' };
 
 async function startStatic() {
   const server = http.createServer((req, res) => {

@@ -1536,10 +1536,11 @@
               <textarea id="anim-music-prompt" class="anim-brief-edit anim-lane__primary" placeholder="e.g. warm lo-fi instrumental, soft pulse, no vocals">${esc(p.music_prompt || '')}</textarea>
               <div class="anim-lane__actions">
                 <select id="anim-music-length" class="anim-select anim-select--compact" title="Length">
-                  ${[15, 30, 45, 60].map((s) => {
+                  ${Array.from({ length: 12 }, (_, i) => (i + 1) * 15).map((s) => {
                     const ms = s * 1000;
                     const cur = Number(p.music_length_ms) || 30000;
-                    return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${s}s</option>`;
+                    const label = s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+                    return `<option value="${ms}" ${cur === ms ? 'selected' : ''}>${label}</option>`;
                   }).join('')}
                 </select>
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-music-generate" ${!(_meta?.providers?.elevenlabs_configured) ? 'disabled title="Music generation isn\'t enabled on this account"' : ''}>${p.music_bed_url ? 'Regen' : 'Generate'}</button>
