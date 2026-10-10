@@ -691,7 +691,7 @@
     .mwp__settings-row input, .mwp__settings-row select { width: 84px; padding: 5px 7px; background: rgba(255,255,255,0.03); border: 1px solid var(--color-border); border-radius: 6px; color: var(--color-text); font-size: 0.76rem; font-family: var(--font-body); }
     .mwp__save { padding: 6px 12px; border-radius: 6px; border: none; background: #7C3AED; color: #fff; font-size: 0.72rem; font-weight: 600; cursor: pointer; }
     @media (max-width: 720px) { .mwp__meters { grid-template-columns: 1fr; } }
-    .se-bw { background: rgba(255,255,255,0.02); border: 1px solid rgba(124,58,237,0.25); border-radius: 12px; padding: 18px 20px; margin: 0 0 24px; max-width: 800px; }
+    .se-bw { background: rgba(255,255,255,0.02); border: 1px solid rgba(124,58,237,0.25); border-radius: 12px; padding: 18px 20px; margin: 0 0 24px; max-width: 1180px; }
     .se-bw__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .se-bw__title { font-size: 1rem; font-weight: 700; color: #fff; margin: 0; }
     .se-bw__sub { font-size: 0.78rem; color: var(--color-text-muted); margin: 4px 0 0; line-height: 1.45; }
@@ -9804,10 +9804,12 @@
       const bw = (data && data.brand_worksheet) || {};
       const w = bw.worksheet || {};
       const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      const noFill = 'autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"';
       const three = (key, placeholder) => [0, 1, 2].map((i) =>
-        `<input type="text" class="se-bw-input" data-bw-list="${key}" maxlength="80" placeholder="${placeholder} ${i + 1}" value="${esc((w[key] || [])[i])}" />`).join('');
+        `<input type="text" class="se-bw-input" name="se-bw-${key}-${i}" ${noFill} data-bw-list="${key}" maxlength="80" placeholder="${placeholder} ${i + 1}" value="${esc((w[key] || [])[i])}" />`).join('');
       const formality = Number(w.formality) || 3;
-      return `<div class="se-bw-wrap"><section id="se-brand-worksheet" class="se-bw">
+      const row = (slot, field) => `<div class="se-bw__q"><div class="se-bw__field">${field}</div><div class="se-bw__sugg" data-bws-slot="${slot}"></div></div>`;
+      return `<section id="se-brand-worksheet" class="se-bw">
         <div class="se-bw__head">
           <div>
             <h3 class="se-bw__title">Brand worksheet</h3>
@@ -9815,18 +9817,18 @@
           </div>
           <button type="button" class="se-bw__save" id="se-bw-save">Save</button>
         </div>
-        <label class="se-bw__label">How formal? <strong id="se-bw-formality-val">${SE_FORMALITY_LABELS[formality]}</strong></label>
-        <input type="range" id="se-bw-formality" min="1" max="5" step="1" value="${formality}" class="se-bw__range" />
-        <div class="se-bw__scale"><span>Formal</span><span>Casual</span></div>
-        <label class="se-bw__label">People expect us to sound… <span class="se-bw__hint">up to 5 words, comma separated</span></label>
-        <input type="text" class="se-bw-input" id="se-bw-adjectives" maxlength="200" placeholder="warm, local, honest, plain-spoken" value="${esc((w.expectation_adjectives || []).join(', '))}" />
-        <label class="se-bw__label">Our 3 values</label>
-        <div class="se-bw__row">${three('values', 'Value')}</div>
-        <label class="se-bw__label">3 phrases we love</label>
-        <div class="se-bw__row">${three('embrace', 'Phrase')}</div>
-        <label class="se-bw__label">3 phrases we never use</label>
-        <div class="se-bw__row">${three('avoid', 'Never say')}</div>
-      </section><aside id="se-bw-suggest" class="bws" aria-label="Suggestions from your posts"></aside></div>`;
+        <div id="se-bw-suggest" class="bws" aria-label="Suggestions from your posts"></div>
+        <form class="se-bw__form" autocomplete="off" onsubmit="return false;">
+        ${row('formality', `<label class="se-bw__label">How formal? <strong id="se-bw-formality-val">${SE_FORMALITY_LABELS[formality]}</strong></label>
+          <input type="range" id="se-bw-formality" min="1" max="5" step="1" value="${formality}" class="se-bw__range" />
+          <div class="se-bw__scale"><span>Formal</span><span>Casual</span></div>`)}
+        ${row('adjectives', `<label class="se-bw__label">People expect us to sound… <span class="se-bw__hint">up to 5 words, comma separated</span></label>
+          <input type="text" class="se-bw-input" id="se-bw-adjectives" name="se-bw-adjectives" ${noFill} maxlength="200" placeholder="warm, local, honest, plain-spoken" value="${esc((w.expectation_adjectives || []).join(', '))}" />`)}
+        ${row('values', `<label class="se-bw__label">Our 3 values</label><div class="se-bw__row">${three('values', 'Value')}</div>`)}
+        ${row('embrace', `<label class="se-bw__label">3 phrases we love</label><div class="se-bw__row">${three('embrace', 'Phrase')}</div>`)}
+        ${row('avoid', `<label class="se-bw__label">3 phrases we never use</label><div class="se-bw__row">${three('avoid', 'Never say')}</div>`)}
+        </form>
+      </section>`;
     }
 
     function mountBrandWorksheet(panel) {

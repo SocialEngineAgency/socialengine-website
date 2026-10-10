@@ -1,7 +1,8 @@
 /* Brand worksheet suggestions: analyses the client's last 12 months of posts and
-   offers one-click answers beside each worksheet question. Nothing saves until
-   the user presses the worksheet's own Save button.
-   window.seMountWorksheetSuggest(panel) — panel contains #se-brand-worksheet and #se-bw-suggest. */
+   puts one-click answers beside each worksheet question (summary strip on top,
+   chips per question, evidence behind "Why?"). Nothing saves until the user
+   presses the worksheet's own Save button.
+   window.seMountWorksheetSuggest(panel) — panel contains #se-brand-worksheet. */
 (function (global) {
   'use strict';
 
@@ -27,47 +28,57 @@
     const st = document.createElement('style');
     st.id = 'bws-styles';
     st.textContent = `
-      .se-bw-wrap { display: grid; grid-template-columns: minmax(0, 800px) minmax(280px, 360px); gap: 16px; align-items: start; margin: 0 0 24px; }
-      .se-bw-wrap .se-bw { margin: 0; }
-      @media (max-width: 1100px) { .se-bw-wrap { grid-template-columns: 1fr; } }
-      .bws { background: rgba(124,58,237,0.05); border: 1px solid rgba(124,58,237,0.25); border-radius: 12px; padding: 16px 18px; font-size: 0.78rem; color: rgba(226,232,240,0.9); position: sticky; top: 16px; }
-      .bws__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-      .bws__title { margin: 0; font-size: 0.9rem; font-weight: 700; color: #fff; }
-      .bws__link { background: none; border: none; color: #A78BFA; font-size: 0.72rem; font-weight: 600; cursor: pointer; padding: 0; width: auto; }
-      .bws__meta { font-size: 0.68rem; color: rgba(148,163,184,0.75); margin: 4px 0 8px; line-height: 1.4; }
-      .bws__summary { margin: 0 0 6px; line-height: 1.5; }
-      .bws__sec { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 10px; margin-top: 10px; }
-      .bws__q { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(167,139,250,0.9); margin-bottom: 6px; }
-      .bws__why { font-size: 0.7rem; color: rgba(148,163,184,0.85); line-height: 1.45; margin-top: 4px; }
-      .bws__quote { font-size: 0.7rem; color: rgba(226,232,240,0.7); font-style: italic; margin-top: 3px; }
-      .bws__chips { display: flex; flex-wrap: wrap; gap: 5px; }
-      .bws__chip { padding: 4px 9px; border-radius: 14px; border: 1px solid rgba(124,58,237,0.35); background: rgba(124,58,237,0.1); color: #DDD6FE; font-size: 0.72rem; font-weight: 600; cursor: pointer; width: auto; font-family: inherit; }
-      .bws__chip[disabled] { opacity: 0.45; cursor: default; }
-      .bws__chip small { font-weight: 500; opacity: 0.7; margin-left: 3px; }
-      .bws__item { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
-      .bws__item > div { flex: 1; min-width: 0; }
-      .bws__item strong { color: #fff; font-weight: 600; }
-      .bws__use { padding: 3px 9px; border-radius: 6px; border: 1px solid rgba(124,58,237,0.4); background: transparent; color: #C4B5FD; font-size: 0.68rem; font-weight: 700; cursor: pointer; width: auto; flex-shrink: 0; font-family: inherit; }
-      .bws__use[disabled] { opacity: 0.45; cursor: default; }
-      .bws__cta { width: 100%; margin-top: 12px; padding: 8px 12px; border-radius: 8px; border: none; background: #7C3AED; color: #fff; font-weight: 700; font-size: 0.76rem; cursor: pointer; font-family: inherit; }
-      .bws__cta[disabled] { opacity: 0.6; cursor: default; }
-      .bws__note { font-size: 0.68rem; color: #FCD34D; margin-top: 8px; line-height: 1.4; }
-      .bws__stats { font-size: 0.66rem; color: rgba(148,163,184,0.7); margin-top: 10px; line-height: 1.5; }
+      .se-bw__q { padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.05); }
+      .se-bw__q:first-child { border-top: none; }
+      .se-bw__q .se-bw__label { margin-top: 0; }
+      .se-bw__sugg:empty { display: none; }
+      .se-bw.bws-on .se-bw__q { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+      @media (max-width: 900px) { .se-bw.bws-on .se-bw__q { grid-template-columns: 1fr; gap: 8px; } }
+      .bws { margin: 10px 0 6px; padding: 12px 14px; border-radius: 10px; background: rgba(124,58,237,0.07); border: 1px solid rgba(124,58,237,0.22); font-size: 0.76rem; color: rgba(226,232,240,0.9); display: flex; gap: 14px; align-items: flex-start; }
+      .bws__main { flex: 1; min-width: 0; }
+      .bws__title { font-size: 0.8rem; font-weight: 700; color: #fff; }
+      .bws__meta { font-size: 0.68rem; color: rgba(148,163,184,0.8); margin-top: 2px; }
+      .bws__summary { margin: 6px 0 0; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .bws.is-open .bws__summary { -webkit-line-clamp: unset; display: block; }
+      .bws__more { background: none; border: none; padding: 0; color: #A78BFA; font-size: 0.7rem; font-weight: 600; cursor: pointer; width: auto; margin-top: 2px; font-family: inherit; }
+      .bws__stats, .bws__note { font-size: 0.68rem; margin-top: 6px; line-height: 1.45; }
+      .bws__stats { color: rgba(148,163,184,0.8); display: none; }
+      .bws.is-open .bws__stats { display: block; }
+      .bws__note { color: #FCD34D; }
+      .bws__actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+      .bws__btn { padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(124,58,237,0.4); background: transparent; color: #DDD6FE; font-size: 0.72rem; font-weight: 600; cursor: pointer; width: auto; white-space: nowrap; font-family: inherit; }
+      .bws__btn--primary { background: #7C3AED; border-color: #7C3AED; color: #fff; }
+      .bws__btn[disabled] { opacity: 0.6; cursor: default; }
+      @media (max-width: 640px) { .bws { flex-direction: column; } .bws__actions { flex-direction: row; } }
+      .bws-s__label { font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(167,139,250,0.85); margin-bottom: 6px; }
+      .bws-s__chips { display: flex; flex-wrap: wrap; gap: 5px; }
+      .bws-chip { padding: 4px 10px; border-radius: 14px; border: 1px solid rgba(124,58,237,0.35); background: rgba(124,58,237,0.1); color: #DDD6FE; font-size: 0.72rem; font-weight: 600; cursor: pointer; width: auto; font-family: inherit; text-align: left; line-height: 1.35; }
+      .bws-chip:hover:not([disabled]) { background: rgba(124,58,237,0.22); }
+      .bws-chip[disabled] { opacity: 0.5; cursor: default; }
+      .bws-chip small { font-weight: 500; opacity: 0.7; margin-left: 4px; }
+      .bws-why { margin-top: 6px; font-size: 0.7rem; color: rgba(148,163,184,0.85); }
+      .bws-why summary { cursor: pointer; color: rgba(167,139,250,0.85); font-weight: 600; list-style: none; display: inline; }
+      .bws-why summary::-webkit-details-marker { display: none; }
+      .bws-why ul { margin: 6px 0 0; padding-left: 16px; line-height: 1.45; }
+      .bws-why li { margin-bottom: 4px; }
+      .bws-why em { color: rgba(226,232,240,0.75); }
       .se-bw-input.bws-filled, .se-bw__range.bws-filled { box-shadow: 0 0 0 2px rgba(167,139,250,0.55); }
     `;
     document.head.appendChild(st);
   }
 
   function create(panel) {
-    const box = panel.querySelector('#se-bw-suggest');
     const form = panel.querySelector('#se-brand-worksheet');
-    if (!box || !form) return;
-    const S = { data: null, busy: false, error: '' };
+    const strip = panel.querySelector('#se-bw-suggest');
+    if (!form || !strip) return;
+    const S = { data: null, busy: false, error: '', open: false };
 
+    const slot = (name) => form.querySelector(`[data-bws-slot="${name}"]`);
     const listInputs = (key) => [...form.querySelectorAll(`[data-bw-list="${key}"]`)];
     const adjInput = () => form.querySelector('#se-bw-adjectives');
     const adjList = () => String(adjInput()?.value || '').split(',').map((s) => s.trim()).filter(Boolean);
     const inList = (key, v) => listInputs(key).some((i) => i.value.trim().toLowerCase() === String(v).toLowerCase());
+    const formalityNow = () => Number(form.querySelector('#se-bw-formality')?.value) || 3;
 
     function mark(el) {
       if (!el) return;
@@ -97,10 +108,10 @@
 
     function fillList(key, value) {
       if (inList(key, value)) return true;
-      const slot = listInputs(key).find((i) => !i.value.trim());
-      if (!slot) { toast('All three boxes are full — clear one first', 'warning'); return false; }
-      slot.value = value;
-      mark(slot);
+      const empty = listInputs(key).find((i) => !i.value.trim());
+      if (!empty) { toast('All three boxes are full — clear one first', 'warning'); return false; }
+      empty.value = value;
+      mark(empty);
       return true;
     }
 
@@ -108,17 +119,23 @@
       const d = S.data;
       let n = 0;
       if (!adjList().length) d.expectation_adjectives.suggestions.slice(0, 5).forEach((w) => { if (addAdjective(w)) n += 1; });
-      for (const v of d.values.suggestions) { if (listInputs('values').some((i) => !i.value.trim()) && !inList('values', v.value)) { fillList('values', v.value); n += 1; } }
-      for (const e of d.embrace.suggestions) { if (listInputs('embrace').some((i) => !i.value.trim()) && !inList('embrace', e.phrase)) { fillList('embrace', e.phrase); n += 1; } }
-      for (const a of d.avoid.suggestions) { if (listInputs('avoid').some((i) => !i.value.trim()) && !inList('avoid', a.phrase)) { fillList('avoid', a.phrase); n += 1; } }
+      const top = (key, items) => {
+        for (const v of items) {
+          if (!listInputs(key).some((i) => !i.value.trim())) break;
+          if (!inList(key, v)) { fillList(key, v); n += 1; }
+        }
+      };
+      top('values', d.values.suggestions.map((v) => v.value));
+      top('embrace', d.embrace.suggestions.map((e) => e.phrase));
+      top('avoid', d.avoid.suggestions.map((a) => a.phrase));
       toast(n ? `Filled ${n} empty box${n === 1 ? '' : 'es'} — check them, then press Save` : 'Nothing empty to fill');
-      render();
+      renderSlots();
     }
 
     function metaLine(d) {
       const b = d.based_on || {};
       const fmt = (iso) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
-      const parts = [`${b.posts || 0} posts`];
+      const parts = [];
       if (b.from && b.to) parts.push(`${fmt(b.from)} – ${fmt(b.to)}`);
       if ((d.sources || []).length) parts.push(d.sources.join(' + '));
       if (b.confidence) parts.push(`${b.confidence} confidence`);
@@ -126,84 +143,107 @@
       return parts.join(' · ');
     }
 
-    function render() {
+    const why = (items) => (items.length ? `<details class="bws-why"><summary>Why?</summary><ul>${items.join('')}</ul></details>` : '');
+    const chip = (attrs, label, used, extra = '') => `<button type="button" class="bws-chip" ${attrs} ${used ? 'disabled' : ''}>${used ? '✓ ' : '+ '}${esc(label)}${extra}</button>`;
+
+    function renderStrip() {
       const d = S.data;
+      form.classList.toggle('bws-on', !!(d && !d.empty && d.formality) && !S.busy);
+      strip.classList.toggle('is-open', S.open);
       if (S.busy) {
-        box.innerHTML = `<div class="bws__head"><h4 class="bws__title">Suggestions from your posts</h4></div>
-          <p class="bws__meta">Reading your last 12 months of posts… this takes 20–40 seconds.</p>`;
+        strip.innerHTML = '<div class="bws__main"><div class="bws__title">Reading your last 12 months of posts…</div><div class="bws__meta">This takes 20–40 seconds.</div></div>';
         return;
       }
       if (!d || (!d.empty && !d.formality)) {
-        box.innerHTML = `<div class="bws__head"><h4 class="bws__title">Not sure what to write?</h4></div>
-          <p class="bws__summary">We'll read your last 12 months of posts — Instagram and anything made here — and suggest answers for each question, with real examples from your captions.</p>
-          ${S.error ? `<div class="bws__note">${esc(S.error)}</div>` : ''}
-          <button type="button" class="bws__cta" id="bws-run">Analyse my posts</button>`;
-        box.querySelector('#bws-run').addEventListener('click', run);
+        strip.innerHTML = `<div class="bws__main"><div class="bws__title">Not sure what to write?</div>
+            <div class="bws__meta">We'll read your last 12 months of posts and suggest an answer beside each question, with real examples from your captions.</div>
+            ${S.error ? `<div class="bws__note">${esc(S.error)}</div>` : ''}</div>
+          <div class="bws__actions"><button type="button" class="bws__btn bws__btn--primary" id="bws-run">Analyse my posts</button></div>`;
+        strip.querySelector('#bws-run').addEventListener('click', run);
         return;
       }
       if (d.empty) {
-        box.innerHTML = `<div class="bws__head"><h4 class="bws__title">Suggestions from your posts</h4><button type="button" class="bws__link" id="bws-run">Try again</button></div>
-          <p class="bws__summary">${esc(d.message)}</p>
-          ${(d.notes || []).map((n) => `<div class="bws__note">${esc(n)}</div>`).join('')}`;
-        box.querySelector('#bws-run').addEventListener('click', run);
+        strip.innerHTML = `<div class="bws__main"><div class="bws__title">Suggestions from your posts</div>
+            <div class="bws__meta">${esc(d.message)}</div>
+            ${(d.notes || []).map((n) => `<div class="bws__note">${esc(n)}</div>`).join('')}</div>
+          <div class="bws__actions"><button type="button" class="bws__btn" id="bws-run">Try again</button></div>`;
+        strip.querySelector('#bws-run').addEventListener('click', run);
         return;
       }
-      const adjNow = adjList().map((w) => w.toLowerCase());
       const st = d.stats || {};
-      box.innerHTML = `
-        <div class="bws__head"><h4 class="bws__title">Suggestions from your posts</h4><button type="button" class="bws__link" id="bws-run">Re-analyse</button></div>
-        <div class="bws__meta">${esc(metaLine(d))}</div>
-        ${d.summary ? `<p class="bws__summary">${esc(d.summary)}</p>` : ''}
-        ${S.error ? `<div class="bws__note">${esc(S.error)}</div>` : ''}
-
-        <div class="bws__sec" data-bws="formality">
-          <div class="bws__q">How formal?</div>
-          <div class="bws__item"><div><strong>${esc(FORMALITY[d.formality.value] || '')}</strong></div>
-            <button type="button" class="bws__use" data-bws-formality="${d.formality.value}">Use</button></div>
-          ${d.formality.why ? `<div class="bws__why">${esc(d.formality.why)}</div>` : ''}
+      strip.innerHTML = `<div class="bws__main">
+          <div class="bws__title">Suggestions from your last ${esc((d.based_on || {}).posts || 0)} posts</div>
+          <div class="bws__meta">${esc(metaLine(d))}</div>
+          ${d.summary ? `<p class="bws__summary">${esc(d.summary)}</p>` : ''}
+          ${st.posts ? `<div class="bws__stats">Your captions: ~${st.avg_caption_chars} characters · ${st.emoji_per_post} emoji per post · ${Math.round((st.question_share || 0) * 100)}% ask a question · ${st.hashtags_per_post} hashtags per post</div>` : ''}
+          <button type="button" class="bws__more" id="bws-more">${S.open ? 'Less' : 'More'}</button>
+          ${S.error ? `<div class="bws__note">${esc(S.error)}</div>` : ''}
+          ${(d.notes || []).map((n) => `<div class="bws__note">${esc(n)}</div>`).join('')}
         </div>
-
-        ${d.expectation_adjectives.suggestions.length ? `<div class="bws__sec" data-bws="adjectives">
-          <div class="bws__q">People expect us to sound…</div>
-          <div class="bws__chips">${d.expectation_adjectives.suggestions.map((w) => `<button type="button" class="bws__chip" data-bws-adj="${esc(w)}" ${adjNow.includes(w.toLowerCase()) ? 'disabled' : ''}>+ ${esc(w)}</button>`).join('')}</div>
-          ${d.expectation_adjectives.why ? `<div class="bws__why">${esc(d.expectation_adjectives.why)}</div>` : ''}
-          ${(d.expectation_adjectives.quotes || []).map((q) => `<div class="bws__quote">“${esc(q)}”</div>`).join('')}
-        </div>` : ''}
-
-        ${d.values.suggestions.length ? `<div class="bws__sec" data-bws="values">
-          <div class="bws__q">Our 3 values</div>
-          ${d.values.suggestions.map((v, i) => `<div class="bws__item"><div><strong>${esc(v.value)}</strong>
-              ${v.why ? `<div class="bws__why">${esc(v.why)}</div>` : ''}
-              ${v.quote ? `<div class="bws__quote">“${esc(v.quote)}”</div>` : ''}</div>
-            <button type="button" class="bws__use" data-bws-value="${i}" ${inList('values', v.value) ? 'disabled' : ''}>${inList('values', v.value) ? 'Added' : 'Use'}</button></div>`).join('')}
-        </div>` : ''}
-
-        ${d.embrace.suggestions.length ? `<div class="bws__sec" data-bws="embrace">
-          <div class="bws__q">Phrases you already use</div>
-          ${d.embrace.suggestions.map((e, i) => `<div class="bws__item"><div><strong>“${esc(e.phrase)}”</strong> <span class="bws__why">in ${e.used} post${e.used === 1 ? '' : 's'}</span>
-              ${e.why ? `<div class="bws__why">${esc(e.why)}</div>` : ''}</div>
-            <button type="button" class="bws__use" data-bws-embrace="${i}" ${inList('embrace', e.phrase) ? 'disabled' : ''}>${inList('embrace', e.phrase) ? 'Added' : 'Use'}</button></div>`).join('')}
-        </div>` : ''}
-
-        ${d.avoid.suggestions.length ? `<div class="bws__sec" data-bws="avoid">
-          <div class="bws__q">Phrases to drop</div>
-          ${d.avoid.suggestions.map((a, i) => `<div class="bws__item"><div><strong>“${esc(a.phrase)}”</strong>${a.used ? ` <span class="bws__why">in ${a.used} post${a.used === 1 ? '' : 's'}</span>` : ''}
-              ${a.why ? `<div class="bws__why">${esc(a.why)}</div>` : ''}</div>
-            <button type="button" class="bws__use" data-bws-avoid="${i}" ${inList('avoid', a.phrase) ? 'disabled' : ''}>${inList('avoid', a.phrase) ? 'Added' : 'Use'}</button></div>`).join('')}
-        </div>` : ''}
-
-        <button type="button" class="bws__cta" id="bws-fill">Fill empty boxes with these</button>
-        ${(d.notes || []).map((n) => `<div class="bws__note">${esc(n)}</div>`).join('')}
-        ${st.posts ? `<div class="bws__stats">Your captions: ~${st.avg_caption_chars} characters · ${st.emoji_per_post} emoji per post · ${Math.round((st.question_share || 0) * 100)}% ask a question · ${st.hashtags_per_post} hashtags per post</div>` : ''}
-      `;
-      box.querySelector('#bws-run').addEventListener('click', run);
-      box.querySelector('#bws-fill').addEventListener('click', fillEmpty);
-      box.querySelectorAll('[data-bws-formality]').forEach((b) => b.addEventListener('click', () => setFormality(Number(b.dataset.bwsFormality))));
-      box.querySelectorAll('[data-bws-adj]').forEach((b) => b.addEventListener('click', () => { if (addAdjective(b.dataset.bwsAdj)) render(); }));
-      box.querySelectorAll('[data-bws-value]').forEach((b) => b.addEventListener('click', () => { if (fillList('values', d.values.suggestions[Number(b.dataset.bwsValue)].value)) render(); }));
-      box.querySelectorAll('[data-bws-embrace]').forEach((b) => b.addEventListener('click', () => { if (fillList('embrace', d.embrace.suggestions[Number(b.dataset.bwsEmbrace)].phrase)) render(); }));
-      box.querySelectorAll('[data-bws-avoid]').forEach((b) => b.addEventListener('click', () => { if (fillList('avoid', d.avoid.suggestions[Number(b.dataset.bwsAvoid)].phrase)) render(); }));
+        <div class="bws__actions">
+          <button type="button" class="bws__btn bws__btn--primary" id="bws-fill">Fill empty boxes</button>
+          <button type="button" class="bws__btn" id="bws-run">Re-analyse</button>
+        </div>`;
+      strip.querySelector('#bws-run').addEventListener('click', run);
+      strip.querySelector('#bws-fill').addEventListener('click', fillEmpty);
+      strip.querySelector('#bws-more').addEventListener('click', () => { S.open = !S.open; renderStrip(); });
     }
+
+    function renderSlots() {
+      const d = S.data;
+      const live = d && !d.empty && d.formality && !S.busy;
+      ['formality', 'adjectives', 'values', 'embrace', 'avoid'].forEach((n) => { const el = slot(n); if (el) el.innerHTML = ''; });
+      if (!live) return;
+
+      const f = d.formality;
+      slot('formality').innerHTML = `<div class="bws-s__label">Suggested</div>
+        <div class="bws-s__chips">${chip(`data-bws-formality="${f.value}"`, FORMALITY[f.value] || '', formalityNow() === f.value)}</div>
+        ${why(f.why ? [`<li>${esc(f.why)}</li>`] : [])}`;
+
+      const adj = d.expectation_adjectives;
+      if (adj.suggestions.length) {
+        const now = adjList().map((w) => w.toLowerCase());
+        slot('adjectives').innerHTML = `<div class="bws-s__label">Suggested</div>
+          <div class="bws-s__chips">${adj.suggestions.map((w) => chip(`data-bws-adj="${esc(w)}"`, w, now.includes(w.toLowerCase()))).join('')}</div>
+          ${why([adj.why && `<li>${esc(adj.why)}</li>`, ...(adj.quotes || []).map((q) => `<li><em>“${esc(q)}”</em></li>`)].filter(Boolean))}`;
+      }
+
+      const vals = d.values.suggestions;
+      if (vals.length) {
+        slot('values').innerHTML = `<div class="bws-s__label">Suggested</div>
+          <div class="bws-s__chips">${vals.map((v, i) => chip(`data-bws-value="${i}" title="${esc(v.why)}"`, v.value, inList('values', v.value))).join('')}</div>
+          ${why(vals.map((v) => `<li><strong>${esc(v.value)}</strong> — ${esc(v.why)}${v.quote ? ` <em>“${esc(v.quote)}”</em>` : ''}</li>`))}`;
+      }
+
+      const emb = d.embrace.suggestions;
+      if (emb.length) {
+        slot('embrace').innerHTML = `<div class="bws-s__label">You already use</div>
+          <div class="bws-s__chips">${emb.map((e, i) => chip(`data-bws-embrace="${i}" title="${esc(e.why)}"`, e.phrase, inList('embrace', e.phrase), `<small>${e.used}×</small>`)).join('')}</div>
+          ${why(emb.map((e) => `<li><strong>“${esc(e.phrase)}”</strong> — in ${e.used} post${e.used === 1 ? '' : 's'}. ${esc(e.why)}</li>`))}`;
+      }
+
+      const av = d.avoid.suggestions;
+      if (av.length) {
+        slot('avoid').innerHTML = `<div class="bws-s__label">Consider dropping</div>
+          <div class="bws-s__chips">${av.map((a, i) => chip(`data-bws-avoid="${i}" title="${esc(a.why)}"`, a.phrase, inList('avoid', a.phrase))).join('')}</div>
+          ${why(av.map((a) => `<li><strong>“${esc(a.phrase)}”</strong>${a.used ? ` — in ${a.used} post${a.used === 1 ? '' : 's'}` : ''}. ${esc(a.why)}</li>`))}`;
+      }
+
+      form.querySelectorAll('[data-bws-formality]').forEach((b) => b.addEventListener('click', () => { setFormality(Number(b.dataset.bwsFormality)); renderSlots(); }));
+      form.querySelectorAll('[data-bws-adj]').forEach((b) => b.addEventListener('click', () => { if (addAdjective(b.dataset.bwsAdj)) renderSlots(); }));
+      form.querySelectorAll('[data-bws-value]').forEach((b) => b.addEventListener('click', () => { if (fillList('values', vals[Number(b.dataset.bwsValue)].value)) renderSlots(); }));
+      form.querySelectorAll('[data-bws-embrace]').forEach((b) => b.addEventListener('click', () => { if (fillList('embrace', emb[Number(b.dataset.bwsEmbrace)].phrase)) renderSlots(); }));
+      form.querySelectorAll('[data-bws-avoid]').forEach((b) => b.addEventListener('click', () => { if (fillList('avoid', av[Number(b.dataset.bwsAvoid)].phrase)) renderSlots(); }));
+    }
+
+    function render() { renderStrip(); renderSlots(); }
+
+    let pending = null;
+    form.addEventListener('input', (e) => {
+      if (!S.data || !e.target.matches('.se-bw-input, #se-bw-formality')) return;
+      clearTimeout(pending);
+      pending = setTimeout(renderSlots, 250);
+    });
 
     async function run() {
       S.busy = true; S.error = ''; render();

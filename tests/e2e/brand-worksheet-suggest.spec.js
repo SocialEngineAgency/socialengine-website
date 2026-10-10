@@ -48,27 +48,37 @@ test('Analyse → suggestions beside the questions → Use fills the form → Sa
 
   const panel = page.locator('#se-bw-suggest');
   await expect(panel).toContainText('Not sure what to write?');
+  await expect(page.locator('[data-bw-list="avoid"]').last()).toHaveAttribute('autocomplete', 'off');
+  await expect(page.locator('#se-bw-adjectives')).toHaveAttribute('autocomplete', 'off');
   await panel.locator('#bws-run').click();
   await expect.poll(() => posts).toBe(1);
-  await expect(panel).toContainText('84 posts');
+  await expect(panel).toContainText('Suggestions from your last 84 posts');
   await expect(panel).toContainText('high confidence');
   await expect(panel).toContainText('weighted to your best posts');
-  await expect(panel).toContainText('“real bread, no shortcuts”');
-  await expect(panel).toContainText('in 12 posts');
 
-  const formBox = await page.locator('#se-brand-worksheet').boundingBox();
-  const panelBox = await panel.boundingBox();
-  expect(panelBox.x).toBeGreaterThan(formBox.x + formBox.width - 1);
+  const form = page.locator('#se-brand-worksheet');
+  const adjSlot = form.locator('[data-bws-slot="adjectives"]');
+  const adjBox = await adjSlot.boundingBox();
+  const adjInputBox = await page.locator('#se-bw-adjectives').boundingBox();
+  expect(adjBox.x).toBeGreaterThan(adjInputBox.x + adjInputBox.width - 1);
+  expect(Math.abs(adjBox.y - adjInputBox.y)).toBeLessThan(60);
 
-  await panel.locator('[data-bws-formality]').click();
+  const quote = adjSlot.locator('.bws-why li', { hasText: 'real bread, no shortcuts' });
+  await expect(quote).toBeHidden();
+  await adjSlot.locator('.bws-why summary').click();
+  await expect(quote).toBeVisible();
+  await expect(form.locator('[data-bws-slot="embrace"] .bws-chip')).toContainText('12×');
+
+  await form.locator('[data-bws-formality]').click();
   await expect(page.locator('#se-bw-formality')).toHaveValue('4');
   await expect(page.locator('#se-bw-formality-val')).toHaveText('Mostly casual');
+  await expect(form.locator('[data-bws-formality]')).toBeDisabled();
 
-  await panel.locator('[data-bws-adj="warm"]').click();
+  await form.locator('[data-bws-adj="warm"]').click();
   await expect(page.locator('#se-bw-adjectives')).toHaveValue('warm');
-  await expect(panel.locator('[data-bws-adj="warm"]')).toBeDisabled();
+  await expect(form.locator('[data-bws-adj="warm"]')).toBeDisabled();
 
-  await panel.locator('[data-bws-value="1"]').click();
+  await form.locator('[data-bws-value="1"]').click();
   await expect(page.locator('[data-bw-list="values"]').first()).toHaveValue('Slow craft');
 
   await panel.locator('#bws-fill').click();
