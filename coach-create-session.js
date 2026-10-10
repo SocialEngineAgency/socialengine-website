@@ -74,6 +74,15 @@ function coachUserStatedNewBrief(userMessage) {
   return /\b(make|create|generate|render|shoot)\b.{0,80}\b(reel|video|clip|post|carousel|infographic|slides?)\b/.test(String(userMessage || '').toLowerCase());
 }
 
+function coachStartsNewDesignTopic(userMessage) {
+  const t = String(userMessage || '').toLowerCase();
+  if (!t.trim() || coachUserRestatedSameCreate(t)) return false;
+  if (/\b(remake|redo|again|retry|try again)\b|\b(this|the|same|current) (poster|infographic|graphic|image)\b/.test(t)) return false;
+  return coachUserStatedNewBrief(t)
+    || /\b(carousel|infogra\w*ic|poster|post)\b.{0,24}\b(about|on|for|covering)\b/.test(t)
+    || /\bnew (topic|task|carousel|infogra\w*ic|poster|post)\b/.test(t);
+}
+
 function coachUserRestatedSameCreate(userMessage) {
   const t = String(userMessage || '').toLowerCase();
   if (/\b(create|make|generate|render|shoot)\s+(this|that|it)(\s+now)?\b/.test(t)) return true;
@@ -563,6 +572,7 @@ const coachSessionApi = {
   coachCreateNav,
   inferCoachDestination,
   coachUserRestatedSameCreate,
+  coachStartsNewDesignTopic,
   applyCoachCreateFields,
   inferCreateActionFromReply,
   isCoachFailedReply,
