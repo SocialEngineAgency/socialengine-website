@@ -138,6 +138,27 @@
       .dsv2-patterns img { width:100%; border-radius:9px; display:block; border:1px solid rgba(255,255,255,0.08); background:#0B0F1A; cursor:zoom-in; }
       .dsv2-patterns figcaption { font-size:0.68rem; color:rgba(255,255,255,0.55); margin-top:5px; }
       .dsv2-source { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+      .dsv2-opt { text-transform:none; letter-spacing:0; font-weight:500; color:rgba(255,255,255,0.35); margin-left:6px; }
+      .dsv2-rcps { display:flex; gap:10px; overflow-x:auto; padding:2px 2px 6px; scrollbar-width:thin; }
+      .dsv2-rcp { flex:0 0 auto; width:184px; text-align:left; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.22); color:#F8FAFC; cursor:pointer; font-family:var(--font-body); display:flex; flex-direction:column; gap:6px; transition:border-color .15s, background .15s, box-shadow .15s; }
+      .dsv2-rcp:hover { border-color:rgba(167,139,250,0.5); }
+      .dsv2-rcp.is-on { border-color:#A78BFA; background:rgba(124,58,237,0.16); box-shadow:0 0 0 3px rgba(124,58,237,0.18); }
+      .dsv2-rcp-strip { display:flex; gap:3px; height:46px; align-items:stretch; }
+      .dsv2-rcp-strip img, .dsv2-rcp-strip i { height:100%; border-radius:4px; object-fit:cover; background:#0B0F1A; border:1px solid rgba(255,255,255,0.08); display:block; }
+      .dsv2-rcp-strip em { font-style:normal; font-size:0.66rem; color:rgba(255,255,255,0.5); align-self:center; padding-left:2px; }
+      .dsv2-rcp-name { font-size:0.84rem; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .dsv2-rcp-meta { font-size:0.7rem; color:rgba(255,255,255,0.5); }
+      .dsv2-rcp-on { margin-top:10px; padding:12px 14px; border-radius:12px; background:rgba(124,58,237,0.09); border:1px solid rgba(124,58,237,0.3); font-size:0.82rem; color:rgba(255,255,255,0.88); line-height:1.5; }
+      .dsv2-rcp-on .dsv2-row { margin-top:8px; }
+      .dsv2-rcp-rules { margin-top:6px; color:rgba(233,213,255,0.78); white-space:pre-wrap; }
+      .dsv2-rcp-tip { font-size:0.76rem; color:rgba(255,255,255,0.5); padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px dashed rgba(255,255,255,0.12); margin-top:14px; line-height:1.5; }
+      .dsv2-rcp-tip strong { color:rgba(255,255,255,0.8); }
+      .dsv2-rcp-form { margin:14px 0 4px; padding:14px 16px; border-radius:12px; background:rgba(124,58,237,0.08); border:1px solid rgba(124,58,237,0.3); }
+      .dsv2-rcp-form textarea { min-height:70px; }
+      .dsv2-rcp-form .dsv2-actions { margin-top:14px; }
+      .dsv2-btn--danger { border-color:rgba(239,68,68,0.45); background:rgba(239,68,68,0.1); color:#FCA5A5; }
+      .dsv2-btn--danger:hover:not(:disabled) { background:rgba(239,68,68,0.2); }
+      .dsv2-btn--sm { padding:7px 12px; font-size:0.74rem; }
       .dsv2-source img { height:52px; border-radius:7px; border:1px solid rgba(255,255,255,0.12); }
       .dsv2-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:20px; }
       .dsv2-hint { font-size:0.74rem; color:rgba(255,255,255,0.45); }
@@ -415,6 +436,7 @@
   function makeCard() {
     return `<div class="dsv2-card" id="dsv2-make">
       <div class="dsv2-row" style="justify-content:space-between;"><h3>Make a carousel</h3><span id="dsv2-medical-chip">${medicalChip()}</span></div>
+      <div id="dsv2-recipes"></div>
       <label class="dsv2-label" for="dsv2-brief">What is it about?</label>
       <textarea id="dsv2-brief" placeholder="Topic, who it's for, the key points, and what people should do at the end"></textarea>
       <div class="dsv2-grid2">
@@ -436,6 +458,155 @@
       <div id="dsv2-medical-ask"></div>
       <div id="dsv2-make-status"></div>
     </div>`;
+  }
+
+  function recipes() { return (state.info && state.info.recipes) || []; }
+  function activeRecipe() { return recipes().find((r) => r.id === state.recipeId) || null; }
+
+  function recipeStrip(r) {
+    const previews = new Map(((state.info && state.info.previews) || []).filter((p) => p && p.url).map((p) => [p.pattern, p.url]));
+    const ratio = `aspect-ratio:${ratioCss()}`;
+    const shown = r.slides.slice(0, 6).map((s) => (previews.get(s.pattern) ? `<img src="${esc(previews.get(s.pattern))}" alt="" style="${ratio}">` : `<i style="${ratio}"></i>`)).join('');
+    return `<span class="dsv2-rcp-strip">${shown}${r.slides.length > 6 ? `<em>+${r.slides.length - 6}</em>` : ''}</span>`;
+  }
+
+  function recipeForm(prefix, r, saveLabel) {
+    return `<div class="dsv2-rcp-form dsv2-fade" id="${prefix}-form">
+      <label class="dsv2-label" for="${prefix}-name">Recipe name</label>
+      <input type="text" id="${prefix}-name" maxlength="60" value="${esc(r.name || '')}" placeholder="e.g. Myth vs fact">
+      <label class="dsv2-label" for="${prefix}-notes">Rules for every carousel from this recipe <span class="dsv2-opt">optional</span></label>
+      <textarea id="${prefix}-notes" maxlength="800" placeholder="e.g. Always 3 myths. End with &quot;Book a free call&quot;. Friendly, no jargon.">${esc(r.notes || '')}</textarea>
+      <div class="dsv2-actions"><button type="button" class="dsv2-btn dsv2-btn--primary" id="${prefix}-ok">${esc(saveLabel)}</button><button type="button" class="dsv2-btn" id="${prefix}-cancel">Cancel</button></div>
+    </div>`;
+  }
+
+  function setRecipes(list) {
+    state.info = Object.assign({}, state.info, { recipes: list || [] });
+    drawRecipes();
+  }
+
+  function drawRecipes() {
+    const box = el('dsv2-recipes');
+    if (!box) return;
+    const list = recipes();
+    const on = activeRecipe();
+    if (!on) state.recipeId = null;
+    if (!list.length) {
+      box.innerHTML = '<div class="dsv2-rcp-tip">Tip: when a carousel works, click <strong>Save as recipe</strong> on it. Next time pick the recipe, type a new topic, and get the same structure and look.</div>';
+    } else {
+      box.innerHTML = `<label class="dsv2-label">Start from a recipe <span class="dsv2-opt">optional</span></label>
+        <div class="dsv2-rcps">${list.map((r) => `<button type="button" class="dsv2-rcp${r.id === state.recipeId ? ' is-on' : ''}" data-rcp="${esc(r.id)}" aria-pressed="${r.id === state.recipeId}">${recipeStrip(r)}<span class="dsv2-rcp-name">${esc(r.name)}</span><span class="dsv2-rcp-meta">${r.slides.length} slides${r.medical ? ' · medical accuracy' : ''}</span></button>`).join('')}</div>
+        ${on ? `<div class="dsv2-rcp-on dsv2-fade" id="dsv2-rcp-on">
+          <div><strong>Using “${esc(on.name)}”.</strong> Same ${on.slides.length} layouts in the same order, with their saved looks. New words and pictures for your topic.</div>
+          ${on.notes ? `<div class="dsv2-rcp-rules">Rules: ${esc(on.notes)}</div>` : ''}
+          <div class="dsv2-row"><button type="button" class="dsv2-btn dsv2-btn--sm" id="dsv2-rcp-edit">Edit recipe</button><button type="button" class="dsv2-btn dsv2-btn--sm dsv2-btn--danger" id="dsv2-rcp-del">Delete</button><button type="button" class="dsv2-link" id="dsv2-rcp-off">Don't use a recipe</button></div>
+          <div id="dsv2-rcp-editbox"></div>
+        </div>` : ''}`;
+      box.querySelectorAll('[data-rcp]').forEach((b) => b.addEventListener('click', () => {
+        state.recipeId = state.recipeId === b.dataset.rcp ? null : b.dataset.rcp;
+        drawRecipes();
+        if (state.recipeId) { const brief = el('dsv2-brief'); if (brief) brief.focus(); }
+      }));
+      if (on) wireActiveRecipe(on);
+    }
+    syncRecipeFields();
+  }
+
+  function wireActiveRecipe(on) {
+    el('dsv2-rcp-off').addEventListener('click', () => { state.recipeId = null; drawRecipes(); });
+    el('dsv2-rcp-del').addEventListener('click', async (ev) => {
+      if (!global.confirm(`Delete the recipe “${on.name}”? Carousels you already made stay as they are.`)) return;
+      ev.target.disabled = true;
+      try {
+        const r = await call('DELETE', `/api/design/recipes/${encodeURIComponent(on.id)}`);
+        state.recipeId = null;
+        setRecipes(r.recipes);
+        toast('Recipe deleted', 'success');
+      } catch (e) {
+        ev.target.disabled = false;
+        toast(e.message || 'Could not delete', 'error');
+      }
+    });
+    el('dsv2-rcp-edit').addEventListener('click', () => {
+      const box = el('dsv2-rcp-editbox');
+      if (el('dsv2-rcpe-form')) { box.innerHTML = ''; return; }
+      box.innerHTML = recipeForm('dsv2-rcpe', on, 'Save changes');
+      el('dsv2-rcpe-cancel').addEventListener('click', () => { box.innerHTML = ''; });
+      el('dsv2-rcpe-ok').addEventListener('click', async () => {
+        const btn = el('dsv2-rcpe-ok');
+        btn.disabled = true;
+        try {
+          const r = await call('PATCH', `/api/design/recipes/${encodeURIComponent(on.id)}`, { name: el('dsv2-rcpe-name').value.trim(), notes: el('dsv2-rcpe-notes').value.trim() });
+          setRecipes(r.recipes);
+          toast('Recipe saved', 'success');
+        } catch (e) {
+          btn.disabled = false;
+          toast(e.message || 'Could not save', 'error');
+        }
+      });
+      el('dsv2-rcpe-name').focus();
+    });
+  }
+
+  function syncRecipeFields() {
+    const on = activeRecipe();
+    const count = el('dsv2-slides');
+    const research = el('dsv2-research');
+    const brief = el('dsv2-brief');
+    const go = el('dsv2-go');
+    if (count) {
+      const old = count.querySelector('option[value="recipe"]');
+      if (old) old.remove();
+      if (on) {
+        count.insertAdjacentHTML('afterbegin', `<option value="recipe">${on.slides.length} (from recipe)</option>`);
+        count.value = 'recipe';
+      } else if (count.value === 'recipe' || !count.value) {
+        count.value = 'auto';
+      }
+      count.disabled = !!on;
+    }
+    if (research && on) research.checked = on.research !== false;
+    if (research) research.disabled = !!on;
+    if (brief) brief.placeholder = on ? `New topic for “${on.name}”: what it's about and who it's for` : "Topic, who it's for, the key points, and what people should do at the end";
+    if (go && !go.disabled) go.textContent = on ? 'Design from recipe' : 'Design carousel';
+  }
+
+  function openSaveRecipe(result) {
+    const box = el('dsv2-rcp-savebox');
+    if (!box) return;
+    if (el('dsv2-rcp-form')) { box.innerHTML = ''; return; }
+    box.innerHTML = `${recipeForm('dsv2-rcp', { name: result.title || '' }, 'Save recipe')}`;
+    box.querySelector('.dsv2-rcp-form').insertAdjacentHTML('afterbegin', '<div class="dsv2-hint" style="margin-bottom:-4px;">Saves the slide order, layouts and looks, plus your rules. Not the words or pictures. Next time pick it and type a new topic.</div>');
+    el('dsv2-rcp-cancel').addEventListener('click', () => { box.innerHTML = ''; });
+    el('dsv2-rcp-ok').addEventListener('click', async () => {
+      const btn = el('dsv2-rcp-ok');
+      const name = el('dsv2-rcp-name').value.trim();
+      if (!name) { toast('Give the recipe a name', 'warning'); el('dsv2-rcp-name').focus(); return; }
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        const research = el('dsv2-research');
+        const r = await call('POST', '/api/design/recipes', {
+          name,
+          notes: el('dsv2-rcp-notes').value.trim(),
+          caption: result.caption || '',
+          medical: !!result.medical,
+          research: (result.sources || []).length > 0 || !!(research && research.checked),
+          slides: (result.slides || []).map((s) => ({ pattern: s.pattern, slots: s.slots, style: s.style })),
+        });
+        box.innerHTML = '';
+        setRecipes(r.recipes);
+        const save = el('dsv2-rcp-save');
+        if (save) { save.textContent = 'Saved as recipe ✓'; save.disabled = true; }
+        toast(`Saved “${r.recipe.name}”. Pick it under Make a carousel next time.`, 'success');
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Save recipe';
+        toast(e.message || 'Could not save the recipe', 'error');
+      }
+    });
+    reveal(box);
+    el('dsv2-rcp-name').select();
   }
 
   function drawExamples() {
@@ -561,6 +732,7 @@
     const go = el('dsv2-go');
     if (go) {
       drawSource();
+      drawRecipes();
       go.addEventListener('click', () => startCarousel());
       el('dsv2-brief').addEventListener('input', () => { state.handoffMedical = undefined; setStatus('dsv2-medical-ask', ''); });
       el('dsv2-brief').addEventListener('keydown', (ev) => {
@@ -650,7 +822,9 @@
     if (brief.length < 10) { toast('Describe the carousel in a sentence or two', 'warning'); if (briefEl) briefEl.focus(); return; }
     const btn = el('dsv2-go');
     if (!btn || btn.disabled) return;
+    const recipe = activeRecipe();
     let medical = opts && typeof opts.medical === 'boolean' ? opts.medical : undefined;
+    if (medical === undefined && recipe && recipe.medical && medicalMode() === 'ask') medical = true;
     if (medical === undefined && medicalMode() === 'ask') {
       if (state.handoffMedical === true || state.handoffMedical === false) medical = state.handoffMedical;
       else if (state.handoffMedical === 'ask') { askMedical(); return; }
@@ -660,7 +834,7 @@
         let isMedical = false;
         try { isMedical = !!(await call('POST', '/api/design/classify', { brief })).medical; } catch (_) { isMedical = true; }
         btn.disabled = false;
-        btn.textContent = 'Design carousel';
+        btn.textContent = recipe ? 'Design from recipe' : 'Design carousel';
         if (isMedical) { askMedical(); return; }
         medical = false;
       }
@@ -668,10 +842,12 @@
     setStatus('dsv2-medical-ask', '');
     btn.disabled = true;
     try {
+      const count = el('dsv2-slides').value;
       const r = await call('POST', '/api/design/carousel', {
         brief,
         medical,
-        count: el('dsv2-slides').value === 'auto' ? undefined : Math.max(3, Math.min(10, Number(el('dsv2-slides').value))),
+        recipe_id: recipe ? recipe.id : undefined,
+        count: recipe || count === 'auto' ? undefined : Math.max(3, Math.min(10, Number(count))),
         research: !!el('dsv2-research').checked,
         source_image_url: state.source || undefined,
       });
@@ -770,12 +946,14 @@
     const ratio = ratioCss();
     box.innerHTML = `<div class="dsv2-card dsv2-fade" id="dsv2-done">
       <div class="dsv2-card-head">
-        <div><h3>${esc(result.title || 'Your carousel')}</h3>${result.angle ? `<p class="dsv2-sub" style="margin-top:4px;">${esc(result.angle)}</p>` : ''}</div>
+        <div><h3>${esc(result.title || 'Your carousel')}</h3>${result.angle ? `<p class="dsv2-sub" style="margin-top:4px;">${esc(result.angle)}</p>` : ''}${result.recipe ? `<span class="dsv2-chip" style="display:inline-block;margin-top:8px;">From recipe: ${esc(result.recipe.name)}</span>` : ''}</div>
         <div class="dsv2-row">
+          <button type="button" class="dsv2-btn" id="dsv2-rcp-save">Save as recipe</button>
           <button type="button" class="dsv2-btn" id="dsv2-zip">Download</button>
           <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-queue">Add to queue</button>
         </div>
       </div>
+      <div id="dsv2-rcp-savebox"></div>
       <div class="dsv2-hint" id="dsv2-posts-to" style="margin:-6px 0 12px;text-align:right;">${queuePlatforms().length ? `Posts to ${queuePlatforms().join(' + ')}` : 'Connect Instagram or Facebook in Settings to post'}
       </div>
       <div class="dsv2-slides">${slides.map((s, i) => {
@@ -793,6 +971,7 @@
     box.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => lightbox(urls, Number(b.dataset.open))));
     box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editSlide(result, result.slides.indexOf(slides[Number(b.dataset.edit)]))));
     el('dsv2-zip').addEventListener('click', () => downloadZip(urls));
+    el('dsv2-rcp-save').addEventListener('click', () => openSaveRecipe(result));
     el('dsv2-queue').addEventListener('click', () => queue(urls, result));
     if (scroll) reveal(box.firstElementChild);
   }
@@ -1477,6 +1656,8 @@
       if (!(state.info && state.info.system)) toast('Set up your brand design first, then Coach can design carousels in it', 'info');
       return;
     }
+    state.recipeId = null;
+    drawRecipes();
     brief.value = String(p.brief || '');
     el('dsv2-slides').value = Number(p.slides) >= 3 ? String(Math.min(10, Math.round(Number(p.slides)))) : 'auto';
     if (/^https:\/\//i.test(String(p.source_image_url || ''))) { state.source = p.source_image_url; drawSource(); }

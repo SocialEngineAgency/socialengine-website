@@ -27,12 +27,13 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
   let system = hasSystem ? SYSTEM : null;
   let settings = { medical };
   let uploads = 0;
+  let recipes = [];
   const polls = {};
   return async (entry, route, json) => {
     const m = route.request().method();
     const body = () => JSON.parse(route.request().postData() || '{}');
     if (entry.path === '/api/design/system') {
-      json(200, { ok: true, enabled: true, system, settings, figurelabs, previews: system ? [{ pattern: 'hook', url: `${PNG}#p1` }, { pattern: 'list', url: `${PNG}#p2` }] : [], fonts: ['archivo', 'inter'] });
+      json(200, { ok: true, enabled: true, system, settings, recipes, figurelabs, previews: system ? [{ pattern: 'hook', url: `${PNG}#p1` }, { pattern: 'list', url: `${PNG}#p2` }] : [], fonts: ['archivo', 'inter'] });
       return 'handled';
     }
     if (entry.path === '/api/studio/upload-image') { uploads += 1; json(200, { url: `https://store.test/ex${uploads}.png` }); return 'handled'; }
@@ -47,6 +48,28 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
       return 'handled';
     }
     if (entry.path === '/api/design/slides/render' && m === 'POST') { calls.push(['renderAll', body()]); json(202, { ok: true, job_id: 'job-renderall' }); return 'handled'; }
+    if (entry.path === '/api/design/recipes' && m === 'POST') {
+      const b = body();
+      calls.push(['recipeSave', b]);
+      const recipe = { id: `rcp_${recipes.length + 1}`, name: b.name, notes: b.notes, medical: !!b.medical, research: b.research !== false, slides: b.slides.map((x) => ({ pattern: x.pattern, example: x.slots.title || '' })) };
+      recipes = [recipe, ...recipes];
+      json(200, { ok: true, recipe, recipes });
+      return 'handled';
+    }
+    if (entry.path.startsWith('/api/design/recipes/') && m === 'PATCH') {
+      const id = entry.path.split('/').pop();
+      calls.push(['recipeEdit', body()]);
+      recipes = recipes.map((r) => (r.id === id ? Object.assign({}, r, body()) : r));
+      json(200, { ok: true, recipe: recipes.find((r) => r.id === id), recipes });
+      return 'handled';
+    }
+    if (entry.path.startsWith('/api/design/recipes/') && m === 'DELETE') {
+      const id = entry.path.split('/').pop();
+      calls.push(['recipeDelete', id]);
+      recipes = recipes.filter((r) => r.id !== id);
+      json(200, { ok: true, recipes });
+      return 'handled';
+    }
     if (entry.path === '/api/design/carousel' && m === 'POST') { calls.push(['carousel', body()]); json(202, { ok: true, job_id: 'job-car' }); return 'handled'; }
     if (entry.path.startsWith('/api/design/jobs/')) {
       const id = entry.path.split('/').pop();
@@ -64,7 +87,9 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
         json(200, { ok: true, job: { id, status: 'done', result: { slides: req.slides.map((x, k) => ({ url: `${PNG}#renum${k + 1}-${x.slots.title || ''}`, issues: [] })) } } });
         return 'handled';
       }
-      json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : RESULT } });
+      const lastCar = (calls.filter((c) => c[0] === 'carousel').pop() || [])[1] || {};
+      const fromRecipe = recipes.find((r) => r.id === lastCar.recipe_id);
+      json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : Object.assign({}, RESULT, fromRecipe ? { recipe: { id: fromRecipe.id, name: fromRecipe.name } } : {}) } });
       return 'handled';
     }
     if (entry.path === '/api/design/settings' && m === 'PUT') { calls.push(['settings', body()]); settings = { medical: body().medical }; json(200, { ok: true, settings }); return 'handled'; }
@@ -383,4 +408,62 @@ test('Editor: move, delete and add slides; page numbers re-render in the new ord
   await expect(ed.locator('[data-slot="title"]')).toHaveValue('When to see a GP');
   await expect.poll(() => calls.filter((c) => c[0] === 'renderAll').length).toBe(3);
   await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3);
+});
+
+test('Recipes: save a carousel as a recipe, rerun it with a new topic, edit and delete it', async ({ page }) => {
+  const errors = watchErrors(page);
+  const calls = [];
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls, runningPolls: 0 }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await expect(page.locator('#dsv2-recipes .dsv2-rcp-tip')).toContainText('Save as recipe');
+  await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
+  await page.locator('#dsv2-go').click();
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
+
+  await page.locator('#dsv2-rcp-save').click();
+  await expect(page.locator('#dsv2-rcp-name')).toHaveValue('Heartburn myths');
+  await page.locator('#dsv2-rcp-name').fill('Myth buster');
+  await page.locator('#dsv2-rcp-notes').fill('End with Book a free call');
+  await page.locator('#dsv2-rcp-ok').click();
+  await expect(page.locator('#dsv2-rcp-save')).toHaveText('Saved as recipe ✓');
+  const saved = calls.find((c) => c[0] === 'recipeSave')[1];
+  expect(saved).toMatchObject({ name: 'Myth buster', notes: 'End with Book a free call', caption: 'Know the facts.', research: true });
+  expect(saved.slides.map((x) => x.pattern)).toEqual(['hook', 'hook', 'hook']);
+
+  const card = page.locator('#dsv2-recipes .dsv2-rcp');
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText('Myth buster');
+  await expect(card).toContainText('3 slides');
+  await expect(card.locator('.dsv2-rcp-strip img')).toHaveCount(3);
+  await card.click();
+  await expect(card).toHaveClass(/is-on/);
+  await expect(page.locator('#dsv2-rcp-on')).toContainText('Same 3 layouts');
+  await expect(page.locator('#dsv2-rcp-on')).toContainText('Rules: End with Book a free call');
+  await expect(page.locator('#dsv2-slides')).toBeDisabled();
+  await expect(page.locator('#dsv2-slides')).toHaveValue('recipe');
+  await expect(page.locator('#dsv2-go')).toHaveText('Design from recipe');
+  await expect(page.locator('#dsv2-brief')).toHaveAttribute('placeholder', /New topic for “Myth buster”/);
+
+  await page.locator('#dsv2-brief').fill('Sleep myths for new parents');
+  await page.locator('#dsv2-go').click();
+  await expect(page.locator('#dsv2-done')).toContainText('From recipe: Myth buster', { timeout: 10000 });
+  const run = calls.filter((c) => c[0] === 'carousel').pop()[1];
+  expect(run).toMatchObject({ brief: 'Sleep myths for new parents', recipe_id: 'rcp_1' });
+  expect(run.count).toBeUndefined();
+
+  await page.locator('#dsv2-rcp-edit').click();
+  await page.locator('#dsv2-rcpe-name').fill('Myth vs fact');
+  await page.locator('#dsv2-rcpe-ok').click();
+  await expect(page.locator('#dsv2-recipes .dsv2-rcp')).toContainText('Myth vs fact');
+  expect(calls.find((c) => c[0] === 'recipeEdit')[1]).toMatchObject({ name: 'Myth vs fact', notes: 'End with Book a free call' });
+
+  page.once('dialog', (d) => d.accept());
+  await page.locator('#dsv2-rcp-del').click();
+  await expect(page.locator('#dsv2-recipes .dsv2-rcp')).toHaveCount(0);
+  await expect(page.locator('#dsv2-slides')).toBeEnabled();
+  await expect(page.locator('#dsv2-slides')).toHaveValue('auto');
+  await expect(page.locator('#dsv2-go')).toHaveText('Design carousel');
+  expect(calls.find((c) => c[0] === 'recipeDelete')[1]).toBe('rcp_1');
+  expect(errors).toEqual([]);
 });
