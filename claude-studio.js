@@ -2349,6 +2349,26 @@
     return row;
   }
 
+  function offerDesignCarousel(action) {
+    const log = document.getElementById('cs-coach-log');
+    if (!log) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'cs-design-carousel';
+    btn.textContent = 'Design this carousel in my brand style';
+    btn.style.cssText = 'align-self:flex-start;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
+    btn.addEventListener('click', () => {
+      window.seDesignStudio.openWith({
+        brief: action.brief,
+        slides: action.slides,
+        source_image_url: action.source_image_url || masterImageUrl() || '',
+        autostart: true,
+      });
+    });
+    log.appendChild(btn);
+    log.scrollTop = log.scrollHeight;
+  }
+
   function coachStyleHttpsUrls() {
     return _csCoachStyleUrls.filter((u) => /^https:\/\//i.test(u));
   }
@@ -2906,6 +2926,12 @@
         ? window.resolveDesignCoachApply
         : () => ({ mode: 'none' });
       const actions = Array.isArray(data.coach_actions) ? data.coach_actions : [];
+      const designCarousel = actions.find((a) => a && a.type === 'design_carousel' && a.brief);
+      if (designCarousel && window.seDesignStudio) {
+        setDesignCoachApply(null);
+        offerDesignCarousel(designCarousel);
+        return;
+      }
       const fromActions = actions.find((a) => a && a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2);
       if (fromActions) window.__SE_CAROUSEL_PLAN = fromActions;
       const decision = decide({
