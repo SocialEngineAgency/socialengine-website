@@ -1340,6 +1340,7 @@
                 <button type="button" id="cs-slide-redo" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#6EE7B7;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Redo selected</button>
                 <button type="button" id="cs-slide-left" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move left</button>
                 <button type="button" id="cs-slide-right" style="padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.75);font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Move right</button>
+                <button type="button" id="cs-slide-reel" title="Animate these slides into a vertical Reel" style="display:none;padding:8px 12px;border-radius:8px;border:1px solid rgba(34,197,94,0.35);background:rgba(34,197,94,0.1);color:#86EFAC;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">▶ Make it a Reel</button>
                 <label id="cs-slide-count-wrap" style="margin-left:auto;font-size:0.72rem;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:8px;">Slides
                   <select id="cs-slide-count" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;padding:6px 8px;font-size:0.75rem;font-family:var(--font-body);">
                     <option value="3">3</option>
@@ -1537,6 +1538,12 @@
     syncTemplateButton();
     document.getElementById('cs-slide-left')?.addEventListener('click', () => moveSelectedSlide(-1));
     document.getElementById('cs-slide-right')?.addEventListener('click', () => moveSelectedSlide(1));
+    document.getElementById('cs-slide-reel')?.addEventListener('click', () => {
+      const urls = reelSlideUrls();
+      if (!urls.length || typeof window.seOpenMotionReel !== 'function') return;
+      const cap = document.getElementById('cs-caption-box')?.value || '';
+      window.seOpenMotionReel({ kind: 'carousel', slides: urls, name: cap.split('\n')[0].slice(0, 60) });
+    });
     document.getElementById('cs-picker-close')?.addEventListener('click', closePicker);
     document.getElementById('cs-picker-modal')?.addEventListener('click', (e) => {
       if (e.target && e.target.id === 'cs-picker-modal') closePicker();
@@ -1927,6 +1934,12 @@
     }, 400);
   }
 
+  function reelSlideUrls() {
+    if (!hasCarousel() || !isAssembledCarousel()) return [];
+    const urls = carouselQueueOrder().map((i) => _csCarousel.slides[i]?.url).filter(Boolean);
+    return urls.every((u) => /^https:\/\//i.test(u)) ? urls.slice(0, 10) : [];
+  }
+
   function renderCarouselPreview() {
     if (!hasCarousel()) return;
     hidePreviewPanes();
@@ -1966,6 +1979,8 @@
         });
       });
     }
+    const reelBtn = document.getElementById('cs-slide-reel');
+    if (reelBtn) reelBtn.style.display = reelSlideUrls().length >= 2 ? '' : 'none';
     const countWrap = document.getElementById('cs-slide-count-wrap');
     if (countWrap) countWrap.style.display = isAssembledCarousel() ? 'none' : 'flex';
     const countSel = document.getElementById('cs-slide-count');
