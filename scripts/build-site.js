@@ -37,6 +37,7 @@ const ALLOWLIST = [
   'inbox-moderation.js', // portal.html — Inbox hidden words
   'brand-worksheet-suggest.js', // portal.html — worksheet suggestions from past posts
   'marketing-playbook.js', // portal.html — funnel map, copy check, question log, lead magnets
+  'motion-reels.js', // portal.html — carousel → Reel and text Reels (HyperFrames)
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'carousel-templates.js', // portal.html
