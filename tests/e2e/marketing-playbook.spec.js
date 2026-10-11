@@ -131,6 +131,52 @@ test('Check copy on a Content Review caption: shows checks, applies the stronger
   expect(edits[edits.length - 1].caption).toContain('3 ways to wear the new linen shirt');
 });
 
+test('Check copy → Fix it for me: sends the failed checks, shows official sources, applies the fixed caption', async ({ page }) => {
+  const fixes = [];
+  const data = clientData({ content: [{ id: 'recP2', status: 'Ready for Review', platform: 'instagram', full_post_text: 'Hot tea raises cancer risk by 90%!!! Comment YES' }] });
+  await mockApi(page, srv.base, {
+    data,
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/marketing/copy-check') {
+        json(200, {
+          kind: 'charity', verdict: 'fix', score: 60, ai_error: '', better_hook: '',
+          checks: [
+            { id: 'hook', label: 'First line stops the scroll', status: 'pass', note: '' },
+            { id: 'ai_facts', label: 'No invented facts', status: 'fail', note: 'Check the 90% figure.', unsupported: ['90%'] },
+          ],
+        });
+        return 'handled';
+      }
+      if (entry.path === '/api/marketing/copy-check/fix') {
+        fixes.push(JSON.parse(entry.body || '{}'));
+        json(200, {
+          text: 'Very hot drinks are a probable cause of oesophageal cancer (Source: WHO). Learn the signs, link in bio. #oesophagealcancer',
+          changes: ['Replaced the 90% claim with the WHO classification'],
+          sources: [{ title: 'Cancer Research UK: hot drinks', url: 'https://news.cancerresearchuk.org/x' }],
+          score_before: 70, score: 95,
+          used: { platform_guidance: true, best_posts: false, official_search: true, country: 'GB' },
+        });
+        return 'handled';
+      }
+      if (entry.path === '/api/edit-caption') { json(200, { success: true }); return 'handled'; }
+      return undefined;
+    },
+  });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="content"]');
+  await page.click('.studio-card[data-post-id="recP2"] .studio-card__caption');
+  const ta = page.locator('.post-caption-edit[data-post-id="recP2"]');
+  await page.locator('.mp-ck-btn').first().click();
+  await page.click('#mp-ck-fix');
+  await expect(page.locator('#mp-ck-sources a')).toHaveAttribute('href', 'https://news.cancerresearchuk.org/x');
+  await expect(page.locator('.mp-modal')).toContainText('score 70 → 95');
+  await expect(page.locator('.mp-modal')).toContainText('Based on platform guidance, official sources.');
+  expect(fixes[0].issues).toEqual([{ label: 'No invented facts', note: 'Check the 90% figure.', unsupported: ['90%'] }]);
+  expect(fixes[0].text).toContain('Hot tea');
+  await page.click('#mp-ck-use-fix');
+  await expect(ta).toHaveValue(/^Very hot drinks are a probable cause/);
+});
+
 test('What customers ask: reads inbox items, shows themes, builds a free resource from one', async ({ page }) => {
   const refresh = [];
   const generated = [];

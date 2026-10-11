@@ -130,11 +130,16 @@
           ${d.ai_error ? `<div class="mp-note">${esc(d.ai_error)}</div>` : ''}
           ${d.better_hook ? `<span class="mp-label">Stronger first line</span><div class="mp-card" id="mp-ck-hook">${esc(d.better_hook)}</div>` : ''}
           <div class="mp-row">
-            ${ta && d.better_hook ? '<button type="button" class="mp-btn mp-btn--primary" id="mp-ck-use-hook">Use this first line</button>' : ''}
+            <button type="button" class="mp-btn mp-btn--primary" id="mp-ck-fix">✨ Fix it for me</button>
+            ${ta && d.better_hook ? '<button type="button" class="mp-btn" id="mp-ck-use-hook">Use this first line</button>' : ''}
             ${ta && hasDash ? '<button type="button" class="mp-btn" id="mp-ck-dash">Remove em dashes</button>' : ''}
             <button type="button" class="mp-btn" id="mp-ck-close">Close</button>
-          </div>`;
+          </div>
+          <div id="mp-ck-fixed"></div>`;
         m.body.querySelector('#mp-ck-close').addEventListener('click', m.close);
+        m.body.querySelector('#mp-ck-fix').addEventListener('click', (e) => {
+          fixCopy({ ta, text, platform: opts.platform || (ta ? platformFor(ta) : 'instagram'), source, check: d, box: m.body.querySelector('#mp-ck-fixed'), btn: e.currentTarget, close: m.close });
+        });
         m.body.querySelector('#mp-ck-use-hook')?.addEventListener('click', () => {
           const lines = ta.value.split('\n');
           const i = lines.findIndex((l) => l.trim());
@@ -150,6 +155,42 @@
         });
       })
       .catch((e) => { m.body.innerHTML = `<div class="mp-note">${esc(e.message)}</div>`; });
+  }
+
+  function fixCopy({ ta, text, platform, source, check, box, btn, close }) {
+    const issues = (check.checks || []).filter((c) => c.status !== 'pass')
+      .map((c) => ({ label: c.label, note: c.note, unsupported: c.unsupported || [] }));
+    btn.disabled = true;
+    box.innerHTML = '<div class="mp-hint">Fixing… checking platform guidance, your best posts and official sources. This takes about 20 seconds.</div>';
+    api('/api/marketing/copy-check/fix', { method: 'POST', body: JSON.stringify({ text, platform, source, issues }) })
+      .then((f) => {
+        const used = [
+          'platform guidance',
+          f.used && f.used.best_posts ? 'your best posts' : '',
+          f.used && f.used.official_search ? 'official sources' : '',
+        ].filter(Boolean).join(', ');
+        const sources = (f.sources || []).map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title || s.url)}</a></li>`).join('');
+        box.innerHTML = `<span class="mp-label">Fixed version · quick-check score ${esc(f.score_before)} → ${esc(f.score)}</span>
+          <textarea class="mp-text" id="mp-ck-fixed-text" rows="8">${esc(f.text)}</textarea>
+          <div class="mp-hint">Based on ${esc(used)}.${f.used && f.used.best_posts ? '' : ' Connect Instagram insights so fixes can learn from your best posts.'}</div>
+          ${(f.changes || []).length ? `<span class="mp-label">What changed</span><ul class="mp-hint" style="margin:0;padding-left:18px">${f.changes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+          ${sources ? `<span class="mp-label">Official sources</span><ul class="mp-hint" style="margin:0;padding-left:18px" id="mp-ck-sources">${sources}</ul>` : ''}
+          <div class="mp-row">
+            ${ta ? '<button type="button" class="mp-btn mp-btn--primary" id="mp-ck-use-fix">Use this version</button>' : ''}
+            <button type="button" class="mp-btn" id="mp-ck-copy-fix">Copy</button>
+          </div>`;
+        const value = () => box.querySelector('#mp-ck-fixed-text').value;
+        box.querySelector('#mp-ck-use-fix')?.addEventListener('click', () => {
+          setText(ta, value());
+          toast('Caption updated');
+          close();
+        });
+        box.querySelector('#mp-ck-copy-fix').addEventListener('click', () => {
+          navigator.clipboard?.writeText(value()).then(() => toast('Copied'), () => toast('Could not copy', 'warning'));
+        });
+      })
+      .catch((e) => { box.innerHTML = `<div class="mp-note">${esc(e.message)}</div>`; })
+      .finally(() => { btn.disabled = false; });
   }
 
   function attachCheckButtons(root) {
