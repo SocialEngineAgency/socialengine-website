@@ -20,15 +20,16 @@ const RESULT = {
   sources: ['https://www.nhs.uk/conditions/heartburn-and-acid-reflux/'],
 };
 
-function designMock({ hasSystem, calls, chatReply }) {
+function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical = 'off', classify = false }) {
   let system = hasSystem ? SYSTEM : null;
+  let settings = { medical };
   let uploads = 0;
   const polls = {};
   return async (entry, route, json) => {
     const m = route.request().method();
     const body = () => JSON.parse(route.request().postData() || '{}');
     if (entry.path === '/api/design/system') {
-      json(200, { ok: true, enabled: true, system, previews: system ? [{ pattern: 'hook', url: `${PNG}#p1` }, { pattern: 'list', url: `${PNG}#p2` }] : [], fonts: ['archivo', 'inter'] });
+      json(200, { ok: true, enabled: true, system, settings, figurelabs, previews: system ? [{ pattern: 'hook', url: `${PNG}#p1` }, { pattern: 'list', url: `${PNG}#p2` }] : [], fonts: ['archivo', 'inter'] });
       return 'handled';
     }
     if (entry.path === '/api/studio/upload-image') { uploads += 1; json(200, { url: `https://store.test/ex${uploads}.png` }); return 'handled'; }
@@ -42,6 +43,8 @@ function designMock({ hasSystem, calls, chatReply }) {
       json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : RESULT } });
       return 'handled';
     }
+    if (entry.path === '/api/design/settings' && m === 'PUT') { calls.push(['settings', body()]); settings = { medical: body().medical }; json(200, { ok: true, settings }); return 'handled'; }
+    if (entry.path === '/api/design/classify' && m === 'POST') { calls.push(['classify', body()]); json(200, { ok: true, medical: classify }); return 'handled'; }
     if (entry.path === '/api/design/system/previews' && m === 'POST') { calls.push(['previews']); json(200, { ok: true, previews: [{ pattern: 'hook', url: `${PNG}#fresh` }] }); return 'handled'; }
     if (entry.path === '/api/studio/design-queue' && m === 'POST') { calls.push(['queue', body()]); json(200, { ok: true }); return 'handled'; }
     if (entry.path === '/api/chat/v2' && chatReply) { json(200, chatReply); return 'handled'; }
@@ -177,4 +180,55 @@ test('Slides defaults to Auto: no count is sent, so the engine picks the length'
   await page.locator('#dsv2-go').click();
   await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
   expect(calls.find((c) => c[0] === 'carousel')[1].count).toBeUndefined();
+});
+
+test('Medical accuracy: setting saves, "ask" checks the topic and asks; the answer is sent with the carousel', async ({ page }) => {
+  const errors = watchErrors(page);
+  const calls = [];
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls, figurelabs: true, medical: 'ask', classify: true }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await expect(page.locator('#dsv2-medical-chip')).toContainText('asks for medical topics');
+  await page.locator('#dsv2-brief').fill("Barrett's oesophagus: what it is and when to see a GP");
+  await page.locator('#dsv2-go').click();
+  const ask = page.locator('#dsv2-medical-ask');
+  await expect(ask).toContainText('This looks like a medical topic');
+  expect(calls.filter((c) => c[0] === 'carousel')).toHaveLength(0);
+  await ask.locator('[data-medical="yes"]').click();
+  await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
+  expect(calls.find((c) => c[0] === 'carousel')[1].medical).toBe(true);
+  expect(calls.find((c) => c[0] === 'classify')[1].brief).toMatch(/Barrett/);
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
+
+  await page.locator('#dsv2-system summary').click();
+  await page.locator('#dsv2-medical').selectOption('always');
+  await expect.poll(() => calls.filter((c) => c[0] === 'settings').length).toBe(1);
+  expect(calls.find((c) => c[0] === 'settings')[1]).toEqual({ medical: 'always' });
+  await expect(page.locator('#dsv2-medical-chip')).toContainText('on (FigureLabs)');
+  expect(errors).toEqual([]);
+});
+
+test('Medical accuracy: Coach "ask" handoff asks instead of auto-starting', async ({ page }) => {
+  const calls = [];
+  const chatReply = { reply: 'Designing it now.', coach_actions: [{ type: 'design_carousel', brief: "Barrett's oesophagus: symptoms and risk", medical: 'ask' }] };
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls, chatReply, figurelabs: true, medical: 'ask' }) });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="ai-coach"]');
+  await page.fill('#chat-input', "carousel on Barrett's");
+  await page.click('#chat-send');
+  await page.locator('.coach-action-btn[data-type="design_carousel"]').click();
+  await expect(page.locator('#dsv2-medical-ask')).toContainText('This looks like a medical topic');
+  expect(calls.filter((c) => c[0] === 'classify' || c[0] === 'carousel')).toHaveLength(0);
+  await page.locator('#dsv2-medical-ask [data-medical="no"]').click();
+  await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
+  expect(calls.find((c) => c[0] === 'carousel')[1].medical).toBe(false);
+});
+
+test('Medical accuracy setting is not shown for brands without FigureLabs', async ({ page }) => {
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls: [] }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await expect(page.locator('#dsv2-make')).toBeVisible();
+  await expect(page.locator('#dsv2-medical')).toHaveCount(0);
+  await expect(page.locator('#dsv2-medical-chip')).toBeEmpty();
 });
