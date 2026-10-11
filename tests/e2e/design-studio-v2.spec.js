@@ -84,7 +84,8 @@ test('Design tab: brief → progress → slides with review scores, caption and 
   await page.click('#create-segments .create-seg[data-segment="brand-design"]');
   await expect(page.locator('#dsv2-make')).toBeVisible();
   await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
-  await page.locator('#dsv2-slides').fill('5');
+  await expect(page.locator('#dsv2-slides')).toHaveValue('auto');
+  await page.locator('#dsv2-slides').selectOption('5');
   await page.locator('#dsv2-go').click();
   await expect(page.locator('#dsv2-make-status')).toContainText('Creative director review');
   const done = page.locator('#dsv2-done');
@@ -165,4 +166,15 @@ test('Refresh previews re-renders the layout previews', async ({ page }) => {
   await expect(page.locator('#dsv2-system .dsv2-patterns img')).toHaveCount(1);
   await expect(page.locator('#dsv2-system .dsv2-patterns img')).toHaveAttribute('src', /#fresh$/);
   expect(calls.filter((c) => c[0] === 'previews')).toHaveLength(1);
+});
+
+test('Slides defaults to Auto: no count is sent, so the engine picks the length', async ({ page }) => {
+  const calls = [];
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
+  await page.locator('#dsv2-go').click();
+  await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
+  expect(calls.find((c) => c[0] === 'carousel')[1].count).toBeUndefined();
 });
