@@ -326,8 +326,6 @@
       <div class="dsv2-grid2">
         <div><label class="dsv2-label" for="dsv2-slides">Slides</label>
           <select id="dsv2-slides"><option value="auto">Auto (up to 10)</option>${[3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}">${n}</option>`).join('')}</select></div>
-        <div><label class="dsv2-label" for="dsv2-platform">Platform</label>
-          <select id="dsv2-platform"><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="linkedin">LinkedIn</option><option value="tiktok">TikTok</option></select></div>
         <div><label class="dsv2-label">Facts</label>
           <label class="dsv2-check"><input type="checkbox" id="dsv2-research" checked> Check on official sources</label></div>
       </div>
@@ -580,7 +578,6 @@
         brief,
         medical,
         count: el('dsv2-slides').value === 'auto' ? undefined : Math.max(3, Math.min(10, Number(el('dsv2-slides').value))),
-        platform: el('dsv2-platform').value,
         research: !!el('dsv2-research').checked,
         source_image_url: state.source || undefined,
       });
@@ -677,6 +674,8 @@
           <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-queue">Add to queue</button>
         </div>
       </div>
+      <div class="dsv2-hint" id="dsv2-posts-to" style="margin:-6px 0 12px;text-align:right;">${queuePlatforms().length ? `Posts to ${queuePlatforms().join(' + ')}` : 'Connect Instagram or Facebook in Settings to post'}
+      </div>
       <div class="dsv2-slides">${slides.map((s, i) => {
         const c = s.critic || {};
         const score = Number(c.score) || 0;
@@ -748,6 +747,19 @@
     }
   }
 
+  function queuePlatforms() {
+    const data = global.__clientData || global.clientData || global._studioClientData || {};
+    const c = data.client || data.fields || data;
+    const raw = c.social_connected_platforms;
+    const lower = (Array.isArray(raw) ? raw : String(raw || '').split(',')).map((p) => String(p || '').trim().toLowerCase());
+    const fbFlag = String(c.facebook_connected || '').toLowerCase();
+    const fbOff = fbFlag === 'false' || fbFlag === '0' || fbFlag === 'no';
+    const out = [];
+    if (lower.includes('instagram') || String(c.instagram_user_id || '').trim()) out.push('Instagram');
+    if (lower.includes('facebook') || (!fbOff && c.meta_page_id && c.meta_page_token)) out.push('Facebook');
+    return out;
+  }
+
   async function queue(urls, result) {
     const btn = el('dsv2-queue');
     if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
@@ -758,7 +770,7 @@
         image_urls: urls,
         brief: result.brief || result.title || '',
         caption,
-        platform: (el('dsv2-platform') && el('dsv2-platform').value) || 'instagram',
+        platform: queuePlatforms().join(',') || 'Instagram,Facebook',
         status: typeof ready.queueReviewStatus === 'function' ? ready.queueReviewStatus() : 'Pending',
       });
       if (!(r.ok || r.success)) throw new Error(r.error || 'Queue failed');

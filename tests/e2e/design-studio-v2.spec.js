@@ -88,6 +88,11 @@ test('Design tab: brief → progress → slides with review scores, caption and 
   await expect(page.locator('#dsv2-make')).toBeVisible();
   await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
   await expect(page.locator('#dsv2-slides')).toHaveValue('auto');
+  await expect(page.locator('#dsv2-platform')).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__clientData = window.__clientData || {};
+    window.__clientData.client = Object.assign({}, window.__clientData.client, { social_connected_platforms: ['instagram', 'facebook'] });
+  });
   await page.locator('#dsv2-slides').selectOption('5');
   await page.locator('#dsv2-go').click();
   await expect(page.locator('#dsv2-make-status')).toContainText('Creative director review');
@@ -98,13 +103,16 @@ test('Design tab: brief → progress → slides with review scores, caption and 
   await expect(page.locator('#dsv2-caption')).toHaveValue('Know the facts.\n\n#heartburn #health');
   await expect(done.locator('.dsv2-sources a')).toHaveAttribute('href', /nhs\.uk/);
   await expect(page.locator('#dsv2-go')).toBeEnabled();
-  expect(calls.find((c) => c[0] === 'carousel')[1]).toMatchObject({ brief: 'Heartburn myths vs facts for adults over 40', count: 5, research: true, platform: 'instagram' });
+  expect(calls.find((c) => c[0] === 'carousel')[1]).toMatchObject({ brief: 'Heartburn myths vs facts for adults over 40', count: 5, research: true });
+  expect(calls.find((c) => c[0] === 'carousel')[1].platform).toBeUndefined();
+  await expect(page.locator('#dsv2-posts-to')).toHaveText('Posts to Instagram + Facebook');
 
   await page.locator('#dsv2-queue').click();
   await expect.poll(() => calls.filter((c) => c[0] === 'queue').length).toBe(1);
   const q = calls.find((c) => c[0] === 'queue')[1];
   expect(q.image_urls).toHaveLength(3);
   expect(q.caption).toContain('#heartburn');
+  expect(q.platform).toBe('Instagram,Facebook');
 });
 
 test('Coach design_carousel → Design this carousel → Design tab starts with the brief and poster', async ({ page }) => {
