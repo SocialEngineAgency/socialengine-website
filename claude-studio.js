@@ -1146,6 +1146,10 @@
     if (aspectEl && ['9:16', '1:1', '4:5'].includes(String(s.aspect_ratio || ''))) {
       aspectEl.value = s.aspect_ratio;
     }
+    if (s.finished && result.attached_image_url) {
+      toast('Graphic loaded. Write the caption, then Add to Queue.', 'success');
+      return;
+    }
     toast('Coach brief loaded — generating now…', 'success');
     applyRedesignedSlides();
     if (!_csGenerating && !masterImageUrl()) {

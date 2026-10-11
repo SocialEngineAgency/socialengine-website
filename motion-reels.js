@@ -1,7 +1,7 @@
 /* Motion Reels (HyperFrames render worker on the API side).
    window.seOpenMotionReel({ kind: 'carousel', slides: [url], name })  — carousel → animated vertical Reel
-   window.seOpenMotionReel({ kind: 'text', text, name })              — kinetic-text Reel from a caption or idea
-   A "Text Reel" button attaches under caption boxes. Finished videos land in Library → Motion reels. */
+   window.seOpenMotionReel({ kind: 'text'|'faceless', text, name }) — text Reel or voiceover + footage Reel
+   A "Make a Reel" button (text on screen, or voiceover + footage) attaches under caption boxes. Finished videos land in Library → Motion reels. */
 (function (global) {
   'use strict';
 
@@ -53,6 +53,13 @@
       .mr-thumbs img { width: 56px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); flex: none; }
       .mr-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(167,139,250,0.25); border-top-color: #A78BFA; animation: mrspin 0.9s linear infinite; }
       @keyframes mrspin { to { transform: rotate(360deg); } }
+      .mr-tabs { display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); margin: 8px 0 2px; }
+      .mr-tab { padding: 6px 12px; border-radius: 7px; border: none; background: transparent; color: rgba(226,232,240,0.7); font-size: 0.76rem; font-weight: 600; cursor: pointer; font-family: inherit; width: auto; }
+      .mr-tab--on { background: rgba(124,58,237,0.35); color: #fff; }
+      .mr-scene { display: grid; grid-template-columns: 22px 1fr 28px; gap: 6px; align-items: start; margin-bottom: 8px; }
+      .mr-scene__n { font-size: 0.72rem; font-weight: 700; color: rgba(167,139,250,0.85); padding-top: 9px; text-align: center; }
+      .mr-scene__search { margin-top: 4px; font-size: 0.74rem; color: rgba(186,230,253,0.9); }
+      .mr-scene__del { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: rgba(248,113,113,0.8); cursor: pointer; width: 28px; height: 34px; padding: 0; }
       .mr-attach { display: inline-flex; align-items: center; gap: 4px; margin: 6px 0 0 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); color: #86EFAC; font-size: 0.7rem; font-weight: 600; cursor: pointer; font-family: inherit; width: auto; }
     `;
     document.head.appendChild(st);
@@ -60,13 +67,16 @@
 
   function openMotionReel(opts = {}) {
     injectStyles();
-    const kind = opts.kind === 'carousel' ? 'carousel' : 'text';
+    let kind = ['carousel', 'faceless'].includes(opts.kind) ? opts.kind : 'text';
     const slides = (opts.slides || []).filter((u) => /^https:\/\//i.test(String(u || '')));
+    let scenes = [];
+    let lastOptions = null;
     const ov = document.createElement('div');
     ov.className = 'mr-overlay';
     ov.innerHTML = `<div class="mr-modal" role="dialog" aria-label="Motion Reel">
-      <div class="mr-head"><h3>${kind === 'carousel' ? 'Turn this carousel into a Reel' : 'Text Reel'}</h3><button type="button" class="mr-x" aria-label="Close">×</button></div>
-      <p class="mr-lead">${kind === 'carousel' ? 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.' : 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'} Takes about 20 to 60 seconds. It is saved to your Library under Motion reels.</p>
+      <div class="mr-head"><h3 id="mr-title"></h3><button type="button" class="mr-x" aria-label="Close">×</button></div>
+      ${kind === 'carousel' ? '' : `<div class="mr-tabs" role="tablist"><button type="button" class="mr-tab" data-mode="text">Text on screen</button><button type="button" class="mr-tab" data-mode="faceless">Voiceover + footage</button></div>`}
+      <p class="mr-lead" id="mr-lead"></p>
       <div class="mr-grid"><div class="mr-form"><div class="mr-hint">Loading…</div></div>
       <div><div class="mr-stage" id="mr-stage"><div class="mr-hint" style="padding:20px;text-align:center">Your Reel appears here.</div></div><div class="mr-row" id="mr-out"></div></div></div>
     </div>`;
@@ -78,12 +88,91 @@
     const form = ov.querySelector('.mr-form');
     const stage = ov.querySelector('#mr-stage');
     const out = ov.querySelector('#mr-out');
+    const COPY = {
+      carousel: ['Turn this carousel into a Reel', 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
+      text: ['Make a Reel', 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
+      faceless: ['Make a Reel', 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
+    };
+
+    function syncHead() {
+      ov.querySelector('#mr-title').textContent = COPY[kind][0];
+      ov.querySelector('#mr-lead').textContent = `${COPY[kind][1]} Takes about 20 to 90 seconds. It is saved to your Library under Motion reels.`;
+      ov.querySelectorAll('.mr-tab').forEach((t) => t.classList.toggle('mr-tab--on', t.dataset.mode === kind));
+    }
+    syncHead();
+    ov.querySelectorAll('.mr-tab').forEach((t) => t.addEventListener('click', () => {
+      if (t.dataset.mode === kind) return;
+      kind = t.dataset.mode;
+      syncHead();
+      out.innerHTML = '';
+      if (lastOptions) renderForm(lastOptions);
+    }));
+
+    function scenesHtml(stock) {
+      return scenes.map((s, i) => `<div class="mr-scene"><span class="mr-scene__n">${i + 1}</span>
+        <div><input class="mr-input" data-scene-line="${i}" maxlength="160" value="${esc(s.line)}" placeholder="What the voice says">
+        ${stock ? `<input class="mr-input mr-scene__search" data-scene-search="${i}" maxlength="60" value="${esc(s.search || '')}" placeholder="Footage to show, e.g. folding linen shirt">` : ''}</div>
+        <button type="button" class="mr-scene__del" data-scene-del="${i}" aria-label="Remove line">×</button></div>`).join('');
+    }
+
+    function renderScenes() {
+      const box = form.querySelector('#mr-scenes');
+      if (!box) return;
+      const stock = form.querySelector('#mr-footage')?.value === 'stock';
+      box.innerHTML = scenesHtml(stock) || '<div class="mr-hint">Write the script, or add lines yourself.</div>';
+      box.querySelectorAll('[data-scene-del]').forEach((b) => b.addEventListener('click', () => {
+        scenes.splice(Number(b.dataset.sceneDel), 1);
+        renderScenes();
+      }));
+      const add = form.querySelector('#mr-scene-add');
+      if (add) add.style.display = scenes.length >= 6 ? 'none' : '';
+    }
+
+    function facelessHtml(o) {
+      const fl = o.faceless || {};
+      const footageOpts = [
+        fl.stock ? '<option value="stock">Stock video clips (free, from Pexels)</option>' : '',
+        `<option value="library" ${fl.library_media ? '' : 'disabled'}>My Library photos and videos (${esc(fl.library_media || 0)})</option>`,
+      ].join('');
+      return `${!fl.enabled ? '<div class="mr-note">Voiceover Reels are being switched on. Try again shortly.</div>' : ''}
+        ${!fl.stock && !fl.library_media ? '<div class="mr-note">Add some photos or videos to your Library first, so the Reel has footage.</div>' : ''}
+        <label class="mr-label" for="mr-idea">Idea or caption</label>
+        <textarea class="mr-text" id="mr-idea" maxlength="3000" style="min-height:80px" placeholder="Why linen should never go in a hot wash">${esc(opts.text || '')}</textarea>
+        <div class="mr-row" style="margin-top:6px"><button type="button" class="mr-btn" id="mr-script">Write the script for me</button><span class="mr-hint">About 20 to 30 seconds spoken.</span></div>
+        <label class="mr-label" for="mr-footage">Footage</label>
+        <select class="mr-select" id="mr-footage">${footageOpts}</select>
+        <span class="mr-label">Script, one line per scene</span>
+        <div id="mr-scenes"></div>
+        <button type="button" class="mr-btn" id="mr-scene-add" style="margin-top:4px">+ Add line</button>`;
+    }
+
+    async function writeScript(auto) {
+      const btn = form.querySelector('#mr-script');
+      const source = (form.querySelector('#mr-idea').value || '').trim();
+      if (!source) { if (!auto) toast('Write the idea first', 'warning'); return; }
+      btn.disabled = true; btn.textContent = 'Writing…';
+      try {
+        const d = await api('/api/motion/faceless/script', { method: 'POST', body: JSON.stringify({ text: source }) });
+        scenes = d.scenes;
+        renderScenes();
+        if (d.cta && !form.querySelector('#mr-cta').value) form.querySelector('#mr-cta').value = d.cta;
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Write the script for me';
+      }
+    }
 
     function renderForm(o) {
+      lastOptions = o;
       const d = o.defaults || {};
       const p = d.palette || {};
+      const fl = o.faceless || {};
+      const capUsed = kind === 'faceless' ? fl.used_today || 0 : o.used_today || 0;
+      const capMax = kind === 'faceless' ? fl.daily_cap || 5 : o.daily_cap || 20;
+      const ready = kind === 'faceless' ? o.enabled && fl.enabled && (fl.stock || fl.library_media) : o.enabled;
       form.innerHTML = `${!o.enabled ? '<div class="mr-note">Motion videos are being switched on. Try again shortly.</div>' : ''}
-        ${kind === 'carousel' ? `<span class="mr-label">Slides (${slides.length})</span><div class="mr-thumbs">${slides.map((u) => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer">`).join('')}</div>
+        ${kind === 'faceless' ? facelessHtml(o) : kind === 'carousel' ? `<span class="mr-label">Slides (${slides.length})</span><div class="mr-thumbs">${slides.map((u) => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer">`).join('')}</div>
           <label class="mr-label" for="mr-secs">Seconds per slide</label>
           <select class="mr-select" id="mr-secs"><option value="2">2 (snappy)</option><option value="2.6" selected>2.6 (balanced)</option><option value="3.5">3.5 (time to read)</option><option value="4.5">4.5 (text-heavy slides)</option></select>`
         : `<label class="mr-label" for="mr-lines">Lines, one per beat</label>
@@ -102,9 +191,21 @@
         <label class="mr-label" for="mr-music">Music</label>
         <select class="mr-select" id="mr-music"><option value="">No music</option>${(o.music || []).map((m) => `<option value="${esc(m.url)}">${esc(m.name)}</option>`).join('')}</select>
         ${(o.music || []).length ? '' : '<div class="mr-hint" style="margin-top:4px">Add your own tracks in Library (kind: music) to use them here. You can also add trending audio in Instagram when you post.</div>'}
-        <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-go" ${o.enabled ? '' : 'disabled'}>Make the Reel</button><span class="mr-hint" id="mr-cap">${esc(o.used_today || 0)} of ${esc(o.daily_cap || 20)} used today</span></div>`;
-      if (kind === 'text' && opts.text && !opts.lines) suggestBeats(true);
+        <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-go" ${ready ? '' : 'disabled'}>Make the Reel</button><span class="mr-hint" id="mr-cap">${esc(capUsed)} of ${esc(capMax)} used today</span></div>`;
+      if (kind === 'text' && opts.text && !opts.lines && !form.dataset.beatsTried) { form.dataset.beatsTried = '1'; suggestBeats(true); }
       form.querySelector('#mr-beats')?.addEventListener('click', () => suggestBeats(false));
+      if (kind === 'faceless') {
+        renderScenes();
+        form.querySelector('#mr-script').addEventListener('click', () => writeScript(false));
+        form.querySelector('#mr-footage').addEventListener('change', renderScenes);
+        form.querySelector('#mr-scene-add').addEventListener('click', () => { scenes.push({ line: '', search: '' }); renderScenes(); });
+        form.querySelector('#mr-scenes').addEventListener('input', (e) => {
+          const t = e.target;
+          if (t.dataset.sceneLine != null) scenes[Number(t.dataset.sceneLine)].line = t.value;
+          if (t.dataset.sceneSearch != null) scenes[Number(t.dataset.sceneSearch)].search = t.value;
+        });
+        if (!scenes.length && opts.text && ready) writeScript(true);
+      }
       form.querySelector('#mr-go').addEventListener('click', go);
     }
 
@@ -150,6 +251,11 @@
       if (kind === 'carousel') {
         body.slides = slides;
         body.seconds_per_slide = Number(form.querySelector('#mr-secs').value);
+      } else if (kind === 'faceless') {
+        delete body.kind;
+        body.scenes = scenes.map((s) => ({ line: String(s.line || '').trim(), search: String(s.search || '').trim() })).filter((s) => s.line);
+        body.footage = form.querySelector('#mr-footage').value;
+        if (!body.scenes.length) { toast('Write the script first', 'warning'); return; }
       } else {
         body.beats = form.querySelector('#mr-lines').value.split('\n').map((s) => s.trim()).filter(Boolean);
         body.style = form.querySelector('#mr-style').value;
@@ -159,7 +265,7 @@
       out.innerHTML = '';
       stage.innerHTML = '<div style="text-align:center"><div class="mr-spin" style="margin:0 auto 10px"></div><div class="mr-hint">Rendering your Reel…</div></div>';
       try {
-        const job = await api('/api/motion/render', { method: 'POST', body: JSON.stringify(body) });
+        const job = await api(kind === 'faceless' ? '/api/motion/faceless/render' : '/api/motion/render', { method: 'POST', body: JSON.stringify(body) });
         const cap = form.querySelector('#mr-cap');
         if (cap && job.daily_cap) cap.textContent = `${job.used_today} of ${job.daily_cap} used today`;
         const s = await poll(job.job_id);
@@ -187,8 +293,8 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'mr-attach';
-      b.textContent = '▶ Text Reel';
-      b.title = 'Turn this caption into an animated text Reel';
+      b.textContent = '▶ Make a Reel';
+      b.title = 'Turn this caption into a text Reel or a voiceover Reel';
       b.addEventListener('click', (e) => {
         e.preventDefault();
         if (!ta.value.trim()) { toast('Write the caption first', 'warning'); return; }
