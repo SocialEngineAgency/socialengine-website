@@ -159,20 +159,99 @@
       .dsv2-slide button:hover img { transform:scale(1.02); }
       .dsv2-slide-meta { font-size:0.68rem; color:rgba(255,255,255,0.55); margin-top:6px; line-height:1.45; }
       .dsv2-slide-meta .dsv2-link { font-size:0.72rem; margin-right:6px; }
-      .dsv2-ed { position:fixed; inset:0; z-index:10000; background:rgba(3,6,14,0.88); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:24px; }
-      .dsv2-ed-box { background:#141A2A; border:1px solid rgba(255,255,255,0.1); border-radius:16px; width:min(1040px,100%); max-height:100%; overflow:auto; display:grid; grid-template-columns:minmax(220px,380px) 1fr; gap:22px; padding:22px; position:relative; }
-      .dsv2-ed-preview img { width:100%; display:block; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#0B0F1A; }
-      .dsv2-ed-preview .dsv2-row { margin-top:10px; }
-      .dsv2-ed-form h3 { margin:0 0 4px; }
-      .dsv2-ed-form textarea { min-height:52px; }
-      .dsv2-ed-count { float:right; font-weight:500; text-transform:none; letter-spacing:0; color:rgba(255,255,255,0.45); }
+      .dsv2-ed { position:fixed; inset:0; z-index:10000; background:rgba(3,6,14,0.84); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; padding:18px; font-family:var(--font-body); color:#E2E8F0; }
+      .dsv2-ed *, .dsv2-ed *::before { box-sizing:border-box; }
+      .dsv2-ed-box { background:#111726; border:1px solid rgba(255,255,255,0.1); border-radius:18px; width:min(1240px,100%); height:min(920px,100%); display:flex; flex-direction:column; box-shadow:0 30px 80px rgba(0,0,0,0.55); overflow:hidden; }
+      .dsv2-ed-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.07); }
+      .dsv2-ed-head h3 { margin:0; font-size:1.02rem; font-weight:800; color:#F8FAFC; }
+      .dsv2-ed-head h3 span { color:rgba(255,255,255,0.5); font-weight:600; }
+      .dsv2-ed-head p { margin:3px 0 0; font-size:0.75rem; color:rgba(255,255,255,0.5); }
+      .dsv2-ed-close { width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14); color:#fff; cursor:pointer; font-size:1.15rem; line-height:1; }
+      .dsv2-ed-close:hover { background:rgba(255,255,255,0.12); }
+      .dsv2-ed-body { flex:1; min-height:0; display:grid; grid-template-columns:minmax(260px,400px) 1fr; gap:22px; padding:18px 20px; overflow:auto; }
+      .dsv2-ed-left { align-self:start; position:sticky; top:0; }
+      .dsv2-ed-stage { position:relative; width:100%; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,0.12); background:#0B0F1A; box-shadow:0 14px 44px rgba(0,0,0,0.45); }
+      .dsv2-ed-still { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transition:opacity .2s; }
+      .dsv2-ed-stage iframe { position:absolute; left:0; top:0; border:0; transform-origin:0 0; opacity:0; pointer-events:none; background:transparent; }
+      .dsv2-ed-stage.is-live iframe.is-on { opacity:1; pointer-events:auto; }
+      .dsv2-ed-stage.is-live .dsv2-ed-still { opacity:0; }
+      .dsv2-ed-badge { position:absolute; left:10px; top:10px; font-size:0.66rem; font-weight:700; padding:4px 9px; border-radius:999px; background:rgba(17,23,38,0.82); color:#C4B5FD; border:1px solid rgba(167,139,250,0.35); pointer-events:none; }
+      .dsv2-ed-badge.is-dirty { color:#FCD34D; border-color:rgba(245,158,11,0.45); }
+      .dsv2-ed-hist { display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+      .dsv2-ed-hist .dsv2-link { margin-left:auto; }
+      .dsv2-ed-warn { margin-top:12px; padding:10px 12px; border-radius:10px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.28); font-size:0.76rem; color:#FCD34D; line-height:1.5; }
+      .dsv2-ed-panel { min-width:0; display:flex; flex-direction:column; }
+      .dsv2-ed-tabs { display:flex; gap:4px; padding:4px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; margin-bottom:14px; flex-wrap:wrap; }
+      .dsv2-ed-tab { flex:1; background:none; border:none; color:rgba(255,255,255,0.65); font-family:var(--font-body); font-size:0.8rem; font-weight:700; padding:9px 10px; border-radius:9px; cursor:pointer; white-space:nowrap; }
+      .dsv2-ed-tab:hover { color:#fff; }
+      .dsv2-ed-tab.is-on { background:linear-gradient(135deg,#7C3AED,#A855F7); color:#fff; box-shadow:0 3px 12px rgba(124,58,237,0.35); }
+      .dsv2-ed-field { background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.08); border-radius:13px; padding:12px 14px; transition:border-color .2s, box-shadow .2s; }
+      .dsv2-ed-field + .dsv2-ed-field { margin-top:10px; }
+      .dsv2-ed-field.is-sel, .dsv2-ed-field.is-flash { border-color:rgba(167,139,250,0.7); box-shadow:0 0 0 3px rgba(124,58,237,0.16); }
+      .dsv2-ed-field.is-hidden input, .dsv2-ed-field.is-hidden textarea { opacity:0.45; }
+      .dsv2-ed-field label { display:flex; align-items:baseline; gap:6px; font-size:0.78rem; font-weight:700; color:#F1F5F9; margin-bottom:7px; }
+      .dsv2-ed-field label em { font-style:normal; font-weight:500; color:rgba(255,255,255,0.45); }
+      .dsv2-ed-sub { display:block; font-size:0.72rem; font-weight:700; color:rgba(255,255,255,0.6); margin:14px 0 7px; }
+      .dsv2-ed input[type=text], .dsv2-ed textarea { width:100%; background:#0A0F1E; border:1px solid rgba(255,255,255,0.14); border-radius:10px; color:#F8FAFC; padding:10px 12px; font-size:0.92rem; font-family:var(--font-body); line-height:1.5; transition:border-color .15s, box-shadow .15s; }
+      .dsv2-ed textarea { resize:vertical; min-height:0; }
+      .dsv2-ed input[type=text]::placeholder, .dsv2-ed textarea::placeholder { color:rgba(255,255,255,0.35); }
+      .dsv2-ed input[type=text]:focus, .dsv2-ed textarea:focus { outline:none; border-color:rgba(167,139,250,0.75); box-shadow:0 0 0 3px rgba(124,58,237,0.2); }
+      .dsv2-ed-count { margin-left:auto; font-weight:600; font-size:0.7rem; color:rgba(255,255,255,0.4); font-variant-numeric:tabular-nums; }
       .dsv2-ed-count.is-over { color:#FCA5A5; }
-      .dsv2-ed-close { position:absolute; right:12px; top:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; }
-      .dsv2-ed-pic { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-      .dsv2-ed-pic input[type=text] { flex:1; min-width:200px; }
-      .dsv2-ed-warn { margin-top:10px; font-size:0.78rem; color:#FCD34D; line-height:1.45; }
-      .dsv2-ed-busy { opacity:0.45; pointer-events:none; }
-      @media (max-width: 760px) { .dsv2-ed-box { grid-template-columns:1fr; } .dsv2-ed { padding:8px; } }
+      .dsv2-ed-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:9px; }
+      .dsv2-ed-seg { display:inline-flex; align-items:center; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:9px; overflow:hidden; }
+      .dsv2-ed-seg button { background:none; border:none; color:#E2E8F0; font-size:0.78rem; font-weight:700; padding:6px 9px; cursor:pointer; font-family:var(--font-body); }
+      .dsv2-ed-seg button:hover { background:rgba(255,255,255,0.08); }
+      .dsv2-ed-seg button.is-on { background:rgba(124,58,237,0.45); color:#fff; }
+      .dsv2-ed-seg span { font-size:0.7rem; color:rgba(255,255,255,0.6); min-width:40px; text-align:center; font-variant-numeric:tabular-nums; }
+      .dsv2-ed-swatches { display:inline-flex; gap:5px; align-items:center; flex-wrap:wrap; }
+      .dsv2-ed-sw { width:24px; height:24px; border-radius:7px; border:2px solid rgba(255,255,255,0.18); cursor:pointer; padding:0; }
+      .dsv2-ed-sw--none { background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.55); font-size:0.66rem; line-height:1; }
+      .dsv2-ed-sw.is-on { border-color:#fff; box-shadow:0 0 0 2px #7C3AED; }
+      .dsv2-ed-hide { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:9px; color:#E2E8F0; font-size:0.74rem; font-weight:700; padding:6px 10px; cursor:pointer; font-family:var(--font-body); }
+      .dsv2-ed-hide.is-on { background:rgba(245,158,11,0.18); border-color:rgba(245,158,11,0.5); color:#FCD34D; }
+      .dsv2-ed-tip, .dsv2-ed-note { margin:12px 0 0; font-size:0.75rem; color:rgba(255,255,255,0.45); line-height:1.5; }
+      .dsv2-ed-note { margin:0; color:#C4B5FD; }
+      .dsv2-ed-layouts { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:12px; }
+      .dsv2-ed-lay { background:none; border:2px solid transparent; border-radius:12px; padding:3px; cursor:pointer; color:rgba(255,255,255,0.7); font-family:var(--font-body); font-size:0.68rem; font-weight:600; text-align:center; }
+      .dsv2-ed-lay img, .dsv2-ed-lay-blank { width:100%; display:block; object-fit:cover; border-radius:9px; background:rgba(255,255,255,0.06); }
+      .dsv2-ed-lay span:last-child { display:block; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .dsv2-ed-lay:hover { border-color:rgba(167,139,250,0.4); }
+      .dsv2-ed-lay.is-on { border-color:#A78BFA; color:#fff; background:rgba(124,58,237,0.14); }
+      .dsv2-ed-picrow { display:flex; gap:16px; align-items:center; }
+      .dsv2-ed-pic-now { width:110px; height:110px; flex:none; object-fit:contain; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); display:block; }
+      .dsv2-ed-range { display:grid; grid-template-columns:96px 1fr; align-items:center; gap:10px; font-size:0.74rem; color:rgba(255,255,255,0.7); }
+      .dsv2-ed-range + .dsv2-ed-range { margin-top:8px; }
+      .dsv2-ed-range input { width:100%; accent-color:#8B5CF6; }
+      .dsv2-ed-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+      .dsv2-ed-chip { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); color:#E2E8F0; border-radius:999px; padding:7px 13px; font-size:0.76rem; font-weight:600; cursor:pointer; font-family:var(--font-body); }
+      .dsv2-ed-chip:hover { border-color:rgba(167,139,250,0.5); }
+      .dsv2-ed-chip.is-on { background:rgba(124,58,237,0.28); border-color:#A78BFA; color:#fff; }
+      .dsv2-ed .dsv2-check { color:rgba(255,255,255,0.8); margin-top:8px; min-height:0; }
+      .dsv2-ed-strip { border-top:1px solid rgba(255,255,255,0.07); padding:12px 20px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; background:rgba(0,0,0,0.12); }
+      .dsv2-ed-thumbs { display:flex; gap:8px; overflow-x:auto; flex:1; min-width:0; padding:2px; }
+      .dsv2-ed-thumb { position:relative; flex:none; width:52px; padding:0; border:2px solid transparent; border-radius:9px; background:none; cursor:pointer; }
+      .dsv2-ed-thumb img { width:100%; display:block; object-fit:cover; border-radius:7px; }
+      .dsv2-ed-thumb > span:last-child { position:absolute; right:3px; bottom:3px; font-size:0.6rem; font-weight:800; background:rgba(0,0,0,0.65); color:#fff; padding:1px 5px; border-radius:6px; }
+      .dsv2-ed-thumb.is-on { border-color:#A78BFA; box-shadow:0 0 0 2px rgba(124,58,237,0.35); }
+      .dsv2-ed-add { min-height:70px; border:2px dashed rgba(255,255,255,0.2); color:rgba(255,255,255,0.7); display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:var(--font-body); }
+      .dsv2-ed-add > span:last-child { position:static; background:none; font-size:0.62rem; }
+      .dsv2-ed-plus { font-size:1.3rem; line-height:1; }
+      .dsv2-ed-ops { display:flex; gap:6px; flex-wrap:wrap; }
+      .dsv2-ed-ops .dsv2-btn { padding:7px 11px; font-size:0.74rem; }
+      .dsv2-ed-addbox { flex-basis:100%; display:flex; gap:8px; }
+      .dsv2-ed-addbox[hidden] { display:none; }
+      .dsv2-ed-addbox input { flex:1; }
+      .dsv2-ed-foot { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:12px 20px; border-top:1px solid rgba(255,255,255,0.07); background:rgba(0,0,0,0.2); }
+      .dsv2-ed-foot .dsv2-hint { display:flex; align-items:center; gap:8px; }
+      .dsv2-ed-busy .dsv2-ed-panel, .dsv2-ed-busy .dsv2-ed-thumbs { opacity:0.5; pointer-events:none; }
+      @media (max-width: 860px) {
+        .dsv2-ed { padding:0; }
+        .dsv2-ed-box { border-radius:0; height:100%; }
+        .dsv2-ed-body { grid-template-columns:1fr; padding:12px; }
+        .dsv2-ed-left { position:static; max-width:300px; width:100%; margin:0 auto; }
+        .dsv2-ed-foot { flex-direction:column; align-items:stretch; }
+      }
       .dsv2-score { font-weight:700; color:#6EE7B7; }
       .dsv2-score--low { color:#FBBF24; }
       .dsv2-sources { margin-top:6px; }
@@ -739,162 +818,568 @@
 
   function warningsHtml(issues) {
     const list = (issues || []).filter((x) => x.severity === 'hard' || x.type === 'too_long' || x.type === 'unsourced_number');
-    return list.length ? `<div class="dsv2-ed-warn">${list.slice(0, 4).map((x) => `⚠ ${esc(x.detail || x.type)}`).join('<br>')}</div>` : '';
+    return list.length ? `<div class="dsv2-ed-warn">${list.slice(0, 4).map((x) => `<div>⚠ ${esc(x.detail || x.type)}</div>`).join('')}</div>` : '';
   }
 
-  function editSlide(result, i) {
+  const FIELD_NAMES = {
+    kicker: 'Small label', eyebrow: 'Small label', label: 'Small label', title: 'Headline', heading: 'Headline', headline: 'Headline',
+    subtitle: 'Subheading', subheading: 'Subheading', body: 'Body text', text: 'Body text', points: 'Points', items: 'Points',
+    note: 'Note', source: 'Source', sources: 'Source', cta: 'Call to action', action: 'Call to action', stat: 'Big number', number: 'Big number',
+  };
+  function fieldName(name) {
+    if (FIELD_NAMES[name]) return FIELD_NAMES[name];
+    const t = String(name).replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  const QUICK_ASKS = [['Shorter', 'Make the words shorter and easier to read on a phone.'], ['Warmer', 'Say it more warmly and kindly.'], ['Punchier headline', 'Make the headline punchier.'], ['Simpler words', 'Use simpler, everyday words.']];
+  const COLOR_NAMES = { bg: 'Background', surface: 'Surface', ink: 'Text', muted: 'Muted', primary: 'Primary', accent: 'Accent', border: 'Border', cta: 'Button' };
+  const clone = (v) => JSON.parse(JSON.stringify(v == null ? null : v));
+  const versionOf = (s) => ({ url: s.url, pattern: s.pattern, slots: clone(s.slots || {}), style: clone(s.style || {}), issues: s.issues || [] });
+
+  /** Move words and pictures into another layout by slot kind and order, so a layout switch previews instantly. */
+  function mapToLayout(patterns, slide, toId) {
+    const from = patterns.find((p) => p.id === slide.pattern) || { slots: {} };
+    const to = patterns.find((p) => p.id === toId) || { slots: {} };
+    const pools = { text: [], list: [], image: [] };
+    for (const [name, sp] of Object.entries(from.slots || {})) {
+      const v = slide.slots[name];
+      if (v == null || v === '' || (Array.isArray(v) && !v.length)) continue;
+      (pools[sp.kind] || pools.text).push({ name, v });
+    }
+    const slots = {};
+    const take = (kind, name) => {
+      const pool = pools[kind];
+      const same = pool.findIndex((x) => x.name === name);
+      return pool.splice(same >= 0 ? same : 0, 1)[0];
+    };
+    for (const [name, sp] of Object.entries(to.slots || {})) {
+      const kind = sp.kind === 'list' || sp.kind === 'image' ? sp.kind : 'text';
+      let got = take(kind, name);
+      if (!got && kind === 'list' && pools.text.length) got = { v: [take('text', name).v] };
+      if (!got && kind === 'text' && pools.list.length) got = { v: [].concat(take('list', name).v).join(' · ') };
+      if (got) slots[name] = got.v;
+    }
+    const style = clone(slide.style || {});
+    if (style.slots) for (const n of Object.keys(style.slots)) if (!(to.slots || {})[n]) delete style.slots[n];
+    return { pattern: toId, slots, style };
+  }
+
+  function editSlide(result, start) {
     const sys = (state.info && state.info.system) || {};
     const patterns = sys.patterns || [];
-    const slide = result.slides[i];
-    if (!slide || !slide.slots) { toast('This slide was made before editing existed. Make the carousel again to edit it.', 'info'); return; }
-    const total = result.slides.length;
+    const colors = Object.entries(sys.colors || {}).filter(([, v]) => /^#[0-9a-f]{3,8}$/i.test(String(v)));
+    const previews = new Map(((state.info && state.info.previews) || []).filter((p) => p && p.url).map((p) => [p.pattern, p.url]));
+    if (!result.slides[start] || !result.slides[start].slots) { toast('This slide was made before editing existed. Make the carousel again to edit it.', 'info'); return; }
+    let i = start;
+    let tab = 'text';
+    let draft = null;
+    let dirty = false;
+    let picUrl = '';
+    let busy = false;
+    let selected = '';
+    let previewSeq = 0;
+    let previewTimer = null;
     const ov = document.createElement('div');
     ov.className = 'dsv2-ed';
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
-    let picUrl = '';
-    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-    function onKey(ev) { if (ev.key === 'Escape') close(); }
+    const q = (sel) => ov.querySelector(sel);
 
-    function draw() {
+    function load(n) {
+      i = n;
       const cur = result.slides[i];
-      const pattern = patterns.find((p) => p.id === cur.pattern) || { slots: {} };
+      draft = { pattern: cur.pattern, slots: clone(cur.slots || {}), style: clone(cur.style || {}) };
+      dirty = false;
+      picUrl = '';
+      selected = '';
+    }
+    function markDirty() {
+      dirty = true;
+      const badge = q('#dsv2-ed-badge');
+      if (badge) { badge.textContent = 'Unsaved changes'; badge.classList.add('is-dirty'); }
+      schedulePreview();
+    }
+    function close() {
+      if (dirty && !window.confirm('Close without saving your changes to this slide?')) return;
+      ov.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(ev) {
+      if (ev.key === 'Escape') close();
+    }
+    async function moveTo(n) {
+      if (busy || n < 0 || n >= result.slides.length || n === i) return;
+      if (dirty) {
+        if (window.confirm('Save your changes to this slide first?')) { await save(); if (dirty) return; } else dirty = false;
+      }
+      load(n);
+      draw();
+    }
+
+    // ── live preview (two frames, swapped when the next one has loaded, so typing never flashes) ──
+    function schedulePreview() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(renderPreview, 220);
+    }
+    async function renderPreview() {
+      const seq = ++previewSeq;
+      const stage = q('.dsv2-ed-stage');
+      if (!stage) return;
+      let r;
+      try {
+        r = await call('POST', '/api/design/slide/preview', { slide: draft, index: i, total: result.slides.length });
+      } catch (e) {
+        return;
+      }
+      if (seq !== previewSeq || !stage.isConnected) return;
+      const frames = stage.querySelectorAll('iframe');
+      const next = frames[0].classList.contains('is-on') ? frames[1] : frames[0];
+      const scale = stage.clientWidth / r.width;
+      [...frames].forEach((f) => { f.style.width = `${r.width}px`; f.style.height = `${r.height}px`; f.style.transform = `scale(${scale})`; });
+      stage.style.height = `${Math.round(r.height * scale)}px`;
+      next.onload = () => {
+        if (seq !== previewSeq) return;
+        wireFrame(next);
+        frames.forEach((f) => f.classList.toggle('is-on', f === next));
+        stage.classList.add('is-live');
+      };
+      next.srcdoc = r.html;
+    }
+    function wireFrame(frame) {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const st = doc.createElement('style');
+      st.textContent = '[data-slot]{cursor:pointer;transition:outline-color .15s}[data-slot]:hover{outline:4px dashed rgba(124,58,237,.75);outline-offset:6px}[data-slot].se-sel{outline:5px solid #7C3AED;outline-offset:6px}';
+      doc.head.appendChild(st);
+      if (selected) doc.querySelectorAll(`[data-slot="${selected}"]`).forEach((n) => n.classList.add('se-sel'));
+      doc.addEventListener('click', (ev) => {
+        const hit = ev.target.closest && ev.target.closest('[data-slot]');
+        ev.preventDefault();
+        if (!hit) return;
+        const name = hit.getAttribute('data-slot');
+        const pattern = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+        const kind = (pattern.slots[name] || {}).kind;
+        selected = name;
+        doc.querySelectorAll('.se-sel').forEach((n) => n.classList.remove('se-sel'));
+        doc.querySelectorAll(`[data-slot="${name}"]`).forEach((n) => n.classList.add('se-sel'));
+        tab = kind === 'image' ? 'picture' : 'text';
+        drawPanel();
+        const field = q(`[data-field="${name}"]`);
+        if (field) {
+          field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          field.classList.add('is-flash');
+          const input = field.querySelector('[data-slot]');
+          if (input) input.focus();
+        }
+      });
+    }
+
+    // ── panel tabs ──
+    function styleOf(name) {
+      draft.style = draft.style || {};
+      draft.style.slots = draft.style.slots || {};
+      draft.style.slots[name] = draft.style.slots[name] || {};
+      return draft.style.slots[name];
+    }
+    function swatches(attr, current, name) {
+      return `<div class="dsv2-ed-swatches"><button type="button" class="dsv2-ed-sw dsv2-ed-sw--none${!current ? ' is-on' : ''}" ${attr}="" ${name ? `data-name="${esc(name)}"` : ''} title="Brand default">✕</button>${colors.map(([k, v]) => `<button type="button" class="dsv2-ed-sw${current === k ? ' is-on' : ''}" ${attr}="${esc(k)}" ${name ? `data-name="${esc(name)}"` : ''} title="${esc(COLOR_NAMES[k] || k)}" style="background:${esc(v)}"></button>`).join('')}</div>`;
+    }
+    function textTab(pattern) {
       const fields = Object.entries(pattern.slots || {}).filter(([, sp]) => sp && sp.kind !== 'image');
-      const hasPic = Object.values(pattern.slots || {}).some((sp) => sp && sp.kind === 'image');
+      if (!fields.length) return '<p class="dsv2-ed-note">This layout has no text.</p>';
+      return fields.map(([name, sp]) => {
+        const v = draft.slots[name];
+        const text = sp.kind === 'list' ? (Array.isArray(v) ? v : String(v || '').split('\n')).join('\n') : String(v || '');
+        const st = ((draft.style || {}).slots || {})[name] || {};
+        const id = `dsv2-ed-f-${esc(name)}`;
+        const attrs = `id="${id}" data-slot="${esc(name)}" data-kind="${esc(sp.kind)}" data-max="${Number(sp.max_chars) || 0}"`;
+        const input = sp.kind !== 'list' && (Number(sp.max_chars) || 0) <= 60
+          ? `<input type="text" ${attrs} value="${esc(text)}">`
+          : `<textarea ${attrs} rows="${sp.kind === 'list' ? 4 : 3}">${esc(text)}</textarea>`;
+        const size = Number(st.size) || 0;
+        return `<div class="dsv2-ed-field${selected === name ? ' is-sel' : ''}${st.hide ? ' is-hidden' : ''}" data-field="${esc(name)}">
+          <label for="${id}">${esc(fieldName(name))}${sp.kind === 'list' ? ' <em>one per line</em>' : ''}<span class="dsv2-ed-count" data-count="${esc(name)}"></span></label>
+          ${input}
+          <div class="dsv2-ed-tools">
+            <div class="dsv2-ed-seg" title="Text size"><button type="button" data-size="-1" data-name="${esc(name)}" aria-label="Smaller">A−</button><span>${100 + size * 10}%</span><button type="button" data-size="1" data-name="${esc(name)}" aria-label="Bigger">A+</button></div>
+            <div class="dsv2-ed-seg" title="Alignment">${['left', 'center', 'right'].map((a) => `<button type="button" data-align="${a}" data-name="${esc(name)}" class="${st.align === a ? 'is-on' : ''}" aria-label="Align ${a}">${a === 'left' ? '⇤' : a === 'center' ? '≡' : '⇥'}</button>`).join('')}</div>
+            ${swatches('data-color', st.color || '', name)}
+            <button type="button" class="dsv2-ed-hide${st.hide ? ' is-on' : ''}" data-hide="${esc(name)}">${st.hide ? 'Hidden' : 'Hide'}</button>
+          </div>
+        </div>`;
+      }).join('') + '<p class="dsv2-ed-tip">Click any text on the slide to jump to it. Wrap a word in *stars* to highlight it.</p>';
+    }
+    function layoutTab() {
+      return `<p class="dsv2-ed-note" style="color:rgba(255,255,255,0.6);margin-bottom:10px;">Your words and picture move into the new layout. Check the preview, then save.</p>
+        <div class="dsv2-ed-layouts">${patterns.map((p) => `<button type="button" class="dsv2-ed-lay${p.id === draft.pattern ? ' is-on' : ''}" data-layout="${esc(p.id)}" title="${esc(p.name || p.id)}">
+        ${previews.get(p.id) ? `<img src="${esc(previews.get(p.id))}" alt="" loading="lazy" style="aspect-ratio:${ratioCss()};">` : `<span class="dsv2-ed-lay-blank" style="aspect-ratio:${ratioCss()};"></span>`}
+        <span>${esc(p.name || p.id)}</span></button>`).join('')}</div>`;
+    }
+    function pictureTab(pattern) {
+      const slot = Object.entries(pattern.slots || {}).find(([, sp]) => sp && sp.kind === 'image');
+      if (!slot) return '<p class="dsv2-ed-note">This layout has no picture. Pick another layout to add one.</p>';
+      const url = draft.slots[slot[0]];
+      const art = (draft.style || {}).art || { zoom: 1, x: 50, y: 50 };
       const medicalPic = result.medical && state.info && state.info.figurelabs;
-      ov.innerHTML = `<div class="dsv2-ed-box">
-        <button type="button" class="dsv2-ed-close" aria-label="Close">×</button>
-        <div class="dsv2-ed-preview">
-          <img src="${esc(cur.url)}" alt="Slide ${i + 1}" style="aspect-ratio:${ratioCss()};object-fit:cover;">
-          <div class="dsv2-row" style="justify-content:space-between;">
-            <span class="dsv2-hint">Slide ${i + 1} of ${total}</span>
-            ${cur.prev ? '<button type="button" class="dsv2-link" id="dsv2-ed-undo">Undo last change</button>' : ''}
-          </div>
-          ${warningsHtml(cur.issues)}
-        </div>
-        <div class="dsv2-ed-form">
-          <h3>Edit slide ${i + 1}</h3>
-          <p class="dsv2-sub" style="margin:0 0 6px;">Only this slide is redrawn. Wrap a word in *stars* to highlight it.</p>
-          <label class="dsv2-label" for="dsv2-ed-layout">Layout</label>
-          <select id="dsv2-ed-layout">${patterns.map((p) => `<option value="${esc(p.id)}"${p.id === cur.pattern ? ' selected' : ''}>${esc(p.name || p.id)}</option>`).join('')}</select>
-          ${fields.map(([name, sp]) => {
-            const v = cur.slots[name];
-            const text = sp.kind === 'list' ? (Array.isArray(v) ? v : String(v || '').split('\n')).join('\n') : String(v || '');
-            return `<label class="dsv2-label" for="dsv2-ed-f-${esc(name)}">${esc(name.replace(/_/g, ' '))}${sp.kind === 'list' ? ' (one per line)' : ''}<span class="dsv2-ed-count" data-count="${esc(name)}"></span></label>
-              <textarea id="dsv2-ed-f-${esc(name)}" data-slot="${esc(name)}" data-kind="${esc(sp.kind)}" data-max="${Number(sp.max_chars) || 0}" rows="${sp.kind === 'list' ? 4 : 2}">${esc(text)}</textarea>`;
-          }).join('')}
-          ${hasPic ? `<label class="dsv2-label">Picture</label>
-          <div class="dsv2-ed-pic">
-            <input type="text" id="dsv2-ed-art" placeholder="Describe a new picture, or leave empty to keep it">
-            <label class="dsv2-btn" style="cursor:pointer;">Upload<input type="file" id="dsv2-ed-upload" accept="image/*" hidden></label>
-            <button type="button" class="dsv2-btn" id="dsv2-ed-lib">From Library</button>
-          </div>
-          ${medicalPic ? '<label class="dsv2-check"><input type="checkbox" id="dsv2-ed-sci"> Medical or scientific illustration (FigureLabs)</label>' : ''}
-          <div class="dsv2-hint" id="dsv2-ed-picnote">${picUrl ? 'Using your picture.' : ''}</div>` : ''}
-          <label class="dsv2-label" for="dsv2-ed-ai">Or ask AI to change it</label>
-          <textarea id="dsv2-ed-ai" rows="2" placeholder="e.g. make the headline shorter, or say it more warmly"></textarea>
-          <div class="dsv2-actions">
-            <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-go">Update slide</button>
-            <span class="dsv2-hint" id="dsv2-ed-status"></span>
+      return `<div class="dsv2-ed-field" data-field="${esc(slot[0])}">
+        <div class="dsv2-ed-picrow">
+          ${url ? `<img class="dsv2-ed-pic-now" src="${esc(url)}" alt="">` : '<span class="dsv2-ed-pic-now"></span>'}
+          <div style="flex:1;min-width:0;">
+            <div class="dsv2-ed-range"><label>Zoom</label><input type="range" min="1" max="2.5" step="0.05" value="${art.zoom}" data-art="zoom"></div>
+            <div class="dsv2-ed-range"><label>Left ↔ right</label><input type="range" min="0" max="100" step="1" value="${art.x}" data-art="x"></div>
+            <div class="dsv2-ed-range"><label>Up ↕ down</label><input type="range" min="0" max="100" step="1" value="${art.y}" data-art="y"></div>
           </div>
         </div>
+        <label class="dsv2-ed-sub">Replace it</label>
+        <div class="dsv2-row" style="gap:8px;">
+          <label class="dsv2-btn" style="cursor:pointer;">Upload<input type="file" id="dsv2-ed-upload" accept="image/*" hidden></label>
+          <button type="button" class="dsv2-btn" id="dsv2-ed-lib">From Library</button>
+          ${url ? `<button type="button" class="dsv2-btn" data-hide="${esc(slot[0])}">${(((draft.style || {}).slots || {})[slot[0]] || {}).hide ? 'Show picture' : 'Hide picture'}</button>` : ''}
+        </div>
+        <label class="dsv2-ed-sub" for="dsv2-ed-art">Or describe a new one (drawn when you save, 30–60 seconds)</label>
+        <input type="text" id="dsv2-ed-art" placeholder="e.g. a mug of chamomile tea on a kitchen table">
+        ${medicalPic ? '<label class="dsv2-check"><input type="checkbox" id="dsv2-ed-sci"> Medical or scientific illustration (FigureLabs)</label>' : ''}
       </div>`;
-      const q = (sel) => ov.querySelector(sel);
-      q('.dsv2-ed-close').addEventListener('click', close);
-      ov.querySelectorAll('textarea[data-slot]').forEach((ta) => {
+    }
+    function backgroundTab() {
+      return `<p class="dsv2-ed-note" style="color:rgba(255,255,255,0.6);margin-bottom:10px;">Background for this slide, from your brand colours.</p>${swatches('data-bg', (draft.style || {}).bg || '')}`;
+    }
+    function aiTab() {
+      return `<div class="dsv2-ed-chips">${QUICK_ASKS.map(([label, text]) => `<button type="button" class="dsv2-ed-chip" data-ask="${esc(text)}">${esc(label)}</button>`).join('')}</div>
+        <textarea id="dsv2-ed-ai" rows="3" placeholder="Tell AI what to change, e.g. swap the stat for the NHS figure, or add a line about seeing a GP"></textarea>
+        <div class="dsv2-actions" style="margin-top:10px;"><button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-ai-go">Apply with AI</button><span class="dsv2-hint">Rewrites this slide and saves it (about 10 seconds). Undo is one click.</span></div>`;
+    }
+
+    function drawPanel() {
+      const pattern = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+      const panel = q('.dsv2-ed-panel');
+      const tabs = [['text', 'Text'], ['layout', 'Layout'], ['picture', 'Picture'], ['background', 'Background'], ['ai', 'Ask AI']];
+      panel.innerHTML = `<div class="dsv2-ed-tabs" role="tablist">${tabs.map(([id, label]) => `<button type="button" role="tab" class="dsv2-ed-tab${tab === id ? ' is-on' : ''}" data-tab="${id}">${label}</button>`).join('')}</div>
+        <div class="dsv2-ed-tabbody">${tab === 'text' ? textTab(pattern) : tab === 'layout' ? layoutTab() : tab === 'picture' ? pictureTab(pattern) : tab === 'background' ? backgroundTab() : aiTab()}</div>`;
+      panel.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; drawPanel(); }));
+      panel.querySelectorAll('[data-slot]').forEach((f) => {
         const count = () => {
-          const max = Number(ta.dataset.max) || 0;
-          const tag = ov.querySelector(`[data-count="${ta.dataset.slot}"]`);
+          const max = Number(f.dataset.max) || 0;
+          const tag = panel.querySelector(`[data-count="${f.dataset.slot}"]`);
           if (!tag || !max) return;
-          const longest = ta.dataset.kind === 'list' ? Math.max(0, ...ta.value.split('\n').map((l) => l.replace(/\*/g, '').length)) : ta.value.replace(/\*/g, '').length;
+          const longest = f.dataset.kind === 'list' ? Math.max(0, ...f.value.split('\n').map((l) => l.replace(/\*/g, '').length)) : f.value.replace(/\*/g, '').length;
           tag.textContent = `${longest}/${max}`;
           tag.classList.toggle('is-over', longest > max);
         };
-        ta.addEventListener('input', count);
+        f.addEventListener('input', () => {
+          draft.slots[f.dataset.slot] = f.dataset.kind === 'list' ? f.value.split('\n').map((x) => x.trim()).filter(Boolean) : f.value;
+          count();
+          markDirty();
+        });
+        f.addEventListener('focus', () => { selected = f.dataset.slot; });
         count();
       });
-      const up = q('#dsv2-ed-upload');
+      panel.querySelectorAll('[data-size]').forEach((b) => b.addEventListener('click', () => {
+        const st = styleOf(b.dataset.name);
+        st.size = Math.max(-4, Math.min(6, (Number(st.size) || 0) + Number(b.dataset.size)));
+        if (!st.size) delete st.size;
+        markDirty();
+        drawPanel();
+      }));
+      panel.querySelectorAll('[data-align]').forEach((b) => b.addEventListener('click', () => {
+        const st = styleOf(b.dataset.name);
+        st.align = st.align === b.dataset.align ? undefined : b.dataset.align;
+        markDirty();
+        drawPanel();
+      }));
+      panel.querySelectorAll('[data-color]').forEach((b) => b.addEventListener('click', () => {
+        const st = styleOf(b.dataset.name);
+        st.color = b.dataset.color || undefined;
+        markDirty();
+        drawPanel();
+      }));
+      panel.querySelectorAll('[data-hide]').forEach((b) => b.addEventListener('click', () => {
+        const st = styleOf(b.dataset.hide);
+        st.hide = !st.hide || undefined;
+        markDirty();
+        drawPanel();
+      }));
+      panel.querySelectorAll('[data-bg]').forEach((b) => b.addEventListener('click', () => {
+        draft.style = draft.style || {};
+        draft.style.bg = b.dataset.bg || undefined;
+        markDirty();
+        drawPanel();
+      }));
+      panel.querySelectorAll('[data-layout]').forEach((b) => b.addEventListener('click', () => {
+        if (b.dataset.layout === draft.pattern) return;
+        draft = mapToLayout(patterns, draft, b.dataset.layout);
+        markDirty();
+        drawPanel();
+      }));
+      panel.querySelectorAll('[data-art]').forEach((r) => r.addEventListener('input', () => {
+        draft.style = draft.style || {};
+        draft.style.art = Object.assign({ zoom: 1, x: 50, y: 50 }, draft.style.art, { [r.dataset.art]: Number(r.value) });
+        markDirty();
+      }));
+      const setPic = (url) => {
+        const slot = Object.entries(pattern.slots || {}).find(([, sp]) => sp && sp.kind === 'image');
+        if (!slot || !url) return;
+        draft.slots[slot[0]] = url;
+        picUrl = url;
+        markDirty();
+        drawPanel();
+      };
+      const up = panel.querySelector('#dsv2-ed-upload');
       if (up) up.addEventListener('change', async (ev) => {
         const f = ev.target.files && ev.target.files[0];
         ev.target.value = '';
         if (!f) return;
-        q('#dsv2-ed-picnote').textContent = 'Uploading…';
-        try { picUrl = await uploadFile(f); q('#dsv2-ed-picnote').textContent = 'Using your picture.'; } catch (e) { q('#dsv2-ed-picnote').textContent = ''; toast(e.message, 'error'); }
+        try { setPic(await uploadFile(f)); } catch (e) { toast(e.message, 'error'); }
       });
-      const lib = q('#dsv2-ed-lib');
-      if (lib) lib.addEventListener('click', () => pickFromLibrary('Pick a picture', (urls) => {
-        if (urls[0]) { picUrl = urls[0]; q('#dsv2-ed-picnote').textContent = 'Using your picture.'; }
+      const lib = panel.querySelector('#dsv2-ed-lib');
+      if (lib) lib.addEventListener('click', () => pickFromLibrary('Pick a picture', (urls) => setPic(urls[0])));
+      const art = panel.querySelector('#dsv2-ed-art');
+      if (art) art.addEventListener('input', () => { if (art.value.trim()) markDirty(); });
+      panel.querySelectorAll('[data-ask]').forEach((b) => b.addEventListener('click', () => {
+        const ta = panel.querySelector('#dsv2-ed-ai');
+        const on = b.classList.toggle('is-on');
+        const lines = ta.value.split('\n').map((l) => l.trim()).filter((l) => l && l !== b.dataset.ask);
+        if (on) lines.push(b.dataset.ask);
+        ta.value = lines.join('\n');
       }));
-      const undo = q('#dsv2-ed-undo');
-      if (undo) undo.addEventListener('click', () => {
-        result.slides[i] = Object.assign({}, cur.prev);
-        saveEdited();
-        draw();
+      const aiGo = panel.querySelector('#dsv2-ed-ai-go');
+      if (aiGo) aiGo.addEventListener('click', () => {
+        const text = panel.querySelector('#dsv2-ed-ai').value.trim();
+        if (!text) { toast('Say what to change, or pick a quick option', 'info'); return; }
+        save({ instruction: text });
       });
-      q('#dsv2-ed-go').addEventListener('click', submit);
     }
 
-    function saveEdited() {
+    function drawStrip() {
+      const strip = q('.dsv2-ed-strip');
+      const n = result.slides.length;
+      strip.innerHTML = `<div class="dsv2-ed-thumbs">${result.slides.map((s, k) => `<button type="button" class="dsv2-ed-thumb${k === i ? ' is-on' : ''}" data-slide="${k}" aria-label="Slide ${k + 1}"><img src="${esc(s.url)}" alt="" style="aspect-ratio:${ratioCss()};"><span>${k + 1}</span></button>`).join('')}
+        ${n < 10 ? '<button type="button" class="dsv2-ed-thumb dsv2-ed-add" id="dsv2-ed-add" aria-label="Add a slide"><span class="dsv2-ed-plus">+</span><span>Add</span></button>' : ''}</div>
+        <div class="dsv2-ed-ops">
+          <button type="button" class="dsv2-btn" data-op="left"${i === 0 ? ' disabled' : ''}>◀ Move</button>
+          <button type="button" class="dsv2-btn" data-op="right"${i === n - 1 ? ' disabled' : ''}>Move ▶</button>
+          <button type="button" class="dsv2-btn" data-op="dup"${n >= 10 ? ' disabled' : ''}>Duplicate</button>
+          <button type="button" class="dsv2-btn" data-op="del"${n <= 1 ? ' disabled' : ''}>Delete</button>
+        </div>
+        <div class="dsv2-ed-addbox" id="dsv2-ed-addbox" hidden>
+          <input type="text" id="dsv2-ed-addtext" placeholder="What should the new slide say? e.g. when to see a GP">
+          <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-addgo">Write slide ${i + 2} with AI</button>
+        </div>`;
+      strip.querySelectorAll('[data-slide]').forEach((b) => b.addEventListener('click', () => moveTo(Number(b.dataset.slide))));
+      strip.querySelectorAll('[data-op]').forEach((b) => b.addEventListener('click', () => structure(b.dataset.op)));
+      const add = strip.querySelector('#dsv2-ed-add');
+      if (add) add.addEventListener('click', () => {
+        const box = strip.querySelector('#dsv2-ed-addbox');
+        box.hidden = !box.hidden;
+        if (!box.hidden) strip.querySelector('#dsv2-ed-addtext').focus();
+      });
+      const addGo = strip.querySelector('#dsv2-ed-addgo');
+      if (addGo) addGo.addEventListener('click', addSlide);
+    }
+
+    function draw() {
+      const cur = result.slides[i];
+      const n = result.slides.length;
+      ov.innerHTML = `<div class="dsv2-ed-box">
+        <div class="dsv2-ed-head">
+          <div><h3>Edit carousel <span>· slide ${i + 1} of ${n}</span></h3><p>Changes show live. Save to redraw the final slide.</p></div>
+          <button type="button" class="dsv2-ed-close" aria-label="Close">×</button>
+        </div>
+        <div class="dsv2-ed-body">
+          <div class="dsv2-ed-left">
+            <div class="dsv2-ed-stage" style="aspect-ratio:${ratioCss()};">
+              <img class="dsv2-ed-still" src="${esc(cur.url)}" alt="Slide ${i + 1}">
+              <iframe sandbox="allow-same-origin" title="Live preview" class="is-on" tabindex="-1"></iframe><iframe sandbox="allow-same-origin" title="Live preview" tabindex="-1"></iframe>
+              <span class="dsv2-ed-badge" id="dsv2-ed-badge">Live preview</span>
+            </div>
+            <div class="dsv2-ed-hist">
+              <button type="button" class="dsv2-btn" id="dsv2-ed-undo"${(cur.history || []).length ? '' : ' disabled'}>↶ Undo</button>
+              <button type="button" class="dsv2-btn" id="dsv2-ed-redo"${(cur.future || []).length ? '' : ' disabled'}>Redo ↷</button>
+              <button type="button" class="dsv2-link" id="dsv2-ed-reset">Discard changes</button>
+            </div>
+            ${warningsHtml(cur.issues)}
+          </div>
+          <div class="dsv2-ed-panel"></div>
+        </div>
+        <div class="dsv2-ed-strip"></div>
+        <div class="dsv2-ed-foot">
+          <span class="dsv2-hint" id="dsv2-ed-status"></span>
+          <div class="dsv2-row" style="gap:8px;">
+            <button type="button" class="dsv2-btn" id="dsv2-ed-done">Done</button>
+            <button type="button" class="dsv2-btn" id="dsv2-ed-save">Save slide</button>
+            ${i < n - 1 ? '<button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-next">Save &amp; next slide →</button>' : '<button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-finish">Save &amp; finish</button>'}
+          </div>
+        </div>
+      </div>`;
+      q('.dsv2-ed-close').addEventListener('click', close);
+      q('#dsv2-ed-done').addEventListener('click', close);
+      q('#dsv2-ed-save').addEventListener('click', () => save());
+      const nextBtn = q('#dsv2-ed-next');
+      if (nextBtn) nextBtn.addEventListener('click', async () => {
+        if (dirty || pendingArt()) { await save(); if (dirty) return; }
+        load(i + 1);
+        draw();
+      });
+      const finish = q('#dsv2-ed-finish');
+      if (finish) finish.addEventListener('click', async () => {
+        if (dirty || pendingArt()) { await save(); if (dirty) return; }
+        close();
+      });
+      q('#dsv2-ed-undo').addEventListener('click', () => history(-1));
+      q('#dsv2-ed-redo').addEventListener('click', () => history(1));
+      q('#dsv2-ed-reset').addEventListener('click', () => { load(i); draw(); });
+      drawPanel();
+      drawStrip();
+      renderPreview();
+    }
+
+    function pendingArt() {
+      const art = q('#dsv2-ed-art');
+      return !!(art && art.value.trim());
+    }
+
+    function persist() {
       const last = store.get('last');
-      if (last && last.title === result.title) store.set('last', Object.assign({}, result, { slides: result.slides.map((x) => Object.assign({}, x, { prev: x.prev ? Object.assign({}, x.prev, { prev: undefined }) : undefined })) }));
+      if (last && last.title === result.title) store.set('last', Object.assign({}, result));
       showResult(result, false);
     }
 
-    async function submit() {
+    function history(dir) {
+      if (busy) return;
       const cur = result.slides[i];
-      const q = (sel) => ov.querySelector(sel);
-      const slots = Object.assign({}, cur.slots);
-      ov.querySelectorAll('textarea[data-slot]').forEach((ta) => {
-        const v = ta.value.trim();
-        if (ta.dataset.kind === 'list') slots[ta.dataset.slot] = v.split('\n').map((x) => x.trim()).filter(Boolean);
-        else slots[ta.dataset.slot] = v;
-      });
-      const layout = q('#dsv2-ed-layout').value;
-      const pattern = (patterns.find((p) => p.id === layout) || {});
-      const ask = q('#dsv2-ed-ai').value.trim();
-      const artSubject = q('#dsv2-ed-art') ? q('#dsv2-ed-art').value.trim() : '';
-      if (picUrl) {
-        const name = Object.entries((patterns.find((p) => p.id === cur.pattern) || {}).slots || {}).find(([, sp]) => sp && sp.kind === 'image');
-        if (name) slots[name[0]] = picUrl;
-      }
-      const instructions = [];
-      if (layout !== cur.pattern) instructions.push(`Switch to the "${pattern.name || layout}" layout (pattern id ${layout}). Keep the same words, shortened only if they don't fit.`);
-      if (ask) instructions.push(ask);
+      const back = (cur.history || []).slice();
+      const fwd = (cur.future || []).slice();
+      const now = versionOf(cur);
+      let v;
+      if (dir < 0) { if (!back.length) return; v = back.pop(); fwd.push(now); }
+      else { if (!fwd.length) return; v = fwd.pop(); back.push(now); }
+      result.slides[i] = Object.assign({}, v, { history: back.slice(-10), future: fwd.slice(-10), critic: null });
+      persist();
+      load(i);
+      draw();
+    }
+
+    function setStatus(text, spin) {
+      const s = q('#dsv2-ed-status');
+      if (s) s.innerHTML = text ? `${spin ? '<span class="dsv2-spin"></span> ' : ''}${esc(text)}` : '';
+    }
+    function lock(on) {
+      busy = on;
+      const box = q('.dsv2-ed-box');
+      if (box) box.classList.toggle('dsv2-ed-busy', on);
+      ov.querySelectorAll('.dsv2-ed-foot button, .dsv2-ed-ops button').forEach((b) => { if (on) b.dataset.was = b.disabled ? '1' : ''; b.disabled = on ? true : b.dataset.was === '1'; });
+    }
+
+    async function save(extra = {}) {
+      if (busy) return;
+      const cur = result.slides[i];
+      const artInput = q('#dsv2-ed-art');
+      const artSubject = artInput ? artInput.value.trim() : '';
+      const sci = q('#dsv2-ed-sci');
+      if (!dirty && !artSubject && !extra.instruction) { setStatus('No changes to save.'); return; }
       const body = {
-        slide: { pattern: cur.pattern, slots },
+        slide: draft,
         index: i,
         total: result.slides.length,
-        instruction: instructions.join('\n') || undefined,
-        art_subject: picUrl ? undefined : artSubject || undefined,
-        scientific: !!(q('#dsv2-ed-sci') && q('#dsv2-ed-sci').checked && artSubject) || undefined,
+        instruction: extra.instruction || undefined,
+        art_subject: artSubject || undefined,
+        scientific: !!(sci && sci.checked && artSubject) || undefined,
         medical: result.medical === true ? true : undefined,
         research: result.medical ? result.research || '' : undefined,
         brief: result.brief || undefined,
       };
-      const form = q('.dsv2-ed-form');
-      const status = q('#dsv2-ed-status');
-      form.classList.add('dsv2-ed-busy');
-      status.textContent = body.instruction ? EDIT_STAGES.edit : body.art_subject ? EDIT_STAGES.art : EDIT_STAGES.render;
+      lock(true);
+      setStatus(body.instruction ? EDIT_STAGES.edit : body.art_subject ? EDIT_STAGES.art : EDIT_STAGES.render, true);
       try {
         const r = await call('POST', '/api/design/slide', body);
-        const out = await waitJob(r.job_id, (p) => { if (EDIT_STAGES[p.stage]) status.textContent = EDIT_STAGES[p.stage]; });
-        const prev = Object.assign({}, cur, { prev: undefined });
-        result.slides[i] = Object.assign({}, out.slide, { critic: null, prev });
-        picUrl = '';
-        saveEdited();
+        const out = await waitJob(r.job_id, (p) => { if (EDIT_STAGES[p.stage]) setStatus(EDIT_STAGES[p.stage], true); });
+        result.slides[i] = Object.assign({}, out.slide, { critic: null, history: (cur.history || []).concat([versionOf(cur)]).slice(-10), future: [] });
+        persist();
+        lock(false);
+        load(i);
         if (ov.isConnected) draw();
-        toast('Slide updated', 'success');
+        setStatus('Saved.');
+        toast('Slide saved', 'success');
       } catch (e) {
-        form.classList.remove('dsv2-ed-busy');
-        status.textContent = '';
-        toast(e.message || 'Edit failed', 'error');
+        lock(false);
+        setStatus('');
+        toast(e.message || 'Save failed', 'error');
+      }
+    }
+
+    async function renumber(note) {
+      lock(true);
+      setStatus(note, true);
+      try {
+        const r = await call('POST', '/api/design/slides/render', { slides: result.slides.map((s) => ({ pattern: s.pattern, slots: s.slots, style: s.style || {} })) });
+        const out = await waitJob(r.job_id);
+        out.slides.forEach((s, k) => { result.slides[k] = Object.assign({}, result.slides[k], { url: s.url, issues: s.issues }); });
+        setStatus('Page numbers updated.');
+      } catch (e) {
+        toast(`Slides moved, but page numbers did not update: ${e.message}`, 'error');
+        setStatus('');
+      }
+      lock(false);
+      persist();
+      if (ov.isConnected) draw();
+    }
+
+    async function structure(op) {
+      if (busy) return;
+      if (dirty && !window.confirm('Your unsaved changes to this slide will be lost. Continue?')) return;
+      const s = result.slides;
+      if (op === 'left' && i > 0) { [s[i - 1], s[i]] = [s[i], s[i - 1]]; load(i - 1); }
+      else if (op === 'right' && i < s.length - 1) { [s[i + 1], s[i]] = [s[i], s[i + 1]]; load(i + 1); }
+      else if (op === 'dup' && s.length < 10) { s.splice(i + 1, 0, Object.assign(versionOf(s[i]), { history: [], future: [] })); load(i + 1); }
+      else if (op === 'del' && s.length > 1) {
+        if (!window.confirm(`Delete slide ${i + 1}?`)) return;
+        s.splice(i, 1);
+        load(Math.min(i, s.length - 1));
+      } else return;
+      draw();
+      await renumber('Updating page numbers…');
+    }
+
+    async function addSlide() {
+      if (busy) return;
+      const text = (q('#dsv2-ed-addtext') || {}).value || '';
+      if (text.trim().length < 3) { toast('Say what the new slide should be about', 'info'); return; }
+      if (dirty && !window.confirm('Your unsaved changes to this slide will be lost. Continue?')) return;
+      const at = i + 1;
+      const context = result.slides.map((s, k) => `${k + 1}. ${Object.values(s.slots || {}).filter((v) => typeof v === 'string' && !/^https?:/.test(v)).join(' / ')}`).join('\n');
+      lock(true);
+      setStatus('Writing the new slide…', true);
+      try {
+        const r = await call('POST', '/api/design/slide', {
+          slide: { pattern: result.slides[i].pattern, slots: {} },
+          create: true,
+          instruction: text.trim(),
+          context,
+          index: at,
+          total: result.slides.length + 1,
+          medical: result.medical === true ? true : undefined,
+          research: result.medical ? result.research || '' : undefined,
+          brief: result.brief || undefined,
+        });
+        const out = await waitJob(r.job_id, (p) => { if (EDIT_STAGES[p.stage]) setStatus(p.stage === 'edit' ? 'Writing the new slide…' : EDIT_STAGES[p.stage], true); });
+        result.slides.splice(at, 0, Object.assign({}, out.slide, { critic: null, history: [], future: [] }));
+        lock(false);
+        load(at);
+        draw();
+        if (at < result.slides.length - 1) await renumber('Updating page numbers…');
+        else { persist(); setStatus('New slide added.'); }
+      } catch (e) {
+        lock(false);
+        setStatus('');
+        toast(e.message || 'Could not add the slide', 'error');
       }
     }
 
     ov.addEventListener('click', (ev) => { if (ev.target === ov) close(); });
     document.addEventListener('keydown', onKey);
-    draw();
+    load(i);
     document.body.appendChild(ov);
+    draw();
   }
 
   function lightbox(urls, start) {

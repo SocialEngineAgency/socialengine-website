@@ -38,6 +38,15 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
     if (entry.path === '/api/studio/upload-image') { uploads += 1; json(200, { url: `https://store.test/ex${uploads}.png` }); return 'handled'; }
     if (entry.path === '/api/design/system/build' && m === 'POST') { calls.push(['build', body()]); json(202, { ok: true, job_id: 'job-build' }); return 'handled'; }
     if (entry.path === '/api/design/slide' && m === 'POST') { calls.push(['slide', body()]); json(202, { ok: true, job_id: 'job-slide' }); return 'handled'; }
+    if (entry.path === '/api/design/slide/preview' && m === 'POST') {
+      const b = body();
+      calls.push(['preview', b]);
+      const sl = b.slide.slots || {};
+      const st = b.slide.style || {};
+      json(200, { ok: true, width: 1080, height: 1350, html: `<!doctype html><html><head><style>body{margin:0;width:1080px;height:1350px;background:${st.bg ? '#7C3AED' : '#fff'}}h1{font-size:90px}</style></head><body><h1 data-slot="title">${String(sl.title || sl.heading || '')}</h1><ul data-slot="points">${[].concat(sl.points || []).map((x) => `<li>${x}</li>`).join('')}</ul><img data-slot="art" src="${sl.art || ''}"></body></html>` });
+      return 'handled';
+    }
+    if (entry.path === '/api/design/slides/render' && m === 'POST') { calls.push(['renderAll', body()]); json(202, { ok: true, job_id: 'job-renderall' }); return 'handled'; }
     if (entry.path === '/api/design/carousel' && m === 'POST') { calls.push(['carousel', body()]); json(202, { ok: true, job_id: 'job-car' }); return 'handled'; }
     if (entry.path.startsWith('/api/design/jobs/')) {
       const id = entry.path.split('/').pop();
@@ -46,7 +55,13 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
       if (id === 'job-build') system = SYSTEM;
       if (id === 'job-slide') {
         const req = calls.filter((c) => c[0] === 'slide').pop()[1];
-        json(200, { ok: true, job: { id, status: 'done', result: { slide: { url: `${PNG}#edited${polls[id]}`, pattern: 'hook', slots: req.slide.slots, issues: [{ type: 'too_long', severity: 'soft', detail: 'title is 45 chars (max 40)' }] } } } });
+        const slots = req.create ? { title: 'When to see a GP' } : req.slide.slots;
+        json(200, { ok: true, job: { id, status: 'done', result: { slide: { url: `${PNG}#edited${calls.filter((c) => c[0] === 'slide').length}`, pattern: req.create ? 'hook' : req.slide.pattern, slots, style: req.slide.style || {}, issues: [{ type: 'too_long', severity: 'soft', detail: 'title is 45 chars (max 40)' }] } } } });
+        return 'handled';
+      }
+      if (id === 'job-renderall') {
+        const req = calls.filter((c) => c[0] === 'renderAll').pop()[1];
+        json(200, { ok: true, job: { id, status: 'done', result: { slides: req.slides.map((x, k) => ({ url: `${PNG}#renum${k + 1}-${x.slots.title || ''}`, issues: [] })) } } });
         return 'handled';
       }
       json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : RESULT } });
@@ -263,41 +278,109 @@ test('Progress updates in place between polls (no flicker)', async ({ page }) =>
   await expect(page.locator('#dsv2-make-status .dsv2-step.is-now')).toHaveText('Polish');
 });
 
-test('Edit a slide: typed text and AI change redraw only that slide, with undo and warnings', async ({ page }) => {
-  const errors = watchErrors(page);
-  const calls = [];
+
+async function openEditor(page, calls, slide = 1) {
   await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls }) });
   await login(page, srv.base);
   await page.evaluate(() => window.switchNav('brand-design'));
   await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
   await page.locator('#dsv2-go').click();
   await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
-
-  await page.locator('#dsv2-done [data-edit="1"]').click();
+  await page.locator(`#dsv2-done [data-edit="${slide}"]`).click();
   const ed = page.locator('.dsv2-ed');
-  await expect(ed).toContainText('Edit slide 2');
-  const title = ed.locator('textarea[data-slot="title"]');
-  await expect(title).toHaveValue('Title 2');
-  await title.fill('A much better *headline*');
-  await expect(ed.locator('[data-count="title"]')).toHaveText('22/40');
-  await ed.locator('#dsv2-ed-ai').fill('say it more warmly');
-  await ed.locator('#dsv2-ed-go').click();
-  await expect(ed.locator('.dsv2-ed-preview img')).toHaveAttribute('src', /#edited/);
-  await expect(ed).toContainText('title is 45 chars');
-  const sent = calls.find((c) => c[0] === 'slide')[1];
-  expect(sent).toMatchObject({ index: 1, total: 3, instruction: 'say it more warmly', slide: { pattern: 'hook', slots: { title: 'A much better *headline*', art: 'https://store.test/art.png' } } });
-  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /#edited/);
-  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(0)).toHaveAttribute('src', /#slide1$/);
+  await expect(ed).toContainText('slide 2 of 3');
+  return ed;
+}
+const liveFrame = (ed) => ed.locator('.dsv2-ed-stage iframe.is-on').contentFrame();
 
+test('Editor: live preview while typing, text styling, Save & next slide, undo/redo', async ({ page }) => {
+  const errors = watchErrors(page);
+  const calls = [];
+  const ed = await openEditor(page, calls);
+  await expect(liveFrame(ed).locator('h1')).toHaveText('Title 2');
+  const title = ed.locator('[data-slot="title"]');
+  const look = await title.evaluate((n) => { const c = getComputedStyle(n); return { color: c.color, bg: c.backgroundColor }; });
+  expect(look).toEqual({ color: 'rgb(248, 250, 252)', bg: 'rgb(10, 15, 30)' });
+  await expect(ed.locator('label[for="dsv2-ed-f-title"]')).toContainText('Headline');
+
+  await title.fill('Live headline');
+  await expect(liveFrame(ed).locator('h1')).toHaveText('Live headline');
+  await expect(ed.locator('#dsv2-ed-badge')).toHaveText('Unsaved changes');
+  expect(calls.filter((c) => c[0] === 'slide')).toHaveLength(0);
+
+  await ed.locator('[data-size="1"][data-name="title"]').click();
+  await ed.locator('[data-size="1"][data-name="title"]').click();
+  await expect(ed.locator('[data-field="title"] .dsv2-ed-seg span')).toHaveText('120%');
+  await ed.locator('[data-align="left"][data-name="title"]').click();
+  await ed.locator('[data-color="primary"][data-name="title"]').click();
+  await expect.poll(() => (calls.filter((c) => c[0] === 'preview').pop() || [0, {}])[1].slide?.style?.slots?.title).toEqual({ size: 2, align: 'left', color: 'primary' });
+
+  await ed.locator('#dsv2-ed-next').click();
+  await expect(ed).toContainText('slide 3 of 3');
+  const saved = calls.find((c) => c[0] === 'slide')[1];
+  expect(saved).toMatchObject({ index: 1, total: 3, slide: { pattern: 'hook', slots: { title: 'Live headline' }, style: { slots: { title: { size: 2, align: 'left', color: 'primary' } } } } });
+  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /#edited1$/);
+  await expect(ed.locator('#dsv2-ed-finish')).toBeVisible();
+
+  await ed.locator('.dsv2-ed-thumb[data-slide="1"]').click();
+  await expect(ed).toContainText('slide 2 of 3');
   await ed.locator('#dsv2-ed-undo').click();
-  await expect(ed.locator('.dsv2-ed-preview img')).toHaveAttribute('src', /#slide2$/);
   await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /#slide2$/);
-
-  await ed.locator('#dsv2-ed-layout').selectOption('list');
-  await ed.locator('#dsv2-ed-go').click();
-  await expect.poll(() => calls.filter((c) => c[0] === 'slide').length).toBe(2);
-  expect(calls.filter((c) => c[0] === 'slide')[1][1].instruction).toMatch(/Switch to the "Checklist" layout/);
-  await page.keyboard.press('Escape');
-  await expect(ed).toHaveCount(0);
+  await expect(ed.locator('[data-slot="title"]')).toHaveValue('Title 2');
+  await ed.locator('#dsv2-ed-redo').click();
+  await expect(ed.locator('[data-slot="title"]')).toHaveValue('Live headline');
   expect(errors).toEqual([]);
+});
+
+test('Editor: click text on the slide to select it; layout switch keeps the words; background and picture controls preview live', async ({ page }) => {
+  const calls = [];
+  const ed = await openEditor(page, calls);
+  await ed.locator('[data-tab="background"]').click();
+  await liveFrame(ed).locator('h1').click();
+  await expect(ed.locator('.dsv2-ed-tab.is-on')).toHaveText('Text');
+  await expect(ed.locator('[data-field="title"]')).toHaveClass(/is-sel/);
+  await expect(ed.locator('[data-slot="title"]')).toBeFocused();
+
+  await ed.locator('[data-tab="layout"]').click();
+  await ed.locator('[data-layout="list"]').click();
+  await ed.locator('[data-tab="text"]').click();
+  await expect(ed.locator('[data-slot="heading"]')).toHaveValue('Title 2');
+  await expect(liveFrame(ed).locator('h1')).toHaveText('Title 2');
+
+  await ed.locator('[data-tab="background"]').click();
+  await ed.locator('[data-bg="primary"]').click();
+  await expect.poll(() => (calls.filter((c) => c[0] === 'preview').pop() || [0, {}])[1].slide?.style?.bg).toBe('primary');
+
+  await ed.locator('[data-tab="layout"]').click();
+  await ed.locator('[data-layout="hook"]').click();
+  await ed.locator('[data-tab="picture"]').click();
+  await ed.locator('[data-art="zoom"]').fill('1.5');
+  await expect.poll(() => (calls.filter((c) => c[0] === 'preview').pop() || [0, {}])[1].slide?.style?.art?.zoom).toBe(1.5);
+});
+
+test('Editor: move, delete and add slides; page numbers re-render in the new order', async ({ page }) => {
+  const calls = [];
+  const ed = await openEditor(page, calls);
+  page.on('dialog', (d) => d.accept());
+  await ed.locator('[data-op="right"]').click();
+  await expect(ed).toContainText('slide 3 of 3');
+  await expect.poll(() => calls.filter((c) => c[0] === 'renderAll').length).toBe(1);
+  expect(calls.find((c) => c[0] === 'renderAll')[1].slides.map((x) => x.slots.title)).toEqual(['Title 1', 'Title 3', 'Title 2']);
+  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(2)).toHaveAttribute('src', /#renum3-Title 2$/);
+
+  await ed.locator('[data-op="del"]').click();
+  await expect(ed).toContainText('slide 2 of 2');
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(2);
+
+  await ed.locator('.dsv2-ed-thumb[data-slide="0"]').click();
+  await ed.locator('#dsv2-ed-add').click();
+  await ed.locator('#dsv2-ed-addtext').fill('when to see a GP');
+  await ed.locator('#dsv2-ed-addgo').click();
+  await expect(ed).toContainText('slide 2 of 3');
+  const made = calls.filter((c) => c[0] === 'slide').pop()[1];
+  expect(made).toMatchObject({ create: true, instruction: 'when to see a GP', index: 1, total: 3 });
+  expect(made.context).toMatch(/1\. Title 1/);
+  await expect(ed.locator('[data-slot="title"]')).toHaveValue('When to see a GP');
+  await expect.poll(() => calls.filter((c) => c[0] === 'renderAll').length).toBe(3);
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3);
 });
