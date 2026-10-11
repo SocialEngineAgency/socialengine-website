@@ -19,10 +19,11 @@
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
   <script src="./animation-studio.js?v=20261010-music-3min" defer></script>
-  <script src="./analytics-cockpit.js?v=20260818-actions" defer></script>
+  <script src="./analytics-cockpit.js?v=20261010-verdicts" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
   <script src="./stories-composer.js?v=20261009" defer></script>
+  <script src="./marketing-playbook.js?v=20261010" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -9850,6 +9851,7 @@
       if (!panel || panel.querySelector('#se-brand-worksheet')) return;
       panel.insertAdjacentHTML('afterbegin', seBrandWorksheetCardHtml(clientData));
       if (typeof window.seMountWorksheetSuggest === 'function') window.seMountWorksheetSuggest(panel);
+      if (typeof window.seMountFunnel === 'function') window.seMountFunnel(panel);
       const range = panel.querySelector('#se-bw-formality');
       range?.addEventListener('input', () => {
         const lab = panel.querySelector('#se-bw-formality-val');
@@ -12935,6 +12937,9 @@
               <button id="inbox-refresh-btn" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.7);font-size:0.8rem;font-weight:500;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='#fff';" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='rgba(148,163,184,0.7)';">
                 <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh
               </button>
+              <button id="inbox-questions-btn" title="The questions customers keep asking, grouped from your comments and DMs" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.08);color:#C4B5FD;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">
+                <i data-lucide="messages-square" style="width:14px;height:14px;"></i> What customers ask
+              </button>
               <button id="inbox-settings-btn" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.7);font-size:0.8rem;font-weight:500;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='#fff';" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='rgba(148,163,184,0.7)';">
                 <i data-lucide="settings" style="width:14px;height:14px;"></i> Auto-Reply Settings
               </button>
@@ -12997,6 +13002,9 @@
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
 
       // Wire Auto-Reply Settings + Refresh immediately (before data loads)
+      document.getElementById('inbox-questions-btn')?.addEventListener('click', () => {
+        if (typeof window.seOpenQuestionLog === 'function') window.seOpenQuestionLog({ getItems: () => window.__seInboxItems || [] });
+      });
       const _settingsBtn = document.getElementById('inbox-settings-btn');
       if (_settingsBtn) {
         _settingsBtn.addEventListener('click', () => {
@@ -13225,6 +13233,7 @@
 
       function renderInboxItems(data) {
         const items = data.items || [];
+        window.__seInboxItems = items;
         const unreplied = data.unreplied || 0;
         const total = data.total || 0;
         const comments = items.filter(i => i.type === 'comment');
