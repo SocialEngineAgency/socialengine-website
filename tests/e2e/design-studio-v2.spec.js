@@ -20,7 +20,7 @@ const RESULT = {
   sources: ['https://www.nhs.uk/conditions/heartburn-and-acid-reflux/'],
 };
 
-function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical = 'off', classify = false }) {
+function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical = 'off', classify = false, runningPolls = 1 }) {
   let system = hasSystem ? SYSTEM : null;
   let settings = { medical };
   let uploads = 0;
@@ -38,7 +38,7 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
     if (entry.path.startsWith('/api/design/jobs/')) {
       const id = entry.path.split('/').pop();
       polls[id] = (polls[id] || 0) + 1;
-      if (polls[id] === 1) { json(200, { ok: true, job: { id, status: 'running', progress: { stage: id === 'job-build' ? 'review' : 'critic', round: 1 } } }); return 'handled'; }
+      if (polls[id] <= runningPolls) { json(200, { ok: true, job: { id, status: 'running', progress: polls[id] === 1 ? { stage: id === 'job-build' ? 'review' : 'critic', round: 1 } : { stage: 'fix', round: 1, slides: [2] } } }); return 'handled'; }
       if (id === 'job-build') system = SYSTEM;
       json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : RESULT } });
       return 'handled';
@@ -196,11 +196,11 @@ test('Medical accuracy: setting saves, "ask" checks the topic and asks; the answ
   await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls, figurelabs: true, medical: 'ask', classify: true }) });
   await login(page, srv.base);
   await page.evaluate(() => window.switchNav('brand-design'));
-  await expect(page.locator('#dsv2-medical-chip')).toContainText('asks for medical topics');
+  await expect(page.locator('#dsv2-medical-chip')).toContainText('asks for medical or scientific topics');
   await page.locator('#dsv2-brief').fill("Barrett's oesophagus: what it is and when to see a GP");
   await page.locator('#dsv2-go').click();
   const ask = page.locator('#dsv2-medical-ask');
-  await expect(ask).toContainText('This looks like a medical topic');
+  await expect(ask).toContainText('This looks like a medical or scientific topic');
   expect(calls.filter((c) => c[0] === 'carousel')).toHaveLength(0);
   await ask.locator('[data-medical="yes"]').click();
   await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
@@ -225,7 +225,7 @@ test('Medical accuracy: Coach "ask" handoff asks instead of auto-starting', asyn
   await page.fill('#chat-input', "carousel on Barrett's");
   await page.click('#chat-send');
   await page.locator('.coach-action-btn[data-type="design_carousel"]').click();
-  await expect(page.locator('#dsv2-medical-ask')).toContainText('This looks like a medical topic');
+  await expect(page.locator('#dsv2-medical-ask')).toContainText('This looks like a medical or scientific topic');
   expect(calls.filter((c) => c[0] === 'classify' || c[0] === 'carousel')).toHaveLength(0);
   await page.locator('#dsv2-medical-ask [data-medical="no"]').click();
   await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
@@ -239,4 +239,17 @@ test('Medical accuracy setting is not shown for brands without FigureLabs', asyn
   await expect(page.locator('#dsv2-make')).toBeVisible();
   await expect(page.locator('#dsv2-medical')).toHaveCount(0);
   await expect(page.locator('#dsv2-medical-chip')).toBeEmpty();
+});
+
+test('Progress updates in place between polls (no flicker)', async ({ page }) => {
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls: [], runningPolls: 2 }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
+  await page.locator('#dsv2-go').click();
+  await expect(page.locator('#dsv2-make-status')).toContainText('Creative director review');
+  await page.evaluate(() => { document.querySelector('#dsv2-make-status .dsv2-progress').dataset.marker = 'same'; });
+  await expect(page.locator('#dsv2-make-status')).toContainText('Fixing weak slides (round 1, slide 2)', { timeout: 10000 });
+  await expect(page.locator('#dsv2-make-status .dsv2-progress')).toHaveAttribute('data-marker', 'same');
+  await expect(page.locator('#dsv2-make-status .dsv2-step.is-now')).toHaveText('Polish');
 });
