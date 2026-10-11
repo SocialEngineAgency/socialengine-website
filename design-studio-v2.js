@@ -158,6 +158,21 @@
       .dsv2-slide img { width:100%; display:block; border-radius:11px; border:1px solid rgba(255,255,255,0.08); background:#0B0F1A; transition:transform .2s; }
       .dsv2-slide button:hover img { transform:scale(1.02); }
       .dsv2-slide-meta { font-size:0.68rem; color:rgba(255,255,255,0.55); margin-top:6px; line-height:1.45; }
+      .dsv2-slide-meta .dsv2-link { font-size:0.72rem; margin-right:6px; }
+      .dsv2-ed { position:fixed; inset:0; z-index:10000; background:rgba(3,6,14,0.88); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:24px; }
+      .dsv2-ed-box { background:#141A2A; border:1px solid rgba(255,255,255,0.1); border-radius:16px; width:min(1040px,100%); max-height:100%; overflow:auto; display:grid; grid-template-columns:minmax(220px,380px) 1fr; gap:22px; padding:22px; position:relative; }
+      .dsv2-ed-preview img { width:100%; display:block; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:#0B0F1A; }
+      .dsv2-ed-preview .dsv2-row { margin-top:10px; }
+      .dsv2-ed-form h3 { margin:0 0 4px; }
+      .dsv2-ed-form textarea { min-height:52px; }
+      .dsv2-ed-count { float:right; font-weight:500; text-transform:none; letter-spacing:0; color:rgba(255,255,255,0.45); }
+      .dsv2-ed-count.is-over { color:#FCA5A5; }
+      .dsv2-ed-close { position:absolute; right:12px; top:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; }
+      .dsv2-ed-pic { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+      .dsv2-ed-pic input[type=text] { flex:1; min-width:200px; }
+      .dsv2-ed-warn { margin-top:10px; font-size:0.78rem; color:#FCD34D; line-height:1.45; }
+      .dsv2-ed-busy { opacity:0.45; pointer-events:none; }
+      @media (max-width: 760px) { .dsv2-ed-box { grid-template-columns:1fr; } .dsv2-ed { padding:8px; } }
       .dsv2-score { font-weight:700; color:#6EE7B7; }
       .dsv2-score--low { color:#FBBF24; }
       .dsv2-sources { margin-top:6px; }
@@ -689,7 +704,7 @@
         const score = Number(c.score) || 0;
         const notes = (c.problems || []).slice(0, 2).join('; ');
         return `<figure class="dsv2-slide"><button type="button" data-open="${i}" aria-label="View slide ${i + 1}"><img src="${esc(s.url)}" alt="Slide ${i + 1}" loading="lazy" style="aspect-ratio:${ratio};object-fit:cover;"></button>
-          <figcaption class="dsv2-slide-meta">Slide ${i + 1}${score ? ` · review <span class="dsv2-score${score < 4 ? ' dsv2-score--low' : ''}">${score}/5</span>` : ''}${notes ? `<br>${esc(notes)}` : ''}</figcaption></figure>`;
+          <figcaption class="dsv2-slide-meta"><button type="button" class="dsv2-link" data-edit="${i}">Edit</button>Slide ${i + 1}${score ? ` · review <span class="dsv2-score${score < 4 ? ' dsv2-score--low' : ''}">${score}/5</span>` : ''}${notes ? `<br>${esc(notes)}` : ''}</figcaption></figure>`;
       }).join('')}</div>
       <label class="dsv2-label" for="dsv2-caption">Caption</label>
       <textarea id="dsv2-caption" style="min-height:130px;">${esc(captionWithTags(result))}</textarea>
@@ -697,9 +712,189 @@
     </div>`;
     const urls = slides.map((s) => s.url);
     box.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => lightbox(urls, Number(b.dataset.open))));
+    box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editSlide(result, result.slides.indexOf(slides[Number(b.dataset.edit)]))));
     el('dsv2-zip').addEventListener('click', () => downloadZip(urls));
     el('dsv2-queue').addEventListener('click', () => queue(urls, result));
     if (scroll) reveal(box.firstElementChild);
+  }
+
+  function waitJob(id, onProgress) {
+    return new Promise((resolve, reject) => {
+      const tick = async () => {
+        try {
+          const job = (await call('GET', `/api/design/jobs/${encodeURIComponent(id)}`)).job;
+          if (job.status === 'done') return resolve(job.result);
+          if (job.status === 'failed') return reject(new Error(job.error || 'Edit failed. Try again.'));
+          if (onProgress) onProgress(job.progress || {});
+        } catch (e) {
+          if (/not found/i.test(e.message)) return reject(e);
+        }
+        setTimeout(tick, 2000);
+      };
+      tick();
+    });
+  }
+
+  const EDIT_STAGES = { edit: 'Rewriting with AI…', art: 'Drawing the new picture (about 30–60 seconds)…', render: 'Redrawing the slide…' };
+
+  function warningsHtml(issues) {
+    const list = (issues || []).filter((x) => x.severity === 'hard' || x.type === 'too_long' || x.type === 'unsourced_number');
+    return list.length ? `<div class="dsv2-ed-warn">${list.slice(0, 4).map((x) => `⚠ ${esc(x.detail || x.type)}`).join('<br>')}</div>` : '';
+  }
+
+  function editSlide(result, i) {
+    const sys = (state.info && state.info.system) || {};
+    const patterns = sys.patterns || [];
+    const slide = result.slides[i];
+    if (!slide || !slide.slots) { toast('This slide was made before editing existed. Make the carousel again to edit it.', 'info'); return; }
+    const total = result.slides.length;
+    const ov = document.createElement('div');
+    ov.className = 'dsv2-ed';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    let picUrl = '';
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    function onKey(ev) { if (ev.key === 'Escape') close(); }
+
+    function draw() {
+      const cur = result.slides[i];
+      const pattern = patterns.find((p) => p.id === cur.pattern) || { slots: {} };
+      const fields = Object.entries(pattern.slots || {}).filter(([, sp]) => sp && sp.kind !== 'image');
+      const hasPic = Object.values(pattern.slots || {}).some((sp) => sp && sp.kind === 'image');
+      const medicalPic = result.medical && state.info && state.info.figurelabs;
+      ov.innerHTML = `<div class="dsv2-ed-box">
+        <button type="button" class="dsv2-ed-close" aria-label="Close">×</button>
+        <div class="dsv2-ed-preview">
+          <img src="${esc(cur.url)}" alt="Slide ${i + 1}" style="aspect-ratio:${ratioCss()};object-fit:cover;">
+          <div class="dsv2-row" style="justify-content:space-between;">
+            <span class="dsv2-hint">Slide ${i + 1} of ${total}</span>
+            ${cur.prev ? '<button type="button" class="dsv2-link" id="dsv2-ed-undo">Undo last change</button>' : ''}
+          </div>
+          ${warningsHtml(cur.issues)}
+        </div>
+        <div class="dsv2-ed-form">
+          <h3>Edit slide ${i + 1}</h3>
+          <p class="dsv2-sub" style="margin:0 0 6px;">Only this slide is redrawn. Wrap a word in *stars* to highlight it.</p>
+          <label class="dsv2-label" for="dsv2-ed-layout">Layout</label>
+          <select id="dsv2-ed-layout">${patterns.map((p) => `<option value="${esc(p.id)}"${p.id === cur.pattern ? ' selected' : ''}>${esc(p.name || p.id)}</option>`).join('')}</select>
+          ${fields.map(([name, sp]) => {
+            const v = cur.slots[name];
+            const text = sp.kind === 'list' ? (Array.isArray(v) ? v : String(v || '').split('\n')).join('\n') : String(v || '');
+            return `<label class="dsv2-label" for="dsv2-ed-f-${esc(name)}">${esc(name.replace(/_/g, ' '))}${sp.kind === 'list' ? ' (one per line)' : ''}<span class="dsv2-ed-count" data-count="${esc(name)}"></span></label>
+              <textarea id="dsv2-ed-f-${esc(name)}" data-slot="${esc(name)}" data-kind="${esc(sp.kind)}" data-max="${Number(sp.max_chars) || 0}" rows="${sp.kind === 'list' ? 4 : 2}">${esc(text)}</textarea>`;
+          }).join('')}
+          ${hasPic ? `<label class="dsv2-label">Picture</label>
+          <div class="dsv2-ed-pic">
+            <input type="text" id="dsv2-ed-art" placeholder="Describe a new picture, or leave empty to keep it">
+            <label class="dsv2-btn" style="cursor:pointer;">Upload<input type="file" id="dsv2-ed-upload" accept="image/*" hidden></label>
+            <button type="button" class="dsv2-btn" id="dsv2-ed-lib">From Library</button>
+          </div>
+          ${medicalPic ? '<label class="dsv2-check"><input type="checkbox" id="dsv2-ed-sci"> Medical or scientific illustration (FigureLabs)</label>' : ''}
+          <div class="dsv2-hint" id="dsv2-ed-picnote">${picUrl ? 'Using your picture.' : ''}</div>` : ''}
+          <label class="dsv2-label" for="dsv2-ed-ai">Or ask AI to change it</label>
+          <textarea id="dsv2-ed-ai" rows="2" placeholder="e.g. make the headline shorter, or say it more warmly"></textarea>
+          <div class="dsv2-actions">
+            <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-go">Update slide</button>
+            <span class="dsv2-hint" id="dsv2-ed-status"></span>
+          </div>
+        </div>
+      </div>`;
+      const q = (sel) => ov.querySelector(sel);
+      q('.dsv2-ed-close').addEventListener('click', close);
+      ov.querySelectorAll('textarea[data-slot]').forEach((ta) => {
+        const count = () => {
+          const max = Number(ta.dataset.max) || 0;
+          const tag = ov.querySelector(`[data-count="${ta.dataset.slot}"]`);
+          if (!tag || !max) return;
+          const longest = ta.dataset.kind === 'list' ? Math.max(0, ...ta.value.split('\n').map((l) => l.replace(/\*/g, '').length)) : ta.value.replace(/\*/g, '').length;
+          tag.textContent = `${longest}/${max}`;
+          tag.classList.toggle('is-over', longest > max);
+        };
+        ta.addEventListener('input', count);
+        count();
+      });
+      const up = q('#dsv2-ed-upload');
+      if (up) up.addEventListener('change', async (ev) => {
+        const f = ev.target.files && ev.target.files[0];
+        ev.target.value = '';
+        if (!f) return;
+        q('#dsv2-ed-picnote').textContent = 'Uploading…';
+        try { picUrl = await uploadFile(f); q('#dsv2-ed-picnote').textContent = 'Using your picture.'; } catch (e) { q('#dsv2-ed-picnote').textContent = ''; toast(e.message, 'error'); }
+      });
+      const lib = q('#dsv2-ed-lib');
+      if (lib) lib.addEventListener('click', () => pickFromLibrary('Pick a picture', (urls) => {
+        if (urls[0]) { picUrl = urls[0]; q('#dsv2-ed-picnote').textContent = 'Using your picture.'; }
+      }));
+      const undo = q('#dsv2-ed-undo');
+      if (undo) undo.addEventListener('click', () => {
+        result.slides[i] = Object.assign({}, cur.prev);
+        saveEdited();
+        draw();
+      });
+      q('#dsv2-ed-go').addEventListener('click', submit);
+    }
+
+    function saveEdited() {
+      const last = store.get('last');
+      if (last && last.title === result.title) store.set('last', Object.assign({}, result, { slides: result.slides.map((x) => Object.assign({}, x, { prev: x.prev ? Object.assign({}, x.prev, { prev: undefined }) : undefined })) }));
+      showResult(result, false);
+    }
+
+    async function submit() {
+      const cur = result.slides[i];
+      const q = (sel) => ov.querySelector(sel);
+      const slots = Object.assign({}, cur.slots);
+      ov.querySelectorAll('textarea[data-slot]').forEach((ta) => {
+        const v = ta.value.trim();
+        if (ta.dataset.kind === 'list') slots[ta.dataset.slot] = v.split('\n').map((x) => x.trim()).filter(Boolean);
+        else slots[ta.dataset.slot] = v;
+      });
+      const layout = q('#dsv2-ed-layout').value;
+      const pattern = (patterns.find((p) => p.id === layout) || {});
+      const ask = q('#dsv2-ed-ai').value.trim();
+      const artSubject = q('#dsv2-ed-art') ? q('#dsv2-ed-art').value.trim() : '';
+      if (picUrl) {
+        const name = Object.entries((patterns.find((p) => p.id === cur.pattern) || {}).slots || {}).find(([, sp]) => sp && sp.kind === 'image');
+        if (name) slots[name[0]] = picUrl;
+      }
+      const instructions = [];
+      if (layout !== cur.pattern) instructions.push(`Switch to the "${pattern.name || layout}" layout (pattern id ${layout}). Keep the same words, shortened only if they don't fit.`);
+      if (ask) instructions.push(ask);
+      const body = {
+        slide: { pattern: cur.pattern, slots },
+        index: i,
+        total: result.slides.length,
+        instruction: instructions.join('\n') || undefined,
+        art_subject: picUrl ? undefined : artSubject || undefined,
+        scientific: !!(q('#dsv2-ed-sci') && q('#dsv2-ed-sci').checked && artSubject) || undefined,
+        medical: result.medical === true ? true : undefined,
+        research: result.medical ? result.research || '' : undefined,
+        brief: result.brief || undefined,
+      };
+      const form = q('.dsv2-ed-form');
+      const status = q('#dsv2-ed-status');
+      form.classList.add('dsv2-ed-busy');
+      status.textContent = body.instruction ? EDIT_STAGES.edit : body.art_subject ? EDIT_STAGES.art : EDIT_STAGES.render;
+      try {
+        const r = await call('POST', '/api/design/slide', body);
+        const out = await waitJob(r.job_id, (p) => { if (EDIT_STAGES[p.stage]) status.textContent = EDIT_STAGES[p.stage]; });
+        const prev = Object.assign({}, cur, { prev: undefined });
+        result.slides[i] = Object.assign({}, out.slide, { critic: null, prev });
+        picUrl = '';
+        saveEdited();
+        if (ov.isConnected) draw();
+        toast('Slide updated', 'success');
+      } catch (e) {
+        form.classList.remove('dsv2-ed-busy');
+        status.textContent = '';
+        toast(e.message || 'Edit failed', 'error');
+      }
+    }
+
+    ov.addEventListener('click', (ev) => { if (ev.target === ov) close(); });
+    document.addEventListener('keydown', onKey);
+    draw();
+    document.body.appendChild(ov);
   }
 
   function lightbox(urls, start) {
