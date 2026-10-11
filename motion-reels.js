@@ -131,7 +131,7 @@
     function facelessHtml(o) {
       const fl = o.faceless || {};
       const footageOpts = [
-        fl.stock ? '<option value="stock">Stock video clips (free, from Pexels)</option>' : '',
+        fl.stock ? `<option value="stock">Stock video clips (free, from ${esc(fl.stock_source || 'Pexels')})</option>` : '',
         `<option value="library" ${fl.library_media ? '' : 'disabled'}>My Library photos and videos (${esc(fl.library_media || 0)})</option>`,
       ].join('');
       return `${!fl.enabled ? '<div class="mr-note">Voiceover Reels are being switched on. Try again shortly.</div>' : ''}
@@ -141,6 +141,7 @@
         <div class="mr-row" style="margin-top:6px"><button type="button" class="mr-btn" id="mr-script">Write the script for me</button><span class="mr-hint">About 20 to 30 seconds spoken.</span></div>
         <label class="mr-label" for="mr-footage">Footage</label>
         <select class="mr-select" id="mr-footage">${footageOpts}</select>
+        ${fl.stock_source === 'Pixabay' ? '<div class="mr-hint" id="mr-stock-credit">Stock clips from <a href="https://pixabay.com/" target="_blank" rel="noopener noreferrer">Pixabay</a>.</div>' : ''}
         <span class="mr-label">Script, one line per scene</span>
         <div id="mr-scenes"></div>
         <button type="button" class="mr-btn" id="mr-scene-add" style="margin-top:4px">+ Add line</button>`;

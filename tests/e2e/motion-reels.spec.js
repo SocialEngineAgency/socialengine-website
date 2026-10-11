@@ -73,7 +73,7 @@ test('Voiceover + footage tab: writes the script, edits scenes and footage words
     data,
     onRequest: async (entry, route, json) => {
       if (entry.path === '/api/motion/options') {
-        json(200, { ...OPTIONS, faceless: { enabled: true, stock: true, library_media: 2, daily_cap: 5, used_today: 1 } });
+        json(200, { ...OPTIONS, faceless: { enabled: true, stock: true, stock_source: 'Pixabay', library_media: 2, daily_cap: 5, used_today: 1 } });
         return 'handled';
       }
       if (entry.path === '/api/motion/faceless/script') {
@@ -95,6 +95,8 @@ test('Voiceover + footage tab: writes the script, edits scenes and footage words
   await page.locator('.mr-attach').first().click();
   await page.click('.mr-tab[data-mode="faceless"]');
   await expect(page.locator('#mr-cap')).toHaveText('1 of 5 used today');
+  await expect(page.locator('#mr-footage option[value="stock"]')).toHaveText('Stock video clips (free, from Pixabay)');
+  await expect(page.locator('#mr-stock-credit a')).toHaveAttribute('href', 'https://pixabay.com/');
   await expect(page.locator('input[data-scene-line="0"]')).toHaveValue('Most people wash linen wrong.');
   expect(scripts[0].text).toContain('Why linen should never go in a hot wash.');
   await page.locator('input[data-scene-search="1"]').fill('kettle boiling');
