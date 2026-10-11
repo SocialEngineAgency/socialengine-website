@@ -43,6 +43,7 @@ const ALLOWLIST = [
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'carousel-templates.js', // portal.html
+  'design-studio-v2.js', // portal.html
   'claude-studio.js', // portal.html
   'design-workspace.js', // portal.html — Post save/archive/template helpers
   'design-scene.js', // portal.html — carousel template scene graph

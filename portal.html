@@ -15,7 +15,8 @@
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
-  <script src="./claude-studio.js?v=20261010-diagram" defer></script>
+  <script src="./claude-studio.js?v=20261011-design" defer></script>
+  <script src="./design-studio-v2.js?v=20261011" defer></script>
   <script src="./portal-assets.js?v=20260929-style"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
   <script src="./animation-studio.js?v=20261010-music-3min" defer></script>
@@ -3293,6 +3294,7 @@
         <div class="create-segments" id="create-segments" role="tablist" aria-label="Create mode" hidden>
           <button type="button" class="create-seg active" role="tab" data-segment="creation-studio" aria-selected="true">Video</button>
           <button type="button" class="create-seg" role="tab" data-segment="design-studio" aria-selected="false">Post</button>
+          <button type="button" class="create-seg" role="tab" data-segment="brand-design" aria-selected="false">Design</button>
           <button type="button" class="create-seg" role="tab" data-segment="animation-studio" aria-selected="false">Animate</button>
         </div>
 
@@ -6647,6 +6649,7 @@
         (window.openClaudeDesignStudio || window.renderClaudeStudio)();
       }
       else if (activeNav === 'animation-studio' && typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
+      else if (activeNav === 'brand-design' && window.seDesignStudio) window.seDesignStudio.render(document.getElementById('dash-content'));
       else if (activeNav === 'ad-studio') renderAdStudio();
       else if (activeNav === 'ai-studio') renderAIStudio();
       else if (activeNav === 'inbox') renderInbox();
@@ -6736,6 +6739,7 @@
         'create': 'Video, Post, or Animate — pick a mode and make something',
         'creation-studio': 'Upload or generate video — music, caption, queue',
         'design-studio': 'Still posts and carousels — brand locked, stage first',
+        'brand-design': 'Carousels designed in your exact brand style',
         'animation-studio': 'Multi-shot reels — canvas + agent',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'inbox': 'Comments, DMs and mentions in one place',
@@ -6754,6 +6758,7 @@
       'create': 'Create',
       'creation-studio': 'Create',
       'design-studio': 'Create',
+      'brand-design': 'Create',
       'animation-studio': 'Create',
       'analytics': 'Analytics',
       'brand-voice': 'Settings',
@@ -6878,10 +6883,10 @@
     });
 
     // ━━━ URL hash = Settings tab / Create mode (atelier) ━━━
-    // #settings/<brand|account|connections|billing> · #create/<video|post|animate>
+    // #settings/<brand|account|connections|billing> · #create/<video|post|design|animate>
     const SETTINGS_TABS = ['brand', 'account', 'connections', 'billing'];
-    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', animate: 'animation-studio' };
-    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'animation-studio': 'animate' };
+    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', design: 'brand-design', animate: 'animation-studio' };
+    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'brand-design': 'design', 'animation-studio': 'animate' };
     function seReadHash() {
       const m = /^#(settings|create)(?:\/([a-z-]+))?$/.exec(window.location.hash || '');
       return m ? { page: m[1], sub: m[2] || '' } : null;
@@ -6904,7 +6909,7 @@
           else openSettingsTab(h.sub);
         } else if (h.page === 'create') {
           const seg = CREATE_SEGMENTS[h.sub];
-          if (activeNav !== 'creation-studio' && activeNav !== 'design-studio' && activeNav !== 'animation-studio') {
+          if (activeNav !== 'creation-studio' && activeNav !== 'design-studio' && activeNav !== 'brand-design' && activeNav !== 'animation-studio') {
             document.querySelector('[data-nav="create"]')?.click();
           } else if (seg) setCreateSegment(seg);
         }
@@ -6949,6 +6954,11 @@
         window.__SE_CREATE_SURFACE = 'animate';
         if (typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
         else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Animation Studio failed to load — hard refresh.</div>';
+      } else if (segment === 'brand-design') {
+        window.__SE_CREATE_SURFACE = 'brand-design';
+        document.getElementById('dash-content').classList.remove('dash-content--animate');
+        if (window.seDesignStudio) window.seDesignStudio.render(document.getElementById('dash-content'));
+        else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Design failed to load — hard refresh.</div>';
       } else if (segment === 'design-studio') {
         window.__SE_CREATE_SURFACE = 'design';
         const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
@@ -6979,6 +6989,17 @@
           createBtn.classList.add('active');
         }
         setCreateSegment('design-studio');
+        return;
+      }
+      if (nav === 'brand-design') {
+        seWriteHash('create/design');
+        showIf(true, document.getElementById('create-segments'));
+        const createBtn = document.querySelector('[data-nav="create"]');
+        if (createBtn) {
+          document.querySelectorAll('.dash-nav-item').forEach((n) => n.classList.remove('active'));
+          createBtn.classList.add('active');
+        }
+        setCreateSegment('brand-design');
         return;
       }
       if (nav === 'creation-studio' || nav === 'video-studio' || nav === 'animation-studio') {
@@ -12577,6 +12598,12 @@
                   });
                   return '<button class="coach-action-btn" data-type="carousel_redesign" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#059669,#34D399);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;">Accept carousel plan</button>';
                 }
+                if (a.type === 'design_carousel' && a.brief) {
+                  coachActionPayloads[i] = Object.assign({}, a, {
+                    source_image_url: a.source_image_url || attachedImageUrl || '',
+                  });
+                  return '<button class="coach-action-btn" data-type="design_carousel" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#EC4899);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;">Design this carousel</button>';
+                }
                 return '';
               }).join('') + '</div>';
           }
@@ -12629,6 +12656,17 @@
                 if (ok) {
                   btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Opened';
                 }
+                return;
+              }
+              if (btn.dataset.type === 'design_carousel') {
+                const payload = coachActionPayloads[Number(btn.dataset.actionIdx)] || {};
+                if (!window.seDesignStudio) {
+                  if (typeof showToast === 'function') showToast('Design failed to load — hard refresh', 'error');
+                  return;
+                }
+                btn.dataset.busy = '1';
+                btn.innerHTML = 'Opened Design';
+                window.seDesignStudio.openWith({ brief: payload.brief, slides: payload.slides, source_image_url: payload.source_image_url, autostart: true });
                 return;
               }
               if (btn.dataset.type === 'carousel_redesign') {
@@ -18683,6 +18721,14 @@
               </div>
             </div>
           </div>
+
+          <button type="button" id="aist-brand-design" onclick="switchNav('brand-design')" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(236,72,153,0.12));border:1px solid rgba(167,139,250,0.35);border-radius:14px;padding:18px 20px;margin-bottom:18px;cursor:pointer;text-align:left;">
+            <span>
+              <span style="display:block;font-family:var(--font-display);font-size:1rem;font-weight:700;color:#fff;margin-bottom:4px;">Brand Design</span>
+              <span style="display:block;font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">Carousels in your exact brand style: your layouts, fonts, colours and illustrations, facts checked and reviewed slide by slide.</span>
+            </span>
+            <span style="flex-shrink:0;font-size:0.78rem;font-weight:700;color:#E9D5FF;">Open →</span>
+          </button>
 
           <!-- Category Overview Cards -->
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:28px;">
