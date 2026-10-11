@@ -391,9 +391,45 @@
     </div>`;
   }
 
+  const VERDICT_STYLE = {
+    scale: { label: 'Scale', color: '#4ADE80' },
+    hold: { label: 'Hold', color: '#FBBF24' },
+    rest: { label: 'Rest', color: '#F87171' },
+  };
+
+  function verdictBadge(p) {
+    const v = VERDICT_STYLE[p.verdict];
+    if (!v) return '';
+    return `<span class="mi-verdict" data-verdict="${esc(p.verdict)}" title="${esc(p.verdict_action || '')}" style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.04em;color:${v.color};border:1px solid ${v.color}55;margin-left:6px">${v.label}</span>`;
+  }
+
+  function trendHtml(data) {
+    const t = data.trend || {};
+    const warn = t.tracking_warning ? `<div id="mi-tracking-warning" style="margin:0 0 14px;padding:10px 12px;border-radius:10px;border:1px solid rgba(251,146,60,.4);background:rgba(251,146,60,.08);font-size:12px;color:#FDBA74">${esc(t.tracking_warning)}</div>` : '';
+    if (t.avg_score_last7 == null) return warn;
+    const word = t.direction === 'up' ? 'better than' : t.direction === 'down' ? 'worse than' : 'about the same as';
+    const color = t.direction === 'up' ? '#4ADE80' : t.direction === 'down' ? '#F87171' : 'rgba(255,255,255,.6)';
+    const before = t.avg_score_before != null ? `, <span style="color:${color}">${word}</span> before (${t.avg_score_before})` : '';
+    return `${warn}<div id="mi-trend" style="margin:0 0 14px;font-size:12px;color:rgba(255,255,255,.6)">Last 7 days: ${fmtNum(t.posts_last7)} post${t.posts_last7 === 1 ? '' : 's'}, average score ${t.avg_score_last7}${before}.</div>`;
+  }
+
+  function verdictKeyHtml(data) {
+    const rules = data.verdict_rules || [];
+    if (!rules.length) return '';
+    return `<div style="font-size:11px;color:rgba(255,255,255,.4);margin:-6px 0 14px">${rules.map((r) => `<span style="color:${(VERDICT_STYLE[r.id] || {}).color || '#fff'};font-weight:700">${esc(r.label)}</span> ${esc(r.note)}`).join(' · ')}</div>`;
+  }
+
+  function recentPostsHtml(data) {
+    const posts = (data.posts || []).filter((p) => p.verdict);
+    if (!posts.length) return '';
+    return `<details id="mi-all-posts" style="margin-top:18px"><summary style="cursor:pointer;font-size:12px;color:rgba(255,255,255,.6)">Every scored post (${posts.length})</summary>
+      ${posts.map((p) => insightPostRow(p, p.verdict === 'rest' ? 'lose' : p.verdict === 'scale' ? 'win' : 'hold')).join('')}
+    </details>`;
+  }
+
   function insightPostRow(p, tone) {
     const m = p.metrics || {};
-    const color = tone === 'win' ? '#4ADE80' : '#F87171';
+    const color = tone === 'win' ? '#4ADE80' : tone === 'hold' ? '#FBBF24' : '#F87171';
     const tags = [FORMAT_LABELS[p.format] || p.format, STORY_LABELS[p.story_type] || '', p.opener && p.opener !== 'statement' ? (OPENER_LABELS[p.opener] || p.opener).split(' (')[0] : '']
       .filter(Boolean).join(' · ');
     const stats = [`reach ${fmtNum(m.reach)}`, m.sends_per_reach != null ? `sends ${fmtMetric('sends_per_reach', m.sends_per_reach)}` : '', m.avg_watch_sec != null ? `watch ${m.avg_watch_sec}s` : '', m.comments != null ? `${fmtNum(m.comments)} comments` : '']
@@ -402,7 +438,8 @@
       <div style="font-weight:700;color:${color};min-width:34px">${p.goal_score != null ? p.goal_score : '—'}</div>
       <div style="min-width:0">
         <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.first_line || '(no caption)')}</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.45)">${esc(tags)}${tags && stats ? ' · ' : ''}${esc(stats)}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.45)">${esc(tags)}${tags && stats ? ' · ' : ''}${esc(stats)}${verdictBadge(p)}</div>
+        ${p.verdict_action ? `<div class="mi-verdict-action" style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px">${esc(p.verdict_action)}</div>` : ''}
       </div>
     </div>`;
   }
@@ -473,14 +510,17 @@
         </div>
         <div class="grow-pills" id="mi-goal-pills">${goalPill('grow', 'Grow')}${goalPill('engage', 'Engage')}</div>
       </div>
+      ${trendHtml(data)}
       ${panel('grow', 'GROW', 'reach people who don\'t follow you', sc.grow)}
       ${panel('engage', 'ENGAGE', 'deepen it with followers', sc.engage)}
       ${reels}
       ${patHtml}
+      ${verdictKeyHtml(data)}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
         <div id="mi-winners"><div style="font-size:10px;letter-spacing:.08em;color:#4ADE80;margin-bottom:4px">WINNERS</div>${(data.winners || []).map((p) => insightPostRow(p, 'win')).join('') || '<div style="font-size:12px;color:rgba(255,255,255,.4)">Not enough posts yet.</div>'}</div>
         <div id="mi-losers"><div style="font-size:10px;letter-spacing:.08em;color:#F87171;margin-bottom:4px">LOSERS</div>${(data.losers || []).map((p) => insightPostRow(p, 'lose')).join('') || '<div style="font-size:12px;color:rgba(255,255,255,.4)">Not enough posts yet.</div>'}</div>
       </div>
+      ${recentPostsHtml(data)}
       ${briefHtml(data.brief, data)}
       ${exportNote}
     </div>`;
