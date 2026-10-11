@@ -11,12 +11,15 @@ const SYSTEM = {
   name: 'Clinic', ratio: '4:5', handle: '@clinic',
   colors: { bg: '#FFFFFF', text: '#111111', primary: '#7C3AED' },
   fonts: { heading: { family: 'archivo' }, body: { family: 'inter' } },
-  patterns: [{ id: 'hook', name: 'Hook' }, { id: 'list', name: 'Checklist' }],
+  patterns: [
+    { id: 'hook', name: 'Hook', slots: { title: { kind: 'text', max_chars: 40 }, art: { kind: 'image' } } },
+    { id: 'list', name: 'Checklist', slots: { heading: { kind: 'text', max_chars: 40 }, points: { kind: 'list', max_chars: 30, max_items: 4 } } },
+  ],
 };
 const RESULT = {
   title: 'Heartburn myths', angle: 'Myth-busting hook',
   caption: 'Know the facts.', hashtags: ['#heartburn', '#health'],
-  slides: [1, 2, 3].map((i) => ({ url: `${PNG}#slide${i}`, pattern: 'hook', critic: { score: i === 2 ? 3 : 5, problems: i === 2 ? ['busy layout'] : [] } })),
+  slides: [1, 2, 3].map((i) => ({ url: `${PNG}#slide${i}`, pattern: 'hook', slots: { title: `Title ${i}`, art: 'https://store.test/art.png' }, critic: { score: i === 2 ? 3 : 5, problems: i === 2 ? ['busy layout'] : [] } })),
   sources: ['https://www.nhs.uk/conditions/heartburn-and-acid-reflux/'],
 };
 
@@ -34,12 +37,18 @@ function designMock({ hasSystem, calls, chatReply, figurelabs = false, medical =
     }
     if (entry.path === '/api/studio/upload-image') { uploads += 1; json(200, { url: `https://store.test/ex${uploads}.png` }); return 'handled'; }
     if (entry.path === '/api/design/system/build' && m === 'POST') { calls.push(['build', body()]); json(202, { ok: true, job_id: 'job-build' }); return 'handled'; }
+    if (entry.path === '/api/design/slide' && m === 'POST') { calls.push(['slide', body()]); json(202, { ok: true, job_id: 'job-slide' }); return 'handled'; }
     if (entry.path === '/api/design/carousel' && m === 'POST') { calls.push(['carousel', body()]); json(202, { ok: true, job_id: 'job-car' }); return 'handled'; }
     if (entry.path.startsWith('/api/design/jobs/')) {
       const id = entry.path.split('/').pop();
       polls[id] = (polls[id] || 0) + 1;
       if (polls[id] <= runningPolls) { json(200, { ok: true, job: { id, status: 'running', progress: polls[id] === 1 ? { stage: id === 'job-build' ? 'review' : 'critic', round: 1 } : { stage: 'fix', round: 1, slides: [2] } } }); return 'handled'; }
       if (id === 'job-build') system = SYSTEM;
+      if (id === 'job-slide') {
+        const req = calls.filter((c) => c[0] === 'slide').pop()[1];
+        json(200, { ok: true, job: { id, status: 'done', result: { slide: { url: `${PNG}#edited${polls[id]}`, pattern: 'hook', slots: req.slide.slots, issues: [{ type: 'too_long', severity: 'soft', detail: 'title is 45 chars (max 40)' }] } } } });
+        return 'handled';
+      }
       json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : RESULT } });
       return 'handled';
     }
@@ -252,4 +261,43 @@ test('Progress updates in place between polls (no flicker)', async ({ page }) =>
   await expect(page.locator('#dsv2-make-status')).toContainText('Fixing weak slides (round 1, slide 2)', { timeout: 10000 });
   await expect(page.locator('#dsv2-make-status .dsv2-progress')).toHaveAttribute('data-marker', 'same');
   await expect(page.locator('#dsv2-make-status .dsv2-step.is-now')).toHaveText('Polish');
+});
+
+test('Edit a slide: typed text and AI change redraw only that slide, with undo and warnings', async ({ page }) => {
+  const errors = watchErrors(page);
+  const calls = [];
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
+  await page.locator('#dsv2-go').click();
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
+
+  await page.locator('#dsv2-done [data-edit="1"]').click();
+  const ed = page.locator('.dsv2-ed');
+  await expect(ed).toContainText('Edit slide 2');
+  const title = ed.locator('textarea[data-slot="title"]');
+  await expect(title).toHaveValue('Title 2');
+  await title.fill('A much better *headline*');
+  await expect(ed.locator('[data-count="title"]')).toHaveText('22/40');
+  await ed.locator('#dsv2-ed-ai').fill('say it more warmly');
+  await ed.locator('#dsv2-ed-go').click();
+  await expect(ed.locator('.dsv2-ed-preview img')).toHaveAttribute('src', /#edited/);
+  await expect(ed).toContainText('title is 45 chars');
+  const sent = calls.find((c) => c[0] === 'slide')[1];
+  expect(sent).toMatchObject({ index: 1, total: 3, instruction: 'say it more warmly', slide: { pattern: 'hook', slots: { title: 'A much better *headline*', art: 'https://store.test/art.png' } } });
+  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /#edited/);
+  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(0)).toHaveAttribute('src', /#slide1$/);
+
+  await ed.locator('#dsv2-ed-undo').click();
+  await expect(ed.locator('.dsv2-ed-preview img')).toHaveAttribute('src', /#slide2$/);
+  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /#slide2$/);
+
+  await ed.locator('#dsv2-ed-layout').selectOption('list');
+  await ed.locator('#dsv2-ed-go').click();
+  await expect.poll(() => calls.filter((c) => c[0] === 'slide').length).toBe(2);
+  expect(calls.filter((c) => c[0] === 'slide')[1][1].instruction).toMatch(/Switch to the "Checklist" layout/);
+  await page.keyboard.press('Escape');
+  await expect(ed).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
