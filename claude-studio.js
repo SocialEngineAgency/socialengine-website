@@ -2362,6 +2362,7 @@
         brief: action.brief,
         slides: action.slides,
         source_image_url: action.source_image_url || masterImageUrl() || '',
+        medical: action.medical,
         autostart: true,
       });
     });

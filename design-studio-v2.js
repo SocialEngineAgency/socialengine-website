@@ -58,6 +58,7 @@
     const bits = [];
     if (p.round) bits.push(`round ${p.round}`);
     if (p.stage === 'art' && p.count) bits.push(`${p.count} image${p.count === 1 ? '' : 's'}`);
+    if (p.stage === 'art' && p.scientific) bits.push(`${p.scientific} medical via FigureLabs`);
     if (p.stage === 'fix' && Array.isArray(p.slides)) bits.push(`slide ${p.slides.join(', ')}`);
     return bits.length ? `${base} (${bits.join(', ')})` : base;
   }
@@ -123,6 +124,11 @@
       .dsv2-swatch { width:20px; height:20px; border-radius:6px; border:1px solid rgba(255,255,255,0.18); display:inline-block; }
       .dsv2-chip { font-size:0.7rem; padding:4px 9px; border-radius:999px; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.78); white-space:nowrap; }
       .dsv2-chip--ok { background:rgba(16,185,129,0.14); color:#6EE7B7; }
+      .dsv2-chip--med { background:rgba(56,189,248,0.12); color:#7DD3FC; }
+      .dsv2-med-set { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:0.8rem; color:rgba(255,255,255,0.8); flex-wrap:wrap; }
+      .dsv2-med-set select { width:auto; min-width:220px; }
+      .dsv2-ask { margin-top:14px; padding:14px; border-radius:12px; background:rgba(56,189,248,0.07); border:1px solid rgba(56,189,248,0.25); font-size:0.84rem; color:rgba(255,255,255,0.88); }
+      .dsv2-ask p { margin:0 0 10px; line-height:1.45; }
       .dsv2-sys summary { list-style:none; cursor:pointer; }
       .dsv2-sys summary::-webkit-details-marker { display:none; }
       .dsv2-sys .dsv2-caret { transition:transform .2s; display:inline-block; }
@@ -260,6 +266,14 @@
           <button type="button" class="dsv2-link" id="dsv2-rebuild">${state.rebuild ? 'Cancel rebuild' : 'Rebuild from new examples'}</button>
         </div>
       </div>
+      ${info.figurelabs ? `<label class="dsv2-med-set">Medical accuracy
+        <select id="dsv2-medical">
+          <option value="ask"${medicalMode() === 'ask' ? ' selected' : ''}>Ask when the topic is medical</option>
+          <option value="always"${medicalMode() === 'always' ? ' selected' : ''}>Always on</option>
+          <option value="off"${medicalMode() === 'off' ? ' selected' : ''}>Off</option>
+        </select>
+        <span class="dsv2-hint">On: anatomy and medical pictures by FigureLabs, every number checked against official sources.</span>
+      </label>` : ''}
       ${previews.length ? `<div class="dsv2-patterns">${previews.map((p, i) => `<figure><img src="${esc(p.url)}" alt="${esc(names.get(p.pattern) || p.pattern)}" loading="lazy" data-zoom="${i}"><figcaption>${esc(names.get(p.pattern) || p.pattern)}</figcaption></figure>`).join('')}</div>` : ''}
     </details>`;
   }
@@ -293,9 +307,20 @@
     </div>`;
   }
 
+  function medicalMode() {
+    const s = state.info && state.info.settings;
+    return (s && s.medical) || 'off';
+  }
+  function medicalChip() {
+    const mode = medicalMode();
+    if (mode === 'always') return '<span class="dsv2-chip dsv2-chip--med">Medical accuracy: on (FigureLabs)</span>';
+    if (mode === 'ask') return '<span class="dsv2-chip dsv2-chip--med">Medical accuracy: asks for medical topics</span>';
+    return '';
+  }
+
   function makeCard() {
     return `<div class="dsv2-card" id="dsv2-make">
-      <h3>Make a carousel</h3>
+      <div class="dsv2-row" style="justify-content:space-between;"><h3>Make a carousel</h3><span id="dsv2-medical-chip">${medicalChip()}</span></div>
       <label class="dsv2-label" for="dsv2-brief">What is it about?</label>
       <textarea id="dsv2-brief" placeholder="Topic, who it's for, the key points, and what people should do at the end"></textarea>
       <div class="dsv2-grid2">
@@ -316,6 +341,7 @@
         <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-go">Design carousel</button>
         <span class="dsv2-hint">About 5 minutes. You can leave this page.</span>
       </div>
+      <div id="dsv2-medical-ask"></div>
       <div id="dsv2-make-status"></div>
     </div>`;
   }
@@ -391,6 +417,22 @@
         refresh.textContent = 'Refresh previews';
       }
     });
+    const med = el('dsv2-medical');
+    if (med) med.addEventListener('change', async () => {
+      const prev = medicalMode();
+      med.disabled = true;
+      try {
+        const r = await call('PUT', '/api/design/settings', { medical: med.value });
+        state.info = Object.assign({}, state.info, { settings: r.settings });
+        const chip = el('dsv2-medical-chip');
+        if (chip) chip.innerHTML = medicalChip();
+        toast(med.value === 'always' ? 'Medical accuracy is on for every carousel' : med.value === 'ask' ? 'It will ask when a topic is medical' : 'Medical accuracy is off', 'success');
+      } catch (e) {
+        med.value = prev;
+        toast(e.message || 'Could not save', 'error');
+      }
+      med.disabled = false;
+    });
     state.root.querySelectorAll('.dsv2-patterns img[data-zoom]').forEach((img) => img.addEventListener('click', () => {
       const urls = [...state.root.querySelectorAll('.dsv2-patterns img[data-zoom]')].map((n) => n.getAttribute('src'));
       lightbox(urls, Number(img.dataset.zoom));
@@ -428,6 +470,7 @@
     if (go) {
       drawSource();
       go.addEventListener('click', () => startCarousel());
+      el('dsv2-brief').addEventListener('input', () => { state.handoffMedical = undefined; setStatus('dsv2-medical-ask', ''); });
       el('dsv2-brief').addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); startCarousel(); }
       });
@@ -494,16 +537,48 @@
     }
   }
 
-  async function startCarousel() {
+  function askMedical() {
+    setStatus('dsv2-medical-ask', `<div class="dsv2-ask dsv2-fade">
+      <p><strong>This looks like a medical topic.</strong> Use medical accuracy? Anatomy and medical pictures are drawn by FigureLabs, every number must come from an official source, and slides with unsourced figures are rewritten. It takes a few minutes longer.</p>
+      <div class="dsv2-row"><button type="button" class="dsv2-btn dsv2-btn--primary" data-medical="yes">Use medical accuracy</button><button type="button" class="dsv2-btn" data-medical="no">Standard</button></div>
+    </div>`);
+    const box = el('dsv2-medical-ask');
+    if (box) {
+      box.querySelectorAll('[data-medical]').forEach((b) => b.addEventListener('click', () => {
+        setStatus('dsv2-medical-ask', '');
+        startCarousel({ medical: b.dataset.medical === 'yes' });
+      }));
+      reveal(box);
+    }
+  }
+
+  async function startCarousel(opts) {
     const briefEl = el('dsv2-brief');
     const brief = briefEl ? briefEl.value.trim() : '';
     if (brief.length < 10) { toast('Describe the carousel in a sentence or two', 'warning'); if (briefEl) briefEl.focus(); return; }
     const btn = el('dsv2-go');
     if (!btn || btn.disabled) return;
+    let medical = opts && typeof opts.medical === 'boolean' ? opts.medical : undefined;
+    if (medical === undefined && medicalMode() === 'ask') {
+      if (state.handoffMedical === true || state.handoffMedical === false) medical = state.handoffMedical;
+      else if (state.handoffMedical === 'ask') { askMedical(); return; }
+      else {
+        btn.disabled = true;
+        btn.textContent = 'Checking topic…';
+        let isMedical = false;
+        try { isMedical = !!(await call('POST', '/api/design/classify', { brief })).medical; } catch (_) { isMedical = true; }
+        btn.disabled = false;
+        btn.textContent = 'Design carousel';
+        if (isMedical) { askMedical(); return; }
+        medical = false;
+      }
+    }
+    setStatus('dsv2-medical-ask', '');
     btn.disabled = true;
     try {
       const r = await call('POST', '/api/design/carousel', {
         brief,
+        medical,
         count: el('dsv2-slides').value === 'auto' ? undefined : Math.max(3, Math.min(10, Number(el('dsv2-slides').value))),
         platform: el('dsv2-platform').value,
         research: !!el('dsv2-research').checked,
@@ -705,6 +780,7 @@
     brief.value = String(p.brief || '');
     el('dsv2-slides').value = Number(p.slides) >= 3 ? String(Math.min(10, Math.round(Number(p.slides)))) : 'auto';
     if (/^https:\/\//i.test(String(p.source_image_url || ''))) { state.source = p.source_image_url; drawSource(); }
+    state.handoffMedical = p.medical === true || p.medical === false || p.medical === 'ask' ? p.medical : undefined;
     reveal(brief);
     if (p.autostart && !store.get('job')) startCarousel();
   }
