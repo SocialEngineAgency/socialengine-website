@@ -266,13 +266,13 @@
           <button type="button" class="dsv2-link" id="dsv2-rebuild">${state.rebuild ? 'Cancel rebuild' : 'Rebuild from new examples'}</button>
         </div>
       </div>
-      ${info.figurelabs ? `<label class="dsv2-med-set">Medical accuracy
+      ${info.figurelabs ? `<label class="dsv2-med-set">Medical &amp; scientific accuracy
         <select id="dsv2-medical">
-          <option value="ask"${medicalMode() === 'ask' ? ' selected' : ''}>Ask when the topic is medical</option>
+          <option value="ask"${medicalMode() === 'ask' ? ' selected' : ''}>Ask when the topic is medical or scientific</option>
           <option value="always"${medicalMode() === 'always' ? ' selected' : ''}>Always on</option>
           <option value="off"${medicalMode() === 'off' ? ' selected' : ''}>Off</option>
         </select>
-        <span class="dsv2-hint">On: anatomy and medical pictures by FigureLabs, every number checked against official sources.</span>
+        <span class="dsv2-hint">On: anatomy, medical and scientific pictures by FigureLabs, every number checked against official sources.</span>
       </label>` : ''}
       ${previews.length ? `<div class="dsv2-patterns">${previews.map((p, i) => `<figure><img src="${esc(p.url)}" alt="${esc(names.get(p.pattern) || p.pattern)}" loading="lazy" data-zoom="${i}"><figcaption>${esc(names.get(p.pattern) || p.pattern)}</figcaption></figure>`).join('')}</div>` : ''}
     </details>`;
@@ -314,7 +314,7 @@
   function medicalChip() {
     const mode = medicalMode();
     if (mode === 'always') return '<span class="dsv2-chip dsv2-chip--med">Medical accuracy: on (FigureLabs)</span>';
-    if (mode === 'ask') return '<span class="dsv2-chip dsv2-chip--med">Medical accuracy: asks for medical topics</span>';
+    if (mode === 'ask') return '<span class="dsv2-chip dsv2-chip--med">Medical accuracy: asks for medical or scientific topics</span>';
     return '';
   }
 
@@ -424,7 +424,7 @@
         state.info = Object.assign({}, state.info, { settings: r.settings });
         const chip = el('dsv2-medical-chip');
         if (chip) chip.innerHTML = medicalChip();
-        toast(med.value === 'always' ? 'Medical accuracy is on for every carousel' : med.value === 'ask' ? 'It will ask when a topic is medical' : 'Medical accuracy is off', 'success');
+        toast(med.value === 'always' ? 'Medical accuracy is on for every carousel' : med.value === 'ask' ? 'It will ask when a topic is medical or scientific' : 'Medical accuracy is off', 'success');
       } catch (e) {
         med.value = prev;
         toast(e.message || 'Could not save', 'error');
@@ -537,7 +537,7 @@
 
   function askMedical() {
     setStatus('dsv2-medical-ask', `<div class="dsv2-ask dsv2-fade">
-      <p><strong>This looks like a medical topic.</strong> Use medical accuracy? Anatomy and medical pictures are drawn by FigureLabs, every number must come from an official source, and slides with unsourced figures are rewritten. It takes a few minutes longer.</p>
+      <p><strong>This looks like a medical or scientific topic.</strong> Use medical &amp; scientific accuracy? Anatomy, medical and scientific pictures are drawn by FigureLabs, every number must come from an official source, and slides with unsourced figures are rewritten. It takes a few minutes longer.</p>
       <div class="dsv2-row"><button type="button" class="dsv2-btn dsv2-btn--primary" data-medical="yes">Use medical accuracy</button><button type="button" class="dsv2-btn" data-medical="no">Standard</button></div>
     </div>`);
     const box = el('dsv2-medical-ask');
@@ -646,7 +646,15 @@
       }
       const box = el(statusId);
       if (box) {
-        box.innerHTML = progressHtml(kind, job);
+        const live = box.querySelector('.dsv2-progress');
+        if (live) {
+          const fresh = document.createElement('div');
+          fresh.innerHTML = progressHtml(kind, job);
+          live.querySelector('.dsv2-progress-top span:nth-child(2)').textContent = fresh.querySelector('.dsv2-progress-top span:nth-child(2)').textContent;
+          live.querySelector('.dsv2-steps').innerHTML = fresh.querySelector('.dsv2-steps').innerHTML;
+        } else {
+          box.innerHTML = progressHtml(kind, job);
+        }
         if (first) { reveal(box); tickClock(); first = false; }
       }
       const b = el(btnId);
