@@ -42,6 +42,7 @@ function designMock({ hasSystem, calls, chatReply }) {
       json(200, { ok: true, job: { id, status: 'done', result: id === 'job-build' ? { system: SYSTEM } : RESULT } });
       return 'handled';
     }
+    if (entry.path === '/api/design/system/previews' && m === 'POST') { calls.push(['previews']); json(200, { ok: true, previews: [{ pattern: 'hook', url: `${PNG}#fresh` }] }); return 'handled'; }
     if (entry.path === '/api/studio/design-queue' && m === 'POST') { calls.push(['queue', body()]); json(200, { ok: true }); return 'handled'; }
     if (entry.path === '/api/chat/v2' && chatReply) { json(200, chatReply); return 'handled'; }
     return undefined;
@@ -126,4 +127,42 @@ test('All Tools has a Brand Design card that opens the Design tab', async ({ pag
   await page.click('.dash-nav-item[data-nav="ai-studio"]');
   await page.click('#aist-brand-design');
   await expect(page.locator('#dsv2-make')).toBeVisible();
+});
+
+test('Design tab scrolls with the mouse wheel and slides open in a viewer', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const calls = [];
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
+  await page.locator('#dsv2-go').click();
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
+
+  const scroller = page.locator('.dsv2-scroll');
+  await scroller.evaluate((n) => { n.style.scrollBehavior = 'auto'; n.scrollTop = 0; });
+  await page.mouse.move(640, 400);
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 400);
+  await expect.poll(() => scroller.evaluate((n) => n.scrollTop)).toBeGreaterThan(200);
+  await expect(page.locator('#dsv2-caption')).toBeInViewport();
+
+  await page.locator('#dsv2-done [data-open="1"]').click();
+  const lb = page.locator('.dsv2-lb');
+  await expect(lb.locator('.dsv2-lb-count')).toHaveText('2 / 3');
+  await page.keyboard.press('ArrowRight');
+  await expect(lb.locator('.dsv2-lb-count')).toHaveText('3 / 3');
+  await page.keyboard.press('Escape');
+  await expect(lb).toHaveCount(0);
+});
+
+test('Refresh previews re-renders the layout previews', async ({ page }) => {
+  const calls = [];
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls }) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await page.locator('#dsv2-system summary').click();
+  await page.locator('#dsv2-refresh').click();
+  await expect(page.locator('#dsv2-system .dsv2-patterns img')).toHaveCount(1);
+  await expect(page.locator('#dsv2-system .dsv2-patterns img')).toHaveAttribute('src', /#fresh$/);
+  expect(calls.filter((c) => c[0] === 'previews')).toHaveLength(1);
 });
