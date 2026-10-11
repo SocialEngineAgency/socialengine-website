@@ -299,7 +299,8 @@
       <label class="dsv2-label" for="dsv2-brief">What is it about?</label>
       <textarea id="dsv2-brief" placeholder="Topic, who it's for, the key points, and what people should do at the end"></textarea>
       <div class="dsv2-grid2">
-        <div><label class="dsv2-label" for="dsv2-slides">Slides</label><input type="number" id="dsv2-slides" min="3" max="10" value="7"></div>
+        <div><label class="dsv2-label" for="dsv2-slides">Slides</label>
+          <select id="dsv2-slides"><option value="auto">Auto (up to 10)</option>${[3, 4, 5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}">${n}</option>`).join('')}</select></div>
         <div><label class="dsv2-label" for="dsv2-platform">Platform</label>
           <select id="dsv2-platform"><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="linkedin">LinkedIn</option><option value="tiktok">TikTok</option></select></div>
         <div><label class="dsv2-label">Facts</label>
@@ -503,7 +504,7 @@
     try {
       const r = await call('POST', '/api/design/carousel', {
         brief,
-        count: Math.max(3, Math.min(10, Number(el('dsv2-slides').value) || 7)),
+        count: el('dsv2-slides').value === 'auto' ? undefined : Math.max(3, Math.min(10, Number(el('dsv2-slides').value))),
         platform: el('dsv2-platform').value,
         research: !!el('dsv2-research').checked,
         source_image_url: state.source || undefined,
@@ -702,7 +703,7 @@
       return;
     }
     brief.value = String(p.brief || '');
-    if (p.slides) el('dsv2-slides').value = Math.max(3, Math.min(10, Number(p.slides) || 7));
+    el('dsv2-slides').value = Number(p.slides) >= 3 ? String(Math.min(10, Math.round(Number(p.slides)))) : 'auto';
     if (/^https:\/\//i.test(String(p.source_image_url || ''))) { state.source = p.source_image_url; drawSource(); }
     reveal(brief);
     if (p.autostart && !store.get('job')) startCarousel();
