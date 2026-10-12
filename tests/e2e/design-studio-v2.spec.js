@@ -107,7 +107,7 @@ test('Design tab: teach the brand from example slides, then the system and Make 
   await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: false, calls }) });
   await login(page, srv.base);
   await page.evaluate(() => window.switchNav('brand-design'));
-  await expect(page).toHaveURL(/#create\/design$/);
+  await expect(page).toHaveURL(/#create\/carousels$/);
   await expect(page.locator('#create-segments .create-seg[data-segment="brand-design"]')).toHaveClass(/active/);
   await expect(page.locator('#dsv2-setup')).toBeVisible();
   await expect(page.locator('#dsv2-make')).toHaveCount(0);
@@ -175,7 +175,7 @@ test('Coach design_carousel → Design this carousel → Design tab starts with 
   const btn = page.locator('.coach-action-btn[data-type="design_carousel"]');
   await expect(btn).toBeVisible({ timeout: 10000 });
   await btn.click();
-  await expect(page).toHaveURL(/#create\/design$/);
+  await expect(page).toHaveURL(/#create\/carousels$/);
   await expect(page.locator('#dsv2-brief')).toHaveValue('Five signs of reflux and when to see a GP');
   await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
   expect(calls.find((c) => c[0] === 'carousel')[1]).toMatchObject({ count: 6, source_image_url: 'https://store.test/poster.png' });
