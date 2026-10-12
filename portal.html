@@ -17,7 +17,7 @@
   <script src="./carousel-templates.js?v=20261010" defer></script>
   <script src="./claude-studio.js?v=20261011-design" defer></script>
   <script src="./design-studio-v2.js?v=20261011j" defer></script>
-  <script src="./portal-assets.js?v=20260929-style"></script>
+  <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
   <script src="./animation-studio.js?v=20261010-music-3min" defer></script>
   <script src="./analytics-cockpit.js?v=20261010-verdicts" defer></script>
@@ -2123,6 +2123,9 @@
       transition: color 0.15s;
     }
     .create-seg:hover { color: rgba(255,255,255,0.9); }
+    .create-seg--studio { margin-left: auto; color: #A78BFA; }
+    .create-seg--studio:hover { color: #C4B5FD; }
+    .create-seg.create-seg--studio::before { display: none; }
     .create-seg.active {
       background: transparent;
       color: #fff;
@@ -3296,6 +3299,7 @@
           <button type="button" class="create-seg" role="tab" data-segment="design-studio" aria-selected="false">Post</button>
           <button type="button" class="create-seg" role="tab" data-segment="brand-design" aria-selected="false">Design</button>
           <button type="button" class="create-seg" role="tab" data-segment="animation-studio" aria-selected="false">Animate</button>
+          <button type="button" class="create-seg create-seg--studio" id="create-open-video-studio" onclick="openVideoStudio()" title="Edit videos with your posts, Library and brand. Opens in a new tab.">Video Studio <span aria-hidden="true">↗</span></button>
         </div>
 
         <!-- Dashboard content area — dynamically populated -->
@@ -3517,6 +3521,24 @@
         throw e;
       }
     }
+
+    // The Video Studio is its own site. A one-time pass (60 s) carries the login
+    // across in the URL fragment; the tab is opened inside the click (Safari blocks later opens).
+    const VIDEO_STUDIO_URL = 'https://socialengine-video.netlify.app/';
+    async function openVideoStudio() {
+      const tab = window.open('about:blank', '_blank');
+      try {
+        const res = await apiFetch('/api/video-studio/pass', { method: 'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || !d.code) throw new Error(d.error || 'Could not open the Video Studio');
+        const url = `${VIDEO_STUDIO_URL}#se_pass=${encodeURIComponent(d.code)}`;
+        if (tab) { tab.opener = null; tab.location.href = url; } else window.location.href = url;
+      } catch (e) {
+        if (tab) tab.close();
+        if (typeof showToast === 'function') showToast(e.message || 'Could not open the Video Studio', 'error');
+      }
+    }
+    window.openVideoStudio = openVideoStudio;
 
     // Studio / cockpit scripts live outside this closure. They get one object
     // that knows how to authenticate, instead of raw credentials on window.
@@ -6974,7 +6996,7 @@
       setCreateChrome(true);
       setCreateSegment(segment || currentCreateSegment());
     }
-    document.querySelectorAll('#create-segments .create-seg').forEach((b) => {
+    document.querySelectorAll('#create-segments .create-seg[data-segment]').forEach((b) => {
       b.addEventListener('click', () => setCreateSegment(b.dataset.segment));
     });
 
@@ -10652,7 +10674,7 @@
     }
 
     function brandLibPreviewHtml(a, mode, helpers) {
-      const family = (helpers.persistFamily ? helpers.persistFamily(a.kind) : '') || (a.kind === 'color' ? 'color' : a.kind === 'music' ? 'audio' : ['outro', 'intro', 'shot'].includes(a.kind) ? 'video' : 'image');
+      const family = (helpers.persistFamily ? helpers.persistFamily(a.kind) : '') || (a.kind === 'color' ? 'color' : a.kind === 'music' ? 'audio' : ['outro', 'intro', 'shot', 'video'].includes(a.kind) ? 'video' : 'image');
       const id = escapeHtml(a.id);
       const label = escapeHtml((helpers.labelOf ? helpers.labelOf(a) : (a.name || a.kind)));
       if (a.kind === 'color' || family === 'color') {
@@ -10831,6 +10853,7 @@
             <option value="intro">Intro</option>
             <option value="music">Music</option>
             <option value="logo">Logo</option>
+            <option value="video">Video</option>
           </select>
           <input id="brand-lib-collection" type="text" placeholder="Collection name" value="${escapeHtml(prevCollection)}" style="flex:1;min-width:140px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
           <input type="file" id="brand-lib-file" multiple hidden />
@@ -18721,6 +18744,14 @@
               </div>
             </div>
           </div>
+
+          <button type="button" id="aist-video-studio" onclick="openVideoStudio()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(0,229,255,0.10));border:1px solid rgba(167,139,250,0.35);border-radius:14px;padding:18px 20px;margin-bottom:12px;cursor:pointer;text-align:left;">
+            <span>
+              <span style="display:block;font-family:var(--font-display);font-size:1rem;font-weight:700;color:#fff;margin-bottom:4px;">Video Studio</span>
+              <span style="display:block;font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">A full video editor with your past posts, Library and brand built in. Cut, caption and add music, then save or schedule straight back here.</span>
+            </span>
+            <span style="flex-shrink:0;font-size:0.78rem;font-weight:700;color:#E9D5FF;">Open ↗</span>
+          </button>
 
           <button type="button" id="aist-brand-design" onclick="switchNav('brand-design')" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(236,72,153,0.12));border:1px solid rgba(167,139,250,0.35);border-radius:14px;padding:18px 20px;margin-bottom:18px;cursor:pointer;text-align:left;">
             <span>
