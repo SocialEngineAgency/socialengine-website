@@ -25,7 +25,7 @@ test('acceptFor and isAssetKind', () => {
 test('retagKinds keeps stills together and does not offer outro for a logo', () => {
   const { retagKinds } = require('../portal-assets');
   assert.deepEqual(retagKinds('scene').sort(), ['character', 'item', 'logo', 'plate', 'scene', 'setting', 'style']);
-  assert.deepEqual(retagKinds('outro').sort(), ['intro', 'outro', 'shot']);
+  assert.deepEqual(retagKinds('outro').sort(), ['intro', 'outro', 'shot', 'video']);
   assert.deepEqual(retagKinds('music'), ['music']);
   assert.deepEqual(retagKinds('color'), ['color']);
 });

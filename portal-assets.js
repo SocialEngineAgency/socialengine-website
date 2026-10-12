@@ -2,11 +2,11 @@
 // and Animate Saved outros / music. No DOM, no fetch.
 'use strict';
 
-const ASSET_KINDS = ['outro', 'intro', 'music', 'logo', 'scene', 'character', 'plate', 'shot', 'item', 'setting', 'style', 'color'];
+const ASSET_KINDS = ['outro', 'intro', 'music', 'logo', 'scene', 'character', 'plate', 'shot', 'item', 'setting', 'style', 'color', 'video'];
 const KIND_LABEL = {
   outro: 'Outro', intro: 'Intro', music: 'Music', logo: 'Logo',
   scene: 'Scene', character: 'Character', plate: 'Plate', shot: 'Shot',
-  item: 'Item', setting: 'Setting', style: 'Style', color: 'Color',
+  item: 'Item', setting: 'Setting', style: 'Style', color: 'Color', video: 'Video',
 };
 const KIND_ACCEPT = {
   outro: 'video/*',
@@ -21,6 +21,7 @@ const KIND_ACCEPT = {
   setting: 'image/*',
   style: 'image/*',
   color: '',
+  video: 'video/*',
 };
 const STILL_KINDS = ['scene', 'character', 'plate', 'logo', 'item', 'setting', 'style'];
 const SECTION_KINDS = ['logo', 'color', 'character', 'item', 'setting', 'scene', 'style'];
@@ -72,7 +73,7 @@ function persistFamily(kind) {
   const k = String(kind || '').trim();
   if (k === 'color') return 'color';
   if (k === 'music') return 'audio';
-  if (['outro', 'intro', 'shot'].includes(k)) return 'video';
+  if (['outro', 'intro', 'shot', 'video'].includes(k)) return 'video';
   if (STILL_KINDS.includes(k)) return 'image';
   return '';
 }
