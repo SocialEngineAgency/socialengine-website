@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20260917-card-when"></script>
+  <script src="./studio-queue-ready.js?v=20261012-post-link"></script>
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
@@ -3851,7 +3851,17 @@
         const p = new URLSearchParams(window.location.search);
         const tab = (p.get('tab') || '').toLowerCase();
         if (tab === 'create') switchNav('creation-studio');
-        if (tab === 'content') document.querySelector('[data-nav=content]')?.click();
+        if (tab === 'content') {
+          document.querySelector('[data-nav=content]')?.click();
+          const ready = window.studioQueueReady || {};
+          const postId = typeof ready.postIdFromSearch === 'function' ? ready.postIdFromSearch(window.location.search) : '';
+          if (postId) {
+            ready.openPostWhenReady(postId, { isContentTab: () => activeNav === 'content' });
+            p.delete('post');
+            const qs = p.toString();
+            try { history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash); } catch (_) {}
+          }
+        }
         // Deep links: #settings/<tab> · #create/<segment>
         const h = typeof seReadHash === 'function' ? seReadHash() : null;
         if (h && h.page === 'settings') document.querySelector('[data-nav=settings]')?.click();
