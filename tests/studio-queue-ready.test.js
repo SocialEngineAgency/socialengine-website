@@ -21,6 +21,8 @@ const {
   applyCaptionToPost,
   escapeCaptionForTextarea,
   cardWhenLabel,
+  postIdFromSearch,
+  openPostWhenReady,
 } = require('../studio-queue-ready');
 
 test('uploaded square is queueable without a generated design', () => {
@@ -277,3 +279,36 @@ test('reschedulePost persists time with the date', () => {
   assert.match(fn, /reschedule-time-|newTime/);
 });
 
+
+test('Video Studio post link: only a real record id is accepted', () => {
+  assert.equal(postIdFromSearch('?tab=content&post=recAbCdEfGh123456'), 'recAbCdEfGh123456');
+  assert.equal(postIdFromSearch('?tab=content&post=rec"><img'), '');
+  assert.equal(postIdFromSearch('?tab=content'), '');
+});
+
+test('Video Studio post link opens the card once it renders', async () => {
+  let clicked = 0;
+  let calls = 0;
+  const card = { click: () => { clicked += 1; } };
+  const doc = { querySelector: (sel) => {
+    assert.equal(sel, '.studio-card[data-post-id="recAbCdEfGh123456"] .studio-card__media');
+    calls += 1;
+    return calls >= 3 ? card : null;
+  } };
+  const ok = await openPostWhenReady('recAbCdEfGh123456', { doc, isContentTab: () => true, intervalMs: 1, timeoutMs: 500 });
+  assert.equal(ok, true);
+  assert.equal(clicked, 1);
+});
+
+test('Video Studio post link gives up when the user leaves Content', async () => {
+  const doc = { querySelector: () => null };
+  const ok = await openPostWhenReady('recAbCdEfGh123456', { doc, isContentTab: () => false, intervalMs: 1 });
+  assert.equal(ok, false);
+});
+
+test('portal applies ?post= only on the Content tab and strips it from the URL', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /postIdFromSearch\(window\.location\.search\)/);
+  assert.match(src, /isContentTab: \(\) => activeNav === 'content'/);
+  assert.match(src, /p\.delete\('post'\)/);
+});

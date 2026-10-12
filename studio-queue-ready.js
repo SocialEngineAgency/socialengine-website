@@ -206,6 +206,33 @@ function buildUploadVideoQueueBody({ videoUrl, imageUrl, caption, platform } = {
   return body;
 }
 
+// Video Studio links back with ?tab=content&post=<Airtable record id>.
+function postIdFromSearch(search) {
+  let id = '';
+  try { id = new URLSearchParams(String(search || '')).get('post') || ''; } catch (_) { return ''; }
+  return /^rec[A-Za-z0-9]{14}$/.test(id) ? id : '';
+}
+
+// Content cards render after the posts load, so wait for the card and open it.
+function openPostWhenReady(postId, { doc, isContentTab, timeoutMs = 20000, intervalMs = 300 } = {}) {
+  const root = doc || (typeof document !== 'undefined' ? document : null);
+  if (!postId || !root) return Promise.resolve(false);
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (typeof isContentTab === 'function' && !isContentTab()) return resolve(false);
+      const media = root.querySelector(`.studio-card[data-post-id="${postId}"] .studio-card__media`);
+      if (media && typeof media.click === 'function') {
+        media.click();
+        return resolve(true);
+      }
+      if (Date.now() >= deadline) return resolve(false);
+      setTimeout(tick, intervalMs);
+    };
+    tick();
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     queueableSingleImage,
@@ -228,6 +255,8 @@ if (typeof module !== 'undefined' && module.exports) {
     applyCaptionToPost,
     escapeCaptionForTextarea,
     cardWhenLabel,
+    postIdFromSearch,
+    openPostWhenReady,
   };
 }
 if (typeof window !== 'undefined') {
@@ -252,5 +281,7 @@ if (typeof window !== 'undefined') {
     applyCaptionToPost,
     escapeCaptionForTextarea,
     cardWhenLabel,
+    postIdFromSearch,
+    openPostWhenReady,
   };
 }
