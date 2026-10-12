@@ -1191,6 +1191,9 @@
   function renderClaudeStudio() {
     const content = document.getElementById('dash-content');
     if (!content) return;
+    // 'post' = Create → Post (single posts). 'carousel' = Create → Carousels → Infographic or finished slides.
+    const csMode = window.__SE_CS_MODE === 'carousel' ? 'carousel' : 'post';
+    const isCarouselMode = csMode === 'carousel';
 
     const data = window._studioClientData || window.__clientData || window.clientData || {};
     _csBrandName = data?.client?.business_name || data?.business_name || 'Your Brand';
@@ -1216,8 +1219,11 @@
       <div class="atelier-shell" style="display:flex;height:calc(100vh - 56px);overflow:hidden;">
         <div class="atelier-essentials" style="width:300px;min-width:280px;border-right:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:22px 18px;display:flex;flex-direction:column;gap:16px;background:rgba(8,12,22,0.92);">
           <div>
-            <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:#fff;letter-spacing:-0.03em;">Post</div>
-            <div style="font-size:0.72rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.4;">Still · carousel · brand locked</div>
+            <div style="font-family:var(--font-display);font-size:1.35rem;font-weight:700;color:#fff;letter-spacing:-0.03em;">${isCarouselMode ? 'Carousels' : 'Post'}</div>
+            <div style="font-size:0.72rem;color:rgba(255,255,255,0.38);margin-top:4px;line-height:1.4;">${isCarouselMode ? 'Infographic or finished slides · brand locked' : 'Still · story · brand locked'}</div>
+            ${isCarouselMode
+              ? `<button type="button" id="cs-mode-brand" style="margin-top:10px;padding:0;background:none;border:none;color:rgba(255,255,255,0.6);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-decoration:underline;">← Brand template carousels</button>`
+              : `<button type="button" id="cs-mode-carousels" style="margin-top:10px;padding:0;background:none;border:none;color:rgba(255,255,255,0.6);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-decoration:underline;">Making a carousel? Open Carousels →</button>`}
           </div>
           <div id="cs-workspace-chip" style="display:none;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);font-size:0.72rem;color:rgba(255,255,255,0.72);font-weight:600;line-height:1.35;"></div>
           <div style="display:flex;gap:4px;">
@@ -1267,7 +1273,7 @@
               </div>
             </details>
 
-            <details class="atelier-drawer" style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
+            <details class="atelier-drawer" id="cs-carousel-drawer"${isCarouselMode ? ' open' : ' hidden'} style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:0;background:rgba(255,255,255,0.015);">
               <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
                 <span>Carousel</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
               </summary>
@@ -1294,7 +1300,7 @@
               <div style="padding:0 12px 12px;">
                 <div id="cs-saved-designs" style="padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;"></div>
                 <button type="button" id="cs-save-template" style="width:100%;margin-top:8px;padding:9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Save as template</button>
-                <div id="cs-brand-templates" style="margin-top:12px;"></div>
+                <div id="cs-brand-templates"${isCarouselMode ? '' : ' hidden'} style="margin-top:12px;"></div>
               </div>
             </details>
 
@@ -1321,7 +1327,7 @@
           <div id="cs-preview-wrap" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:auto;padding:36px 28px;">
             <div id="cs-empty" style="text-align:center;max-width:400px;">
               <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:rgba(255,255,255,0.78);margin-bottom:10px;letter-spacing:-0.03em;">Stage</div>
-              <div style="font-size:0.88rem;color:rgba(255,255,255,0.35);line-height:1.65;">Choose a reference, write a brief, Generate — or drop a finished graphic and Add to Queue. Carousel tools live under Carousel when you need them.</div>
+              <div style="font-size:0.88rem;color:rgba(255,255,255,0.35);line-height:1.65;">${isCarouselMode ? 'Upload a tall infographic to split or redesign into slides, or upload 2–10 finished slides and Add to Queue.' : 'Choose a reference, write a brief, Generate — or drop a finished graphic and Add to Queue. Carousels have their own tab.'}</div>
             </div>
             <div id="cs-loading" style="display:none;text-align:center;">
               <div style="width:52px;height:52px;border:3px solid rgba(124,58,237,0.2);border-top-color:#7C3AED;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
@@ -1555,6 +1561,13 @@
     document.getElementById('cs-tab-products')?.addEventListener('click', () => setPickerTab('products'));
     document.getElementById('cs-tab-library')?.addEventListener('click', () => setPickerTab('library'));
     document.getElementById('cs-tab-uploads')?.addEventListener('click', () => setPickerTab('uploads'));
+
+    document.getElementById('cs-mode-carousels')?.addEventListener('click', () => {
+      if (typeof window.seOpenCarousels === 'function') window.seOpenCarousels('brand');
+    });
+    document.getElementById('cs-mode-brand')?.addEventListener('click', () => {
+      if (typeof window.seOpenCarousels === 'function') window.seOpenCarousels('brand');
+    });
 
     applyDesignCoachSession();
     applyRedesignedSlides();
@@ -3262,6 +3275,7 @@
   window.designCoachAsk = designCoachAsk;
   window.openClaudeDesignStudio = function openClaudeDesignStudio() {
     window.__SE_CREATE_SURFACE = 'design';
+    window.__SE_CS_MODE = 'post';
     try {
       if (typeof window.activeNav !== 'undefined') window.activeNav = 'design-studio';
     } catch (_) {}

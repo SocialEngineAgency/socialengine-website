@@ -84,13 +84,13 @@ for (const vp of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
   });
 }
 
-test('Create: mode strip switches Video · Post · Design · Animate and remembers the choice', async ({ page }) => {
+test('Create: mode strip switches Video · Post · Carousels · Animate and remembers the choice', async ({ page }) => {
   await mockApi(page, srv.base);
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="create"]');
   const seg = page.locator('#create-segments');
   await expect(seg).toBeVisible();
-  await expect(seg.locator('[data-segment]')).toHaveText(['Video', 'Post', 'Design', 'Animate']);
+  await expect(seg.locator('[data-segment]')).toHaveText(['Video', 'Post', 'Carousels', 'Animate']);
   await expect(seg.locator('[data-segment="creation-studio"]')).toHaveClass(/active/);
   await expect(page.locator('#dash-content .atelier-shell')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('#dash-content')).toContainText(/I already have the video/i);
@@ -104,7 +104,7 @@ test('Create: mode strip switches Video · Post · Design · Animate and remembe
   await seg.locator('[data-segment="brand-design"]').click();
   await expect(seg.locator('[data-segment="brand-design"]')).toHaveClass(/active/);
   await expect(page.locator('#dash-content .dsv2')).toBeVisible({ timeout: 15000 });
-  expect(await page.evaluate(() => location.hash)).toBe('#create/design');
+  expect(await page.evaluate(() => location.hash)).toBe('#create/carousels');
 
   await seg.locator('[data-segment="animation-studio"]').click();
   await expect(seg.locator('[data-segment="animation-studio"]')).toHaveClass(/active/);
