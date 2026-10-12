@@ -3297,7 +3297,7 @@
         <div class="create-segments" id="create-segments" role="tablist" aria-label="Create mode" hidden>
           <button type="button" class="create-seg active" role="tab" data-segment="creation-studio" aria-selected="true">Video</button>
           <button type="button" class="create-seg" role="tab" data-segment="design-studio" aria-selected="false">Post</button>
-          <button type="button" class="create-seg" role="tab" data-segment="brand-design" aria-selected="false">Design</button>
+          <button type="button" class="create-seg" role="tab" data-segment="brand-design" aria-selected="false">Carousels</button>
           <button type="button" class="create-seg" role="tab" data-segment="animation-studio" aria-selected="false">Animate</button>
           <button type="button" class="create-seg create-seg--studio" id="create-open-video-studio" onclick="openVideoStudio()" title="Edit videos with your posts, Library and brand. Opens in a new tab.">Video Studio <span aria-hidden="true">↗</span></button>
         </div>
@@ -6678,10 +6678,11 @@
       else if (activeNav === 'competitor-intel') renderCompetitorIntel();
       else if (activeNav === 'video-studio' || activeNav === 'creation-studio') renderVideoStudio();
       else if (activeNav === 'design-studio' && typeof (window.openClaudeDesignStudio || window.renderClaudeStudio) === 'function') {
+        window.__SE_CS_MODE = 'post';
         (window.openClaudeDesignStudio || window.renderClaudeStudio)();
       }
       else if (activeNav === 'animation-studio' && typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
-      else if (activeNav === 'brand-design' && window.seDesignStudio) window.seDesignStudio.render(document.getElementById('dash-content'));
+      else if (activeNav === 'brand-design') renderCarouselsTab();
       else if (activeNav === 'ad-studio') renderAdStudio();
       else if (activeNav === 'ai-studio') renderAIStudio();
       else if (activeNav === 'inbox') renderInbox();
@@ -6770,8 +6771,8 @@
         'video-studio': 'AI-powered video creation for your brand',
         'create': 'Video, Post, or Animate — pick a mode and make something',
         'creation-studio': 'Upload or generate video — music, caption, queue',
-        'design-studio': 'Still posts and carousels — brand locked, stage first',
-        'brand-design': 'Carousels designed in your exact brand style',
+        'design-studio': 'Single posts, stories and diagrams — brand locked, stage first',
+        'brand-design': 'Every carousel: your brand template, infographics and finished slides',
         'animation-studio': 'Multi-shot reels — canvas + agent',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'inbox': 'Comments, DMs and mentions in one place',
@@ -6915,10 +6916,10 @@
     });
 
     // ━━━ URL hash = Settings tab / Create mode (atelier) ━━━
-    // #settings/<brand|account|connections|billing> · #create/<video|post|design|animate>
+    // #settings/<brand|account|connections|billing> · #create/<video|post|carousels|animate> (#create/design still opens Carousels)
     const SETTINGS_TABS = ['brand', 'account', 'connections', 'billing'];
-    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', design: 'brand-design', animate: 'animation-studio' };
-    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'brand-design': 'design', 'animation-studio': 'animate' };
+    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', carousels: 'brand-design', design: 'brand-design', animate: 'animation-studio' };
+    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'brand-design': 'carousels', 'animation-studio': 'animate' };
     function seReadHash() {
       const m = /^#(settings|create)(?:\/([a-z-]+))?$/.exec(window.location.hash || '');
       return m ? { page: m[1], sub: m[2] || '' } : null;
@@ -6989,10 +6990,10 @@
       } else if (segment === 'brand-design') {
         window.__SE_CREATE_SURFACE = 'brand-design';
         document.getElementById('dash-content').classList.remove('dash-content--animate');
-        if (window.seDesignStudio) window.seDesignStudio.render(document.getElementById('dash-content'));
-        else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Design failed to load — hard refresh.</div>';
+        renderCarouselsTab();
       } else if (segment === 'design-studio') {
         window.__SE_CREATE_SURFACE = 'design';
+        window.__SE_CS_MODE = 'post';
         const open = window.openClaudeDesignStudio || window.renderClaudeStudio;
         if (typeof open === 'function') open();
         else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Post studio failed to load — hard refresh.</div>';
@@ -7001,6 +7002,30 @@
         renderVideoStudio();
       }
     }
+    // Carousels tab (segment id stays 'brand-design' so saved state and old links keep working).
+    // Two views: 'brand' = brand-template designer (design-studio-v2.js), 'slides' = infographic
+    // split, finished-slide upload and Coach redesigns (claude-studio.js in carousel mode).
+    function renderCarouselsTab(view) {
+      const dc = document.getElementById('dash-content');
+      if (!dc) return;
+      if (view === 'brand' || view === 'slides') window.__SE_CAROUSEL_VIEW = view;
+      const v = window.__SE_CAROUSEL_VIEW === 'slides' ? 'slides' : 'brand';
+      if (v === 'slides') {
+        window.__SE_CS_MODE = 'carousel';
+        if (typeof window.renderClaudeStudio === 'function') window.renderClaudeStudio();
+        else dc.innerHTML = '<div style="padding:40px;color:#F87171;">Carousels failed to load — hard refresh.</div>';
+        return;
+      }
+      window.__SE_CS_MODE = 'post';
+      if (window.seDesignStudio) window.seDesignStudio.render(dc);
+      else dc.innerHTML = '<div style="padding:40px;color:#F87171;">Carousels failed to load — hard refresh.</div>';
+    }
+    // Open Carousels on a given view from anywhere (Post hand-off, Coach redesign, Design v2 link).
+    window.seOpenCarousels = function seOpenCarousels(view) {
+      window.__SE_CAROUSEL_VIEW = view === 'slides' ? 'slides' : 'brand';
+      if (activeNav === 'brand-design') { renderCarouselsTab(); return; }
+      window.switchNav('brand-design');
+    };
     function renderCreatePage(segment) {
       showIf(true, document.getElementById('create-segments'));
       setCreateChrome(true);
@@ -7024,7 +7049,7 @@
         return;
       }
       if (nav === 'brand-design') {
-        seWriteHash('create/design');
+        seWriteHash('create/carousels');
         showIf(true, document.getElementById('create-segments'));
         const createBtn = document.querySelector('[data-nav="create"]');
         if (createBtn) {
@@ -7881,12 +7906,13 @@
         prompt: (plan && plan.prompt) || 'Carousel redesign',
         attached_image_url: data.master_image_url || master,
       };
-      if (typeof window.applyRedesignedSlides === 'function' && document.getElementById('cs-carousel')) {
+      if (window.__SE_CS_MODE === 'carousel' && typeof window.applyRedesignedSlides === 'function' && document.getElementById('cs-carousel')) {
         window.applyRedesignedSlides();
         return true;
       }
-      if (typeof switchNav === 'function') switchNav('design-studio');
-      else if (typeof window.openClaudeDesignStudio === 'function') window.openClaudeDesignStudio();
+      // Carousels live in Create → Carousels; the slides view picks up __SE_CAROUSEL_REDESIGN on render.
+      if (typeof window.seOpenCarousels === 'function') window.seOpenCarousels('slides');
+      else if (typeof switchNav === 'function') switchNav('design-studio');
       return true;
     }
     window.acceptCarouselRedesign = acceptCarouselRedesign;
@@ -18763,9 +18789,9 @@
             <span style="flex-shrink:0;font-size:0.78rem;font-weight:700;color:#E9D5FF;">Open ↗</span>
           </button>
 
-          <button type="button" id="aist-brand-design" onclick="switchNav('brand-design')" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(236,72,153,0.12));border:1px solid rgba(167,139,250,0.35);border-radius:14px;padding:18px 20px;margin-bottom:18px;cursor:pointer;text-align:left;">
+          <button type="button" id="aist-brand-design" onclick="(window.seOpenCarousels ? window.seOpenCarousels('brand') : switchNav('brand-design'))" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(236,72,153,0.12));border:1px solid rgba(167,139,250,0.35);border-radius:14px;padding:18px 20px;margin-bottom:18px;cursor:pointer;text-align:left;">
             <span>
-              <span style="display:block;font-family:var(--font-display);font-size:1rem;font-weight:700;color:#fff;margin-bottom:4px;">Brand Design</span>
+              <span style="display:block;font-family:var(--font-display);font-size:1rem;font-weight:700;color:#fff;margin-bottom:4px;">Carousels</span>
               <span style="display:block;font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">Carousels in your exact brand style: your layouts, fonts, colours and illustrations, facts checked and reviewed slide by slide.</span>
             </span>
             <span style="flex-shrink:0;font-size:0.78rem;font-weight:700;color:#E9D5FF;">Open →</span>

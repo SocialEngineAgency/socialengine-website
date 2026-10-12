@@ -182,7 +182,7 @@ test('Coach design_carousel → Design this carousel → Design tab starts with 
   await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
 });
 
-test('All Tools has a Brand Design card that opens the Design tab', async ({ page }) => {
+test('All Tools has a Carousels card that opens the Carousels tab', async ({ page }) => {
   await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls: [] }) });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="ai-studio"]');

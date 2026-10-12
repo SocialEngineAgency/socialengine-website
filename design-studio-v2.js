@@ -334,15 +334,17 @@
     const root = state.root;
     if (!root) return;
     if (!info.enabled) {
-      root.innerHTML = '<div class="dsv2-scroll"><div class="dsv2"><h2>Brand Design</h2><p class="dsv2-sub">Brand Design is not switched on for this account yet.</p></div></div>';
+      root.innerHTML = '<div class="dsv2-scroll"><div class="dsv2"><h2>Carousels</h2><p class="dsv2-sub">Brand template carousels are not switched on for this account yet. You can still turn an infographic into slides, or post finished slides.</p><div class="dsv2-actions"><button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-open-slides">Infographic or finished slides →</button></div></div></div>';
+      const openSlides = el('dsv2-open-slides');
+      if (openSlides) openSlides.addEventListener('click', () => { if (typeof global.seOpenCarousels === 'function') global.seOpenCarousels('slides'); });
       return;
     }
     const showSetup = !sys || state.rebuild;
     root.innerHTML = `<div class="dsv2-scroll"><div class="dsv2">
       <div class="dsv2-head"><div>
-        <h2>Brand Design</h2>
+        <h2>Carousels</h2>
         <p class="dsv2-sub">Carousels designed in your exact brand style: your layouts, fonts, colours and illustration style, with facts checked and every slide reviewed before you see it.</p>
-      </div></div>
+      </div><button type="button" class="dsv2-btn" id="dsv2-open-slides" title="Split a tall infographic into slides, or post finished slides as they are">Infographic or finished slides →</button></div>
       ${sys ? systemCard(sys, info) : ''}
       ${showSetup ? setupCard(!!sys) : ''}
       ${sys && !state.rebuild ? makeCard() : ''}
@@ -655,6 +657,8 @@
   }
 
   function wire() {
+    const openSlides = el('dsv2-open-slides');
+    if (openSlides) openSlides.addEventListener('click', () => { if (typeof global.seOpenCarousels === 'function') global.seOpenCarousels('slides'); });
     const rebuild = el('dsv2-rebuild');
     if (rebuild) rebuild.addEventListener('click', (ev) => {
       ev.preventDefault();
@@ -1668,6 +1672,7 @@
 
   function openWith(p) {
     state.pending = Object.assign({}, p || {});
+    global.__SE_CAROUSEL_VIEW = 'brand'; // Carousels tab: the brand-template view owns handoffs
     if (typeof global.switchNav === 'function') global.switchNav('brand-design');
   }
 

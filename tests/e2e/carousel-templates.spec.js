@@ -62,7 +62,7 @@ test('example slides → review → saved default → Build in brand template �
   await login(page, srv.base);
   await page.evaluate(() => {
     window._studioReference = { url: 'https://store.test/master.png', type: 'image', title: '4K poster' };
-    window.switchNav('design-studio');
+    window.seOpenCarousels('slides');
   });
 
   const build = page.locator('#cs-build-template');
@@ -87,7 +87,8 @@ test('example slides → review → saved default → Build in brand template �
   expect(save.make_default).toBe(true);
   await expect(page.locator('#cs-brand-templates')).toContainText('Clinic stages');
 
-  await page.locator('summary').filter({ has: page.locator('span', { hasText: /^Carousel$/ }) }).click();
+  // Carousels → Infographic or finished slides opens with the Carousel drawer already expanded.
+  await expect(page.locator('#cs-carousel-drawer')).toHaveAttribute('open', '');
   await expect(build).toBeEnabled();
   await page.locator('#cs-tpl-count').selectOption('3');
   await build.click();
