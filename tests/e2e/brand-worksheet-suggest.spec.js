@@ -58,10 +58,16 @@ test('Analyse → suggestions beside the questions → Use fills the form → Sa
 
   const form = page.locator('#se-brand-worksheet');
   const adjSlot = form.locator('[data-bws-slot="adjectives"]');
-  const adjBox = await adjSlot.boundingBox();
-  const adjInputBox = await page.locator('#se-bw-adjectives').boundingBox();
-  expect(adjBox.x).toBeGreaterThan(adjInputBox.x + adjInputBox.width - 1);
-  expect(Math.abs(adjBox.y - adjInputBox.y)).toBeLessThan(60);
+  // Measure once the panel has settled (suggestions render in, then the grid
+  // reflows); a single early measurement was flaky.
+  const beside = async () => {
+    const adjBox = await adjSlot.boundingBox();
+    const adjInputBox = await page.locator('#se-bw-adjectives').boundingBox();
+    if (!adjBox || !adjInputBox) return 'not laid out';
+    if (!(adjBox.x > adjInputBox.x + adjInputBox.width - 1)) return 'not to the right';
+    return Math.abs(adjBox.y - adjInputBox.y) < 60 ? 'beside' : `off by ${Math.round(adjBox.y - adjInputBox.y)}px`;
+  };
+  await expect.poll(beside, { timeout: 5000 }).toBe('beside');
 
   const quote = adjSlot.locator('.bws-why li', { hasText: 'real bread, no shortcuts' });
   await expect(quote).toBeHidden();
