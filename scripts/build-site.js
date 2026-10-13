@@ -40,6 +40,7 @@ const ALLOWLIST = [
   'key-dates.js', // portal.html — Calendar key dates (holidays, awareness days) + post ideas
   'diagram-posts.js', // portal.html — diagram graphics (steps, timeline, compare, cycle, funnel)
   'motion-reels.js', // portal.html — carousel → Reel and text Reels (HyperFrames)
+  'live-updates.js', // portal.html — live updates stream (Server-Sent Events)
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'carousel-templates.js', // portal.html

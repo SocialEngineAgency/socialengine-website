@@ -28,6 +28,7 @@
   <script src="./key-dates.js?v=20261010" defer></script>
   <script src="./diagram-posts.js?v=20261010" defer></script>
   <script src="./motion-reels.js?v=20261010-voice" defer></script>
+  <script src="./live-updates.js?v=20261012" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -6227,16 +6228,18 @@
           return;
         }
         try {
-          const res = await apiFetch(`${API}/api/client-data`, {
-            headers: authHeaders()
-          });
+          // Just this post (live updates usually get there first).
+          const res = await apiFetch(`${API}/api/posts/${encodeURIComponent(postId)}`);
           if (!res.ok) return;
-          const freshData = await res.json();
-          const freshPost = (freshData.content || []).find(p => p.id === postId);
+          const freshPost = (await res.json()).post;
           if (freshPost && freshPost.status !== 'Regenerating') {
             clearInterval(regenPollTimers[postId]);
             delete regenPollTimers[postId];
-            clientData = freshData;
+            if (clientData) {
+              const list = Array.isArray(clientData.content) ? clientData.content : (clientData.content = []);
+              const at = list.findIndex(p => p.id === postId);
+              if (at >= 0) list[at] = freshPost; else list.unshift(freshPost);
+            }
             const idx = studioPostsList.findIndex(p => p.id === postId);
             if (idx >= 0) studioPostsList[idx] = freshPost;
             if (activeNav === 'content') renderContentPage(clientData);
@@ -6739,11 +6742,104 @@
       if (wasGated && nowPaid) showToast('Upgrade unlocked — enjoy your full dashboard!', 'success');
     }
     function startTierPolling() {
-      if (tierPoller) return;
-      tierPoller = visiblePoller(pollSession, 60000);
+      if (!tierPoller) tierPoller = visiblePoller(pollSession, 60000);
+      seLiveStart();
     }
     function stopTierPolling() {
       if (tierPoller) { tierPoller.stop(); tierPoller = null; }
+      seLiveStop();
+    }
+
+    // ━━━ Live updates ━━━
+    // The API pushes "post X changed" / "account changed" hints over a
+    // Server-Sent Events stream (live-updates.js). We re-read just what changed
+    // through /api/posts?ids= and /api/client-data?content=none, so a finished
+    // generation, a publish or a credit top-up shows up without a refresh.
+    async function seLiveTicket() {
+      const r = await apiFetch(`${API}/api/events/ticket`, { method: 'POST' });
+      if (r.status === 401 || r.status === 403 || r.status === 404) return null;
+      if (!r.ok) throw new Error(`ticket ${r.status}`);
+      const d = await r.json().catch(() => ({}));
+      return d && typeof d.url === 'string' && d.url.startsWith('/api/events?') ? d.url : null;
+    }
+    // Typing in a field or a dialog open: re-render later so nothing is lost.
+    let _seLivePendingRender = false;
+    function seLiveUserIsEditing() {
+      const a = document.activeElement;
+      if (a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !/^(button|checkbox|radio|submit)$/i.test(a.type || '')) || a.isContentEditable)) return true;
+      return Array.from(document.querySelectorAll('.reject-modal.active, .se-onboarding-overlay.active, [role="dialog"][aria-modal="true"]'))
+        .some((el) => el.getClientRects().length > 0); // visible (display:none has no boxes)
+    }
+    function seLiveRefreshView() {
+      if (seLiveUserIsEditing()) {
+        if (!_seLivePendingRender) {
+          _seLivePendingRender = true;
+          document.addEventListener('focusout', () => setTimeout(() => { _seLivePendingRender = false; seLiveRefreshView(); }, 300), { once: true });
+        }
+        return;
+      }
+      const y = window.scrollY;
+      if (activeNav === 'dashboard' || activeNav === 'content' || activeNav === 'library') rerenderCurrentPage();
+      if (document.getElementById('studio-modal')?.classList.contains('active')) renderStudioModalContent();
+      window.scrollTo(0, y);
+    }
+    async function seLiveApplyPosts(ids) {
+      if (!clientData || !ids || !ids.length) return;
+      const res = await apiFetch(`${API}/api/posts?ids=${encodeURIComponent(ids.slice(0, 100).join(','))}`);
+      if (!res.ok) return;
+      const d = await res.json().catch(() => null);
+      if (!d || !clientData) return;
+      const list = Array.isArray(clientData.content) ? clientData.content : (clientData.content = []);
+      for (const p of (d.posts || [])) {
+        const i = list.findIndex((x) => x.id === p.id);
+        if (i >= 0) list[i] = p; else list.unshift(p);
+        const j = studioPostsList.findIndex((x) => x.id === p.id);
+        if (j >= 0) studioPostsList[j] = p;
+      }
+      for (const id of (d.missing || [])) {
+        const i = list.findIndex((x) => x.id === id);
+        if (i >= 0) list.splice(i, 1);
+        const j = studioPostsList.findIndex((x) => x.id === id);
+        if (j >= 0) studioPostsList.splice(j, 1);
+      }
+      seLiveRefreshView();
+    }
+    async function seLiveApplyClient(fields) {
+      if (!clientData) return;
+      if (fields && fields.length && fields.every((f) => f === 'session_epoch')) return; // the stream says logout itself
+      const res = await apiFetch(`${API}/api/client-data?content=none`);
+      if (!res.ok) return;
+      const fresh = await res.json().catch(() => null);
+      if (!fresh || !clientData) return;
+      const keep = clientData.content;
+      clientData = Object.assign(fresh, { content: keep });
+      delete clientData.content_omitted;
+      try { updateSidebarCredits(); } catch (_) {}
+      if (activeNav === 'settings' || activeNav === 'brand-voice' || activeNav === 'dashboard') seLiveRefreshView();
+    }
+    async function seLiveResync() {
+      if (!clientData) return;
+      const res = await apiFetch(`${API}/api/client-data`);
+      if (!res.ok) return;
+      const fresh = await res.json().catch(() => null);
+      if (!fresh) return;
+      clientData = fresh;
+      seLiveRefreshView();
+    }
+    function seLiveStart() {
+      if (!window.seLive || !clientToken) return;
+      if (window.seLive.connected) return;
+      window.seLive.start({
+        api: API,
+        getTicket: seLiveTicket,
+        onPost: (ids) => { seLiveApplyPosts(ids).catch(() => {}); },
+        onClient: (fields) => { seLiveApplyClient(fields).catch(() => {}); },
+        onResync: () => { seLiveResync().catch(() => {}); },
+        onLogout: () => handleSessionExpired(),
+      });
+    }
+    function seLiveStop() {
+      try { window.seLive && window.seLive.stop(); } catch (_) {}
     }
     function stopInboxPolling() {
       if (inboxPollInterval) { inboxPollInterval.stop(); inboxPollInterval = null; }
