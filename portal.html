@@ -7437,7 +7437,7 @@
               <div id="vs-mix-status" style="font-size:0.72rem;color:${mixCurrent ? '#6EE7B7' : 'rgba(255,255,255,0.4)'};margin-bottom:16px;">${mixCurrent ? 'Video player is the mix — hit play on the video.' : (uploadDraft.musicUrl ? 'Video player is still the original. Play with music to hear the final.' : '')}</div>
               <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Caption</label>
               <textarea id="vs-upload-caption" rows="4" placeholder="Write the caption for this post" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:8px;">${uploadDraft.caption || ''}</textarea>
-              <button type="button" onclick="generateVSUploadCaption()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);margin-bottom:16px;">Write caption</button>
+              <button type="button" onclick="generateVSUploadCaption(this)" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);margin-bottom:16px;">Write caption</button>
               <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Platforms</label>
               <div id="vs-upload-platforms" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
                 ${vsPlatforms.map((p) => `<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:rgba(255,255,255,0.75);"><input type="checkbox" value="${p}" checked> ${p}</label>`).join('')}
@@ -8256,26 +8256,40 @@
       pickVSSavedMusic('');
     }
 
-    async function generateVSUploadCaption() {
+    async function generateVSUploadCaption(btn) {
       const box = document.getElementById('vs-upload-caption');
       const draft = vsUploadDraft();
-      const desc = String(box?.value || draft.filename || 'Social media video').trim();
+      const typed = String(box?.value || '').trim();
+      // The writer watches the uploaded video (the mixed version when music was added).
+      const videoUrl = /^https:\/\//i.test(draft.mixedVideoUrl || '') ? draft.mixedVideoUrl : (/^https:\/\//i.test(draft.videoUrl || '') ? draft.videoUrl : '');
+      if (!videoUrl && !typed) { showToast('Upload your video first'); return; }
+      const label = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = videoUrl ? 'Watching video…' : 'Writing…'; }
       try {
         const resp = await fetch(`${API}/api/studio/generate-caption`, {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ description: desc, platform: 'Instagram', tone: 'engaging', hashtag_count: 8 }),
+          body: JSON.stringify({
+            media_url: videoUrl || undefined,
+            media_type: 'video',
+            current_caption: videoUrl ? typed : '',
+            description: videoUrl ? '' : typed,
+            platform: 'Instagram',
+            tone: 'engaging',
+          }),
         });
         const data = await resp.json().catch(() => ({}));
         if (data.success && data.caption && box) {
           box.value = data.caption;
           draft.caption = data.caption;
-          showToast('Caption ready', 'success');
+          showToast(data.warning || 'Caption ready', data.warning ? 'warning' : 'success');
         } else {
           showToast(data.error || 'Caption failed');
         }
       } catch (e) {
         showToast(e.message || 'Caption failed');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = label || 'Write caption'; }
       }
     }
 
@@ -13515,32 +13529,31 @@
       }
 
       function paintBanner(dbg) {
-        const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
+        const noPage = !!dbg.dm_no_page;
+        const needReconnect = noPage || !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
         const needAdvanced = !needReconnect && !!(dbg.dm_needs_advanced_access || dbg.dm_standard_access_empty);
         const needAppSetup = !needReconnect && !needAdvanced && !!dbg.dm_app_capability_error;
+        const dmFailed = !needReconnect && !needAdvanced && !needAppSetup && !dbg.dm_ig_count && !!(dbg.dm_instagram_failed || dbg.dm_instagram_busy);
         const banner = document.getElementById('inbox-reconnect-banner');
         if (!banner) return;
         const title = document.getElementById('inbox-banner-title');
         const body = document.getElementById('inbox-banner-body');
         const btn = document.getElementById('inbox-reconnect-meta-btn');
-        if (needReconnect) {
-          banner.style.display = 'flex';
-          title.textContent = 'Meta permissions needed';
-          body.textContent = 'Reconnect once and approve comments and messaging so replies and DMs work.';
-          btn.style.display = '';
+        const show = (t, b, withButton) => { banner.style.display = 'flex'; title.textContent = t; body.textContent = b; btn.style.display = withButton ? '' : 'none'; };
+        if (noPage) {
+          show('DMs need your Facebook Page', dbg.dm_info || 'Reconnect Meta and choose the Facebook Page linked to your Instagram.', true);
+        } else if (needReconnect) {
+          show('Meta permissions needed', 'Reconnect once and approve comments and messaging so replies and DMs work.', true);
         } else if (needAdvanced) {
-          banner.style.display = 'flex';
-          title.textContent = 'Instagram DMs are limited for now';
-          body.textContent = dbg.dm_info || 'Customer DMs appear after Meta approves Advanced Access for Instagram messages.';
-          btn.style.display = 'none';
+          show('Instagram DMs are limited for now', dbg.dm_info || 'Customer DMs appear after Meta approves Advanced Access for Instagram messages.', false);
         } else if (needAppSetup) {
-          banner.style.display = 'flex';
-          title.textContent = 'Instagram DMs need Messaging turned on';
-          body.textContent = dbg.dm_info || 'Turn on Instagram Messaging for the Meta app, then refresh.';
-          btn.style.display = 'none';
+          show('Instagram DMs need Messaging turned on', dbg.dm_info || 'Turn on Instagram Messaging for the Meta app, then refresh.', false);
+        } else if (dmFailed) {
+          show(dbg.dm_instagram_busy ? 'DMs did not load this time' : 'Instagram DMs did not load', dbg.dm_info || 'Meta did not return your DMs. Try Refresh.', false);
         } else {
           banner.style.display = 'none';
         }
+        S.dmNote = dbg.dm_messenger_unavailable ? 'Facebook Page messages (Messenger) are not connected yet, so only Instagram DMs show here.' : '';
       }
 
       // ── Rendering ──
@@ -13570,6 +13583,11 @@
       }
 
       function emptyHtml() {
+        if (S.type === 'dm' && !S.q) {
+          const dbg = (S.data && S.data._debug) || {};
+          const why = dbg.dm_info || (S.dmNote || 'No DMs came back from Meta yet.');
+          return `<div class="ibx-empty"><strong>No DMs here yet</strong>${escapeHtml(why)}${S.dmNote && why !== S.dmNote ? `<br>${escapeHtml(S.dmNote)}` : ''}</div>`;
+        }
         if (S.q || S.platform || S.type) return '<div class="ibx-empty"><strong>Nothing matches</strong>Try another search or filter.</div>';
         if (S.status === 'needs_reply') return '<div class="ibx-empty"><strong>All caught up</strong>Nobody is waiting on a reply.</div>';
         if (S.status === 'done') return '<div class="ibx-empty"><strong>Nothing marked done yet</strong>Mark a conversation done once it is handled.</div>';
@@ -20280,24 +20298,29 @@
   async function _batchWriteCaption(idx) {
     const item = _batchFiles[idx];
     if (!item) return;
-    // Paste-first: open AI brief only when needed; don't overwrite without confirm
-    if (!item.aiBriefOpen && !(item.description || '').trim()) {
-      item.aiBriefOpen = true;
-      item.expanded = true;
-      item.compact = false;
-      _batchExpandedIdx = idx;
-      _renderBatchQueue();
-      if (typeof showToast === 'function') showToast('Add a short brief for AI, then tap Write caption again');
-      setTimeout(() => {
-        const el = document.getElementById('bq-desc-' + idx);
-        if (el) el.focus();
-      }, 40);
-      return;
-    }
-    if ((item.caption || '').trim()) {
-      if (!confirm('Replace your existing caption with an AI rewrite?')) return;
-    }
+    // The writer watches the video / looks at the photo, so no brief is needed.
+    // A typed caption is rewritten (its facts kept), so no confirm either.
     await _batchGenerateOne(idx);
+  }
+
+  // Upload the file once so the caption writer can look at it; scheduling
+  // then reuses the stored copy instead of uploading again.
+  function _batchEnsureUploaded(idx) {
+    const item = _batchFiles[idx];
+    if (!item) return Promise.reject(new Error('Missing file'));
+    if (item.mediaUrl) return Promise.resolve(item.mediaUrl);
+    if (item.uploading) return item.uploading;
+    const isVideo = item.file.type.startsWith('video/');
+    const fd = new FormData();
+    fd.append('file', item.file, item.file.name);
+    item.uploading = (async () => {
+      const resp = await apiFetch(`${API}/api/studio/${isVideo ? 'upload-video' : 'upload-image'}`, { method: 'POST', headers: authHeaders(), body: fd });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.url) throw new Error(data.error || 'Upload failed');
+      item.mediaUrl = data.url;
+      return data.url;
+    })().finally(() => { item.uploading = null; });
+    return item.uploading;
   }
 
   function _batchPreviewMedia(idx) {
@@ -20389,7 +20412,10 @@
           <div style="margin-bottom:8px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
               <div style="font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;">Caption</div>
-              ${hasCap ? `<button type="button" onclick="event.stopPropagation();_batchToggleExpand(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Collapse</button>` : `<span style="font-size:0.65rem;color:rgba(255,255,255,0.28);">Paste your own · AI optional</span>`}
+              <span style="display:flex;align-items:center;gap:10px;">
+                ${!isScheduled ? `<button type="button" onclick="event.stopPropagation();_batchToggleAiBrief(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);padding:0;">${aiBriefOpen ? 'Hide notes' : 'Notes for AI'}</button>` : ''}
+                ${hasCap ? `<button type="button" onclick="event.stopPropagation();_batchToggleExpand(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.4);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);padding:0;">Collapse</button>` : ''}
+              </span>
             </div>
             <textarea id="bq-cap-${idx}" rows="${hasCap ? 5 : 4}"
               placeholder="Paste your caption here…"
@@ -20400,10 +20426,10 @@
             ${aiBriefOpen ? `
               <div style="margin-top:8px;padding:8px 9px;background:rgba(124,58,237,0.06);border:0.5px solid rgba(124,58,237,0.22);border-radius:8px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
-                  <div style="font-size:0.62rem;font-weight:700;color:#C4B5FD;text-transform:uppercase;letter-spacing:0.05em;">AI brief (optional)</div>
+                  <div style="font-size:0.62rem;font-weight:700;color:#C4B5FD;text-transform:uppercase;letter-spacing:0.05em;">Notes for AI (optional)</div>
                   <button type="button" onclick="event.stopPropagation();_batchToggleAiBrief(${idx})" style="background:none;border:none;color:rgba(255,255,255,0.35);font-size:0.65rem;cursor:pointer;font-family:var(--font-body);">Hide</button>
                 </div>
-                <textarea id="bq-desc-${idx}" placeholder="Short notes for AI — tone, offer, CTA…"
+                <textarea id="bq-desc-${idx}" placeholder="AI watches the video. Add direction if you like: offer, event, call to action…"
                   oninput="_batchFiles[${idx}].description=this.value"
                   onmousedown="event.stopPropagation()"
                   style="width:100%;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:7px;color:rgba(255,255,255,0.65);font-size:0.72rem;padding:7px 9px;resize:vertical;min-height:42px;font-family:var(--font-body);outline:none;box-sizing:border-box;">${_bqEsc(item.description || '')}</textarea>
@@ -20459,7 +20485,7 @@
 
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
           ${!isScheduled ? `<span draggable="true" ondragstart="_batchDragStart(${idx},event)" ondragend="_batchDragEnd()" title="Drag to a calendar day" style="padding:4px 7px;border-radius:5px;border:0.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.45);font-size:0.68rem;cursor:grab;user-select:none;font-family:var(--font-body);">⠿ Drag</span>` : ''}
-          ${!isScheduled ? `<button onclick="event.stopPropagation();_batchWriteCaption(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.12);border-radius:5px;color:rgba(255,255,255,0.55);font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap ? '✨ Rewrite with AI' : (aiBriefOpen ? '✨ Write with AI' : '✨ AI caption')}</button>` : ''}
+          ${!isScheduled ? `<button onclick="event.stopPropagation();_batchWriteCaption(${idx})" id="bq-aibtn-${idx}" style="padding:4px 9px;background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.12);border-radius:5px;color:rgba(255,255,255,0.55);font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">${hasCap ? '✨ Rewrite with AI' : '✨ AI caption'}</button>` : ''}
           <button type="button" onclick="event.stopPropagation();_batchPickDate(${idx})" style="padding:4px 9px;background:${hasDate?'rgba(124,58,237,0.1)':'rgba(255,255,255,0.04)'};border:0.5px solid ${hasDate?'rgba(124,58,237,0.25)':'rgba(255,255,255,0.1)'};border-radius:5px;color:${hasDate?'#a78bfa':'rgba(255,255,255,0.4)'};font-size:0.68rem;cursor:pointer;font-family:var(--font-body);">📅 ${hasDate ? (dateLabel + ' · ' + (item.time || '09:00')) : 'Set date & time'}</button>
           ${hasCap && !isScheduled ? `<button onclick="event.stopPropagation();_batchScheduleOne(${idx})" style="padding:4px 10px;background:#7C3AED;border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Schedule</button>` : ''}
           ${isScheduled ? `<button onclick="event.stopPropagation();_batchPublishNowFromDay(${idx},'${_bqEsc(item.date || '')}')" style="padding:4px 10px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:5px;color:#fff;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:var(--font-body);margin-left:auto;">Publish now</button>` : ''}
@@ -20619,16 +20645,39 @@
     const item = _batchFiles[idx];
     if (!item) return;
     const descEl = document.getElementById('bq-desc-' + idx);
-    const desc = (descEl?.value || item.description || item.file.name.replace(/\.[^.]+$/, '').replace(/[_\-]+/g, ' ')).trim();
+    const notes = String(descEl?.value || item.description || '').trim();
+    const liveCap = document.getElementById('bq-cap-' + idx);
+    if (liveCap) item.caption = liveCap.value;
+    const draft = String(item.caption || '').trim();
+    const isVideo = item.file.type.startsWith('video/');
     const btn = document.getElementById('bq-aibtn-' + idx);
-    if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
+    const reset = () => { if (btn) { btn.disabled = false; btn.textContent = draft ? '✨ Rewrite with AI' : '✨ AI caption'; } };
+    if (btn) { btn.disabled = true; btn.textContent = item.mediaUrl ? (isVideo ? '✨ Watching video…' : '✨ Looking at photo…') : '✨ Uploading…'; }
+    let mediaUrl = '';
+    try {
+      mediaUrl = await _batchEnsureUploaded(idx);
+    } catch (e) {
+      if (!notes && !draft) {
+        if (typeof showToast === 'function') showToast('Could not upload the file to read it: ' + e.message, 'error');
+        reset();
+        return;
+      }
+    }
+    if (btn && mediaUrl) btn.textContent = isVideo ? '✨ Watching video…' : '✨ Looking at photo…';
     try {
       const resp = await apiFetch(`${API}/api/studio/generate-caption`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ description: desc || 'Social media content', platform: item.platforms[0] || 'Instagram', tone: 'engaging', hashtag_count: 8 }),
+        body: JSON.stringify({
+          description: notes,
+          current_caption: draft,
+          media_url: mediaUrl || undefined,
+          media_type: isVideo ? 'video' : 'image',
+          platform: item.platforms.join(', ') || 'Instagram',
+          tone: 'engaging',
+        }),
       });
-      const data = await resp.json();
+      const data = await resp.json().catch(() => ({}));
       if (data.success && data.caption) {
         _batchFiles[idx].caption = data.caption;
         if (_batchFiles[idx].status === 'pending') _batchFiles[idx].status = 'captioned';
@@ -20636,13 +20685,17 @@
         _batchFiles[idx].aiBriefOpen = false;
         _batchExpandedIdx = idx;
         _renderBatchQueue();
+        if (typeof showToast === 'function') {
+          if (data.warning) showToast(data.warning, 'warning');
+          else if (!mediaUrl) showToast('Could not upload the file, so this caption is based on your notes only.', 'warning');
+        }
       } else {
-        if (typeof showToast === 'function') showToast('Caption failed: ' + (data.error || 'Unknown error'));
-        if (btn) { btn.disabled = false; btn.textContent = '✨ Write caption'; }
+        if (typeof showToast === 'function') showToast('Caption failed: ' + (data.error || 'Unknown error'), 'error');
+        reset();
       }
     } catch (e) {
-      if (typeof showToast === 'function') showToast('Caption error: ' + e.message);
-      if (btn) { btn.disabled = false; btn.textContent = '✨ Write caption'; }
+      if (typeof showToast === 'function') showToast('Caption error: ' + e.message, 'error');
+      reset();
     }
   }
 
@@ -20667,19 +20720,36 @@
     const schedBtn = card ? card.querySelector('button[onclick*="batchScheduleOne"]') : null;
     if (schedBtn) { schedBtn.disabled = true; schedBtn.textContent = 'Scheduling…'; }
     try {
-      const fd = new FormData();
-      // Text fields FIRST — putting the video before caption used to lose the
-      // caption when naive multipart parsers split on binary boundary collisions.
-      fd.append('caption', item.caption || '');
-      fd.append('platforms', item.platforms.join(','));
-      fd.append('scheduled_date', item.date);
-      fd.append('scheduled_time', item.time || '09:00');
-      fd.append('file', item.file, item.file.name);
-      const resp = await apiFetch(`${API}/api/studio/quick-schedule`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: fd,
-      });
+      let resp;
+      if (item.mediaUrl) {
+        // Already uploaded for the caption: send the stored copy, not the file again.
+        resp = await apiFetch(`${API}/api/studio/quick-schedule`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            caption: item.caption || '',
+            platforms: item.platforms.join(','),
+            scheduled_date: item.date,
+            scheduled_time: item.time || '09:00',
+            media_url: item.mediaUrl,
+            content_type: item.file.type.startsWith('video/') ? 'video' : 'image',
+          }),
+        });
+      } else {
+        const fd = new FormData();
+        // Text fields FIRST — putting the video before caption used to lose the
+        // caption when naive multipart parsers split on binary boundary collisions.
+        fd.append('caption', item.caption || '');
+        fd.append('platforms', item.platforms.join(','));
+        fd.append('scheduled_date', item.date);
+        fd.append('scheduled_time', item.time || '09:00');
+        fd.append('file', item.file, item.file.name);
+        resp = await apiFetch(`${API}/api/studio/quick-schedule`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: fd,
+        });
+      }
       const data = await resp.json();
       if (data.success) {
         _batchFiles[idx].status = 'scheduled';
