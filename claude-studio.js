@@ -3239,21 +3239,38 @@
     }
   }
 
+  // What the caption writer should look at: the carousel slides, the
+  // designed / picked image, or the referenced video. Only stored https URLs.
+  function captionMedia() {
+    const https = (u) => (/^https:\/\//i.test(String(u || '')) ? String(u) : '');
+    if (hasCarousel()) {
+      const urls = (_csCarousel.slides || []).map((sl) => https(sl.url)).filter(Boolean).slice(0, 10);
+      if (urls.length > 1) return { image_urls: urls, media_type: 'carousel' };
+      if (urls.length === 1) return { media_url: urls[0], media_type: 'image' };
+    }
+    const image = https(_csQueueSingleUrl) || https(_csGeneratedUrl) || https(_csOriginalPreviewUrl) || (_csRef && _csRef.type === 'image' ? https(_csRef.url) : '');
+    if (image) return { media_url: image, media_type: 'image' };
+    if (_csRef && _csRef.type === 'video' && https(_csRef.video_url || _csRef.url)) return { media_url: https(_csRef.video_url || _csRef.url), media_type: 'video' };
+    return null;
+  }
+
   async function getCaption() {
     const box = document.getElementById('cs-caption-box');
     const btn = document.getElementById('cs-caption');
     _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
-    if (!_csBrief) {
+    const media = captionMedia();
+    if (!_csBrief && !media) {
       toast('Describe your post first', 'warning');
       return;
     }
-    if (btn) { btn.disabled = true; btn.textContent = 'Writing…'; }
-    if (box && 'value' in box) box.value = 'Writing caption…';
+    const draft = box && 'value' in box ? String(box.value || '').trim() : '';
+    if (btn) { btn.disabled = true; btn.textContent = media ? 'Looking…' : 'Writing…'; }
+    if (box && 'value' in box && !draft) box.value = 'Writing caption…';
     try {
       const res = await fetch(`${apiBase()}/api/studio/generate-caption`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ description: _csBrief, platform: 'Instagram' }),
+        body: JSON.stringify({ description: _csBrief, platform: 'Instagram', current_caption: draft, ...(media || {}) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Caption failed');
@@ -3262,9 +3279,10 @@
         box.dataset.caption = caption;
         if ('value' in box) box.value = caption;
       }
+      if (data.warning) toast(data.warning, 'warning');
     } catch (e) {
       toast(e.message || 'Caption failed', 'error');
-      if (box && 'value' in box && box.value === 'Writing caption…') box.value = '';
+      if (box && 'value' in box && box.value === 'Writing caption…') box.value = draft;
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Get Caption'; btn.style.cursor = 'pointer'; btn.style.color = 'rgba(255,255,255,0.75)'; }
     }
