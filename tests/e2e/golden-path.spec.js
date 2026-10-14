@@ -46,7 +46,7 @@ const TAB_DEFINITIONS = [
     data: async (page) => {
       const body = page.locator('#inbox-body');
       await expect(body).toBeVisible({ timeout: TAB_TIMEOUT_MS });
-      await expect(body.getByText(/Total Messages/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(body.locator('.inbox-filter[data-status="all"]')).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(body.getByText(/Needs Reply/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(body.locator('.inbox-filter').first()).toBeVisible({ timeout: TAB_TIMEOUT_MS });
     },
@@ -208,7 +208,7 @@ const TAB_DEFINITIONS = [
       const body = page.locator('#inbox-body');
       await expect(body).toBeVisible({ timeout: TAB_TIMEOUT_MS });
       await expect(body.locator('.inbox-filter').first()).toBeVisible({ timeout: TAB_TIMEOUT_MS });
-      await expect(body.getByText(/Comments|DMs|Mentions/i)).toBeVisible({ timeout: TAB_TIMEOUT_MS });
+      await expect(body.locator('#inbox-type')).toBeVisible({ timeout: TAB_TIMEOUT_MS });
     },
     ctas: [
       {

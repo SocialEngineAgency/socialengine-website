@@ -11794,7 +11794,8 @@
                     <span style="width:6px;height:6px;border-radius:50%;${getConnectionTone(ttConnection).dot}"></span>
                     ${ttHandle ? `${ttConnection.statusLabel} as @${ttHandle}` : ttConnection.statusLabel}
                   </div>
-                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${ttConnection.analyticsLimited ? 'TikTok publishing is connected, but native business OAuth still needs to finish before Grow can pull platform metrics.' : ttConnection.analyticsOnly ? 'TikTok is connected for analytics. Disconnect, then Connect again when re-authorizing permissions.' : 'TikTok is fully connected. SocialEngine can publish videos directly to your TikTok account and read analytics.'}</p>
+                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0;">${ttConnection.analyticsLimited ? 'TikTok publishing is connected, but native business OAuth still needs to finish before Grow can pull platform metrics.' : ttConnection.analyticsOnly ? 'TikTok is connected for analytics. Disconnect, then Connect again when re-authorizing permissions.' : 'TikTok is connected. SocialEngine posts your videos to it.'}</p>
+                  <div id="tt-publish-results" style="margin-top:14px;"></div>
                   <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                     ${ttConnection.analyticsLimited ? `<button onclick="retryNativeOAuth('tiktok')" style="display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.8125rem;cursor:pointer;font-family:var(--font-body);">Complete Analytics Connection</button><span style="font-size:0.74rem;color:var(--color-text-faint);line-height:1.5;">Complete TikTok native OAuth to unlock impressions, reach, and saves in Grow.</span>` : ''}
                     <button onclick="disconnectPlatform('tiktok')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.75);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-weight:600;font-size:0.78rem;cursor:pointer;font-family:var(--font-body);">Disconnect TikTok</button>
@@ -11804,12 +11805,12 @@
                     <span style="width:6px;height:6px;border-radius:50%;background:rgba(100,116,139,0.5);"></span>
                     Not connected
                   </div>
-                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0 0 14px;">Connect your TikTok Business account to enable direct video posting, analytics tracking, and audience insights.</p>
+                  <p style="font-size:0.8125rem;color:var(--color-text-muted);line-height:1.55;margin:0 0 14px;">Connect TikTok so SocialEngine can post your videos there.</p>
                   <button onclick="connectTikTokOAuth()" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:linear-gradient(135deg,#000,#25F4EE);color:#fff;font-weight:700;font-size:0.875rem;border:none;border-radius:10px;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.opacity='0.9'" onmouseleave="this.style.opacity='1'">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>
                     Connect TikTok
                   </button>
-                  <p style="font-size:0.78rem;color:var(--color-text-faint);margin:10px 0 0;line-height:1.5;">You'll be redirected to TikTok to authorize access. We request publish and analytics permissions.</p>
+                  <p style="font-size:0.78rem;color:var(--color-text-faint);margin:10px 0 0;line-height:1.5;">You'll be sent to TikTok to approve it. We only ask for permission to post videos.</p>
                 `}
               </div>
             </div>
@@ -11900,6 +11901,7 @@
       });
       const _h = seReadHash();
       openSettingsTab(_h && _h.page === 'settings' && SETTINGS_TABS.includes(_h.sub) ? _h.sub : 'brand');
+      if (isTTConnected) seLoadTikTokResults();
 
       setTimeout(() => {
         if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -11920,6 +11922,45 @@
         document.getElementById('shopify-oauth-reconnect-go')?.addEventListener('click', () => startShopifyOAuth('shopify-oauth-domain-reconnect'));
         document.getElementById('shopify-oauth-domain-reconnect')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') startShopifyOAuth('shopify-oauth-domain-reconnect'); });
       }, 50);
+    }
+
+    // Settings → TikTok: what TikTok actually did with recent posts (Upload-Post
+    // accepts uploads first and posts them after, so a rejection only shows here
+    // and on the post itself).
+    async function seLoadTikTokResults() {
+      const el = document.getElementById('tt-publish-results');
+      if (!el) return;
+      const esc = (v) => escapeHtml(String(v == null ? '' : v));
+      el.innerHTML = '<div style="font-size:0.78rem;color:var(--color-text-faint);">Checking recent TikTok posts…</div>';
+      try {
+        const res = await apiFetch(`${API}/api/publish/results?platform=tiktok`, { headers: authHeaders() });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { el.innerHTML = ''; return; }
+        const rows = [];
+        for (const h of d.history || []) rows.push({ ok: h.success, why: h.error, at: h.at, url: h.post_url });
+        if (!rows.length) {
+          for (const c of d.checks || []) {
+            const f = (c.failures || []).find((x) => x.platform === 'tiktok');
+            if (c.status === 'pending') rows.push({ ok: null, why: 'Waiting for TikTok to confirm', at: c.created_at });
+            else rows.push({ ok: !f, why: f ? f.message : '', at: c.checked_at || c.created_at });
+          }
+        }
+        if (!rows.length) { el.innerHTML = '<div style="font-size:0.78rem;color:var(--color-text-faint);">No TikTok posts yet.</div>'; return; }
+        const failed = rows.filter((r) => r.ok === false).length;
+        el.innerHTML = `
+          <div style="font-size:0.8rem;font-weight:700;color:#fff;margin-bottom:6px;">Recent TikTok posts${failed ? ` <span style="color:#FCA5A5;font-weight:600;">· ${failed} didn't go through</span>` : ''}</div>
+          <div style="display:grid;gap:4px;">
+            ${rows.slice(0, 8).map((r) => `
+              <div style="display:flex;gap:10px;align-items:baseline;font-size:0.76rem;line-height:1.45;">
+                <span style="flex:none;width:8px;height:8px;border-radius:50%;margin-top:4px;background:${r.ok === false ? '#F87171' : r.ok ? '#22C55E' : '#94A3B8'};"></span>
+                <span style="flex:none;color:var(--color-text-faint);min-width:64px;">${r.at ? esc(new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) : ''}</span>
+                <span style="color:${r.ok === false ? '#FECACA' : 'var(--color-text-muted)'};">${r.ok === false ? esc(r.why || 'TikTok rejected it') : r.ok ? (r.url ? `Posted · <a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:#CBD5E1;">view</a>` : 'Posted') : esc(r.why)}</span>
+              </div>`).join('')}
+          </div>
+          ${d.history_error ? `<div style="font-size:0.72rem;color:var(--color-text-faint);margin-top:6px;">${esc(d.history_error)}</div>` : ''}`;
+      } catch (_) {
+        el.innerHTML = '';
+      }
     }
 
     function shopifyFormHTML() {
@@ -13098,865 +13139,823 @@
     }
 
     // ━━━ Engagement Inbox ━━━
+    // ━━━ Inbox: conversation list + thread (stored inbox, GET /api/inbox) ━━━
+    const INBOX_CSS = `
+      .ibx{max-width:1180px}
+      .ibx-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 16px;flex-wrap:wrap;margin-bottom:16px}
+      .ibx-title{font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;letter-spacing:-0.02em;margin:0}
+      .ibx-sync{font-size:0.75rem;color:#94A3B8;margin:4px 0 0}
+      .ibx-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      .ibx-btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#CBD5E1;font:600 0.8rem var(--font-body);cursor:pointer;white-space:nowrap;text-decoration:none}
+      .ibx-btn:hover{border-color:rgba(255,255,255,0.2);color:#fff}
+      .ibx-btn svg{width:15px;height:15px}
+      .ibx-btn[disabled]{opacity:0.6;cursor:default}
+      .ibx-primary{background:#7C3AED;border-color:#7C3AED;color:#fff}
+      .ibx-primary:hover{background:#6D28D9;border-color:#6D28D9;color:#fff}
+      .ibx-done-btn{border-color:rgba(34,197,94,0.45);color:#86EFAC}
+      .ibx-icon-btn{width:36px;height:36px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#CBD5E1;cursor:pointer;text-decoration:none}
+      .ibx-icon-btn:hover{border-color:rgba(255,255,255,0.2);color:#fff}
+      .ibx-icon-btn svg{width:16px;height:16px}
+      .ibx-panes{display:grid;grid-template-columns:minmax(320px,400px) minmax(0,1fr);min-height:620px;border:1px solid rgba(255,255,255,0.07);border-radius:16px;background:rgba(14,28,51,0.6);overflow:hidden}
+      .ibx-list{display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,0.07);min-width:0}
+      .ibx-tabs{display:flex;gap:4px;padding:12px 12px 8px}
+      .ibx-tab{flex:1;min-height:36px;border:0;border-radius:8px;background:transparent;color:#CBD5E1;font:600 0.78rem var(--font-body);cursor:pointer}
+      .ibx-tab b{font-weight:700;margin-left:4px;color:#94A3B8}
+      .ibx-tab.active{background:rgba(124,58,237,0.18);color:#fff}
+      .ibx-tab.active b{color:#DDD6FE}
+      .ibx-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:0 12px 10px}
+      .ibx-tools input{grid-column:1/-1}
+      .ibx-tools input,.ibx-tools select{min-height:36px;border-radius:8px;border:1px solid rgba(255,255,255,0.09);background:rgba(10,22,40,0.75);color:#E2E8F0;font:500 0.78rem var(--font-body);padding:0 6px 0 10px;min-width:0;box-sizing:border-box}
+      .ibx-rows{flex:1;overflow-y:auto;max-height:640px;border-top:1px solid rgba(255,255,255,0.06)}
+      .ibx-row{display:flex;gap:10px;width:100%;text-align:left;padding:12px 30px 12px 14px;border:0;border-bottom:1px solid rgba(255,255,255,0.05);background:transparent;color:inherit;cursor:pointer;font-family:var(--font-body);position:relative;box-sizing:border-box}
+      .ibx-row:hover{background:rgba(255,255,255,0.03)}
+      .ibx-row[aria-current="true"]{background:rgba(124,58,237,0.13)}
+      .ibx-av{flex:none;width:34px;height:34px;border-radius:50%;background:#15243F;border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:0.78rem;font-weight:700;color:#CBD5E1;text-transform:uppercase}
+      .ibx-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+      .ibx-row-top{display:flex;align-items:center;gap:6px;min-width:0}
+      .ibx-name{font-size:0.84rem;font-weight:600;color:#E2E8F0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .ibx-name.is-unread{font-weight:800;color:#fff}
+      .ibx-tag{flex:none;font-size:0.6rem;font-weight:800;letter-spacing:0.04em;color:#94A3B8;border:1px solid rgba(148,163,184,0.3);border-radius:4px;padding:0 4px;line-height:1.5}
+      .ibx-time{margin-left:auto;flex:none;font-size:0.7rem;color:#94A3B8}
+      .ibx-preview{font-size:0.8rem;color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0}
+      .ibx-row-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:0.68rem;min-height:0}
+      .ibx-wait{color:#FDBA74;font-weight:600}
+      .ibx-donemark{color:#86EFAC;font-weight:600}
+      .ibx-dot{position:absolute;top:17px;right:12px;width:8px;height:8px;border-radius:50%;background:#38BDF8}
+      .inbox-hidden-badge{padding:0 6px;border-radius:4px;background:rgba(248,113,113,0.12);color:#FCA5A5;font-weight:700}
+      .ibx-thread{display:flex;flex-direction:column;min-width:0}
+      .ibx-thread-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.07)}
+      .ibx-thread-who{min-width:0}
+      .ibx-thread-name{font-weight:700;color:#fff;font-size:0.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .ibx-thread-sub{font-size:0.74rem;color:#94A3B8}
+      .ibx-thread-actions{margin-left:auto;display:flex;gap:6px;flex:none}
+      .ibx-context{margin:12px 18px 0;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.03);font-size:0.76rem;color:#94A3B8;line-height:1.45}
+      .ibx-context span{color:#CBD5E1}
+      .ibx-msgs{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px;max-height:460px;min-height:240px}
+      .ibx-msg{max-width:78%;display:flex;flex-direction:column;gap:3px;align-self:flex-start}
+      .ibx-msg.me{align-self:flex-end;align-items:flex-end}
+      .ibx-msg-meta{font-size:0.66rem;color:#94A3B8;padding:0 4px}
+      .ibx-bubble{padding:9px 13px;border-radius:14px;background:#15243F;border:1px solid rgba(255,255,255,0.06);color:#F1F5F9;font-size:0.85rem;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+      .ibx-msg.me .ibx-bubble{background:#22345A;border-color:rgba(148,163,184,0.22)}
+      .ibx-window{margin:0 18px 10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(251,146,60,0.3);background:rgba(251,146,60,0.06);font-size:0.76rem;color:#FED7AA;line-height:1.45}
+      .ibx-window a{color:#FDBA74;font-weight:700}
+      .ibx-compose{border-top:1px solid rgba(255,255,255,0.07);padding:12px 18px 16px;display:flex;flex-direction:column;gap:8px}
+      .ibx-chips{display:flex;gap:6px;flex-wrap:wrap}
+      .ibx-chip{min-height:30px;padding:0 10px;border-radius:15px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:#CBD5E1;font:600 0.72rem var(--font-body);cursor:pointer}
+      .ibx-chip:hover{border-color:rgba(255,255,255,0.25);color:#fff}
+      .ibx-compose textarea{width:100%;min-height:80px;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(10,22,40,0.75);color:#fff;font:0.86rem/1.5 var(--font-body);resize:vertical;outline:none}
+      .ibx-compose textarea:focus{border-color:rgba(148,163,184,0.5)}
+      .inbox-bait-warn{padding:8px 10px;border-radius:8px;border:1px solid rgba(251,191,36,0.25);background:rgba(251,191,36,0.06);color:#FCD34D;font-size:0.74rem;line-height:1.45}
+      .ibx-compose-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .ibx-compose-actions .ibx-primary{margin-left:auto}
+      .ibx-link{background:none;border:0;padding:0;color:#94A3B8;font:600 0.74rem var(--font-body);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+      .ibx-link:hover{color:#E2E8F0}
+      .ibx-empty{padding:56px 24px;text-align:center;color:#94A3B8;font-size:0.86rem;line-height:1.55}
+      .ibx-empty strong{display:block;color:#E2E8F0;font-size:0.95rem;margin-bottom:4px}
+      .ibx-foot{padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:0.72rem;color:#94A3B8;flex-wrap:wrap}
+      .ibx-tip{margin-top:10px;font-size:0.74rem;color:#94A3B8}
+      .ibx-back{display:none}
+      .ibx-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+      @media (max-width: 860px){
+        .ibx-panes{grid-template-columns:1fr}
+        .ibx-list{border-right:0}
+        .ibx-panes[data-view="thread"] .ibx-list{display:none}
+        .ibx-panes[data-view="list"] .ibx-thread{display:none}
+        .ibx-back{display:inline-flex}
+        .ibx-rows{max-height:none}
+        .ibx-head > div:first-child{padding-left:48px}
+        .ibx-head-actions{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
+      }
+    `;
+
     function renderInbox() {
       const content = document.getElementById('dash-content');
-      const c = clientData?.client || {};
-      const bv = scrubBrandVoice(clientData?.brand_voice) || {};
-      const plats = Array.isArray(c.social_connected_platforms)
-        ? c.social_connected_platforms.map(p => String(p || '').trim().toLowerCase())
-        : String(c.social_connected_platforms || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      const upSnap = clientData?.upload_post_connection;
-      const upIg = plats.includes('instagram') || (Array.isArray(upSnap?.accounts) && upSnap.accounts.some(a => String(a.platform || '').toLowerCase() === 'instagram'));
-      const isConnected = !!(c.instagram_token || c.facebook_token || upIg);
-
-      // Preview tier gate for Inbox
       if (isPreview()) {
         content.innerHTML = getUpgradeOverlay(
           'Engagement Inbox',
-          'AI-powered replies to DMs, comments, and mentions — all in your brand voice. Upgrade to unlock automated engagement management.',
-          ['AI replies in your exact brand voice', 'Auto-reply to comments & DMs', 'Mention & tag monitoring', 'Brand voice learning from your edits']
+          'AI-powered replies to DMs, comments, and mentions, all in your brand voice. Upgrade to unlock the inbox.',
+          ['AI replies in your brand voice', 'Auto-reply to comments', 'Mentions and tags in one place', 'Learns from your edits']
         );
         if (typeof lucide !== 'undefined') lucide.createIcons();
         return;
       }
-
-      // Show loading skeleton first
-      content.innerHTML = `
-        <div style="max-width:1100px;">
-          <div style="margin-bottom:28px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;">
-            <div>
-              <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;letter-spacing:-0.02em;margin:0 0 4px;">Engagement Inbox</h2>
-              <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0;">DMs, comments, and mentions — all in one place</p>
-              <p id="inbox-sync-status" style="font-size:0.72rem;color:rgba(148,163,184,0.55);margin:6px 0 0;">Checking for new messages…</p>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <button id="inbox-refresh-btn" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.7);font-size:0.8rem;font-weight:500;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='#fff';" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='rgba(148,163,184,0.7)';">
-                <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Refresh
-              </button>
-              <button id="inbox-questions-btn" title="The questions customers keep asking, grouped from your comments and DMs" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(124,58,237,0.35);background:rgba(124,58,237,0.08);color:#C4B5FD;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">
-                <i data-lucide="messages-square" style="width:14px;height:14px;"></i> What customers ask
-              </button>
-              <button id="inbox-settings-btn" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.7);font-size:0.8rem;font-weight:500;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='#fff';" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.color='rgba(148,163,184,0.7)';">
-                <i data-lucide="settings" style="width:14px;height:14px;"></i> Auto-Reply Settings
-              </button>
-            </div>
-          </div>
-          <div id="inbox-reconnect-banner" style="display:none;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 20px;padding:14px 16px;border-radius:12px;border:1px solid rgba(251,146,60,0.35);background:rgba(251,146,60,0.08);">
-            <div style="flex:1;min-width:220px;">
-              <div id="inbox-banner-title" style="font-size:0.88rem;font-weight:700;color:#FDBA74;margin-bottom:4px;">Meta permissions needed for Engage</div>
-              <div id="inbox-banner-body" style="font-size:0.78rem;color:rgba(255,255,255,0.65);line-height:1.45;">Comment names, sending replies, and Instagram DMs require extra Meta scopes. Reconnect once and approve all permissions (comments + messaging).</div>
-            </div>
-            <button type="button" id="inbox-reconnect-meta-btn" style="padding:10px 16px;border-radius:8px;border:none;background:linear-gradient(135deg,#F97316,#EA580C);color:#0A1628;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Reconnect Meta</button>
-          </div>
-          <div id="inbox-body">
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;">
-              ${[1,2,3].map(() => `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;animation:pulse 1.5s ease-in-out infinite;"><div style="width:40%;height:12px;background:rgba(255,255,255,0.06);border-radius:4px;margin-bottom:10px;"></div><div style="width:60%;height:20px;background:rgba(255,255,255,0.04);border-radius:4px;"></div></div>`).join('')}
-            </div>
-            <div style="display:grid;gap:8px;">
-              ${[1,2,3,4,5].map(() => `<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:10px;padding:16px 20px;display:flex;gap:12px;align-items:center;animation:pulse 1.5s ease-in-out infinite;"><div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.06);flex-shrink:0;"></div><div style="flex:1;"><div style="width:30%;height:10px;background:rgba(255,255,255,0.06);border-radius:3px;margin-bottom:8px;"></div><div style="width:70%;height:10px;background:rgba(255,255,255,0.04);border-radius:3px;"></div></div></div>`).join('')}
-            </div>
-          </div>
-
-          <!-- Auto-reply settings modal (always present) -->
-          <div id="inbox-settings-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
-            <div style="background:linear-gradient(135deg,#0f1a2e,#162237);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px;max-width:480px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.5);">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-                <h3 style="font-family:var(--font-display);font-size:1.125rem;font-weight:700;color:#fff;margin:0;">Auto-Reply Settings</h3>
-                <button onclick="document.getElementById('inbox-settings-modal').style.display='none';" style="background:none;border:none;color:rgba(148,163,184,0.5);cursor:pointer;padding:4px;"><i data-lucide="x" style="width:18px;height:18px;"></i></button>
-              </div>
-              <div style="margin-bottom:20px;">
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:12px;">
-                  <div>
-                    <div style="font-size:0.875rem;font-weight:600;color:#fff;">AI Auto-Reply</div>
-                    <div style="font-size:0.75rem;color:var(--color-text-muted);margin-top:2px;">Generate brand-voice replies for incoming messages</div>
-                  </div>
-                  <label style="position:relative;width:44px;height:24px;cursor:pointer;">
-                    <input type="checkbox" id="inbox-auto-toggle" style="opacity:0;width:0;height:0;">
-                    <span id="inbox-auto-track" style="position:absolute;inset:0;background:rgba(255,255,255,0.1);border-radius:24px;transition:0.2s;"></span>
-                    <span id="inbox-auto-thumb" style="position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:0.2s;"></span>
-                  </label>
-                </div>
-                <div style="padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
-                  <div style="font-size:0.875rem;font-weight:600;color:#fff;margin-bottom:10px;">Reply Mode</div>
-                  <div style="display:flex;gap:8px;">
-                    <button class="inbox-mode-btn active" data-mode="draft" id="inbox-mode-draft" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(124,58,237,0.3);background:rgba(124,58,237,0.08);color:#7C3AED;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-align:center;">
-                      <div style="font-weight:700;margin-bottom:2px;">Draft Mode</div>
-                      <div style="font-size:0.7rem;opacity:0.7;">Click Generate, check, send</div>
-                    </button>
-                    <button class="inbox-mode-btn" data-mode="auto" id="inbox-mode-auto" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-align:center;">
-                      <div style="font-weight:700;margin-bottom:2px;">Auto Mode</div>
-                      <div style="font-size:0.7rem;opacity:0.7;">AI replies to new comments. DMs are never auto-sent.</div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <button id="inbox-save-settings" style="width:100%;padding:12px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#0A1628;border:none;border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Save Settings</button>
-            </div>
-          </div>
-        </div>
-      `;
-      setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
-
-      // Wire Auto-Reply Settings + Refresh immediately (before data loads)
-      document.getElementById('inbox-questions-btn')?.addEventListener('click', () => {
-        if (typeof window.seOpenQuestionLog === 'function') window.seOpenQuestionLog({ getItems: () => window.__seInboxItems || [] });
-      });
-      const _settingsBtn = document.getElementById('inbox-settings-btn');
-      if (_settingsBtn) {
-        _settingsBtn.addEventListener('click', () => {
-          const m = document.getElementById('inbox-settings-modal');
-          if (m) { m.style.display = 'flex'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
-        });
-      }
-      async function loadInboxData(prefetched, opts = {}) {
-        const forceRefresh = !!opts.forceRefresh;
-        try {
-          let data = prefetched;
-          if (!data) {
-            const qs = forceRefresh ? '?refresh=1' : '';
-            const res = await apiFetch(`${API}/api/inbox${qs}`, {
-              headers: authHeaders()
-            });
-            data = await res.json().catch(() => ({}));
-            if (res.status === 403) {
-              updateEngageBadge(0);
-              renderInboxUpgrade();
-              return;
-            }
-            if (!res.ok) {
-              if (typeof showToast === 'function') showToast(data.error || 'Could not refresh inbox', 'error');
-              return;
-            }
-          }
-
-          if (!data.connected) {
-            updateEngageBadge(0);
-            renderInboxConnect();
-            return;
-          }
-
-          updateEngageBadge(data.unreplied || 0);
-          // Preserve open composer draft across auto-poll re-renders
-          if (window._openInboxItemId) {
-            const openEl = document.querySelector(`.inbox-item[data-item-id="${CSS.escape(String(window._openInboxItemId))}"]`);
-            const ta = openEl ? document.getElementById(`inbox-text-${openEl.dataset.idx}`) : null;
-            if (ta && ta.value) window.__inboxDraftById = { ...(window.__inboxDraftById || {}), [window._openInboxItemId]: ta.value };
-          }
-          // Don't block first paint on canned responses
-          loadCannedResponses().catch(() => {});
-          renderInboxItems(data);
-          window.__inboxLastFetchAt = Date.now();
-          const syncEl = document.getElementById('inbox-sync-status');
-          if (syncEl) {
-            const ms = data._debug?.inbox_ms;
-            const cache = data._debug?.cache_hit ? ' · cached' : '';
-            syncEl.textContent = ms != null
-              ? `Auto-updating · synced in ${Math.round(ms / 100) / 10}s${cache}`
-              : 'Auto-updating';
-          }
-          // Banner: reconnect only when scopes missing; otherwise show app-capability note for DMs
-          const dbg = data._debug || {};
-          const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
-          const needAdvanced = !needReconnect && !!(dbg.dm_needs_advanced_access || dbg.dm_standard_access_empty);
-          const needAppSetup = !needReconnect && !needAdvanced && !!dbg.dm_app_capability_error;
-          const banner = document.getElementById('inbox-reconnect-banner');
-          const bannerTitle = document.getElementById('inbox-banner-title');
-          const bannerBody = document.getElementById('inbox-banner-body');
-          const reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
-          if (banner) {
-            if (needReconnect) {
-              banner.style.display = 'flex';
-              if (bannerTitle) bannerTitle.textContent = 'Meta permissions needed for Engage';
-              if (bannerBody) bannerBody.textContent = 'Approve comment + messaging permissions on reconnect so replies and DMs work.';
-              if (reconnectBtn) reconnectBtn.style.display = '';
-            } else if (needAdvanced) {
-              banner.style.display = 'flex';
-              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs: Standard Access limit';
-              if (bannerBody) bannerBody.textContent = dbg.dm_info || 'Under Standard Access, Engage only shows DMs from Meta App Admins/Developers/Testers. Customer DMs appear after Advanced Access for instagram_manage_messages. For the screencast: add a Tester → they DM this IG → refresh Engage.';
-              if (reconnectBtn) reconnectBtn.style.display = 'none';
-            } else if (needAppSetup) {
-              banner.style.display = 'flex';
-              if (bannerTitle) bannerTitle.textContent = 'Instagram DMs need Messaging on the Meta app';
-              if (bannerBody) bannerBody.textContent = dbg.dm_info || 'Your Meta connection is fine — enable Instagram Messaging / Messenger on the SocialEngine app in Meta Developer Console. Facebook commenter names are often hidden by Meta privacy and may stay as “Facebook user”.';
-              if (reconnectBtn) reconnectBtn.style.display = 'none';
-            } else {
-              banner.style.display = 'none';
-            }
-          }
-          if ((needReconnect || needAppSetup) && typeof showToast === 'function' && !window.__seDmPermToast) {
-            window.__seDmPermToast = true;
-            if (needReconnect) showToast(dbg.dm_info || 'Reconnect Meta to unlock Engage permissions.', 'warning');
-          }
-          // Auto-scrape every 25s while Engage is open
-          if (inboxPollInterval) { inboxPollInterval.stop(); inboxPollInterval = null; }
-          if (data.connected) {
-            inboxPollInterval = visiblePoller(() => {
-              if (activeNav !== 'inbox' || !clientEmail || !clientToken) return;
-              return loadInboxData(null, { forceRefresh: true });
-            }, 25000);
-          }
-        } catch (e) {
-          console.error('Engage load failed', e);
-          if (typeof showToast === 'function') showToast('Engage refresh failed — try again', 'error');
-        }
-      }
-      window.loadInboxData = loadInboxData;
-
-      const _refreshBtn = document.getElementById('inbox-refresh-btn');
-      if (_refreshBtn) {
-        _refreshBtn.onclick = async () => {
-          const icon = _refreshBtn.querySelector('i') || _refreshBtn.querySelector('svg');
-          if (icon) icon.style.animation = 'spin 0.8s linear infinite';
-          _refreshBtn.disabled = true;
-          _refreshBtn.style.opacity = '0.7';
-          try {
-            await loadInboxData(null, { forceRefresh: true });
-            if (typeof showToast === 'function') showToast('Inbox refreshed', 'success');
-          } finally {
-            _refreshBtn.disabled = false;
-            _refreshBtn.style.opacity = '1';
-            if (icon) icon.style.animation = '';
-            setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
-          }
-        };
+      if (!document.getElementById('ibx-css')) {
+        const st = document.createElement('style');
+        st.id = 'ibx-css';
+        st.textContent = INBOX_CSS;
+        document.head.appendChild(st);
       }
 
-      const _reconnectBtn = document.getElementById('inbox-reconnect-meta-btn');
-      if (_reconnectBtn) {
-        _reconnectBtn.onclick = () => {
-          if (typeof connectInstagramOAuth === 'function') connectInstagramOAuth({ engage: true });
-          else if (typeof window.connectInstagramOAuth === 'function') window.connectInstagramOAuth({ engage: true });
-        };
-      }
-      // Wire toggle and mode buttons in the always-present modal
-      const _toggle = document.getElementById('inbox-auto-toggle');
-      if (_toggle) {
-        _toggle.addEventListener('change', function() {
-          const track = document.getElementById('inbox-auto-track');
-          const thumb = document.getElementById('inbox-auto-thumb');
-          if (track) track.style.background = this.checked ? '#7C3AED' : 'rgba(255,255,255,0.1)';
-          if (thumb) thumb.style.left = this.checked ? '23px' : '3px';
-        });
-      }
-      document.querySelectorAll('.inbox-mode-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.inbox-mode-btn').forEach(b => {
-            b.style.borderColor = 'rgba(255,255,255,0.08)'; b.style.background = 'transparent'; b.style.color = 'rgba(148,163,184,0.6)'; b.classList.remove('active');
-          });
-          btn.style.borderColor = 'rgba(124,58,237,0.3)'; btn.style.background = 'rgba(124,58,237,0.08)'; btn.style.color = '#7C3AED'; btn.classList.add('active');
-        });
-      });
-      const _saveBtn = document.getElementById('inbox-save-settings');
-      if (_saveBtn) {
-        _saveBtn.addEventListener('click', async () => {
-          const autoEnabled = document.getElementById('inbox-auto-toggle')?.checked;
-          const activeMode = document.querySelector('.inbox-mode-btn.active');
-          const mode = activeMode?.dataset?.mode || 'draft';
-          _saveBtn.textContent = 'Saving...';
-          try {
-            await apiFetch(`${API}/api/inbox/settings`, {
-              method: 'POST',
-              headers: authHeaders({ 'Content-Type': 'application/json' }),
-              body: JSON.stringify({ auto_reply_enabled: autoEnabled, auto_reply_mode: mode })
-            });
-            _saveBtn.textContent = 'Saved!';
-            _saveBtn.style.background = 'linear-gradient(135deg,#7C3AED,#6D28D9)';
-            setTimeout(() => { document.getElementById('inbox-settings-modal').style.display = 'none'; _saveBtn.textContent = 'Save Settings'; }, 800);
-          } catch {
-            _saveBtn.textContent = 'Error — retry';
-            setTimeout(() => { _saveBtn.textContent = 'Save Settings'; }, 2000);
-          }
-        });
-      }
-
-      // Fetch inbox data
-      loadInboxData();
-
-      window._reloadInboxIfActive = function(data) {
-        if (activeNav === 'inbox' && data) loadInboxData(data);
+      // Filters survive leaving and coming back to the Inbox.
+      const prev = window.__seInbox || {};
+      const S = window.__seInbox = {
+        status: prev.status || 'needs_reply',
+        sort: prev.sort || 'newest',
+        platform: prev.platform || '',
+        type: prev.type || '',
+        q: '',
+        limit: 100,
+        items: [],
+        data: null,
+        selectedId: prev.selectedId || null,
+        view: 'list',
+        drafts: prev.drafts || {},
       };
 
-      function renderInboxUpgrade() {
-        document.getElementById('inbox-body').innerHTML = `
-          <div style="text-align:center;padding:60px 20px;">
-            <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(124,58,237,0.1));display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
-              <i data-lucide="lock" style="width:28px;height:28px;color:rgba(139,92,246,0.7);"></i>
-            </div>
-            <h3 style="font-family:var(--font-display);font-size:1.25rem;font-weight:700;color:#fff;margin:0 0 8px;">Unlock Engagement Inbox</h3>
-            <p style="font-size:0.875rem;color:var(--color-text-muted);max-width:420px;margin:0 auto 24px;line-height:1.6;">Manage all your DMs, comments, and mentions from one premium dashboard. AI generates on-brand replies in seconds.</p>
-            <a href="${STRIPE_LINK}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#0A1628;text-decoration:none;border-radius:10px;font-weight:700;font-size:0.9rem;font-family:var(--font-body);box-shadow:0 4px 20px rgba(124,58,237,0.25);">
-              Upgrade to ${UPGRADE_NAME} ${ARROW_SVG}
-            </a>
-          </div>
-        `;
-        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
-      }
-
-      function renderInboxConnect() {
-        const el = document.getElementById('inbox-body');
-        if (!el) return; // User navigated away from the Inbox tab before async load resolved
-        el.innerHTML = `
-          <div style="text-align:center;padding:48px 20px;">
-            <div style="width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg,rgba(225,48,108,0.08),rgba(131,58,180,0.08),rgba(252,175,69,0.08));border:1px solid rgba(225,48,108,0.15);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
-            </div>
-            <h3 style="font-family:var(--font-display);font-size:1.25rem;font-weight:700;color:#fff;margin:0 0 8px;">Connect Your Social Accounts</h3>
-                <p style="font-size:0.875rem;color:var(--color-text-muted);max-width:480px;margin:0 auto 12px;line-height:1.6;">Link your Instagram Business account to pull in DMs, comments, and mentions. SocialEngine generates brand-voice replies for every message — you just hit send.</p>
-            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:24px;">
-              <button onclick="connectInstagramOAuth()" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:linear-gradient(135deg,#833AB4,#E1306C,#F77737);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);box-shadow:0 4px 20px rgba(225,48,108,0.25);transition:all 0.15s;" onmouseenter="this.style.transform='translateY(-1px)'" onmouseleave="this.style.transform=''">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>
-                Connect Instagram
-              </button>
-              ${(() => {
-                const cc = clientData?.client || {};
-                const plats = Array.isArray(cc.social_connected_platforms)
-                  ? cc.social_connected_platforms.map(p => String(p || '').trim().toLowerCase())
-                  : String(cc.social_connected_platforms || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-                const upSnap = clientData?.upload_post_connection;
-                const upIg = plats.includes('instagram') || (Array.isArray(upSnap?.accounts) && upSnap.accounts.some(a => String(a.platform || '').toLowerCase() === 'instagram'));
-                if (!upIg) return '';
-                return `<button type="button" onclick="connectViaUploadPost('instagram')" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(124,58,237,0.12);color:#E9D5FF;border:1px solid rgba(124,58,237,0.35);border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Refresh inbox connection</button>`;
-              })()}
-              <button onclick="connectTikTokOAuth()" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(255,255,255,0.04);color:#fff;border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-weight:600;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;" onmouseenter="this.style.borderColor='rgba(105,201,208,0.4)'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.1)'">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg>
-                Connect TikTok
-              </button>
-            </div>
-            <p style="font-size:0.75rem;color:var(--color-text-faint);margin:20px auto 0;max-width:400px;line-height:1.5;">We only request read + reply permissions. SocialEngine never posts, follows, or takes actions without your explicit approval.</p>
-          </div>
-        `;
-      }
-
-      function renderInboxItems(data) {
-        const items = data.items || [];
-        window.__seInboxItems = items;
-        const unreplied = data.unreplied || 0;
-        const total = data.total || 0;
-        const comments = items.filter(i => i.type === 'comment');
-        const dms = items.filter(i => i.type === 'dm');
-        const needsReply = items.filter(i => !i.has_reply && !i.is_from_us);
-
-        const body = document.getElementById('inbox-body');
-        body.innerHTML = `
-          <!-- Stats row -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;">
-            <div style="background:linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65));border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:18px 22px;">
-              <div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.5);margin-bottom:6px;">Total Messages</div>
-              <div style="font-family:var(--font-display);font-size:1.75rem;font-weight:800;color:#fff;letter-spacing:-0.02em;">${total}</div>
-            </div>
-            <div style="background:linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65));border:1px solid ${unreplied > 0 ? 'rgba(251,146,60,0.2)' : 'rgba(255,255,255,0.06)'};border-radius:14px;padding:18px 22px;">
-              <div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:${unreplied > 0 ? 'rgba(251,146,60,0.7)' : 'rgba(148,163,184,0.5)'};margin-bottom:6px;">Needs Reply</div>
-              <div style="font-family:var(--font-display);font-size:1.75rem;font-weight:800;color:${unreplied > 0 ? '#FB923C' : '#fff'};letter-spacing:-0.02em;">${unreplied}</div>
-            </div>
-            <div style="background:linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65));border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:18px 22px;">
-              <div style="font-size:0.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.5);margin-bottom:6px;">Avg Response Time</div>
-              <div style="font-family:var(--font-display);font-size:1.75rem;font-weight:800;color:#7C3AED;letter-spacing:-0.02em;"><2m</div>
-            </div>
-          </div>
-
-          ${data.source === 'upload-post' ? `<div style="margin-bottom:16px;padding:12px 14px;border-radius:10px;border:1px solid rgba(124,58,237,0.2);background:rgba(124,58,237,0.06);font-size:0.78rem;color:rgba(226,232,240,0.85);line-height:1.5;">Inbox is synced via your <strong style="color:#E9D5FF;">Upload-Post</strong> Instagram connection (same as publishing). Replies use Upload-Post when Meta tokens are not stored on this account.</div>` : ''}
-
-          <div id="inbox-tip" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);">
-            <span style="flex:1;min-width:220px;font-size:0.76rem;color:rgba(226,232,240,0.8);line-height:1.45;">${escapeHtml(data.ranking_tip || '')}</span>
-            <button type="button" id="inbox-hidden-words-btn" style="width:auto;padding:6px 12px;border-radius:7px;border:1px solid rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);color:#FCA5A5;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:var(--font-body);white-space:nowrap;">Hidden words${items.some(i => i.hidden_match) ? ` · ${items.filter(i => i.hidden_match).length} flagged` : ''}</button>
-          </div>
-
-          <!-- Filter tabs -->
-          <div style="display:flex;gap:4px;margin-bottom:16px;padding:3px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.05);width:fit-content;">
-            <button class="inbox-filter active" data-filter="all" style="padding:7px 16px;border-radius:8px;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;background:rgba(124,58,237,0.15);color:#7C3AED;">All (${total})</button>
-            <button class="inbox-filter" data-filter="comment" style="padding:7px 16px;border-radius:8px;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;background:transparent;color:rgba(148,163,184,0.6);">Comments (${comments.length})</button>
-            <button class="inbox-filter" data-filter="dm" style="padding:7px 16px;border-radius:8px;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;background:transparent;color:rgba(148,163,184,0.6);">DMs (${dms.length})</button>
-            <button class="inbox-filter" data-filter="mention" style="padding:7px 16px;border-radius:8px;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;background:transparent;color:rgba(148,163,184,0.6);">Mentions (${items.filter(i => i.type === 'mention').length})</button>
-            <button class="inbox-filter" data-filter="unreplied" style="padding:7px 16px;border-radius:8px;border:none;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;background:transparent;color:${unreplied > 0 ? 'rgba(251,146,60,0.7)' : 'rgba(148,163,184,0.6)'};">Needs Reply (${unreplied})</button>
-          </div>
-
-          <!-- Messages list -->
-          <div id="inbox-list" style="display:grid;gap:6px;">
-            ${items.length === 0 ? `
-              <div style="text-align:center;padding:48px 20px;">
-                <i data-lucide="inbox" style="width:40px;height:40px;color:rgba(148,163,184,0.25);margin-bottom:12px;"></i>
-                <p style="font-size:0.9rem;color:var(--color-text-muted);margin:0;">No messages yet. Once your social accounts are connected, DMs and comments will appear here.</p>
-              </div>
-            ` : items.map((item, idx) => renderInboxItem(item, idx)).join('')}
-          </div>
-
-        `;
-
-        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
-        // Sync toggle state from API data
-        const _at = document.getElementById('inbox-auto-toggle');
-        const _track = document.getElementById('inbox-auto-track');
-        const _thumb = document.getElementById('inbox-auto-thumb');
-        if (_at && data.auto_reply_enabled) {
-          _at.checked = true;
-          if (_track) _track.style.background = '#7C3AED';
-          if (_thumb) _thumb.style.left = '23px';
-        }
-        // Sync mode from API data
-        if (data.auto_reply_mode === 'auto') {
-          document.querySelectorAll('.inbox-mode-btn').forEach(b => {
-            const isAuto = b.dataset.mode === 'auto';
-            b.style.borderColor = isAuto ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.08)';
-            b.style.background = isAuto ? 'rgba(124,58,237,0.08)' : 'transparent';
-            b.style.color = isAuto ? '#7C3AED' : 'rgba(148,163,184,0.6)';
-            if (isAuto) b.classList.add('active'); else b.classList.remove('active');
-          });
-        }
-        const _hwBtn = document.getElementById('inbox-hidden-words-btn');
-        if (_hwBtn) _hwBtn.addEventListener('click', () => {
-          if (typeof window.openHiddenWordsModal === 'function') window.openHiddenWordsModal();
-        });
-        window.onHiddenWordsChanged = () => loadInboxData(null, { forceRefresh: true });
-        bindInboxEvents(items, data);
-      }
-
-      function buildInboxThread(item) {
-        if (Array.isArray(item.thread) && item.thread.length) return item.thread;
-        // Comments: root + nested replies → thread
-        if (item.type === 'comment') {
-          const rootTs = item.created_time || item.timestamp || null;
-          const root = {
-            id: item.id,
-            text: item.text || '',
-            timestamp: rootTs,
-            from_us: !!item.is_from_us,
-            username: item.is_from_us ? 'You' : (item.username || 'user'),
-          };
-          const replies = (item.replies || []).map(r => ({
-            id: r.id,
-            text: r.text || '',
-            timestamp: r.timestamp || null,
-            from_us: !!r.from_us,
-            username: r.from_us ? 'You' : (r.username || 'user'),
-          }));
-          return [root, ...replies];
-        }
-        return [{
-          id: item.id,
-          text: item.text || '',
-          timestamp: item.timestamp || null,
-          from_us: !!item.is_from_us,
-          username: item.is_from_us ? 'You' : (item.username || 'user'),
-        }];
-      }
-
-      function renderThreadHtml(thread, idx) {
-        if (!thread.length) return '';
-        const bubbles = thread.map((m) => {
-          const mine = !!m.from_us;
-          const align = mine ? 'flex-end' : 'flex-start';
-          const bg = mine ? 'rgba(124,58,237,0.22)' : 'rgba(255,255,255,0.05)';
-          const border = mine ? 'rgba(124,58,237,0.35)' : 'rgba(255,255,255,0.08)';
-          const label = mine ? 'You' : (m.username ? (String(m.username).startsWith('@') ? m.username : '@' + m.username) : 'Them');
-          const when = m.timestamp ? getTimeAgo(m.timestamp) : '';
-          return `<div style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">`
-            + `<div style="font-size:0.65rem;color:rgba(255,255,255,0.35);margin-bottom:3px;padding:0 4px;">${escapeHtml(label)}${when ? ' · ' + when : ''}</div>`
-            + `<div style="max-width:85%;padding:8px 12px;border-radius:12px;background:${bg};border:1px solid ${border};font-size:0.84rem;color:#fff;line-height:1.45;white-space:pre-wrap;word-break:break-word;">${escapeHtml(m.text || '')}</div>`
-            + `</div>`;
-        }).join('');
-        return `<div class="inbox-thread" id="inbox-thread-${idx}" style="margin:8px 0 4px;padding:10px;border-radius:10px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.05);max-height:320px;overflow-y:auto;">${bubbles}</div>`;
-      }
-
-      function renderInboxItem(item, idx) {
-        const isComment = item.type === 'comment';
-        const isMention = item.type === 'mention';
-        const isDm = item.type === 'dm';
-        const needsReply = !item.has_reply && !item.is_from_us;
-        const theyReplied = !!item.they_replied;
-        const timeAgo = getTimeAgo(item.timestamp);
-        const platformIcon = item.platform === 'instagram'
-          ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>'
-          : item.platform === 'facebook'
-          ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1877F2" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>'
-          : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#69C9D0" stroke-width="2" stroke-linecap="round"><path d="M9 12a4 4 0 1 0 4 0V4a5 5 0 0 0 5 5"/></svg>';
-        const typeLabel = isComment ? 'Comment' : isMention ? 'Mention' : isDm ? 'DM' : String(item.type || 'Item');
-        const typeBg = isComment ? 'rgba(139,92,246,0.1)' : isMention ? 'rgba(14,165,233,0.12)' : 'rgba(124,58,237,0.1)';
-        const typeColor = isComment ? 'rgba(139,92,246,0.8)' : isMention ? 'rgba(56,189,248,0.9)' : 'rgba(124,58,237,0.8)';
-        const fullText = String(item.text || '');
-        const textLooksLong = fullText.length > 110 || fullText.split(/\n/).length > 2;
-        const postCaption = String(item.post_caption || '');
-        const captionLooksLong = postCaption.length > 110 || postCaption.split(/\n/).length > 2;
-        if (!item.thread) item.thread = buildInboxThread(item);
-        const threadCount = (item.thread || []).length;
-        const threadHint = threadCount > 1
-          ? `<div style="font-size:0.7rem;color:${theyReplied ? 'rgba(52,211,153,0.9)' : 'rgba(167,139,250,0.75)'};margin:2px 0 6px;">${threadCount} messages in thread · open to continue</div>`
-          : '';
-        const statusBadge = theyReplied
-          ? '<span class="inbox-awaiting-badge" style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:rgba(52,211,153,0.12);color:rgba(52,211,153,0.95);">They replied</span>'
-          : needsReply
-          ? '<span class="inbox-awaiting-badge" style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:rgba(251,146,60,0.1);color:rgba(251,146,60,0.8);">Awaiting Reply</span>'
-          : '';
-        const accentDot = theyReplied
-          ? '<div style="position:absolute;top:8px;right:12px;width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 8px rgba(52,211,153,0.65);"></div>'
-          : needsReply
-          ? '<div style="position:absolute;top:8px;right:12px;width:7px;height:7px;border-radius:50%;background:#FB923C;box-shadow:0 0 6px rgba(251,146,60,0.5);"></div>'
-          : '';
-        const borderCol = theyReplied ? 'rgba(52,211,153,0.22)' : needsReply ? 'rgba(251,146,60,0.12)' : 'rgba(255,255,255,0.05)';
-
-        return `
-          <div class="inbox-item" data-item-id="${escapeHtml(String(item.id || ''))}" data-type="${item.type}" data-replied="${item.has_reply || item.is_from_us}" data-idx="${idx}" style="background:linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5));border:1px solid ${borderCol};border-radius:12px;padding:16px 20px;cursor:pointer;transition:all 0.15s;position:relative;" onmouseover="this.style.borderColor='rgba(124,58,237,0.2)';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.85),rgba(22,34,55,0.65))';" onmouseout="this.style.borderColor='${borderCol}';this.style.background='linear-gradient(135deg,rgba(17,29,48,0.7),rgba(22,34,55,0.5))';">
-            ${accentDot}
-            <div style="display:flex;align-items:flex-start;gap:12px;">
-              <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.8rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;">${(item.username || '?')[0]}</div>
-              <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-                  <span style="font-size:0.875rem;font-weight:700;color:#fff;">${item.platform === 'facebook' ? escapeHtml(item.username || 'Facebook user') : '@' + escapeHtml(item.username || 'unknown')}</span>
-                  <span style="display:inline-flex;align-items:center;gap:4px;">${platformIcon}</span>
-                  <span style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;background:${typeBg};color:${typeColor};">${typeLabel}</span>
-                  ${statusBadge}
-                  ${item.hidden_match ? `<span class="inbox-hidden-badge" title="Matches your hidden words — sync the list to Instagram/Facebook to hide it. Auto-replies skip it." style="padding:2px 8px;border-radius:4px;font-size:0.65rem;font-weight:700;letter-spacing:0.03em;background:rgba(248,113,113,0.12);color:#FCA5A5;">Hidden word: ${escapeHtml(item.hidden_match)}</span>` : ''}
-                  <span style="font-size:0.72rem;color:var(--color-text-faint);margin-left:auto;white-space:nowrap;">${timeAgo}</span>
-                </div>
-                <div class="inbox-preview-block" id="inbox-preview-${idx}">
-                  <p class="inbox-item-text" id="inbox-text-body-${idx}" data-expanded="0" style="font-size:0.84rem;color:var(--color-text);line-height:1.5;margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:pre-wrap;">${escapeHtml(fullText)}</p>
-                  ${textLooksLong ? `<button type="button" class="inbox-expand-text-btn" data-target="inbox-text-body-${idx}" style="background:none;border:none;padding:0 0 6px;margin:0;color:rgba(167,139,250,0.85);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Show more</button>` : ''}
-                  ${threadHint}
-                </div>
-                ${isComment && postCaption ? `
-                  <div style="padding:6px 10px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:2px solid rgba(139,92,246,0.3);margin:4px 0 8px;">
-                    <div style="font-size:0.68rem;color:rgba(255,255,255,0.35);margin-bottom:2px;font-weight:600;">On post</div>
-                    <p class="inbox-item-caption" id="inbox-caption-body-${idx}" data-expanded="0" style="font-size:0.72rem;color:var(--color-text-faint);line-height:1.45;margin:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:pre-wrap;">${escapeHtml(postCaption)}</p>
-                    ${captionLooksLong ? `<button type="button" class="inbox-expand-text-btn" data-target="inbox-caption-body-${idx}" style="background:none;border:none;padding:4px 0 0;margin:0;color:rgba(167,139,250,0.75);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Show more</button>` : ''}
-                  </div>` : ''}
-                <!-- Reply / thread area (hidden by default) -->
-                <div class="inbox-reply-area" id="inbox-reply-${idx}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05);">
-                  ${renderThreadHtml(item.thread || [], idx)}
-                  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-                    <button class="inbox-generate-btn" data-idx="${idx}" style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:6px;border:1px solid rgba(139,92,246,0.2);background:rgba(139,92,246,0.06);color:rgba(139,92,246,0.8);font-size:0.75rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">
-                      <i data-lucide="sparkles" style="width:12px;height:12px;"></i> Generate AI Reply
-                    </button>
-                  </div>
-                  <div style="margin-bottom:8px;">
-                    <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">Quick Replies</div>
-                    <div class="inbox-canned-row" data-idx="${idx}" style="display:flex;flex-wrap:wrap;gap:5px;"></div>
-                  </div>
-                  <textarea class="inbox-reply-text" id="inbox-text-${idx}" placeholder="Type your reply or generate one with AI..." style="width:100%;min-height:60px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#fff;font-size:0.84rem;font-family:var(--font-body);line-height:1.5;resize:vertical;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='rgba(124,58,237,0.3)'" onblur="this.style.borderColor='rgba(255,255,255,0.08)'"></textarea>
-                  <div class="inbox-bait-warn" id="inbox-bait-${idx}" style="display:none;margin-top:6px;padding:8px 10px;border-radius:7px;border:1px solid rgba(251,191,36,0.25);background:rgba(251,191,36,0.06);color:#FCD34D;font-size:0.74rem;line-height:1.45;"></div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;">
-                    <button type="button" class="inbox-save-canned-btn" data-idx="${idx}" style="background:none;border:none;color:rgba(167,139,250,0.75);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);padding:0;">+ Save as canned response</button>
-                    <div style="display:flex;gap:8px;margin-left:auto;">
-                      <button class="inbox-cancel-btn" data-idx="${idx}" style="padding:7px 16px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(148,163,184,0.6);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Cancel</button>
-                      <button class="inbox-send-btn" data-idx="${idx}" style="padding:7px 18px;border-radius:7px;border:none;background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#0A1628;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:5px;">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Reply
-                      </button>
-                    </div>
-                  </div>
-                </div></div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      function getTimeAgo(ts) {
-        if (!ts) return '';
-        const diff = Date.now() - new Date(ts).getTime();
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) return 'Just now';
-        if (mins < 60) return `${mins}m ago`;
-        const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}h ago`;
-        const days = Math.floor(hrs / 24);
-        if (days < 7) return `${days}d ago`;
-        return new Date(ts).toLocaleDateString();
-      }
+      const PLAT = { instagram: 'IG', facebook: 'FB', tiktok: 'TT' };
+      const PLAT_NAME = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok' };
+      const KIND = { dm: 'DM', comment: 'Comment', mention: 'Mention' };
+      const KIND_LOWER = { dm: 'DM', comment: 'comment', mention: 'mention' };
 
       function escapeHtml(str) {
         const div = document.createElement('div');
         div.textContent = str || '';
         return div.innerHTML;
       }
+      function getTimeAgo(ts) {
+        if (!ts) return '';
+        const diff = Date.now() - new Date(ts).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'now';
+        if (mins < 60) return `${mins}m`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h`;
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return `${days}d`;
+        if (days < 60) return `${Math.floor(days / 7)}w`;
+        return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      function waitingFor(ts) {
+        if (!ts) return '';
+        const h = Math.floor((Date.now() - new Date(ts).getTime()) / 3600000);
+        if (h < 1) return 'Waiting';
+        if (h < 24) return `Waiting ${h}h`;
+        const d = Math.floor(h / 24);
+        return d < 14 ? `Waiting ${d}d` : `Waiting ${Math.floor(d / 7)}w`;
+      }
+      const displayName = (it) => (it.platform === 'facebook' ? (it.username || 'Facebook user') : `@${it.username || 'unknown'}`);
+      const needsReply = (it) => (it.needs_reply !== undefined ? !!it.needs_reply : (it.type !== 'mention' && !it.has_reply && !it.is_from_us));
+      const isDone = (it) => it.status === 'done';
+      const windowClosed = (it) => it.type === 'dm' && !!it.last_inbound_at && (Date.now() - new Date(it.last_inbound_at).getTime()) > 24 * 3600000;
+      function openUrl(it) {
+        if (it.post_permalink) return it.post_permalink;
+        if (it.type === 'dm') return it.platform === 'facebook' ? 'https://business.facebook.com/latest/inbox' : 'https://www.instagram.com/direct/inbox/';
+        return it.platform === 'facebook' ? 'https://www.facebook.com/' : 'https://www.instagram.com/';
+      }
+      function threadOf(it) {
+        if (Array.isArray(it.thread) && it.thread.length) return it.thread;
+        return [{ id: it.id, text: it.text || '', timestamp: it.created_time || it.timestamp, from_us: !!it.is_from_us, username: it.username }];
+      }
 
-      function bindInboxEvents(items, data) {
-        // Filter tabs
-        document.querySelectorAll('.inbox-filter').forEach(btn => {
-          btn.addEventListener('click', () => {
-            document.querySelectorAll('.inbox-filter').forEach(b => {
-              b.style.background = 'transparent';
-              b.style.color = 'rgba(148,163,184,0.6)';
-              b.classList.remove('active');
-            });
-            btn.style.background = 'rgba(124,58,237,0.15)';
-            btn.style.color = '#7C3AED';
-            btn.classList.add('active');
-            const filter = btn.dataset.filter;
-            document.querySelectorAll('.inbox-item').forEach(item => {
-              if (filter === 'all') { item.style.display = ''; }
-              else if (filter === 'unreplied') { item.style.display = item.dataset.replied === 'false' ? '' : 'none'; }
-              else { item.style.display = item.dataset.type === filter ? '' : 'none'; }
-            });
-          });
+      content.innerHTML = `
+        <div class="ibx">
+          <div class="ibx-head">
+            <div>
+              <h2 class="ibx-title">Inbox</h2>
+              <p id="inbox-sync-status" class="ibx-sync">Checking for new messages…</p>
+            </div>
+            <div class="ibx-head-actions">
+              <button type="button" id="inbox-hidden-words-btn" class="ibx-btn">Hidden words</button>
+              <button type="button" id="inbox-questions-btn" class="ibx-btn" title="The questions customers keep asking, grouped from your comments and DMs">What customers ask</button>
+              <button type="button" id="inbox-settings-btn" class="ibx-btn"><i data-lucide="settings-2"></i>Auto-reply</button>
+              <button type="button" id="inbox-refresh-btn" class="ibx-icon-btn" aria-label="Refresh" title="Refresh"><i data-lucide="refresh-cw"></i></button>
+            </div>
+          </div>
+          <div id="inbox-reconnect-banner" style="display:none;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 16px;padding:14px 16px;border-radius:12px;border:1px solid rgba(251,146,60,0.35);background:rgba(251,146,60,0.08);">
+            <div style="flex:1;min-width:220px;">
+              <div id="inbox-banner-title" style="font-size:0.88rem;font-weight:700;color:#FDBA74;margin-bottom:4px;">Meta permissions needed</div>
+              <div id="inbox-banner-body" style="font-size:0.78rem;color:rgba(255,255,255,0.7);line-height:1.45;">Reconnect once and approve comments and messaging.</div>
+            </div>
+            <button type="button" id="inbox-reconnect-meta-btn" class="ibx-btn ibx-primary">Reconnect Meta</button>
+          </div>
+          <div id="inbox-body">
+            <div class="ibx-panes"><div class="ibx-list"><div class="ibx-empty">Loading your inbox…</div></div><div class="ibx-thread"></div></div>
+          </div>
+
+          <div id="inbox-settings-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
+            <div role="dialog" aria-modal="true" aria-labelledby="inbox-settings-title" style="background:#0E1C33;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:28px;max-width:480px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.5);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                <h3 id="inbox-settings-title" style="font-family:var(--font-display);font-size:1.125rem;font-weight:700;color:#fff;margin:0;">Auto-reply</h3>
+                <button type="button" aria-label="Close" onclick="document.getElementById('inbox-settings-modal').style.display='none';" class="ibx-icon-btn"><i data-lucide="x"></i></button>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:12px;">
+                <div>
+                  <div style="font-size:0.875rem;font-weight:600;color:#fff;">AI replies</div>
+                  <div style="font-size:0.75rem;color:#94A3B8;margin-top:2px;">Write brand-voice replies to new messages</div>
+                </div>
+                <label style="position:relative;width:44px;height:24px;cursor:pointer;flex:none;">
+                  <input type="checkbox" id="inbox-auto-toggle" aria-label="AI replies" style="opacity:0;width:0;height:0;">
+                  <span id="inbox-auto-track" style="position:absolute;inset:0;background:rgba(255,255,255,0.12);border-radius:24px;transition:0.2s;"></span>
+                  <span id="inbox-auto-thumb" style="position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:0.2s;"></span>
+                </label>
+              </div>
+              <div style="display:flex;gap:8px;margin-bottom:20px;">
+                <button type="button" class="inbox-mode-btn active" data-mode="draft" id="inbox-mode-draft" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.12);color:#fff;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-align:center;">
+                  <div style="font-weight:700;margin-bottom:2px;">Draft</div>
+                  <div style="font-size:0.7rem;color:#94A3B8;">You check and send</div>
+                </button>
+                <button type="button" class="inbox-mode-btn" data-mode="auto" id="inbox-mode-auto" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:#CBD5E1;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-align:center;">
+                  <div style="font-weight:700;margin-bottom:2px;">Auto</div>
+                  <div style="font-size:0.7rem;color:#94A3B8;">Replies to new comments. DMs are never auto-sent.</div>
+                </button>
+              </div>
+              <button type="button" id="inbox-save-settings" class="ibx-btn ibx-primary" style="width:100%;justify-content:center;min-height:44px;">Save</button>
+            </div>
+          </div>
+        </div>
+      `;
+      setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+
+      document.getElementById('inbox-questions-btn')?.addEventListener('click', () => {
+        if (typeof window.seOpenQuestionLog === 'function') window.seOpenQuestionLog({ getItems: () => window.__seInboxItems || [] });
+      });
+      document.getElementById('inbox-hidden-words-btn')?.addEventListener('click', () => {
+        if (typeof window.openHiddenWordsModal === 'function') window.openHiddenWordsModal();
+      });
+      window.onHiddenWordsChanged = () => loadInboxData(null, { forceRefresh: true });
+      document.getElementById('inbox-settings-btn')?.addEventListener('click', () => {
+        const m = document.getElementById('inbox-settings-modal');
+        if (m) { m.style.display = 'flex'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
+      });
+      document.getElementById('inbox-reconnect-meta-btn')?.addEventListener('click', () => {
+        const fn = typeof connectInstagramOAuth === 'function' ? connectInstagramOAuth : window.connectInstagramOAuth;
+        if (typeof fn === 'function') fn({ engage: true });
+      });
+      const _toggle = document.getElementById('inbox-auto-toggle');
+      _toggle?.addEventListener('change', function () {
+        const track = document.getElementById('inbox-auto-track');
+        const thumb = document.getElementById('inbox-auto-thumb');
+        if (track) track.style.background = this.checked ? '#7C3AED' : 'rgba(255,255,255,0.12)';
+        if (thumb) thumb.style.left = this.checked ? '23px' : '3px';
+      });
+      function paintMode(mode) {
+        document.querySelectorAll('.inbox-mode-btn').forEach((b) => {
+          const on = b.dataset.mode === mode;
+          b.classList.toggle('active', on);
+          b.style.borderColor = on ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.08)';
+          b.style.background = on ? 'rgba(124,58,237,0.12)' : 'transparent';
+          b.style.color = on ? '#fff' : '#CBD5E1';
         });
-
-        // Show more / less for message text OR on-post caption (independent)
-        document.querySelectorAll('.inbox-expand-text-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const body = document.getElementById(btn.dataset.target);
-            if (!body) return;
-            const open = body.dataset.expanded === '1';
-            if (open) {
-              body.dataset.expanded = '0';
-              body.style.display = '-webkit-box';
-              body.style.webkitLineClamp = '2';
-              body.style.overflow = 'hidden';
-              btn.textContent = 'Show more';
-            } else {
-              body.dataset.expanded = '1';
-              body.style.display = 'block';
-              body.style.webkitLineClamp = 'unset';
-              body.style.overflow = 'visible';
-              btn.textContent = 'Show less';
-            }
-          });
-        });
-
-        // Click to expand thread + composer — stays open until Cancel or another card
-        document.querySelectorAll('.inbox-item').forEach(itemEl => {
-          itemEl.addEventListener('click', (e) => {
-            if (e.target.closest('.inbox-reply-area') || e.target.closest('button') || e.target.closest('.inbox-expand-text-btn')) return;
-            const idx = itemEl.dataset.idx;
-            const itemId = itemEl.dataset.itemId || '';
-            const replyArea = document.getElementById(`inbox-reply-${idx}`);
-            const preview = document.getElementById(`inbox-preview-${idx}`);
-            if (replyArea) {
-              const isOpen = replyArea.style.display !== 'none';
-              document.querySelectorAll('.inbox-reply-area').forEach(a => a.style.display = 'none');
-              document.querySelectorAll('.inbox-preview-block').forEach(p => { p.style.display = ''; });
-              if (!isOpen) {
-                replyArea.style.display = 'block';
-                if (preview) preview.style.display = 'none';
-                window._openInboxItemId = itemId || null;
-                const threadEl = document.getElementById(`inbox-thread-${idx}`);
-                if (threadEl) threadEl.scrollTop = threadEl.scrollHeight;
-                setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
-              } else {
-                window._openInboxItemId = null;
-              }
-            }
-          });
-        });
-
-        // Cancel reply — collapse thread, restore preview
-        document.querySelectorAll('.inbox-cancel-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const idx = btn.dataset.idx;
-            document.getElementById(`inbox-reply-${idx}`).style.display = 'none';
-            const preview = document.getElementById(`inbox-preview-${idx}`);
-            if (preview) preview.style.display = '';
-            window._openInboxItemId = null;
-          });
-        });
-
-        // Restore previously open thread after a soft inbox refresh
-        if (window._openInboxItemId) {
-          const openEl = document.querySelector(`.inbox-item[data-item-id="${CSS.escape(String(window._openInboxItemId))}"]`);
-          if (openEl) {
-            const idx = openEl.dataset.idx;
-            const replyArea = document.getElementById(`inbox-reply-${idx}`);
-            const preview = document.getElementById(`inbox-preview-${idx}`);
-            if (replyArea) {
-              replyArea.style.display = 'block';
-              if (preview) preview.style.display = 'none';
-              const draft = (window.__inboxDraftById || {})[window._openInboxItemId];
-              const ta = document.getElementById(`inbox-text-${idx}`);
-              if (ta && draft) ta.value = draft;
-              const threadEl = document.getElementById(`inbox-thread-${idx}`);
-              if (threadEl) threadEl.scrollTop = threadEl.scrollHeight;
-            }
-          }
+      }
+      document.querySelectorAll('.inbox-mode-btn').forEach((btn) => btn.addEventListener('click', () => paintMode(btn.dataset.mode)));
+      const _saveBtn = document.getElementById('inbox-save-settings');
+      _saveBtn?.addEventListener('click', async () => {
+        const autoEnabled = !!document.getElementById('inbox-auto-toggle')?.checked;
+        const mode = document.querySelector('.inbox-mode-btn.active')?.dataset?.mode || 'draft';
+        _saveBtn.textContent = 'Saving…';
+        try {
+          const r = await apiFetch(`${API}/api/inbox/settings`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ auto_reply_enabled: autoEnabled, auto_reply_mode: mode }) });
+          if (!r.ok) throw new Error('save failed');
+          _saveBtn.textContent = 'Saved';
+          setTimeout(() => { document.getElementById('inbox-settings-modal').style.display = 'none'; _saveBtn.textContent = 'Save'; }, 700);
+        } catch (_) {
+          _saveBtn.textContent = 'Could not save, try again';
+          setTimeout(() => { _saveBtn.textContent = 'Save'; }, 2000);
         }
+      });
+      document.getElementById('inbox-refresh-btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const icon = btn.querySelector('svg, i');
+        if (icon) icon.style.animation = 'spin 0.8s linear infinite';
+        try { await loadInboxData(null, { forceRefresh: true }); } finally {
+          btn.disabled = false;
+          if (icon) icon.style.animation = '';
+        }
+      });
 
-        function paintCannedChips() {
-          document.querySelectorAll('.inbox-canned-row').forEach(row => {
-            const idx = row.dataset.idx;
-            if (!_cannedResponses.length) {
-              row.innerHTML = '<span style="font-size:0.72rem;color:rgba(255,255,255,0.28);">No saved replies yet</span>';
+      // ── Data ──
+      function queryString(opts) {
+        const p = new URLSearchParams();
+        p.set('status', S.status);
+        p.set('sort', S.sort);
+        if (S.platform) p.set('platform', S.platform);
+        if (S.type) p.set('type', S.type);
+        if (S.q) p.set('q', S.q);
+        p.set('limit', String(S.limit));
+        if (opts.forceRefresh) p.set('refresh', '1');
+        return p.toString();
+      }
+
+      // Before the stored inbox (older API): filter and sort what came back here.
+      function localFilter(data) {
+        let items = (data.items || []).slice();
+        if (S.status === 'needs_reply') items = items.filter((i) => needsReply(i));
+        if (S.status === 'done') items = [];
+        if (S.platform) items = items.filter((i) => i.platform === S.platform);
+        if (S.type) items = items.filter((i) => i.type === S.type);
+        if (S.q) {
+          const q = S.q.toLowerCase();
+          items = items.filter((i) => [i.username, i.text, i.post_caption].join(' ').toLowerCase().includes(q));
+        }
+        items.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+        if (S.sort === 'oldest') items.reverse();
+        const all = data.items || [];
+        return {
+          items,
+          counts: {
+            all: all.length,
+            needs_reply: all.filter((i) => needsReply(i)).length,
+            done: 0,
+            dm: all.filter((i) => i.type === 'dm').length,
+            comment: all.filter((i) => i.type === 'comment').length,
+            mention: all.filter((i) => i.type === 'mention').length,
+          },
+        };
+      }
+
+      let loadSeq = 0;
+      async function loadInboxData(prefetched, opts = {}) {
+        const seq = ++loadSeq;
+        try {
+          let data = prefetched;
+          if (!data) {
+            const res = await apiFetch(`${API}/api/inbox?${queryString(opts)}`, { headers: authHeaders() });
+            data = await res.json().catch(() => ({}));
+            if (res.status === 403) { updateEngageBadge(0); renderInboxUpgrade(); return; }
+            if (!res.ok) { if (typeof showToast === 'function') showToast(data.error || 'Could not load the inbox', 'error'); return; }
+          }
+          if (seq !== loadSeq) return; // a newer load is on its way
+          if (!data.connected) { updateEngageBadge(0); renderInboxConnect(); return; }
+          updateEngageBadge(data.unreplied || 0);
+          const view = data.counts ? { items: data.items || [], counts: data.counts } : localFilter(data);
+          S.data = data;
+          S.items = view.items;
+          S.counts = view.counts;
+          window.__seInboxItems = data.items || [];
+          loadCannedResponses().then(paintChips).catch(() => {});
+          paintSync(data);
+          paintBanner(data._debug || {});
+          renderInboxItems(data);
+          scheduleInboxPoll(data);
+        } catch (e) {
+          console.error('Inbox load failed', e);
+          if (typeof showToast === 'function') showToast('Inbox refresh failed, try again', 'error');
+        }
+      }
+      window.loadInboxData = loadInboxData;
+      window._reloadInboxIfActive = function (data) { if (activeNav === 'inbox') loadInboxData(data && data.counts ? data : null); };
+
+      function scheduleInboxPoll(data) {
+        if (inboxPollInterval) { inboxPollInterval.stop(); inboxPollInterval = null; }
+        const fast = !!(data.sync && data.sync.deep_running);
+        inboxPollInterval = visiblePoller(() => {
+          if (activeNav !== 'inbox' || !clientEmail || !clientToken) return;
+          return loadInboxData(null, {});
+        }, fast ? 10000 : 30000);
+      }
+
+      function paintSync(data) {
+        const el = document.getElementById('inbox-sync-status');
+        if (!el) return;
+        const s = data.sync || {};
+        if (s.deep_running) { el.textContent = 'Bringing in older messages from Meta…'; return; }
+        const when = s.quick_at || data.fetched_at;
+        el.textContent = when ? `Up to date · checked ${getTimeAgo(when) === 'now' ? 'just now' : getTimeAgo(when) + ' ago'}` : 'Up to date';
+      }
+
+      function paintBanner(dbg) {
+        const needReconnect = !!(dbg.engage_reconnect_needed || dbg.dm_permission_error || dbg.ig_username_permission_error);
+        const needAdvanced = !needReconnect && !!(dbg.dm_needs_advanced_access || dbg.dm_standard_access_empty);
+        const needAppSetup = !needReconnect && !needAdvanced && !!dbg.dm_app_capability_error;
+        const banner = document.getElementById('inbox-reconnect-banner');
+        if (!banner) return;
+        const title = document.getElementById('inbox-banner-title');
+        const body = document.getElementById('inbox-banner-body');
+        const btn = document.getElementById('inbox-reconnect-meta-btn');
+        if (needReconnect) {
+          banner.style.display = 'flex';
+          title.textContent = 'Meta permissions needed';
+          body.textContent = 'Reconnect once and approve comments and messaging so replies and DMs work.';
+          btn.style.display = '';
+        } else if (needAdvanced) {
+          banner.style.display = 'flex';
+          title.textContent = 'Instagram DMs are limited for now';
+          body.textContent = dbg.dm_info || 'Customer DMs appear after Meta approves Advanced Access for Instagram messages.';
+          btn.style.display = 'none';
+        } else if (needAppSetup) {
+          banner.style.display = 'flex';
+          title.textContent = 'Instagram DMs need Messaging turned on';
+          body.textContent = dbg.dm_info || 'Turn on Instagram Messaging for the Meta app, then refresh.';
+          btn.style.display = 'none';
+        } else {
+          banner.style.display = 'none';
+        }
+      }
+
+      // ── Rendering ──
+      function rowHtml(it, idx) {
+        const unread = !!it.unread;
+        const wait = needsReply(it) && !isDone(it) ? waitingFor(it.last_inbound_at || it.timestamp) : '';
+        const preview = it.type === 'mention' ? it.text : `${it.is_from_us ? 'You: ' : ''}${(threadOf(it).slice(-1)[0] || {}).text || it.text || ''}`;
+        return `
+          <button type="button" class="inbox-item ibx-row" data-item-id="${escapeHtml(String(it.id))}" data-idx="${idx}" data-type="${escapeHtml(it.type || '')}" aria-current="${S.selectedId === it.id ? 'true' : 'false'}">
+            <span class="ibx-av" aria-hidden="true">${escapeHtml((it.username || '?').replace(/^@/, '')[0] || '?')}</span>
+            <span class="ibx-row-main">
+              <span class="ibx-row-top">
+                <span class="ibx-name${unread ? ' is-unread' : ''}">${escapeHtml(displayName(it))}</span>
+                <span class="ibx-tag" title="${PLAT_NAME[it.platform] || ''}">${PLAT[it.platform] || ''}</span>
+                <span class="ibx-tag">${KIND[it.type] || ''}</span>
+                <span class="ibx-time">${getTimeAgo(it.timestamp)}</span>
+              </span>
+              <span class="inbox-item-text ibx-preview">${escapeHtml(preview)}</span>
+              ${(wait || isDone(it) || it.hidden_match) ? `<span class="ibx-row-meta">
+                ${wait ? `<span class="ibx-wait">${wait}</span>` : ''}
+                ${isDone(it) ? '<span class="ibx-donemark">Done</span>' : ''}
+                ${it.hidden_match ? `<span class="inbox-hidden-badge" title="Matches your hidden words. Auto-replies skip it.">Hidden word: ${escapeHtml(it.hidden_match)}</span>` : ''}
+              </span>` : ''}
+            </span>
+            ${unread ? '<span class="ibx-dot" role="img" aria-label="Unread"></span>' : ''}
+          </button>`;
+      }
+
+      function emptyHtml() {
+        if (S.q || S.platform || S.type) return '<div class="ibx-empty"><strong>Nothing matches</strong>Try another search or filter.</div>';
+        if (S.status === 'needs_reply') return '<div class="ibx-empty"><strong>All caught up</strong>Nobody is waiting on a reply.</div>';
+        if (S.status === 'done') return '<div class="ibx-empty"><strong>Nothing marked done yet</strong>Mark a conversation done once it is handled.</div>';
+        return '<div class="ibx-empty"><strong>No messages yet</strong>Comments, DMs and mentions show up here as they come in.</div>';
+      }
+
+      function renderInboxItems(data) {
+        const body = document.getElementById('inbox-body');
+        if (!body) return;
+        const c = S.counts || {};
+        const items = S.items;
+        if (S.selectedId && !items.some((i) => i.id === S.selectedId)) {
+          // Keep showing the open conversation even after it leaves the current tab.
+          const kept = (window.__seInboxOpenItem && window.__seInboxOpenItem.id === S.selectedId) ? window.__seInboxOpenItem : null;
+          if (!kept) S.selectedId = null;
+        }
+        const listScroll = document.getElementById('inbox-list')?.scrollTop || 0;
+        const draftEl = document.querySelector('#inbox-thread-pane .inbox-reply-text');
+        if (draftEl && S.selectedId) S.drafts[S.selectedId] = draftEl.value;
+        const sync = data.sync || {};
+        const oldest = sync.oldest_at ? new Date(sync.oldest_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+        const tab = (status, label, n) => `<button type="button" role="tab" class="inbox-filter ibx-tab${S.status === status ? ' active' : ''}" data-status="${status}" aria-selected="${S.status === status}">${label}${n !== undefined ? ` <b>${n}</b>` : ''}</button>`;
+        const opt = (value, label, current) => `<option value="${value}"${current === value ? ' selected' : ''}>${label}</option>`;
+        body.innerHTML = `
+          <div class="ibx-panes" id="inbox-panes" data-view="${S.view}">
+            <section class="ibx-list" aria-label="Conversations">
+              <div class="ibx-tabs" role="tablist" aria-label="Show">
+                ${tab('needs_reply', 'Needs reply', c.needs_reply)}
+                ${tab('all', 'All', c.all)}
+                ${tab('done', 'Done', c.done)}
+              </div>
+              <div class="ibx-tools">
+                <label class="ibx-sr" for="inbox-search">Search</label>
+                <input id="inbox-search" type="search" placeholder="Search names and messages" value="${escapeHtml(S.q)}">
+                <select id="inbox-type" aria-label="Type">
+                  ${opt('', 'All types', S.type)}${opt('dm', `DMs${c.dm !== undefined ? ` (${c.dm})` : ''}`, S.type)}${opt('comment', `Comments${c.comment !== undefined ? ` (${c.comment})` : ''}`, S.type)}${opt('mention', `Mentions${c.mention !== undefined ? ` (${c.mention})` : ''}`, S.type)}
+                </select>
+                <select id="inbox-platform" aria-label="Platform">
+                  ${opt('', 'Platform', S.platform)}${opt('instagram', 'Instagram', S.platform)}${opt('facebook', 'Facebook', S.platform)}${opt('tiktok', 'TikTok', S.platform)}
+                </select>
+                <select id="inbox-sort" aria-label="Sort">
+                  ${opt('newest', 'Newest', S.sort)}${opt('oldest', 'Oldest', S.sort)}
+                </select>
+              </div>
+              <div id="inbox-list" class="ibx-rows">${items.length ? items.map(rowHtml).join('') : emptyHtml()}</div>
+              <div class="ibx-foot">
+                <span>${oldest ? `Messages back to ${oldest}` : ''}</span>
+                <span style="display:flex;gap:12px;">
+                  ${data.has_more ? '<button type="button" class="ibx-link" id="inbox-more-btn">Show more</button>' : ''}
+                  ${data.source === 'meta' && !sync.deep_running ? '<button type="button" class="ibx-link" id="inbox-older-btn">Look further back</button>' : ''}
+                </span>
+              </div>
+            </section>
+            <section class="ibx-thread" id="inbox-thread-pane" aria-label="Conversation"></section>
+          </div>
+          <div id="inbox-tip" class="ibx-tip">${escapeHtml(data.ranking_tip || '')}</div>
+        `;
+        const list = document.getElementById('inbox-list');
+        if (list) list.scrollTop = listScroll;
+        const hw = document.getElementById('inbox-hidden-words-btn');
+        const flagged = (data.items || []).filter((i) => i.hidden_match).length;
+        if (hw) hw.textContent = flagged ? `Hidden words · ${flagged} flagged` : 'Hidden words';
+        syncSettingsModal(data);
+        renderThreadPane();
+        bindInboxEvents();
+        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+      }
+
+      function syncSettingsModal(data) {
+        const t = document.getElementById('inbox-auto-toggle');
+        if (t) {
+          t.checked = !!data.auto_reply_enabled;
+          const track = document.getElementById('inbox-auto-track');
+          const thumb = document.getElementById('inbox-auto-thumb');
+          if (track) track.style.background = t.checked ? '#7C3AED' : 'rgba(255,255,255,0.12)';
+          if (thumb) thumb.style.left = t.checked ? '23px' : '3px';
+        }
+        paintMode(data.auto_reply_mode === 'auto' ? 'auto' : 'draft');
+      }
+
+      function selectedItem() {
+        return S.items.find((i) => i.id === S.selectedId)
+          || ((window.__seInboxOpenItem && window.__seInboxOpenItem.id === S.selectedId) ? window.__seInboxOpenItem : null);
+      }
+
+      function messagesHtml(it) {
+        return threadOf(it).map((m) => {
+          const me = !!m.from_us;
+          const who = me ? 'You' : (it.platform === 'facebook' ? (m.username || it.username || 'Them') : `@${String(m.username || it.username || 'them').replace(/^@/, '')}`);
+          return `<div class="ibx-msg${me ? ' me' : ''}"><div class="ibx-msg-meta">${escapeHtml(who)}${m.timestamp ? ' · ' + getTimeAgo(m.timestamp) : ''}${m.pending ? ' · sending' : ''}</div><div class="ibx-bubble">${escapeHtml(m.text || '')}</div></div>`;
+        }).join('');
+      }
+
+      function renderThreadPane() {
+        const pane = document.getElementById('inbox-thread-pane');
+        if (!pane) return;
+        const it = selectedItem();
+        if (!it) {
+          pane.innerHTML = `<div class="ibx-empty" style="margin:auto;"><strong>Pick a conversation</strong>Its messages and your reply box open here.</div>`;
+          return;
+        }
+        window.__seInboxOpenItem = it;
+        const canReply = it.type !== 'mention';
+        const closed = windowClosed(it);
+        const started = it.created_time ? `started ${getTimeAgo(it.created_time)}${/^\d+[mhdw]$/.test(getTimeAgo(it.created_time)) ? ' ago' : ''}` : '';
+        const appName = PLAT_NAME[it.platform] || 'the app';
+        pane.innerHTML = `
+          <div class="ibx-thread-head">
+            <button type="button" class="ibx-icon-btn ibx-back" id="inbox-back-btn" aria-label="Back to conversations"><i data-lucide="chevron-left"></i></button>
+            <span class="ibx-av" aria-hidden="true">${escapeHtml((it.username || '?').replace(/^@/, '')[0] || '?')}</span>
+            <div class="ibx-thread-who">
+              <div class="ibx-thread-name">${escapeHtml(displayName(it))}</div>
+              <div class="ibx-thread-sub">${appName} ${KIND_LOWER[it.type] || ''}${started ? ' · ' + started : ''}</div>
+            </div>
+            <div class="ibx-thread-actions">
+              <button type="button" class="ibx-icon-btn" id="inbox-unread-btn" aria-label="Mark unread" title="Mark unread"><i data-lucide="mail"></i></button>
+              <a class="ibx-icon-btn" href="${escapeHtml(openUrl(it))}" target="_blank" rel="noopener" aria-label="Open in ${appName}" title="Open in ${appName}"><i data-lucide="external-link"></i></a>
+              <button type="button" class="ibx-btn ${isDone(it) ? '' : 'ibx-done-btn'}" id="inbox-done-btn"><i data-lucide="${isDone(it) ? 'rotate-ccw' : 'check'}"></i>${isDone(it) ? 'Reopen' : 'Done'}</button>
+            </div>
+          </div>
+          ${it.type === 'comment' && it.post_caption ? `<div class="ibx-context">On your post: <span>${escapeHtml(String(it.post_caption).slice(0, 160))}${String(it.post_caption).length > 160 ? '…' : ''}</span></div>` : ''}
+          <div class="ibx-msgs" id="inbox-thread-msgs">${messagesHtml(it)}</div>
+          ${canReply && closed ? `<div class="ibx-window">Their last message was more than 24 hours ago, so Meta may not let us send this from SocialEngine. If it doesn't go, <a href="${escapeHtml(openUrl(it))}" target="_blank" rel="noopener">reply in ${appName}</a>.</div>` : ''}
+          ${canReply ? `
+          <div class="ibx-compose">
+            <div class="inbox-canned-row ibx-chips" aria-label="Quick replies"></div>
+            <label class="ibx-sr" for="inbox-text-${S.items.indexOf(it)}">Reply</label>
+            <textarea class="inbox-reply-text" id="inbox-text-${S.items.indexOf(it)}" placeholder="Write a reply…">${escapeHtml(S.drafts[it.id] || '')}</textarea>
+            <div class="inbox-bait-warn" style="display:none;"></div>
+            <div class="ibx-compose-actions">
+              <button type="button" class="ibx-btn inbox-generate-btn"><i data-lucide="sparkles"></i>Write with AI</button>
+              <button type="button" class="ibx-link inbox-save-canned-btn">Save as quick reply</button>
+              <button type="button" class="ibx-btn ibx-primary inbox-send-btn"><i data-lucide="send"></i>Send</button>
+            </div>
+          </div>` : `<div class="ibx-compose"><span style="font-size:0.8rem;color:#94A3B8;">Mentions can't be answered from here. <a class="ibx-link" href="${escapeHtml(openUrl(it))}" target="_blank" rel="noopener">Open the post</a> to reply.</span></div>`}
+        `;
+        const msgs = document.getElementById('inbox-thread-msgs');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        paintChips();
+        bindThreadEvents(it);
+        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 20);
+      }
+
+      function paintChips() {
+        const row = document.querySelector('#inbox-thread-pane .inbox-canned-row');
+        if (!row) return;
+        if (!_cannedResponses.length) { row.innerHTML = ''; row.style.display = 'none'; return; }
+        row.style.display = '';
+        row.innerHTML = _cannedResponses.map((c) => `<button type="button" class="ibx-chip inbox-canned-chip" data-cid="${escapeHtml(c.id)}">${escapeHtml(c.label || (c.text || '').slice(0, 28))}</button>`).join('');
+        row.querySelectorAll('.inbox-canned-chip').forEach((chip) => chip.addEventListener('click', () => {
+          const c = _cannedResponses.find((x) => x.id === chip.dataset.cid);
+          const ta = document.querySelector('#inbox-thread-pane .inbox-reply-text');
+          if (c && ta) { ta.value = c.text; ta.focus(); }
+        }));
+      }
+
+      async function setState(ids, patch) {
+        const r = await apiFetch(`${API}/api/inbox/state`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ ids, ...patch }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Could not update the inbox');
+        if (d.counts) {
+          S.counts = { ...S.counts, ...d.counts };
+          updateEngageBadge(d.counts.needs_reply || 0);
+        }
+        return d;
+      }
+
+      function selectItem(id) {
+        S.selectedId = id;
+        S.view = 'thread';
+        document.getElementById('inbox-panes')?.setAttribute('data-view', 'thread');
+        document.querySelectorAll('#inbox-list .ibx-row').forEach((r) => r.setAttribute('aria-current', r.dataset.itemId === id ? 'true' : 'false'));
+        const it = selectedItem();
+        renderThreadPane();
+        if (it && it.unread && S.data && S.data.counts) {
+          it.unread = false;
+          const row = document.querySelector(`#inbox-list .ibx-row[data-item-id="${CSS.escape(id)}"]`);
+          row?.querySelector('.ibx-dot')?.remove();
+          row?.querySelector('.ibx-name')?.classList.remove('is-unread');
+          setState([id], { read: true }).catch(() => {});
+        }
+      }
+
+      function bindInboxEvents() {
+        document.querySelectorAll('.inbox-filter').forEach((btn) => btn.addEventListener('click', () => {
+          S.status = btn.dataset.status;
+          loadInboxData(null, {});
+        }));
+        let searchTimer = null;
+        document.getElementById('inbox-search')?.addEventListener('input', (e) => {
+          clearTimeout(searchTimer);
+          const v = e.target.value;
+          searchTimer = setTimeout(() => {
+            S.q = v.trim();
+            loadInboxData(null, {}).then(() => {
+              const box = document.getElementById('inbox-search');
+              if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+            });
+          }, 300);
+        });
+        document.getElementById('inbox-type')?.addEventListener('change', (e) => { S.type = e.target.value; loadInboxData(null, {}); });
+        document.getElementById('inbox-platform')?.addEventListener('change', (e) => { S.platform = e.target.value; loadInboxData(null, {}); });
+        document.getElementById('inbox-sort')?.addEventListener('change', (e) => { S.sort = e.target.value; loadInboxData(null, {}); });
+        document.getElementById('inbox-more-btn')?.addEventListener('click', () => { S.limit = Math.min(200, S.limit + 100); loadInboxData(null, {}); });
+        document.getElementById('inbox-older-btn')?.addEventListener('click', async (e) => {
+          e.currentTarget.disabled = true;
+          e.currentTarget.textContent = 'Looking…';
+          try {
+            await apiFetch(`${API}/api/inbox/sync`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ deep: true }) });
+            if (typeof showToast === 'function') showToast('Bringing in older messages. They will appear here in a minute or two.', 'success');
+            setTimeout(() => loadInboxData(null, {}), 1500);
+          } catch (_) {
+            if (typeof showToast === 'function') showToast('Could not start that, try again', 'error');
+          }
+        });
+        document.querySelectorAll('#inbox-list .ibx-row').forEach((row) => row.addEventListener('click', () => selectItem(row.dataset.itemId)));
+      }
+
+      function bindThreadEvents(it) {
+        document.getElementById('inbox-back-btn')?.addEventListener('click', () => {
+          S.view = 'list';
+          document.getElementById('inbox-panes')?.setAttribute('data-view', 'list');
+        });
+        document.getElementById('inbox-unread-btn')?.addEventListener('click', async () => {
+          try {
+            await setState([it.id], { read: false });
+            it.unread = true;
+            const row = document.querySelector(`#inbox-list .ibx-row[data-item-id="${CSS.escape(it.id)}"]`);
+            if (row && !row.querySelector('.ibx-dot')) row.insertAdjacentHTML('beforeend', '<span class="ibx-dot" role="img" aria-label="Unread"></span>');
+            row?.querySelector('.ibx-name')?.classList.add('is-unread');
+            if (typeof showToast === 'function') showToast('Marked unread');
+          } catch (e) { if (typeof showToast === 'function') showToast(e.message, 'error'); }
+        });
+        document.getElementById('inbox-done-btn')?.addEventListener('click', async () => {
+          const toDone = !isDone(it);
+          try {
+            await setState([it.id], { status: toDone ? 'done' : 'open' });
+            it.status = toDone ? 'done' : 'open';
+            it.unread = false;
+            const leaves = (toDone && S.status !== 'all') || (!toDone && S.status === 'done');
+            if (leaves) {
+              const i = S.items.findIndex((x) => x.id === it.id);
+              S.items.splice(i, 1);
+              const next = S.items[i] || S.items[i - 1] || null;
+              S.selectedId = next ? next.id : null;
+              if (!next) S.view = 'list';
+              window.__seInboxOpenItem = null;
+            }
+            renderInboxItems(S.data);
+            if (typeof showToast === 'function') showToast(toDone ? 'Marked done' : 'Back in your inbox');
+          } catch (e) { if (typeof showToast === 'function') showToast(e.message, 'error'); }
+        });
+
+        const ta = document.querySelector('#inbox-thread-pane .inbox-reply-text');
+        ta?.addEventListener('input', () => { S.drafts[it.id] = ta.value; });
+
+        document.querySelector('#inbox-thread-pane .inbox-save-canned-btn')?.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          const textVal = ta?.value?.trim();
+          if (!textVal) { if (typeof showToast === 'function') showToast('Write a reply first', 'warning'); return; }
+          btn.textContent = 'Saving…';
+          try {
+            const res = await apiFetch(`${API}/api/inbox/canned-responses`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ label: textVal.slice(0, 30), text: textVal }) });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || 'Save failed');
+            _cannedResponses = d.canned || [];
+            paintChips();
+            if (typeof showToast === 'function') showToast('Saved as a quick reply');
+          } catch (err) {
+            if (typeof showToast === 'function') showToast(err.message || 'Could not save that reply', 'error');
+          } finally {
+            btn.textContent = 'Save as quick reply';
+          }
+        });
+
+        document.querySelector('#inbox-thread-pane .inbox-generate-btn')?.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          const orig = btn.innerHTML;
+          btn.disabled = true;
+          btn.textContent = 'Writing…';
+          try {
+            const res = await apiFetch(`${API}/api/inbox/generate-reply`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ message: it.text, username: it.username, type: it.type, postCaption: it.post_caption }) });
+            const result = await res.json().catch(() => ({}));
+            const warnEl = document.querySelector('#inbox-thread-pane .inbox-bait-warn');
+            const baits = Array.isArray(result.bait_warnings) ? result.bait_warnings : [];
+            if (warnEl) {
+              warnEl.style.display = baits.length ? 'block' : 'none';
+              warnEl.textContent = baits.length ? `This may read as engagement bait (${baits.map((b) => `${b.kind}: "${b.match}"`).join('; ')}). Meta shows bait to fewer people, so edit before sending.` : '';
+            }
+            if (result.suggested_reply && ta) {
+              ta.value = result.suggested_reply;
+              ta.dataset.aiGenerated = result.suggested_reply;
+              S.drafts[it.id] = ta.value;
+            } else if (typeof showToast === 'function') {
+              showToast(result.error || `Could not write a reply (${res.status})`, 'error', { ref: result.request_id });
+            }
+          } catch (_) {
+            if (typeof showToast === 'function') showToast('Connection error writing a reply', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 20);
+          }
+        });
+
+        document.querySelector('#inbox-thread-pane .inbox-send-btn')?.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          const reply = ta?.value?.trim();
+          if (!reply) return;
+          const orig = btn.innerHTML;
+          btn.disabled = true;
+          btn.textContent = 'Sending…';
+          try {
+            const res = await apiFetch(`${API}/api/inbox/reply`, {
+              method: 'POST',
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ itemId: it.id, inboxId: it.id, itemType: it.type, platform: it.platform || '', reply, recipient_id: it.recipient_id || '' }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (!result.success) {
+              if (typeof showToast === 'function') showToast(result.error || `Reply failed (${res.status})`, 'error', { ref: result.request_id });
+              if (result.reconnect_needed) { const b = document.getElementById('inbox-reconnect-banner'); if (b) b.style.display = 'flex'; }
               return;
             }
-            row.innerHTML = _cannedResponses.map(c =>
-              `<button type="button" class="inbox-canned-chip" data-idx="${idx}" data-cid="${c.id}" style="padding:4px 10px;border-radius:14px;border:1px solid rgba(124,58,237,0.25);background:rgba(124,58,237,0.08);color:#C4B5FD;font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">${escapeHtml(c.label || (c.text || '').slice(0, 28))}</button>`
-            ).join('');
-          });
-          document.querySelectorAll('.inbox-canned-chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-              e.stopPropagation();
-              const c = _cannedResponses.find(x => x.id === chip.dataset.cid);
-              const ta = document.getElementById(`inbox-text-${chip.dataset.idx}`);
-              if (c && ta) { ta.value = c.text; ta.focus(); }
-            });
-          });
-        }
-        paintCannedChips();
-
-        document.querySelectorAll('.inbox-save-canned-btn').forEach(btn => {
-          btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const idx = btn.dataset.idx;
-            const textVal = document.getElementById(`inbox-text-${idx}`)?.value?.trim();
-            if (!textVal) { if (typeof showToast === 'function') showToast('Write a reply first', 'warning'); return; }
-            btn.textContent = 'Saving…';
-            try {
-              const res = await apiFetch(`${API}/api/inbox/canned-responses`, {
-                method: 'POST',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ label: textVal.slice(0, 30), text: textVal }),
-              });
-              const d = await res.json();
-              if (!res.ok) throw new Error(d.error || 'Save failed');
-              _cannedResponses = d.canned || [];
-              paintCannedChips();
-              btn.textContent = 'Saved';
-              if (typeof showToast === 'function') showToast('Canned response saved');
-              setTimeout(() => { btn.textContent = '+ Save as canned response'; }, 1200);
-            } catch (err) {
-              btn.textContent = '+ Save as canned response';
-              if (typeof showToast === 'function') showToast(err.message || 'Could not save canned reply', 'error');
+            const aiOriginal = ta?.dataset?.aiGenerated;
+            if (aiOriginal && aiOriginal !== reply) {
+              apiFetch(`${API}/api/inbox/reply-edited`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ originalReply: aiOriginal, editedReply: reply, messageContext: { type: it.type, username: it.username } }) }).catch(() => {});
             }
-          });
-        });
-
-        // Generate AI reply
-        document.querySelectorAll('.inbox-generate-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const idx = parseInt(btn.dataset.idx);
-            const item = items[idx];
-            if (!item) return;
-            btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:5px;"><span class="se-spinner" style="width:12px;height:12px;border:2px solid rgba(139,92,246,0.2);border-top-color:rgba(139,92,246,0.8);border-radius:50%;animation:spin 0.6s linear infinite;"></span> Generating...</span>';
-            btn.disabled = true;
-            try {
-              const res = await apiFetch(`${API}/api/inbox/generate-reply`, {
-                method: 'POST',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ message: item.text, username: item.username, type: item.type, postCaption: item.post_caption })
-              });
-              const result = await res.json().catch(() => ({}));
-              const warnEl = document.getElementById(`inbox-bait-${idx}`);
-              const baits = Array.isArray(result.bait_warnings) ? result.bait_warnings : [];
-              if (warnEl) {
-                warnEl.style.display = baits.length ? 'block' : 'none';
-                warnEl.textContent = baits.length
-                  ? `This may read as engagement bait (${baits.map(b => `${b.kind}: "${b.match}"`).join('; ')}). Meta shows bait to fewer people — edit before sending.`
-                  : '';
-              }
-              if (result.suggested_reply) {
-                const ta = document.getElementById(`inbox-text-${idx}`);
-                ta.value = result.suggested_reply;
-                ta.dataset.aiGenerated = result.suggested_reply; // Store for learning loop tracking
-              } else {
-                const ta = document.getElementById(`inbox-text-${idx}`);
-                if (ta) {
-                  ta.value = '';
-                  ta.placeholder = 'AI reply generation failed — type your reply manually';
-                }
-                const errMsg = result.error || `AI reply failed (${res.status})`;
-                if (typeof showToast === 'function') showToast(errMsg, 'error', { ref: result.request_id });
-              }
-            } catch (e) {
-              const ta = document.getElementById(`inbox-text-${idx}`);
-              if (ta) ta.placeholder = 'Connection error — type your reply manually';
-              if (typeof showToast === 'function') showToast('Connection error generating reply', 'error');
-            } finally {
-              btn.innerHTML = '<i data-lucide="sparkles" style="width:12px;height:12px;"></i> Regenerate';
-              btn.disabled = false;
-              setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+            it.thread = [...threadOf(it), { id: result.message_id || result.reply_id || `local-${Date.now()}`, text: reply, timestamp: new Date().toISOString(), from_us: true, username: 'You' }];
+            it.has_reply = true;
+            it.is_from_us = true;
+            it.needs_reply = false;
+            delete S.drafts[it.id];
+            if (ta) { ta.value = ''; delete ta.dataset.aiGenerated; }
+            const msgs = document.getElementById('inbox-thread-msgs');
+            if (msgs) { msgs.innerHTML = messagesHtml(it); msgs.scrollTop = msgs.scrollHeight; }
+            const row = document.querySelector(`#inbox-list .ibx-row[data-item-id="${CSS.escape(it.id)}"]`);
+            if (row) {
+              row.querySelector('.ibx-wait')?.remove();
+              const p = row.querySelector('.ibx-preview');
+              if (p) p.textContent = `You: ${reply}`;
             }
-          });
+            if (typeof showToast === 'function') showToast('Sent');
+            if (typeof pollEngageBadge === 'function') pollEngageBadge();
+          } catch (_) {
+            if (typeof showToast === 'function') showToast('Connection error sending reply', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 20);
+          }
         });
-
-        // Send reply
-        document.querySelectorAll('.inbox-send-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const idx = parseInt(btn.dataset.idx);
-            const item = items[idx];
-            const reply = document.getElementById(`inbox-text-${idx}`)?.value?.trim();
-            if (!reply || !item) return;
-            const origHTML = btn.innerHTML;
-            btn.innerHTML = '<span class="se-spinner" style="width:12px;height:12px;border:2px solid rgba(10,22,40,0.3);border-top-color:#0A1628;border-radius:50%;animation:spin 0.6s linear infinite;"></span> Sending...';
-            btn.disabled = true;
-            try {
-              const res = await apiFetch(`${API}/api/inbox/reply`, {
-                method: 'POST',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({
-                  itemId: item.id,
-                  itemType: item.type,
-                  platform: item.platform || '',
-                  reply,
-                  recipient_id: item.recipient_id || '',
-                })
-              });
-              const result = await res.json().catch(() => ({}));
-              if (result.success) {
-                btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Sent';
-                btn.style.background = '#7C3AED';
-                // Learning loop: if reply was AI-generated and then edited, record the edit
-                const textArea = document.getElementById(`inbox-text-${idx}`);
-                const aiOriginal = textArea?.dataset?.aiGenerated;
-                if (aiOriginal && aiOriginal !== reply) {
-                  apiFetch(`${API}/api/inbox/reply-edited`, {
-                    method: 'POST',
-                    headers: authHeaders({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ originalReply: aiOriginal, editedReply: reply, messageContext: { type: item.type, username: item.username } })
-                  }).catch(() => {}); // Non-blocking
-                }
-                // Keep conversation open — append to thread and stay in composer
-                if (!Array.isArray(item.thread)) item.thread = buildInboxThread(item);
-                item.thread.push({
-                  id: result.message_id || result.reply_id || ('local-' + Date.now()),
-                  text: reply,
-                  timestamp: new Date().toISOString(),
-                  from_us: true,
-                  username: 'You',
-                });
-                item.has_reply = true;
-                item.is_from_us = true;
-                item.they_replied = false;
-                item.text = reply;
-                const threadEl = document.getElementById(`inbox-thread-${idx}`);
-                if (threadEl) {
-                  threadEl.outerHTML = renderThreadHtml(item.thread, idx);
-                  const nextThread = document.getElementById(`inbox-thread-${idx}`);
-                  if (nextThread) nextThread.scrollTop = nextThread.scrollHeight;
-                }
-                const awaiting = document.querySelector(`.inbox-item[data-idx="${idx}"] .inbox-awaiting-badge`);
-                if (awaiting) awaiting.remove();
-                const card = document.querySelector(`.inbox-item[data-idx="${idx}"]`);
-                if (card) card.dataset.replied = 'true';
-                if (textArea) {
-                  textArea.value = '';
-                  delete textArea.dataset.aiGenerated;
-                }
-                setTimeout(() => {
-                  btn.innerHTML = origHTML;
-                  btn.style.background = 'linear-gradient(135deg,#7C3AED,#6D28D9)';
-                  btn.disabled = false;
-                }, 900);
-                if (typeof pollEngageBadge === 'function') pollEngageBadge();
-              } else {
-                btn.innerHTML = 'Failed — retry';
-                btn.style.background = 'rgba(239,68,68,0.8)';
-                btn.disabled = false;
-                const errMsg = result.error || `Reply failed (${res.status})`;
-                if (typeof showToast === 'function') showToast(errMsg, 'error', { ref: result.request_id });
-                if (result.reconnect_needed) {
-                  const banner = document.getElementById('inbox-reconnect-banner');
-                  if (banner) banner.style.display = 'flex';
-                }
-                setTimeout(() => { btn.innerHTML = origHTML; btn.style.background = 'linear-gradient(135deg,#7C3AED,#6D28D9)'; }, 2000);
-              }
-            } catch (e) {
-              btn.innerHTML = 'Error — retry';
-              btn.disabled = false;
-              if (typeof showToast === 'function') showToast('Connection error sending reply', 'error');
-              setTimeout(() => { btn.innerHTML = origHTML; }, 2000);
-            }
-          });
-        });
-
-        // Refresh + settings are wired once in renderInbox() skeleton init above
       }
+
+      function renderInboxUpgrade() {
+        const el = document.getElementById('inbox-body');
+        if (!el) return;
+        el.innerHTML = `
+          <div class="ibx-empty">
+            <strong>Unlock the Inbox</strong>
+            Every comment, DM and mention in one place, with replies written in your brand voice.
+            <div style="margin-top:18px;"><a href="${STRIPE_LINK}" target="_blank" class="ibx-btn ibx-primary" style="display:inline-flex;">Upgrade to ${UPGRADE_NAME}</a></div>
+          </div>`;
+      }
+
+      function renderInboxConnect() {
+        const el = document.getElementById('inbox-body');
+        if (!el) return;
+        const cc = clientData?.client || {};
+        const plats = Array.isArray(cc.social_connected_platforms)
+          ? cc.social_connected_platforms.map((p) => String(p || '').trim().toLowerCase())
+          : String(cc.social_connected_platforms || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+        const upSnap = clientData?.upload_post_connection;
+        const upIg = plats.includes('instagram') || (Array.isArray(upSnap?.accounts) && upSnap.accounts.some((a) => String(a.platform || '').toLowerCase() === 'instagram'));
+        el.innerHTML = `
+          <div class="ibx-empty">
+            <strong>Connect your accounts</strong>
+            Link your Instagram Business account to bring comments, DMs and mentions in here.
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px;">
+              <button type="button" class="ibx-btn ibx-primary" onclick="connectInstagramOAuth()">Connect Instagram</button>
+              ${upIg ? `<button type="button" class="ibx-btn" onclick="connectViaUploadPost('instagram')">Refresh inbox connection</button>` : ''}
+            </div>
+          </div>`;
+      }
+
+      loadInboxData();
     }
 
     // === Fundraise MVP — JustGiving + Meta command center ===
