@@ -57,11 +57,13 @@ test('Inbox shows the ranking tip, flags hidden words, warns on bait, and saves 
 
   const ana = page.locator('.inbox-item[data-item-id="c1"]');
   await ana.locator('.inbox-item-text').click();
-  await ana.locator('.inbox-generate-btn').click();
-  const warn = ana.locator('.inbox-bait-warn');
+  const thread = page.locator('#inbox-thread-pane');
+  await expect(thread).toContainText('On your post: New menu');
+  await thread.locator('.inbox-generate-btn').click();
+  const warn = thread.locator('.inbox-bait-warn');
   await expect(warn).toBeVisible();
   await expect(warn).toContainText('comment bait');
-  await expect(ana.locator('.inbox-reply-text')).toHaveValue('Comment YES and we will save you one!');
+  await expect(thread.locator('.inbox-reply-text')).toHaveValue('Comment YES and we will save you one!');
 
   await page.click('#inbox-hidden-words-btn');
   await expect(page.locator('#hw-text')).toHaveValue('crypto');
