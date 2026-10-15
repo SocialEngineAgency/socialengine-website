@@ -2271,7 +2271,7 @@
         payload.reference = { ..._csRef, url: hero };
         payload.photo_url = hero;
       }
-      // FigureLabs path returns a job_id immediately; HTML/Soul stay sync.
+      // FigureLabs and GPT Image return a job_id immediately; HTML/Soul stay sync.
       const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
         method: 'POST',
         headers: authHeaders(),
@@ -2306,8 +2306,8 @@
       }
       if (styleUrls.length && !(result.style_lock && result.style_lock.sent)) {
         toast('Style photo did not reach the generator — re-attach it', 'error');
-      } else if (styleUrls.length && result.method && result.method !== 'figurelabs') {
-        toast('Style lock needs Scientific Infographic on this account', 'warning');
+      } else if (styleUrls.length && result.method && result.method !== 'figurelabs' && result.method !== 'gpt-image') {
+        toast('Style lock needs Scientific Infographic or GPT Image 2.5 on this account', 'warning');
       }
     } catch (e) {
       const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
