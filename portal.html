@@ -32,7 +32,7 @@
   <script src="./design-studio-v2.js?v=20261011j" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
-  <script src="./animation-studio.js?v=20261016-nl" defer></script>
+  <script src="./animation-studio.js?v=20261016-nl2" defer></script>
   <script src="./analytics-cockpit.js?v=20261010-verdicts" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
@@ -3078,7 +3078,7 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261016h">
+  <link rel="stylesheet" href="./new-look.css?v=20261016j">
   <script src="./new-look.js?v=20261016e" defer></script>
 </head>
 <body>
@@ -4340,18 +4340,28 @@
 
     window.openStudioModal = function(postIndex) {
       studioCurrentIndex = postIndex;
+      if (typeof nlModalHome === 'function') nlModalHome();
       const modal = document.getElementById('studio-modal');
       renderStudioModalContent();
       modal.classList.add('active');
+      if (modal.classList.contains('nl-inline')) {
+        // New look Review: the post opens under the grid, not over the page.
+        _nlRvGen = _navGeneration;
+        nlRvMarkSel();
+        requestAnimationFrame(() => modal.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+        return;
+      }
       document.body.style.overflow = 'hidden';
     };
 
     window.closeStudioModal = function() {
+      if (typeof nlModalHome === 'function') nlModalHome();
       const modal = document.getElementById('studio-modal');
       modal.classList.remove('active');
       document.body.style.overflow = '';
       // Pause any playing video
       modal.querySelectorAll('video').forEach(v => v.pause());
+      if (typeof nlRvMarkSel === 'function') nlRvMarkSel();
     };
 
     document.addEventListener('keydown', e => {
@@ -4448,6 +4458,8 @@
     function renderStudioModalContent() {
       const post = studioPostsList[studioCurrentIndex];
       if (!post) return;
+      if (typeof nlModalHome === 'function') nlModalHome();
+      if (typeof nlRvMarkSel === 'function') setTimeout(nlRvMarkSel, 0);
       const body = document.getElementById('studio-modal-body');
       const platform = (post.platform || 'instagram').toLowerCase();
       const status = post.status || 'Draft';
@@ -4549,7 +4561,7 @@
             </div>
           </div>`;
       } else if (hasImage) {
-        previewHTML = `<img src="${imageUrl}" alt="${(post.theme || 'Content preview').replace(/"/g, '&quot;')}" style="max-width:100%;max-height:100%;object-fit:contain;" onerror="this.style.display='none';this.parentElement.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;height:100%;background:rgba(255,255,255,0.02);\'><svg width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'rgba(255,255,255,0.15)\' stroke-width=\'1.5\'><rect x=\'2\' y=\'2\' width=\'20\' height=\'20\' rx=\'5\'/><circle cx=\'8.5\' cy=\'8.5\' r=\'1.5\'/><path d=\'m21 15-5-5L5 21\'/></svg></div>'">`;
+        previewHTML = `<img src="${imageUrl}" alt="${(post.theme || 'Content preview').replace(/"/g, '&quot;')}" style="max-width:100%;max-height:100%;object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'studio-modal__preview-empty',textContent:'Image unavailable'}))">`;
       } else {
         previewHTML = isReel
           ? `<div class="video-generating-state" style="min-height:300px;">
@@ -4727,7 +4739,7 @@
             if (local) local.status = 'Published';
             await refreshClientDataSnapshot();
             renderStudioModalContent();
-            if (clientData) renderContentPage(clientData);
+            if (clientData) rerenderReviewViews();
             updateSidebarCredits();
           } else if (st === 'failed') {
             showToast('Publish failed — we\'ll retry automatically');
@@ -4853,7 +4865,7 @@
         setTimeout(() => {
           overlay.remove();
           renderStudioModalContent();
-          if (clientData) renderContentPage(clientData);
+          if (clientData) rerenderReviewViews();
           updateSidebarCredits();
         }, 1500);
       } catch {
@@ -4891,7 +4903,7 @@
         btn.style.background = 'rgba(124,58,237,0.15)';
         btn.style.borderColor = 'rgba(124,58,237,0.3)';
         btn.disabled = false;
-        setTimeout(() => { if (clientData) renderContentPage(clientData); updateSidebarCredits(); }, 800);
+        setTimeout(() => { if (clientData) rerenderReviewViews(); updateSidebarCredits(); }, 800);
       } catch {
         btn.innerHTML = origHTML;
         btn.disabled = false;
@@ -4927,7 +4939,7 @@
         failed ? `${failed} failed` : '',
       ].filter(Boolean).join(' · ');
       showToast(`✓ ${approved} post${approved !== 1 ? 's' : ''} approved${extra ? ` · ${extra}` : '!'}`);
-      if (clientData) renderContentPage(clientData);
+      if (clientData) rerenderReviewViews();
     };
 
     // Fix 5: Sidebar credits updater
@@ -6865,6 +6877,12 @@
     window.addEventListener('resize', seMeasureDashHeader);
 
     let _navGeneration = 0; // Increments on each nav change, used to prevent stale async overwrites
+    // After an approve or publish lands: refresh the page that lists posts (Review or Home), and
+    // leave any other page alone instead of swapping Review in over it.
+    function rerenderReviewViews() {
+      if (activeNav === 'content') renderContentPage(clientData);
+      else if (activeNav === 'dashboard') renderDashboard(clientData);
+    }
     function rerenderCurrentPage() {
       if (activeNav === 'dashboard') renderDashboard(clientData);
       else if (activeNav === 'content') renderContentPage(clientData);
@@ -9342,12 +9360,207 @@
           }
         });
       });
+      if (nlRvOn()) nlReviewChrome(content, { live, pending });
+    }
+
+    // ── New look: Review in the redesign layout ──
+    // Same data, filters and handlers as Content Review; new cards, a filter bar, and the post
+    // detail (the studio modal, unchanged inside) shown inline under the grid instead of on top.
+    function nlRvOn() { return document.documentElement.classList.contains('nl'); }
+    function nlRvStatus(post) {
+      const st = String(post.status || 'Draft');
+      if (isArchivedPost(post)) return ['archived', 'Archived'];
+      if (isLivePublishedPost(post)) return ['live', 'Live'];
+      if (st === 'Regenerating' || st === 'Generating') return ['review', 'Making'];
+      if (st === 'QA Failed') return ['failed', 'Needs a fix'];
+      if (st === 'Rejected') return ['failed', 'Rejected'];
+      if (st === 'Scheduled') return ['scheduled', 'Scheduled'];
+      if (st === 'Approved') return ['scheduled', post.scheduled_date ? 'Scheduled' : 'Approved'];
+      return ['review', 'Needs review'];
+    }
+    function nlRvMedia(post) {
+      const rawImage = resolveImageUrl(post);
+      const imageUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
+        ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
+        : rawImage;
+      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
+      if (videoUrl) return `<video src="${escapeHtml(videoUrl)}" muted loop playsinline preload="metadata" poster="${escapeHtml(imageUrl || '')}" onmouseenter="this.play().catch(()=>{})" onmouseleave="this.pause()"></video>`;
+      if (imageUrl) return `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'nl-rv-card__ph',textContent:'Image not loading'}))">`;
+      const st = String(post.status || '');
+      const fk = contentFormatKey(post);
+      const label = (st === 'Regenerating' || st === 'Generating') ? (fk === 'reel' || fk === 'video' ? 'Making your video' : 'Making your image')
+        : st === 'QA Failed' ? 'Did not finish' : (fk === 'reel' || fk === 'video' ? 'Video draft' : 'Image pending');
+      return `<span class="nl-rv-card__ph">${label}</span>`;
+    }
+    function nlRvCaption(post) {
+      return String(post.full_post_text || post.caption || '').replace(/#[\w]+/g, '').replace(/\s+/g, ' ').trim();
+    }
+    function nlRvCard(post, index) {
+      const [pk, pl] = nlPlatform(post);
+      const [sk, sl] = nlRvStatus(post);
+      const fk = contentFormatKey(post);
+      const badge = fk === 'carousel' ? 'Carousel' : fk === 'reel' ? 'Reel' : fk === 'video' ? 'Video' : fk === 'story' ? 'Story' : '';
+      const when = nlWhen(post);
+      const id = String(post.id || '').replace(/'/g, "\\'");
+      const st = String(post.status || '');
+      const actionable = ['Ready for Review', 'Draft', 'Pending'].includes(st) && !isArchivedPost(post);
+      const making = st === 'Regenerating' || st === 'Generating';
+      const cap = nlRvCaption(post);
+      let acts;
+      if (actionable) {
+        acts = `<button type="button" class="nl-btn nl-btn--xs nl-btn--primary" onclick="event.stopPropagation();studioQuickApprove('${id}',this)">Approve</button>
+          <button type="button" class="nl-btn nl-btn--xs" onclick="event.stopPropagation();openRejectModal('${id}')">Reject</button>`;
+      } else if (making) {
+        acts = `<span class="nl-rv-card__busy"><i></i>Making it now</span>`;
+      } else if (isArchivedPost(post)) {
+        acts = `<button type="button" class="nl-btn nl-btn--xs" onclick="event.stopPropagation();studioRestore('${id}',this)">Restore</button>`;
+      } else if ((st === 'Approved' || st === 'Scheduled') && !post.scheduled_date) {
+        acts = `<button type="button" class="nl-btn nl-btn--xs nl-btn--primary" onclick="event.stopPropagation();scheduleFromContent('${id}','')">Schedule</button>`;
+      } else {
+        acts = `<button type="button" class="nl-btn nl-btn--xs" onclick="event.stopPropagation();openStudioModal(${index})">Open</button>`;
+      }
+      return `<article class="nl-rv-card" data-index="${index}" data-post-id="${escapeHtml(String(post.id || ''))}" data-status="${escapeHtml(st)}">
+        <button type="button" class="nl-rv-card__media" onclick="openStudioModal(${index})" aria-label="Open ${escapeHtml(pl)} post">
+          ${nlRvMedia(post)}
+          ${badge ? `<span class="nl-rv-card__badge">${badge}</span>` : ''}
+        </button>
+        <div class="nl-rv-card__meta">
+          <span class="nl-rv-card__plat"><i class="nl-pdot nl-pdot--${pk}"></i>${escapeHtml(pl)}</span>
+          ${when ? `<span class="nl-rv-card__when">${escapeHtml(when)}</span>` : ''}
+          <span class="nl-rv-pill nl-rv-pill--${sk}"><i></i>${sl}</span>
+        </div>
+        <p class="nl-rv-card__cap" onclick="openStudioModal(${index})">${escapeHtml(cap || 'No caption yet')}</p>
+        ${seRuleOfFiveBadgeHtml(post) ? `<div class="nl-rv-card__r5">${seRuleOfFiveBadgeHtml(post)}</div>` : ''}
+        <div class="nl-rv-card__acts">${acts}<button type="button" class="nl-btn nl-btn--xs nl-btn--icon" onclick="event.stopPropagation();openStudioModal(${index})" aria-label="More for this post" title="Open the full post"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button></div>
+      </article>`;
+    }
+    function nlRvRow(post, index) {
+      const [pk, pl] = nlPlatform(post);
+      const [sk, sl] = nlRvStatus(post);
+      const id = String(post.id || '').replace(/'/g, "\\'");
+      const st = String(post.status || '');
+      const actionable = ['Ready for Review', 'Draft', 'Pending'].includes(st) && !isArchivedPost(post);
+      return `<div class="nl-rv-row" data-index="${index}" data-post-id="${escapeHtml(String(post.id || ''))}" onclick="openStudioModal(${index})">
+        <span class="nl-rv-row__thumb">${nlRvMedia(post)}</span>
+        <span class="nl-rv-row__main"><span class="nl-rv-row__cap">${escapeHtml(nlRvCaption(post) || 'No caption yet')}</span>
+          <span class="nl-rv-row__meta"><i class="nl-pdot nl-pdot--${pk}"></i>${escapeHtml(pl)} · ${escapeHtml(nlFormat(post))}${nlWhen(post) ? ` · ${escapeHtml(nlWhen(post))}` : ''}</span></span>
+        <span class="nl-rv-pill nl-rv-pill--${sk}"><i></i>${sl}</span>
+        <span class="nl-rv-row__acts">${actionable ? `<button type="button" class="nl-btn nl-btn--xs nl-btn--primary" onclick="event.stopPropagation();studioQuickApprove('${id}',this)">Approve</button><button type="button" class="nl-btn nl-btn--xs" onclick="event.stopPropagation();openRejectModal('${id}')">Reject</button>` : ''}</span>
+      </div>`;
+    }
+    function nlRvContent(posts) {
+      if (studioViewMode === 'list') return `<div class="nl-rv-list">${posts.map((p, i) => nlRvRow(p, i)).join('')}</div>`;
+      return `<div class="nl-rv-grid">${posts.map((p, i) => nlRvCard(p, i)).join('')}</div>`;
+    }
+    // The studio modal lives in the Review page (inline) in the new look, and in <body> otherwise.
+    const STUDIO_MODAL_EL = document.getElementById('studio-modal');
+    let _nlRvGen = -1;
+    function nlModalHome() {
+      const m = STUDIO_MODAL_EL;
+      if (!m) return;
+      const host = nlRvOn() ? document.getElementById('nl-rv-detail') : null;
+      if (host) {
+        if (m.parentElement !== host) {
+          // Re-attached after the page re-rendered: keep it open only within the same visit.
+          if (!m.isConnected && typeof _navGeneration !== 'undefined' && _nlRvGen !== _navGeneration) m.classList.remove('active');
+          host.appendChild(m);
+        }
+        m.classList.add('nl-inline');
+      } else if (m.parentElement !== document.body) {
+        if (m.classList.contains('nl-inline')) m.classList.remove('active');
+        m.classList.remove('nl-inline');
+        document.body.appendChild(m);
+      }
+    }
+    function nlRvMarkSel() {
+      const m = STUDIO_MODAL_EL;
+      const open = !!(m && m.classList.contains('nl-inline') && m.classList.contains('active'));
+      document.querySelectorAll('#studio-content-area [data-index]').forEach((el) => {
+        el.classList.toggle('is-sel', open && Number(el.dataset.index) === studioCurrentIndex);
+      });
+    }
+    function nlReviewChrome(content, ctx) {
+      const { live, pending } = ctx;
+      content.classList.add('nl-rv');
+      const header = content.querySelector('.studio-header');
+      const bulk = content.querySelector('#bulk-approve-btn');
+      const refresh = content.querySelector('#content-refresh');
+      const video = [...content.querySelectorAll('.studio-header__right > button')].find((b) => /openVideoCreator/.test(b.getAttribute('onclick') || ''));
+      const view = content.querySelector('.studio-view-toggle');
+      const head = document.createElement('div');
+      head.className = 'nl-rv-head';
+      head.innerHTML = `<div><h1 class="nl-h1">Review</h1><p class="nl-rv-sub">${live.length} post${live.length === 1 ? '' : 's'} in the pipeline. ${pending.length ? `${pending.length} need${pending.length === 1 ? 's' : ''} your approval.` : 'Nothing waiting for your approval.'}</p></div><div class="nl-rv-head__tools"></div>`;
+      const tools = head.querySelector('.nl-rv-head__tools');
+      if (refresh) { refresh.className = 'nl-btn nl-btn--icon'; refresh.setAttribute('aria-label', 'Refresh'); refresh.title = 'Refresh'; refresh.lastChild && (refresh.lastChild.textContent = ''); tools.appendChild(refresh); }
+      if (video) { video.className = 'nl-btn'; video.removeAttribute('style'); video.removeAttribute('onmouseenter'); video.removeAttribute('onmouseleave'); video.innerHTML = 'Create video <span id="video-credits-badge" class="nl-rv-credits"></span>'; tools.appendChild(video); }
+      const np = document.createElement('button');
+      np.type = 'button'; np.className = 'nl-btn'; np.textContent = 'New post';
+      np.addEventListener('click', () => switchNav('design-studio'));
+      tools.appendChild(np);
+      if (bulk) { bulk.className = 'nl-btn nl-btn--primary'; bulk.removeAttribute('style'); bulk.textContent = `Approve all ${pending.length}`; tools.appendChild(bulk); }
+      if (header) header.replaceWith(head);
+
+      const filters = content.querySelector('#studio-filters');
+      const bar = filters && filters.parentElement;
+      if (bar) {
+        bar.className = 'nl-rv-bar';
+        bar.removeAttribute('style');
+        filters.classList.add('nl-seg');
+        const label = { pending: 'Needs review', approved: 'Scheduled', published: 'Live', all: 'All', video: 'Video', rejected: 'Rejected', archived: 'Archived' };
+        filters.querySelectorAll('.studio-filter').forEach((b) => {
+          const n = b.querySelector('.studio-filter__count');
+          b.firstChild.textContent = (label[b.dataset.filter] || b.firstChild.textContent.trim()) + ' ';
+          if (n) n.classList.add('nl-seg__n');
+        });
+        const all = filters.querySelector('[data-filter="all"]');
+        const livePill = filters.querySelector('[data-filter="published"]');
+        if (all && livePill) livePill.after(all);
+        bar.querySelectorAll(':scope > div[style*="width:1px"]').forEach((d) => d.remove());
+        const platBtns = [...bar.querySelectorAll('.studio-platform-filter')];
+        if (platBtns.length > 1) {
+          const sel = document.createElement('select');
+          sel.className = 'nl-rv-select';
+          sel.setAttribute('aria-label', 'Platform');
+          sel.innerHTML = `<option value="">Platform · All</option>` + platBtns.map((b) => `<option value="${escapeHtml(b.dataset.platform)}">${escapeHtml(nlPlatform({ platform: b.dataset.platform })[1])}</option>`).join('');
+          let cur = '';
+          sel.addEventListener('change', () => {
+            const next = sel.value;
+            if (next) platBtns.find((b) => b.dataset.platform === next)?.click();
+            else (filters.querySelector(`.studio-filter[data-filter="${window._studioFilter || 'all'}"]`) || filters.querySelector('.studio-filter[data-filter="all"]'))?.click();
+            cur = next;
+            sel.value = next;
+          });
+          filters.querySelectorAll('.studio-filter').forEach((b) => b.addEventListener('click', () => { sel.value = ''; cur = ''; }));
+          filters.after(sel);
+        }
+        platBtns.forEach((b) => { b.style.display = 'none'; });
+        const relabel = (id, text) => { const s = bar.querySelector(id); if (s) { s.className = 'nl-rv-select'; s.removeAttribute('style'); if (s.options[0]) s.options[0].textContent = text; } };
+        relabel('#studio-type-filter', 'Type · All');
+        relabel('#studio-group-filter', 'Group · All');
+        relabel('#studio-sort', 'Newest first');
+        if (view) {
+          view.className = 'nl-seg nl-rv-view';
+          view.querySelectorAll('button').forEach((b) => { b.querySelector('svg')?.remove(); b.classList.add('studio-view-btn'); });
+          bar.appendChild(view);
+        }
+      }
+      let host = content.querySelector('#nl-rv-detail');
+      if (!host) {
+        host = document.createElement('section');
+        host.id = 'nl-rv-detail';
+        host.className = 'nl-rv-detail';
+        host.setAttribute('aria-label', 'Post detail');
+        content.appendChild(host);
+      }
+      nlModalHome();
+      nlRvMarkSel();
     }
 
     function renderStudioContent(posts) {
       if (posts.length === 0) {
         return `<div class="empty-state" style="padding:60px 20px;"><div class="empty-state__icon"><i data-lucide="inbox" style="width:40px;height:40px;"></i></div><div class="empty-state__title">No posts in review</div><div class="empty-state__desc">Live posts you already published show under <button onclick="document.querySelector('[data-nav=schedule]')?.click()" style="background:none;border:none;color:#A78BFA;cursor:pointer;font-size:inherit;text-decoration:underline;padding:0;">Schedule</button> — or wait here while live history loads. New drafts will appear here when they're ready for approval.</div></div>`;
       }
+      if (nlRvOn()) return nlRvContent(posts);
       if (studioViewMode === 'list') {
         return `<div class="studio-list">${posts.map((p, i) => renderStudioListItem(p, i)).join('')}</div>`;
       }

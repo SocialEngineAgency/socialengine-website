@@ -71,6 +71,12 @@
   }
 
   /** Short customer-facing shot line — never compiled Art Director wrap. */
+  // A shot's own control, found by its data-scene (the new look moves controls out of the card).
+  function shotControl(sceneId, cls) {
+    const id = String(sceneId || '').replace(/["\\]/g, '\\$&');
+    return document.querySelector(`${cls}[data-scene="${id}"]`);
+  }
+
   function customerShotLine(s) {
     if (!s) return '';
     const action = String(s.action || '').trim();
@@ -255,7 +261,7 @@
     const arc = Object.assign({}, sb.arc || {}, _storyArcDraft && _storyArcDraft.id === p.id ? _storyArcDraft.arc : {});
     const typeLabel = animStoryTypeLabel(sb.story_type);
     const row = (key, label, ph) => `<label class="anim-arc__row"><span>${label}</span><textarea rows="2" data-arc="${key}" maxlength="${key === 'middle' ? 500 : 240}" placeholder="${ph}">${esc(arc[key] || '')}</textarea></label>`;
-    return `<div class="anim-section">
+    return `<div class="anim-section" data-nl="arc">
       <div class="anim-section__label">Story${typeLabel ? ` · ${esc(typeLabel)}` : ''}${sb.message ? ` · <span style="text-transform:none;letter-spacing:0;color:rgba(255,255,255,0.55);">${esc(sb.message)}</span>` : ''}</div>
       <div class="anim-arc">
         ${row('hook', 'Hook (first 1–3s)', 'What stops the scroll')}
@@ -1257,12 +1263,548 @@
     }).join('');
   }
 
+
+  // ── New look: the Animate board ──
+  // The studio renders exactly as before. In the new look its pieces, with their listeners,
+  // are moved into the board layout: a brief card, tall shot cards with a selected-shot bar,
+  // the ask bar, timeline tracks, and a Sound and finish column. The composer moves once;
+  // canvas pieces are re-placed after every renderCanvas.
+  let _nlSelShot = null;
+  let _nlSavedOpen = false;
+  let _nlArcOpen = false;
+  let _nlMoreOpen = false;
+  const _nlLaneOpen = new Set();
+  const NL_I = {
+    mic: 'M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21',
+    cc: 'M4 6h16v12H4z M10 10.5a2 2 0 1 0 0 3 M16 10.5a2 2 0 1 0 0 3',
+    music: 'M9 18V6l10-2v12 M9 18a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z M19 16a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z',
+    flag: 'M5 21V4 M5 4h11l-2 4 2 4H5',
+    lock: 'M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+    chev: 'M6 9l6 6 6-6',
+  };
+  const nlSvg = (d, size = 13, sw = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+  function nlOn() { return document.documentElement.classList.contains('nl'); }
+  function nlShotSecs(s) { return Math.min(8, Math.max(4, Number(s && s.duration_target) || 5)); }
+  function nlClock(sec) { const t = Math.max(0, Math.round(sec)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
+  function nlScenes() { return ((_project && _project.scenes) || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
+  function nlShotState(s) {
+    const st = String((s && s.status) || '').toLowerCase();
+    if (st === 'generating') return { key: 'gen', label: 'Rendering' };
+    if (st === 'failed' || (s && s.error)) return { key: 'bad', label: 'Failed' };
+    if ((s && s.video_url) || st === 'ready' || st === 'done') return { key: 'ok', label: 'Ready' };
+    return { key: 'todo', label: 'Not made yet' };
+  }
+
+  function nlAnimRoot() {
+    const shell = document.querySelector('.anim-shell');
+    const canvas = shell && shell.querySelector('.anim-canvas');
+    if (!canvas) return null;
+    let root = canvas.querySelector(':scope > .nl-anim');
+    if (root) return root;
+    root = document.createElement('div');
+    root.className = 'nl-anim';
+    root.innerHTML = `
+      <div class="nl-anim__main">
+        <div data-slot="err"></div>
+        <section class="nl-acard nl-abrief" aria-label="Brief">
+          <div class="nl-abrief__row">
+            <div class="nl-afield"><span class="nl-afield__l">Start from</span><div data-slot="entry"></div></div>
+            <div class="nl-afield"><label class="nl-afield__l" for="anim-story-type">Story</label><div data-slot="story"></div></div>
+            <div class="nl-afield"><span class="nl-afield__l">Look</span><div data-slot="look" class="nl-alook"></div></div>
+            <span class="nl-grow"></span>
+            <button type="button" class="nl-abtn nl-abtn--dash" data-nl-drive hidden>Driving video</button>
+            <button type="button" class="nl-abtn" data-nl-more aria-expanded="false">More settings</button>
+          </div>
+          <div data-slot="more" class="nl-abrief__more" hidden></div>
+          <div data-slot="drive"></div>
+          <div data-slot="why"></div>
+          <div class="nl-acast">
+            <div class="nl-acast__h"><span class="nl-afield__l">Cast and places</span><span class="nl-acast__lock" data-slot="lock"></span></div>
+            <div data-slot="cast" class="nl-acast__row"></div>
+          </div>
+          <div data-slot="char"></div>
+          <div data-slot="arc"></div>
+        </section>
+        <section class="nl-acard nl-ashots" aria-labelledby="nl-shots-title">
+          <div class="nl-acard__h">
+            <h2 id="nl-shots-title">Shots <span class="nl-acard__meta" data-slot="shots-meta"></span></h2>
+            <span class="nl-acard__tools"><button type="button" class="nl-abtn" data-nl-saved hidden aria-expanded="false">Saved shots</button></span>
+          </div>
+          <div data-slot="saved" class="nl-asaved" hidden></div>
+          <div data-slot="shots" class="nl-ashots__grid"></div>
+          <div data-slot="shotbar"></div>
+        </section>
+        <section class="nl-aask" aria-label="Write or ask for a change">
+          <div data-slot="log" class="nl-aask__log"></div>
+          <div data-slot="actions"></div>
+          <div data-slot="prompt"></div>
+          <div class="nl-aask__row"><span data-slot="tokens" class="nl-aask__tokens"></span><span class="nl-grow"></span><span data-slot="packs"></span><span data-slot="send"></span></div>
+        </section>
+        <section class="nl-acard nl-atl" aria-labelledby="nl-tl-title" data-slot="tl" hidden></section>
+        <div data-slot="home" class="nl-ahome"></div>
+      </div>
+      <aside class="nl-anim__side" aria-label="Sound and finish">
+        <div data-slot="lanes" class="nl-alanes"></div>
+        <section class="nl-afinal" aria-labelledby="nl-final-title" data-slot="final"></section>
+      </aside>`;
+    canvas.appendChild(root);
+    shell.classList.add('nl-anim-on');
+    nlAdoptComposer(root);
+    return root;
+  }
+
+  // Move the chat-side controls into the board once. Nodes keep their ids and listeners.
+  function nlAdoptComposer(root) {
+    const slot = (n) => root.querySelector(`[data-slot="${n}"]`);
+    const put = (name, node) => { if (node && slot(name)) slot(name).appendChild(node); };
+    put('entry', document.getElementById('anim-entry-mode'));
+    put('story', document.getElementById('anim-story-type'));
+    put('why', document.getElementById('anim-story'));
+    const look = document.getElementById('anim-look');
+    if (look) {
+      const lookSlot = slot('look');
+      lookSlot.appendChild(look);
+      if (look.options.length && look.options.length <= 4) {
+        look.classList.add('nl-sr');
+        look.tabIndex = -1;
+        const seg = document.createElement('div');
+        seg.className = 'nl-aseg';
+        seg.setAttribute('role', 'group');
+        seg.setAttribute('aria-label', 'Look');
+        const paint = () => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === look.value ? 'true' : 'false'));
+        seg.innerHTML = [...look.options].map((o) => `<button type="button" data-v="${esc(o.value)}">${esc(String(o.textContent || '').replace(/ \/ animated$/i, ''))}</button>`).join('');
+        seg.addEventListener('click', (e) => {
+          const b = e.target.closest('button[data-v]');
+          if (!b) return;
+          look.value = b.dataset.v;
+          look.dispatchEvent(new Event('change', { bubbles: true }));
+          paint();
+        });
+        look.addEventListener('change', paint);
+        lookSlot.appendChild(seg);
+        paint();
+      }
+    }
+    put('cast', document.getElementById('anim-refs'));
+    put('cast', document.querySelector('.anim-ref-tools'));
+    put('drive', document.getElementById('anim-drive-wrap'));
+    const settings = document.querySelector('.anim-chat-settings');
+    if (settings) {
+      settings.open = true;
+      settings.querySelectorAll('.anim-chat-settings__body > div').forEach((d) => {
+        if (String(d.textContent || '').trim() === 'References') d.hidden = true;
+      });
+      put('more', settings);
+    }
+    put('log', document.getElementById('anim-chat-log'));
+    put('actions', document.getElementById('anim-brief-actions'));
+    put('prompt', document.getElementById('anim-prompt'));
+    put('packs', document.getElementById('anim-pending-packs'));
+    put('send', document.getElementById('anim-send'));
+
+    slot('entry').addEventListener('click', () => setTimeout(() => nlTokens(slot('tokens')), 0));
+    document.getElementById('anim-look')?.addEventListener('change', () => nlTokens(slot('tokens')));
+    const more = root.querySelector('[data-nl-more]');
+    const moreSlot = slot('more');
+    const paintMore = () => { moreSlot.hidden = !_nlMoreOpen; more.setAttribute('aria-expanded', _nlMoreOpen ? 'true' : 'false'); };
+    more.addEventListener('click', () => { _nlMoreOpen = !_nlMoreOpen; paintMore(); });
+    paintMore();
+
+    const motion = document.getElementById('anim-motion');
+    const drive = root.querySelector('[data-nl-drive]');
+    if (motion && [...motion.options].some((o) => o.value === 'drive')) {
+      drive.hidden = false;
+      drive.addEventListener('click', () => {
+        if (motion.value !== 'drive') {
+          motion.value = 'drive';
+          motion.dispatchEvent(new Event('change', { bubbles: true }));
+          toast('Driving video is on. Upload the clip to copy its motion.', 'info');
+        } else {
+          document.getElementById('anim-drive-file')?.click();
+        }
+      });
+    }
+
+    const saved = root.querySelector('[data-nl-saved]');
+    saved.addEventListener('click', () => {
+      _nlSavedOpen = !_nlSavedOpen;
+      slot('saved').hidden = !_nlSavedOpen;
+      saved.setAttribute('aria-expanded', _nlSavedOpen ? 'true' : 'false');
+    });
+
+    // The project pill in the header goes back to the project list (the Home button's job).
+    const head = document.querySelector('.anim-canvas-header');
+    if (head && !head.querySelector('.nl-aproj')) {
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'nl-aproj';
+      pill.title = 'All projects';
+      pill.hidden = true;
+      pill.addEventListener('click', () => document.getElementById('anim-home')?.click());
+      const tools = document.getElementById('anim-new')?.parentElement;
+      if (tools) tools.insertBefore(pill, tools.firstChild);
+    }
+  }
+
+  function nlAnimLayout(fromCanvas) {
+    if (!nlOn()) return;
+    const root = nlAnimRoot();
+    if (!root) return;
+    const slot = (n) => root.querySelector(`[data-slot="${n}"]`);
+    const p = _project;
+    root.classList.toggle('is-home', !p);
+    const body = document.getElementById('anim-canvas-body');
+
+    if (fromCanvas && body) {
+      ['err', 'char', 'arc', 'shots', 'shotbar', 'saved', 'lanes', 'final', 'home'].forEach((n) => { const s = slot(n); if (s) s.textContent = ''; });
+      const kids = [...body.children];
+      if (!p) {
+        kids.forEach((k) => slot('home').appendChild(k));
+      } else {
+        kids.forEach((k) => {
+          const tag = k.getAttribute('data-nl');
+          if (k.classList.contains('anim-canvas-top')) { k.remove(); return; }
+          if (tag === 'char') { nlChar(k, slot('char')); return; }
+          if (tag === 'arc') { nlArc(k, slot('arc')); return; }
+          if (tag === 'shots') { nlShots(k, root); return; }
+          if (tag === 'final') { nlFinal(k, root); return; }
+          slot('err').appendChild(k);
+        });
+      }
+      body.textContent = '';
+    }
+
+    if (p) {
+      if (!slot('final').childElementCount) nlFinal(null, root);
+      if (!slot('lanes').childElementCount) nlLanes(null, root);
+    }
+    nlTimeline(slot('tl'));
+    nlHeaderPill();
+    nlTokens(slot('tokens'));
+    nlLock(slot('lock'));
+    const savedBtn = root.querySelector('[data-nl-saved]');
+    if (savedBtn) {
+      savedBtn.hidden = !slot('saved').childElementCount;
+      slot('saved').hidden = savedBtn.hidden || !_nlSavedOpen;
+    }
+  }
+
+  function nlHeaderPill() {
+    const pill = document.querySelector('.anim-canvas-header .nl-aproj');
+    if (!pill) return;
+    const p = _project;
+    pill.hidden = !p;
+    if (!p) return;
+    const title = p.agent_brief?.title || projectTitle(p) || 'Untitled';
+    pill.innerHTML = `<span class="nl-aproj__l">Project</span><span class="nl-aproj__t">${esc(title)}</span>${nlSvg(NL_I.chev, 12, 2)}`;
+  }
+
+  function nlTokens(el) {
+    if (!el) return;
+    const entry = document.querySelector('#anim-entry-mode [data-entry].active')?.dataset.entry || readAnimEntry();
+    const look = document.getElementById('anim-look');
+    const lookLabel = look ? String(look.options[look.selectedIndex]?.textContent || '').replace(/ \/ animated$/i, '') : '';
+    const scenes = nlScenes();
+    const secs = scenes.reduce((n, s) => n + nlShotSecs(s), 0);
+    const toks = [entry === 'prompt' ? 'From an idea' : 'From voiceover'];
+    if (scenes.length) toks.push(`${nlClock(secs)} · ${scenes.length} shot${scenes.length === 1 ? '' : 's'}`);
+    if (lookLabel) toks.push(lookLabel);
+    el.innerHTML = toks.map((t) => `<span class="nl-atok">${esc(t)}</span>`).join('');
+  }
+
+  function nlLock(el) {
+    if (!el) return;
+    const pack = _project?.character_pack;
+    if (!pack?.locked) { el.innerHTML = ''; return; }
+    const names = (pack.cast || []).map((c) => c && (c.name || c.character_name)).filter(Boolean);
+    const who = names.length ? names.slice(0, 3).join(', ') : 'Your character';
+    el.innerHTML = `${nlSvg(NL_I.lock, 12, 2)}${esc(who)} locked across every shot`;
+  }
+
+  function nlChar(sec, into) {
+    const label = sec.querySelector('.anim-section__label');
+    if (label) label.textContent = label.textContent.replace('Character / asset lock', 'Character sheet');
+    sec.classList.add('nl-achar');
+    into.appendChild(sec);
+  }
+
+  function nlArc(sec, into) {
+    const label = sec.querySelector('.anim-section__label');
+    const d = document.createElement('details');
+    d.className = 'nl-aarc';
+    d.open = _nlArcOpen;
+    d.addEventListener('toggle', () => { _nlArcOpen = d.open; });
+    const sum = document.createElement('summary');
+    sum.innerHTML = label ? label.innerHTML : 'Story';
+    if (label) label.remove();
+    d.appendChild(sum);
+    d.appendChild(sec);
+    into.appendChild(d);
+  }
+
+  function nlShots(sec, root) {
+    const slot = (n) => root.querySelector(`[data-slot="${n}"]`);
+    const grid = slot('shots');
+    const bar = slot('shotbar');
+    const scenes = nlScenes();
+    const byId = new Map(scenes.map((s) => [s.id, s]));
+    const savedBox = sec.querySelector('.anim-saved-shots');
+    if (savedBox) slot('saved').appendChild(savedBox);
+    const tl = sec.querySelector(':scope > .anim-timeline') || sec;
+    [...tl.children].forEach((k) => grid.appendChild(k));
+    const secs = scenes.reduce((n, s) => n + nlShotSecs(s), 0);
+    slot('shots-meta').textContent = scenes.length ? `${scenes.length} shot${scenes.length === 1 ? '' : 's'} · ${secs} s` : '';
+
+    const cards = [...grid.querySelectorAll('.anim-shot[data-scene]')].filter((c) => !c.classList.contains('anim-shot--ghost'));
+    if (!cards.some((c) => c.dataset.scene === _nlSelShot)) _nlSelShot = cards[0]?.dataset.scene || null;
+    cards.forEach((card, i) => {
+      const s = byId.get(card.dataset.scene) || {};
+      const st = nlShotState(s);
+      const media = card.querySelector('.anim-shot__media');
+      if (media) {
+        const num = document.createElement('span');
+        num.className = 'nl-shot__num';
+        num.textContent = `${i + 1} · ${nlShotSecs(s)} s`;
+        media.appendChild(num);
+        if (st.key === 'gen') {
+          const ov = document.createElement('div');
+          ov.className = 'nl-shot__gen';
+          ov.innerHTML = '<span>Rendering</span><i></i>';
+          media.appendChild(ov);
+        }
+      }
+      const takes = sceneTakes(s);
+      const foot = document.createElement('div');
+      foot.className = 'nl-shot__foot';
+      foot.innerHTML = `<span class="nl-shot__st"><i class="nl-shot__dot nl-shot__dot--${st.key}"></i>${esc(st.label)}</span><span class="nl-shot__takes">${takes.length > 1 ? `Take ${Math.max(0, activeTakeIndex(s)) + 1} of ${takes.length}` : (s.video_url ? 'Take 1' : '')}</span>`;
+      const what = document.createElement('p');
+      what.className = 'nl-shot__what';
+      what.textContent = _shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : customerShotLine(s);
+      card.appendChild(foot);
+      card.appendChild(what);
+      card.setAttribute('aria-label', `Shot ${i + 1}, ${nlShotSecs(s)} seconds, ${st.label}`);
+      card.dataset.nlIndex = String(i + 1);
+      card.tabIndex = 0;
+      const vid = card.querySelector('video.anim-shot__video');
+      if (vid) {
+        // Tall cards play on hover; double-click still opens the big player.
+        vid.controls = false;
+        vid.addEventListener('mouseenter', () => { const r = vid.play(); if (r && r.catch) r.catch(() => {}); });
+        vid.addEventListener('mouseleave', () => { try { vid.pause(); } catch (_) {} });
+      }
+      const select = () => nlSelectShot(card.dataset.scene, root);
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button, select, textarea, input, a')) return;
+        select();
+      });
+      card.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === card) { e.preventDefault(); select(); }
+      });
+    });
+    bar.textContent = '';
+    if (_nlSelShot) nlSelectShot(_nlSelShot, root);
+    sec.remove();
+  }
+
+  function nlSelectShot(id, root) {
+    const bar = root.querySelector('[data-slot="shotbar"]');
+    const grid = root.querySelector('[data-slot="shots"]');
+    if (!bar || !grid) return;
+    // Put the previous shot's controls back in its card.
+    const prev = bar.querySelector('.anim-shot__meta');
+    if (prev) {
+      const home = grid.querySelector(`.anim-shot[data-scene="${CSS.escape(prev.dataset.nlScene || '')}"]`);
+      if (home) home.insertBefore(prev, home.querySelector('.nl-shot__foot'));
+      else prev.remove();
+    }
+    bar.textContent = '';
+    _nlSelShot = id;
+    root.querySelectorAll('.nl-atl__b--shot[data-scene]').forEach((b) => b.classList.toggle('is-sel', b.dataset.scene === id));
+    const card = grid.querySelector(`.anim-shot[data-scene="${CSS.escape(id)}"]`);
+    grid.querySelectorAll('.anim-shot').forEach((c) => c.classList.toggle('is-sel', c === card));
+    if (!card) return;
+    const meta = card.querySelector('.anim-shot__meta');
+    if (!meta) return;
+    meta.dataset.nlScene = id;
+    const box = document.createElement('div');
+    box.className = 'nl-shotbar';
+    box.setAttribute('aria-label', `Shot ${card.dataset.nlIndex || ''} settings`);
+    const h = document.createElement('div');
+    h.className = 'nl-shotbar__h';
+    h.textContent = `Shot ${card.dataset.nlIndex || ''} · What happens`;
+    box.appendChild(h);
+    box.appendChild(meta);
+    bar.appendChild(box);
+    const ta = meta.querySelector('.anim-shot__prompt-edit');
+    if (ta && !ta.dataset.nlBound) {
+      ta.dataset.nlBound = '1';
+      ta.addEventListener('input', () => {
+        const what = card.querySelector('.nl-shot__what');
+        if (what) what.textContent = ta.value;
+      });
+    }
+  }
+
+  function nlLaneDefs(p) {
+    const f = assembleFlags();
+    const vo = String(p.vo_script || p.agent_brief?.vo_script || '').trim();
+    const cap = p.last_burned_caption_style || p.caption_style;
+    return [
+      { key: 'vo', title: 'Voiceover', icon: NL_I.mic, flag: 'anim-flag-vo', on: f.vo, ready: !!p.vo_script,
+        state: p.vo_script ? 'Ready' : 'Not written',
+        sum: vo ? `“${vo.length > 110 ? vo.slice(0, 108).trim() + '…' : vo}”` : 'Write the script, or let AI write one from your shots.' },
+      { key: 'captions', title: 'Captions', icon: NL_I.cc, flag: 'anim-flag-captions', on: f.captions, ready: !!p.last_burned_caption_style,
+        state: p.last_burned_caption_style ? 'Styled' : 'Style it',
+        sum: `Word by word, timed to the voiceover.${cap && cap.preset_id ? ` Style: ${cap.preset_id}.` : ''}` },
+      { key: 'music', title: 'Music', icon: NL_I.music, flag: 'anim-flag-music', on: f.music, ready: !!p.music_bed_url,
+        state: p.music_bed_url ? 'Ready' : 'Not added',
+        sum: p.music_prompt ? String(p.music_prompt) : (p.music_bed_url ? 'Music bed attached. It sits under the voice.' : 'Make a bed from a prompt, or pick or upload one.') },
+      { key: 'outro', title: 'End card', icon: NL_I.flag, flag: 'anim-flag-outro', on: f.outro, ready: !!p.outro_url,
+        state: p.outro_url ? 'Ready' : 'None',
+        sum: p.outro_url ? 'Your end card plays after the last shot.' : 'Pick a saved end card or upload one.' },
+    ];
+  }
+
+  function nlLanes(panel, root) {
+    const into = root.querySelector('[data-slot="lanes"]');
+    const p = _project;
+    if (!into || !p) return;
+    into.textContent = '';
+    if (!panel) {
+      const note = document.createElement('p');
+      note.className = 'nl-alanes__note';
+      note.textContent = 'Voiceover, captions, music and the end card open here once a shot is ready.';
+      into.appendChild(note);
+    }
+    nlLaneDefs(p).forEach((d) => {
+      const lane = panel && panel.querySelector(`.anim-lane[data-lane="${d.key}"]`);
+      const layer = panel && document.getElementById(d.flag)?.closest('.anim-layer');
+      const open = !!lane && (_nlLaneOpen.has(d.key) || (d.key === 'captions' && _captionStudioOpen));
+      const sec = document.createElement('section');
+      sec.className = `nl-lane${d.ready ? ' is-ready' : ''}${open ? ' is-open' : ''}${d.on ? '' : ' is-off'}${lane ? '' : ' is-locked'}`;
+      sec.setAttribute('aria-label', d.title);
+      sec.innerHTML = `
+        <div class="nl-lane__h">
+          <span class="nl-lane__ic">${nlSvg(d.icon)}</span>
+          <h2 class="nl-lane__t">${esc(d.title)}</h2>
+          <span class="nl-lane__state">${esc(d.on ? d.state : 'Off')}</span>
+          <span class="nl-lane__sw"></span>
+          ${lane ? `<button type="button" class="nl-lane__edit" aria-expanded="${open ? 'true' : 'false'}">${open ? 'Done' : 'Edit'}</button>` : ''}
+        </div>
+        <p class="nl-lane__sum">${esc(d.sum)}</p>
+        <div class="nl-lane__body"></div>`;
+      if (layer) {
+        layer.title = `Include ${d.title.toLowerCase()} in the final`;
+        sec.querySelector('.nl-lane__sw').appendChild(layer);
+        const cb = layer.querySelector('input');
+        cb?.addEventListener('change', () => {
+          sec.classList.toggle('is-off', !cb.checked);
+          sec.querySelector('.nl-lane__state').textContent = cb.checked ? d.state : 'Off';
+        });
+      }
+      if (lane) {
+        lane.hidden = false;
+        sec.querySelector('.nl-lane__body').appendChild(lane);
+        const btn = sec.querySelector('.nl-lane__edit');
+        btn.addEventListener('click', () => {
+          const now = !sec.classList.contains('is-open');
+          sec.classList.toggle('is-open', now);
+          btn.textContent = now ? 'Done' : 'Edit';
+          btn.setAttribute('aria-expanded', now ? 'true' : 'false');
+          if (now) _nlLaneOpen.add(d.key); else _nlLaneOpen.delete(d.key);
+        });
+      }
+      into.appendChild(sec);
+    });
+  }
+
+  function nlFinal(sec, root) {
+    const into = root.querySelector('[data-slot="final"]');
+    const p = _project;
+    if (!into || !p) return;
+    into.textContent = '';
+    const scenes = nlScenes();
+    const secs = scenes.reduce((n, s) => n + nlShotSecs(s), 0);
+    const ready = scenes.filter((s) => nlShotState(s).key === 'ok').length;
+    const segs = scenes.map((s) => `<i class="nl-afinal__seg nl-afinal__seg--${nlShotState(s).key}"></i>`).join('');
+    const head = document.createElement('div');
+    head.className = 'nl-afinal__top';
+    head.innerHTML = `
+      <div class="nl-afinal__h"><h2 id="nl-final-title">Final video</h2><span>9:16${secs ? ` · ${nlClock(secs)}` : ''}</span></div>
+      ${scenes.length ? `<div class="nl-afinal__bar" aria-label="${ready} of ${scenes.length} shots ready">${segs}</div><span class="nl-afinal__count">${ready} of ${scenes.length} shot${scenes.length === 1 ? '' : 's'} ready</span>` : ''}`;
+    into.appendChild(head);
+    const fin = sec && sec.querySelector('.anim-final');
+    if (!fin) {
+      const ph = document.createElement('p');
+      ph.className = 'nl-afinal__ph';
+      ph.textContent = 'Your final video appears here once the shots are ready.';
+      into.appendChild(ph);
+      if (sec) sec.remove();
+      return;
+    }
+    const panel = fin.querySelector('.anim-assemble-panel');
+    nlLanes(panel, root);
+    if (panel) panel.remove();
+    const btns = document.getElementById('anim-rebuild-final')?.parentElement
+      || document.getElementById('anim-expand-final')?.parentElement
+      || document.getElementById('anim-open-review')?.parentElement;
+    if (btns) btns.classList.add('nl-afinal__btns');
+    [...fin.children].forEach((k) => into.appendChild(k));
+    const past = sec.querySelector('.anim-past-finals');
+    if (past) into.appendChild(past);
+    sec.remove();
+  }
+
+  function nlTimeline(el) {
+    if (!el) return;
+    const p = _project;
+    const scenes = nlScenes();
+    if (!p || !scenes.length) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    const f = assembleFlags();
+    const shotSecs = scenes.reduce((n, s) => n + nlShotSecs(s), 0);
+    const endSecs = p.outro_url && f.outro ? 2 : 0;
+    const total = shotSecs + endSecs;
+    const pct = (x) => `${((x / total) * 100).toFixed(2)}%`;
+    const blk = (from, to, text, cls, scene) => `<span class="nl-atl__b ${cls || ''}"${scene ? ` data-scene="${esc(scene)}"` : ''} style="left:${pct(from)};width:${pct(to - from)}" title="${esc(text)}">${esc(text)}</span>`;
+    let t = 0;
+    const shotBlocks = scenes.map((s, i) => {
+      const a = t; t += nlShotSecs(s);
+      const st = nlShotState(s).key;
+      return blk(a, t, st === 'gen' ? `${i + 1} · rendering` : String(i + 1), `nl-atl__b--shot nl-atl__b--${st}${s.id === _nlSelShot ? ' is-sel' : ''}`, s.id);
+    }).join('') + (endSecs ? blk(shotSecs, total, 'End card', 'nl-atl__b--shot') : '');
+    const vo = String(p.vo_script || '').trim();
+    const voBlocks = f.vo && vo ? blk(0.3, Math.max(0.6, shotSecs - 0.3), vo, 'nl-atl__b--vo') : '';
+    let capBlocks = '';
+    if (f.captions && vo) {
+      const words = vo.split(/\s+/).filter(Boolean);
+      const per = Math.max(2, Math.ceil(words.length / Math.max(1, scenes.length * 2)));
+      const chunks = [];
+      for (let i = 0; i < words.length; i += per) chunks.push(words.slice(i, i + per).join(' '));
+      const span = Math.max(0.6, shotSecs - 0.6) / Math.max(1, chunks.length);
+      capBlocks = chunks.slice(0, 24).map((c, i) => blk(0.3 + i * span, 0.3 + (i + 1) * span - 0.15, c, 'nl-atl__b--cap')).join('');
+    }
+    const music = f.music && (p.music_bed_url || p.music_prompt) ? blk(0, total, p.music_prompt || 'Music bed', 'nl-atl__b--music') : '';
+    const ticks = [];
+    const step = total > 40 ? 10 : total > 20 ? 4 : 2;
+    for (let s = 0; s < total; s += step) ticks.push(`<span style="left:${pct(s)}">${nlClock(s)}</span>`);
+    const track = (label, blocks, empty) => `<div class="nl-atl__row"><span class="nl-atl__l">${label}</span><div class="nl-atl__lane">${blocks || `<span class="nl-atl__empty">${empty}</span>`}</div></div>`;
+    el.innerHTML = `
+      <div class="nl-acard__h nl-acard__h--flat"><h2 id="nl-tl-title">Timeline</h2><span class="nl-acard__meta">${nlClock(total)}</span></div>
+      <div class="nl-atl__ticks">${ticks.join('')}</div>
+      ${track('Shots', shotBlocks, '')}
+      ${track('Voiceover', voBlocks, f.vo ? 'No script yet' : 'Off')}
+      ${track('Captions', capBlocks, f.captions ? (vo ? '' : 'Follow the voiceover') : 'Off')}
+      ${track('Music', music, f.music ? 'Not added' : 'Off')}`;
+  }
+
   function renderCanvas() {
     renderCanvasInner();
     if (document.documentElement.classList.contains('nl')) {
       const body = document.getElementById('anim-canvas-body');
       if (body) body.dataset.nlSteps = _project ? animStepsNL(_project) : '';
       paintStepsNL();
+      try { nlAnimLayout(true); } catch (e) { console.warn('[animate] new look layout', e); }
     }
   }
 
@@ -1329,7 +1871,7 @@
 
       ${renderStoryArcSection(p)}
 
-      <div class="anim-section">
+      <div class="anim-section" data-nl="char">
         <div class="anim-section__label">Character / asset lock ${p.character_pack?.locked ? '· Locked' : ''}${(p.character_pack?.cast || []).length > 1 ? ` · Cast ${(p.character_pack.cast || []).length}` : ''}</div>
         ${modelLine(p)}
         ${plannedViews.length ? `
@@ -1366,7 +1908,7 @@
         <div class="anim-placeholder-row">Add reference images in the chat panel, then accept the brief to generate multi-view sheets.</div>`}
       </div>
 
-      <div class="anim-section">
+      <div class="anim-section" data-nl="shots">
         <div class="anim-section__label">Timeline</div>
         <div class="anim-timeline">
           ${scenes.length ? (() => {
@@ -1494,7 +2036,7 @@
           : (history.length >= 2 ? history.slice(0, -1) : []);
         if (!showPlayer && !readyShotUrls.length && !pastList.length) return '';
         return `
-      <div class="anim-section">
+      <div class="anim-section" data-nl="final">
         <div class="anim-section__label">Final</div>
         <div class="anim-final">
           ${showPlayer
@@ -1982,6 +2524,9 @@
       }
     }
     logEl.scrollTop = logEl.scrollHeight;
+    if (document.documentElement.classList.contains('nl')) {
+      try { nlAnimLayout(false); } catch (e) { console.warn('[animate] new look layout', e); }
+    }
   }
 
   async function ensureProject() {
@@ -2221,8 +2766,7 @@
     if (scene.status === 'generating' || projectHasBusyScenes(_project) || _project.status === 'assembling') {
       return toast('Wait for shots to finish before suggesting', 'info');
     }
-    const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
-    const localPrompt = (shotCard?.querySelector('.anim-shot__prompt-edit')?.value
+    const localPrompt = (shotControl(sceneId, '.anim-shot__prompt-edit')?.value
       || _shotPromptDrafts[sceneId]
       || scene.prompt
       || '').trim();
@@ -2231,8 +2775,8 @@
       if (!ok) return;
       return suggestScene(sceneId, { force: true });
     }
-    const btn = shotCard?.querySelector('.anim-shot-suggest');
-    const ta = shotCard?.querySelector('.anim-shot__prompt-edit');
+    const btn = shotControl(sceneId, '.anim-shot-suggest');
+    const ta = shotControl(sceneId, '.anim-shot__prompt-edit');
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Suggesting…';
@@ -2400,8 +2944,7 @@
     if (!_project?.id || !sceneId || _busy) return;
     const scene = (_project.scenes || []).find((s) => s.id === sceneId);
     if (scene?.status === 'generating') return toast('This shot is already generating — hang tight', 'info');
-    const shotCard = document.querySelector(`.anim-shot[data-scene="${sceneId}"]`);
-    const promptEdit = (shotCard?.querySelector('.anim-shot__prompt-edit')?.value
+    const promptEdit = (shotControl(sceneId, '.anim-shot__prompt-edit')?.value
       || _shotPromptDrafts[sceneId]
       || customerShotLine(scene)
       || '').trim();
@@ -2410,8 +2953,8 @@
     try {
       toast('Remaking this shot…', 'info');
       const references = refsPayload();
-      const shotI2v = shotCard?.querySelector('.anim-shot-i2v')?.value || '';
-      const shotTpl = shotCard?.querySelector('.anim-shot-template')?.value || '';
+      const shotI2v = shotControl(sceneId, '.anim-shot-i2v')?.value || '';
+      const shotTpl = shotControl(sceneId, '.anim-shot-template')?.value || '';
       _shotPromptDrafts[sceneId] = promptEdit;
       const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/regenerate`, {
         method: 'POST',
@@ -2776,6 +3319,7 @@
           <img src="${esc(mediaSrc(r.url))}" alt="" />
           <button type="button" class="anim-ref-x" data-i="${i}" aria-label="Remove">×</button>
         </div>
+        <span class="anim-ref-name">${esc(r.title || 'Reference')}</span>
         <select class="anim-ref-role" data-i="${i}" title="Reference role">
           ${REF_ROLES.map((role) =>
             `<option value="${role.id}" ${r.role === role.id ? 'selected' : ''}>${role.label}</option>`
@@ -3126,6 +3670,7 @@
         .anim-refs { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:8px; min-height:28px; }
         .anim-refs-empty { font-size:0.7rem; color:rgba(255,255,255,0.3); padding:4px 0; line-height:1.4; }
         .anim-ref-card { display:flex; flex-direction:column; gap:4px; width:72px; }
+        .anim-ref-name { display:none; }
         .anim-ref-chip { position:relative; width:72px; height:72px; border-radius:8px; overflow:hidden; border:1px solid rgba(167,139,250,0.45); }
         .anim-ref-chip img { width:100%; height:100%; object-fit:cover; display:block; }
         .anim-ref-x { position:absolute; top:2px; right:2px; width:18px; height:18px; border:none; border-radius:50%; background:rgba(0,0,0,0.7); color:#fff; font-size:12px; line-height:1; cursor:pointer; padding:0; }
