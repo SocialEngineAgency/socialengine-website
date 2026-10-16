@@ -157,3 +157,28 @@ test('new look Post: options out of drawers, size control drives the size, capti
   await expect(page.locator('#cs-brief')).toHaveValue('');
   expect(errors).toEqual([]);
 });
+
+test('new look Animate: steps show where the project is; the studio still opens projects', async ({ page }) => {
+  const errors = watchErrors(page);
+  const project = {
+    id: 'proj_nl', status: 'ready', mode: 'video', look: 'stylized', agent_brief: { title: 'Walk day' },
+    character_pack: { locked: true, views: [{ label: 'Front', url: 'https://store.test/front.png' }] },
+    pipeline: { assemble: { vo: true, captions: true, music: true, outro: true } },
+    scenes: [{ id: 's1', order: 1, status: 'ready', video_url: 'https://store.test/shot.mp4', prompt: 'Walk' }],
+  };
+  await mockApi(page, srv.base, { data: clientData(), animProjects: [project] });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await expect(page.locator('.anim-canvas-header .nl-steps')).toHaveCount(0);
+  await page.click('[data-open-project="proj_nl"]');
+  const steps = page.locator('.anim-canvas-header .nl-step');
+  await expect(steps).toHaveCount(4);
+  await expect(steps.nth(2)).toHaveClass(/nl-step--done/);
+  await expect(steps.nth(3)).toHaveClass(/nl-step--now/);
+  await expect(steps.nth(3)).toHaveAttribute('aria-current', 'step');
+  await page.click('#anim-home');
+  await expect(page.locator('.anim-canvas-header .nl-steps')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

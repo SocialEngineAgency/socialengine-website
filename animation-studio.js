@@ -1224,7 +1224,49 @@
     }
   }
 
+  // New look: where the project is, as steps (Brief › Character › Shots › Final). Painted by
+  // paintStepsNL() into the canvas header so it survives canvas re-renders.
+  function animStepsNL(p) {
+    const scenes = (p && p.scenes) || [];
+    const shotsDone = scenes.length > 0 && scenes.every((sc) => sc.video_url || sc.status === 'ready' || sc.status === 'done');
+    const steps = [
+      ['Brief', !!(p && p.agent_brief)],
+      ['Character', !!(p && p.character_pack && (p.character_pack.locked || (p.character_pack.views || []).some((v) => v.url)))],
+      ['Shots', shotsDone],
+      ['Final', !!(p && p.final_url)],
+    ];
+    const now = steps.findIndex((x) => !x[1]);
+    return steps.map(([label, done], i) => `${label}|${done ? 'done' : i === now ? 'now' : 'todo'}`).join(',');
+  }
+  function paintStepsNL() {
+    const head = document.querySelector('.anim-canvas-header');
+    const body = document.getElementById('anim-canvas-body');
+    if (!head || !body) return;
+    let bar = head.querySelector('.nl-steps');
+    const spec = _project ? (body.dataset.nlSteps || '') : '';
+    if (!spec) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('ol');
+      bar.className = 'nl-steps';
+      bar.setAttribute('aria-label', 'Steps');
+      head.insertBefore(bar, head.children[1] || null);
+    }
+    bar.innerHTML = spec.split(',').map((x, i) => {
+      const [label, st] = x.split('|');
+      return `<li class="nl-step nl-step--${st}"${st === 'now' ? ' aria-current="step"' : ''}><span class="nl-step__n">${st === 'done' ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : i + 1}</span>${esc(label)}</li>`;
+    }).join('');
+  }
+
   function renderCanvas() {
+    renderCanvasInner();
+    if (document.documentElement.classList.contains('nl')) {
+      const body = document.getElementById('anim-canvas-body');
+      if (body) body.dataset.nlSteps = _project ? animStepsNL(_project) : '';
+      paintStepsNL();
+    }
+  }
+
+  function renderCanvasInner() {
     const el = document.getElementById('anim-canvas-body');
     if (!el) return;
     _canvasFp = projectUiFingerprint(_project);
