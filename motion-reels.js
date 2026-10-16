@@ -34,6 +34,8 @@
       .mr-x { background: none; border: none; color: rgba(148,163,184,0.7); font-size: 1.3rem; cursor: pointer; width: auto; }
       .mr-lead { font-size: 0.78rem; color: rgba(148,163,184,0.85); margin: 0 0 14px; line-height: 1.5; }
       .mr-grid { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 20px; }
+      .mr-grid > * { min-width: 0; }
+      @media (min-width: 761px) { .mr-grid > div:last-child { position: sticky; top: 0; align-self: start; } }
       @media (max-width: 760px) { .mr-grid { grid-template-columns: 1fr; } }
       .mr-label { display: block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(167,139,250,0.85); margin: 12px 0 4px; }
       .mr-input, .mr-select, .mr-text { width: 100%; box-sizing: border-box; padding: 8px 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; font-size: 0.82rem; font-family: inherit; }
@@ -56,9 +58,32 @@
       .mr-tabs { display: inline-flex; gap: 4px; padding: 3px; border-radius: 9px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); margin: 8px 0 2px; }
       .mr-tab { padding: 6px 12px; border-radius: 7px; border: none; background: transparent; color: rgba(226,232,240,0.7); font-size: 0.76rem; font-weight: 600; cursor: pointer; font-family: inherit; width: auto; }
       .mr-tab--on { background: rgba(124,58,237,0.35); color: #fff; }
-      .mr-scene { display: grid; grid-template-columns: 22px 1fr 28px; gap: 6px; align-items: start; margin-bottom: 8px; }
+      .mr-scene { display: grid; grid-template-columns: 22px minmax(0, 1fr) 28px; gap: 6px; align-items: start; margin-bottom: 8px; }
       .mr-scene__n { font-size: 0.72rem; font-weight: 700; color: rgba(167,139,250,0.85); padding-top: 9px; text-align: center; }
-      .mr-scene__search { margin-top: 4px; font-size: 0.74rem; color: rgba(186,230,253,0.9); }
+      .mr-scene__search { font-size: 0.74rem; color: rgba(186,230,253,0.9); }
+      .mr-scene { padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+      .mr-fq { display: flex; gap: 6px; margin-top: 6px; }
+      .mr-fq .mr-btn { padding: 6px 10px; }
+      .mr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+      .mr-chip { padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: rgba(226,232,240,0.8); font-size: 0.7rem; cursor: pointer; font-family: inherit; width: auto; }
+      .mr-chip--on { border-color: rgba(167,139,250,0.7); color: #fff; background: rgba(124,58,237,0.22); }
+      .mr-chip--none { text-decoration: line-through; opacity: 0.55; }
+      .mr-strip { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 4px; scrollbar-width: thin; }
+      .mr-opt { position: relative; flex: none; width: 54px; height: 96px; border-radius: 7px; overflow: hidden; border: 2px solid transparent; padding: 0; background: #05080F; cursor: pointer; width: 54px; }
+      .mr-opt img, .mr-opt video { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .mr-opt--on { border-color: #A78BFA; box-shadow: 0 0 0 2px rgba(167,139,250,0.25); }
+      .mr-opt__tag { position: absolute; left: 3px; bottom: 3px; padding: 1px 4px; border-radius: 4px; background: rgba(0,0,0,0.65); color: #fff; font-size: 0.58rem; font-weight: 600; line-height: 1.3; }
+      .mr-opt--on::after { content: '✓'; position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: #A78BFA; color: #0f1a2e; font-size: 0.62rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+      .mr-more { flex: none; width: 54px; height: 96px; border-radius: 7px; border: 1px dashed rgba(255,255,255,0.18); background: transparent; color: rgba(226,232,240,0.8); font-size: 0.68rem; font-weight: 600; cursor: pointer; font-family: inherit; padding: 0; }
+      .mr-fmsg { font-size: 0.7rem; color: rgba(148,163,184,0.85); margin-top: 2px; min-height: 1em; }
+      .mr-fmsg--warn { color: #FCD34D; }
+      .mr-skel { flex: none; width: 54px; height: 96px; border-radius: 7px; background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.09), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: mrskel 1.2s ease-in-out infinite; }
+      @keyframes mrskel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+      .mr-peek { position: relative; width: 100%; height: 100%; }
+      .mr-peek video, .mr-peek img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .mr-peek__cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 10px 10px; background: linear-gradient(transparent, rgba(0,0,0,0.75)); font-size: 0.72rem; color: #fff; line-height: 1.4; }
+      .mr-peek__cap small { display: block; color: rgba(226,232,240,0.7); font-size: 0.64rem; margin-top: 2px; }
+      .mr-done-note { font-size: 0.72rem; color: rgba(148,163,184,0.9); margin-top: 8px; line-height: 1.45; flex-basis: 100%; }
       .mr-scene__del { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: rgba(248,113,113,0.8); cursor: pointer; width: 28px; height: 34px; padding: 0; }
       .mr-attach { display: inline-flex; align-items: center; gap: 4px; margin: 6px 0 0 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); color: #86EFAC; font-size: 0.7rem; font-weight: 600; cursor: pointer; font-family: inherit; width: auto; }
     `;
@@ -71,6 +96,7 @@
     const slides = (opts.slides || []).filter((u) => /^https:\/\//i.test(String(u || '')));
     let scenes = [];
     let lastOptions = null;
+    let busy = false;
     const ov = document.createElement('div');
     ov.className = 'mr-overlay';
     ov.innerHTML = `<div class="mr-modal" role="dialog" aria-label="Motion Reel">
@@ -108,30 +134,138 @@
       if (lastOptions) renderForm(lastOptions);
     }));
 
+    const MORE_MAX = 32;
+    let footageSource = '';
+    let reqSeq = 0;
+
+    function stockOn() { return form.querySelector('#mr-footage')?.value === 'stock'; }
+    function secs(n) { n = Math.round(Number(n) || 0); return n ? `0:${String(n).padStart(2, '0')}` : ''; }
+
+    function footageHtml(s, i) {
+      const searches = [...new Set([s.search, ...(s.searches || [])].map((q) => String(q || '').trim().toLowerCase()).filter(Boolean))];
+      const none = new Set((s.tried || []).filter((q) => !(s.found || []).includes(q)));
+      const chips = searches.length > 1
+        ? `<div class="mr-chips" aria-label="Other searches for scene ${i + 1}">${searches.map((q) => `<button type="button" class="mr-chip${q === String(s.search || '').trim().toLowerCase() ? ' mr-chip--on' : ''}${none.has(q) ? ' mr-chip--none' : ''}" data-chip="${i}" data-q="${esc(q)}" ${none.has(q) ? 'title="Nothing found for this one"' : ''}>${esc(q)}</button>`).join('')}</div>`
+        : '';
+      let strip = '';
+      if (s.loading && !(s.options || []).length) strip = '<div class="mr-strip" aria-hidden="true">' + '<span class="mr-skel"></span>'.repeat(6) + '</div>';
+      else if ((s.options || []).length) {
+        strip = `<div class="mr-strip" role="group" aria-label="Footage for scene ${i + 1}">${s.options.map((o, k) => {
+          const on = o.id === s.pick;
+          const label = `${o.type === 'image' ? 'Photo' : `Video${o.duration ? `, ${Math.round(o.duration)} seconds` : ''}`}${o.credit ? ` by ${o.credit}` : ''}, found with "${o.query}"`;
+          return `<button type="button" class="mr-opt${on ? ' mr-opt--on' : ''}" data-opt="${i}" data-k="${k}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">
+            ${o.thumb ? `<img src="${esc(o.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
+            <span class="mr-opt__tag">${o.type === 'image' ? 'Photo' : `▶ ${esc(secs(o.duration))}`}</span></button>`;
+        }).join('')}${s.more && s.options.length < MORE_MAX ? `<button type="button" class="mr-more" data-more="${i}" ${s.loading ? 'disabled' : ''}>${s.loading ? '…' : 'More'}</button>` : ''}</div>`;
+      }
+      const msg = s.msg ? `<div class="mr-fmsg${s.warn ? ' mr-fmsg--warn' : ''}" role="status">${esc(s.msg)}</div>` : '<div class="mr-fmsg" role="status"></div>';
+      return `<div class="mr-fq"><input class="mr-input mr-scene__search" data-scene-search="${i}" maxlength="40" value="${esc(s.search || '')}" placeholder="Footage to find, e.g. coffee cup" aria-label="Footage search for scene ${i + 1}">
+        <button type="button" class="mr-btn" data-find="${i}" ${s.loading ? 'disabled' : ''}>Search</button></div>${chips}${strip}${msg}`;
+    }
+
     function scenesHtml(stock) {
-      return scenes.map((s, i) => `<div class="mr-scene"><span class="mr-scene__n">${i + 1}</span>
-        <div><input class="mr-input" data-scene-line="${i}" maxlength="160" value="${esc(s.line)}" placeholder="What the voice says">
-        ${stock ? `<input class="mr-input mr-scene__search" data-scene-search="${i}" maxlength="60" value="${esc(s.search || '')}" placeholder="Footage to show, e.g. folding linen shirt">` : ''}</div>
-        <button type="button" class="mr-scene__del" data-scene-del="${i}" aria-label="Remove line">×</button></div>`).join('');
+      return scenes.map((s, i) => `<div class="mr-scene" data-scene="${i}"><span class="mr-scene__n">${i + 1}</span>
+        <div><input class="mr-input" data-scene-line="${i}" maxlength="160" value="${esc(s.line)}" placeholder="What the voice says" aria-label="Line ${i + 1}">
+        ${stock ? `<div data-footage="${i}">${footageHtml(s, i)}</div>` : ''}</div>
+        <button type="button" class="mr-scene__del" data-scene-del="${i}" aria-label="Remove line ${i + 1}">×</button></div>`).join('');
+    }
+
+    /** Repaint one scene's footage area only, so typing elsewhere keeps its focus. */
+    function paintFootage(s) {
+      const i = scenes.indexOf(s);
+      const box = i >= 0 ? form.querySelector(`[data-footage="${i}"]`) : null;
+      if (!box) return;
+      const had = document.activeElement && box.contains(document.activeElement) ? document.activeElement.getAttribute('data-scene-search') != null : false;
+      const scroll = box.querySelector('.mr-strip')?.scrollLeft || 0;
+      box.innerHTML = footageHtml(s, i);
+      const strip = box.querySelector('.mr-strip');
+      if (strip) strip.scrollLeft = scroll;
+      if (had) { const inp = box.querySelector('[data-scene-search]'); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
     }
 
     function renderScenes() {
       const box = form.querySelector('#mr-scenes');
       if (!box) return;
-      const stock = form.querySelector('#mr-footage')?.value === 'stock';
-      box.innerHTML = scenesHtml(stock) || '<div class="mr-hint">Write the script, or add lines yourself.</div>';
-      box.querySelectorAll('[data-scene-del]').forEach((b) => b.addEventListener('click', () => {
-        scenes.splice(Number(b.dataset.sceneDel), 1);
-        renderScenes();
-      }));
+      box.innerHTML = scenesHtml(stockOn()) || '<div class="mr-hint">Write the script, or add lines yourself.</div>';
       const add = form.querySelector('#mr-scene-add');
       if (add) add.style.display = scenes.length >= 6 ? 'none' : '';
+    }
+
+    /** First option no other scene has picked, so two scenes rarely show the same clip. */
+    function defaultPick(s) {
+      const taken = new Set(scenes.filter((x) => x !== s).map((x) => x.pick).filter(Boolean));
+      const o = (s.options || []).find((x) => !taken.has(x.id)) || (s.options || [])[0];
+      return o ? o.id : null;
+    }
+
+    function pickedOption(s) { return (s.options || []).find((o) => o.id === s.pick) || null; }
+
+    /** Show a scene's chosen footage in the big 9:16 frame, as it will be cropped in the Reel. */
+    function peek(s) {
+      const o = pickedOption(s);
+      if (!o || busy) return;
+      const i = scenes.indexOf(s);
+      const media = o.type === 'image' || !o.preview
+        ? `<img src="${esc(o.thumb || o.url)}" alt="" referrerpolicy="no-referrer">`
+        : `<video src="${esc(o.preview)}" poster="${esc(o.thumb || '')}" autoplay muted loop playsinline></video>`;
+      stage.innerHTML = `<div class="mr-peek">${media}<div class="mr-peek__cap">Scene ${i + 1}: ${esc(s.line || '')}<small>${o.type === 'image' ? 'Photo' : 'Video'}${o.credit ? ` by ${esc(o.credit)}` : ''} on ${esc(footageSource || 'Pixabay')}</small></div></div>`;
+    }
+
+    /**
+     * Find footage for some scenes (all of them after the script is written). Free: nothing
+     * is rendered and no Reel is used up. `more` pages on for one scene.
+     */
+    async function findFootage(list, { more = false } = {}) {
+      list = list.filter((s) => scenes.includes(s));
+      if (!list.length || !stockOn()) return;
+      const seq = ++reqSeq;
+      list.forEach((s) => {
+        s.loading = true;
+        s.seq = seq;
+        if (!more) { s.options = []; s.pick = null; s.msg = ''; s.warn = false; }
+        paintFootage(s);
+      });
+      try {
+        const d = await api('/api/motion/faceless/footage', {
+          method: 'POST',
+          body: JSON.stringify({ scenes: list.map((s) => ({ line: s.line, search: s.search, searches: s.searches || [] })), offset: more ? (list[0].options || []).length : 0 }),
+        });
+        footageSource = d.source || footageSource;
+        list.forEach((s, k) => {
+          if (s.seq !== seq) return;
+          const r = (d.scenes || [])[k] || { options: [] };
+          const seen = new Set((s.options || []).map((o) => o.id));
+          s.options = [...(s.options || []), ...(r.options || []).filter((o) => !seen.has(o.id))];
+          s.more = !!r.more;
+          s.tried = r.searched || [];
+          s.found = r.found || [];
+          if (!s.pick) s.pick = defaultPick(s);
+          const first = String(s.search || '').trim().toLowerCase();
+          if (!s.options.length) {
+            s.msg = 'Nothing found. Try one or two simple words, like "coffee cup". Without footage this scene uses your Library.';
+            s.warn = true;
+          } else if (!more && first && !s.found.includes(first) && s.found[0]) {
+            s.msg = `Nothing for "${first}", so these are for "${s.found[0]}".`;
+            s.warn = false;
+          } else {
+            s.msg = '';
+            s.warn = false;
+          }
+        });
+      } catch (e) {
+        list.forEach((s) => { if (s.seq === seq) { s.msg = e.message; s.warn = true; } });
+      } finally {
+        list.forEach((s) => { if (s.seq === seq) { s.loading = false; paintFootage(s); } });
+        const shown = list.find((s) => s.pick);
+        if (shown && !more && list.length === 1) peek(shown);
+        else if (shown && !more && !stage.querySelector('video#mr-video')) peek(scenes.find((s) => s.pick) || shown);
+      }
     }
 
     function facelessHtml(o) {
       const fl = o.faceless || {};
       const footageOpts = [
-        fl.stock ? `<option value="stock">Stock video clips (free, from ${esc(fl.stock_source || 'Pexels')})</option>` : '',
+        fl.stock ? `<option value="stock">Stock clips and photos (free, from ${esc(fl.stock_source || 'Pexels')})</option>` : '',
         `<option value="library" ${fl.library_media ? '' : 'disabled'}>My Library photos and videos (${esc(fl.library_media || 0)})</option>`,
       ].join('');
       return `${!fl.enabled ? '<div class="mr-note">Voiceover Reels are being switched on. Try again shortly.</div>' : ''}
@@ -141,7 +275,7 @@
         <div class="mr-row" style="margin-top:6px"><button type="button" class="mr-btn" id="mr-script">Write the script for me</button><span class="mr-hint">About 20 to 30 seconds spoken.</span></div>
         <label class="mr-label" for="mr-footage">Footage</label>
         <select class="mr-select" id="mr-footage">${footageOpts}</select>
-        ${fl.stock_source === 'Pixabay' ? '<div class="mr-hint" id="mr-stock-credit">Stock clips from <a href="https://pixabay.com/" target="_blank" rel="noopener noreferrer">Pixabay</a>.</div>' : ''}
+        ${fl.stock_source === 'Pixabay' ? '<div class="mr-hint" id="mr-stock-credit">Stock clips and photos from <a href="https://pixabay.com/" target="_blank" rel="noopener noreferrer">Pixabay</a>. Searching is free; only making the Reel counts toward today.</div>' : ''}
         <span class="mr-label">Script, one line per scene</span>
         <div id="mr-scenes"></div>
         <button type="button" class="mr-btn" id="mr-scene-add" style="margin-top:4px">+ Add line</button>`;
@@ -154,8 +288,9 @@
       btn.disabled = true; btn.textContent = 'Writing…';
       try {
         const d = await api('/api/motion/faceless/script', { method: 'POST', body: JSON.stringify({ text: source }) });
-        scenes = d.scenes;
+        scenes = d.scenes.map((sc) => ({ line: sc.line, search: sc.search || '', searches: sc.searches || (sc.search ? [sc.search] : []), options: [], pick: null }));
         renderScenes();
+        findFootage(scenes.slice());
         if (d.cta && !form.querySelector('#mr-cta').value) form.querySelector('#mr-cta').value = d.cta;
       } catch (e) {
         toast(e.message, 'error');
@@ -198,12 +333,55 @@
       if (kind === 'faceless') {
         renderScenes();
         form.querySelector('#mr-script').addEventListener('click', () => writeScript(false));
-        form.querySelector('#mr-footage').addEventListener('change', renderScenes);
-        form.querySelector('#mr-scene-add').addEventListener('click', () => { scenes.push({ line: '', search: '' }); renderScenes(); });
-        form.querySelector('#mr-scenes').addEventListener('input', (e) => {
+        form.querySelector('#mr-footage').addEventListener('change', () => {
+          renderScenes();
+          if (stockOn()) findFootage(scenes.filter((s) => !(s.options || []).length && (s.line || s.search)));
+        });
+        form.querySelector('#mr-scene-add').addEventListener('click', () => {
+          scenes.push({ line: '', search: '', searches: [], options: [], pick: null });
+          renderScenes();
+          form.querySelector(`[data-scene-line="${scenes.length - 1}"]`)?.focus();
+        });
+        const box = form.querySelector('#mr-scenes');
+        const searchScene = (s, q) => {
+          if (q != null) s.search = q;
+          const typed = String(s.search || '').trim();
+          if (typed && !(s.searches || []).map((x) => x.toLowerCase()).includes(typed.toLowerCase())) s.searches = [typed, ...(s.searches || [])].slice(0, 5);
+          findFootage([s]);
+        };
+        box.addEventListener('input', (e) => {
           const t = e.target;
           if (t.dataset.sceneLine != null) scenes[Number(t.dataset.sceneLine)].line = t.value;
           if (t.dataset.sceneSearch != null) scenes[Number(t.dataset.sceneSearch)].search = t.value;
+        });
+        // A new line with no footage yet: look for some when the writer moves on.
+        box.addEventListener('change', (e) => {
+          const t = e.target;
+          if (t.dataset.sceneLine == null) return;
+          const s = scenes[Number(t.dataset.sceneLine)];
+          if (s && s.line.trim() && !(s.options || []).length && !s.loading && stockOn()) findFootage([s]);
+        });
+        box.addEventListener('keydown', (e) => {
+          const t = e.target;
+          if (t.dataset.sceneSearch != null && e.key === 'Enter') { e.preventDefault(); searchScene(scenes[Number(t.dataset.sceneSearch)]); }
+        });
+        box.addEventListener('click', (e) => {
+          const el = e.target.closest('button');
+          if (!el || !box.contains(el)) return;
+          const d = el.dataset;
+          if (d.sceneDel != null) { scenes.splice(Number(d.sceneDel), 1); renderScenes(); return; }
+          if (d.find != null) { searchScene(scenes[Number(d.find)]); return; }
+          if (d.chip != null) { searchScene(scenes[Number(d.chip)], d.q); return; }
+          if (d.more != null) { findFootage([scenes[Number(d.more)]], { more: true }); return; }
+          if (d.opt != null) {
+            const s = scenes[Number(d.opt)];
+            const o = s.options[Number(d.k)];
+            if (!o) return;
+            s.pick = o.id;
+            paintFootage(s);
+            peek(s);
+            form.querySelector(`[data-opt="${scenes.indexOf(s)}"][data-k="${d.k}"]`)?.focus();
+          }
         });
         if (!scenes.length && opts.text && ready) writeScript(true);
       }
@@ -254,7 +432,11 @@
         body.seconds_per_slide = Number(form.querySelector('#mr-secs').value);
       } else if (kind === 'faceless') {
         delete body.kind;
-        body.scenes = scenes.map((s) => ({ line: String(s.line || '').trim(), search: String(s.search || '').trim() })).filter((s) => s.line);
+        const stock = stockOn();
+        body.scenes = scenes.map((s) => {
+          const o = stock ? pickedOption(s) : null;
+          return { line: String(s.line || '').trim(), search: String(s.search || '').trim(), searches: s.searches || [], ...(o ? { pick: { id: o.id, url: o.url, type: o.type } } : {}) };
+        }).filter((s) => s.line);
         body.footage = form.querySelector('#mr-footage').value;
         if (!body.scenes.length) { toast('Write the script first', 'warning'); return; }
       } else {
@@ -263,6 +445,7 @@
         if (!body.beats.length) { toast('Add at least one line', 'warning'); return; }
       }
       btn.disabled = true; btn.textContent = 'Rendering…';
+      busy = true;
       out.innerHTML = '';
       stage.innerHTML = '<div style="text-align:center"><div class="mr-spin" style="margin:0 auto 10px"></div><div class="mr-hint">Rendering your Reel…</div></div>';
       try {
@@ -273,11 +456,12 @@
         if (!s) return;
         if (s.status !== 'done') throw new Error(s.error || 'The video did not render.');
         stage.innerHTML = `<video id="mr-video" src="${esc(s.video_url)}" controls autoplay muted loop playsinline></video>`;
-        out.innerHTML = `<a class="mr-btn mr-btn--primary" id="mr-download" href="${esc(s.video_url)}" download="reel.mp4" target="_blank" rel="noopener">Download MP4</a><span class="mr-hint">Saved to Library, Motion reels.</span>`;
+        out.innerHTML = `<a class="mr-btn mr-btn--primary" id="mr-download" href="${esc(s.video_url)}" download="reel.mp4" target="_blank" rel="noopener">Download MP4</a><span class="mr-hint">Saved to Library, Motion reels.</span>${s.note ? `<div class="mr-done-note" id="mr-note">${esc(s.note)}</div>` : ''}`;
         toast('Reel ready');
       } catch (err) {
         stage.innerHTML = `<div class="mr-note" style="padding:20px;text-align:center">${esc(err.message)}</div>`;
       } finally {
+        busy = false;
         btn.disabled = false; btn.textContent = 'Make another version';
       }
     }
