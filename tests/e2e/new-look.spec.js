@@ -88,3 +88,48 @@ test('?look=new: icon rail, jump bar, Day/Dark that sticks, palette mapped, ?loo
   await expect(page.locator('html')).not.toHaveClass(/\bnl\b/);
   expect(errors).toEqual([]);
 });
+
+test('new look Calendar: platform tabs and filter, live ring, counts, key dates and unscheduled in the aside', async ({ page }) => {
+  const errors = watchErrors(page);
+  const d = new Date();
+  const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const content = [
+    { id: 'rec1', status: 'Scheduled', caption: 'Walk on Sunday', platform: 'Instagram', scheduled_date: `${ym}-10T09:00:00.000Z` },
+    { id: 'rec2', status: 'Ready for Review', caption: 'Nurse spotlight', platform: 'TikTok', scheduled_date: `${ym}-11` },
+    { id: 'rec3', status: 'Approved', caption: 'Five questions for your GP', platform: 'Facebook' },
+  ];
+  await mockApi(page, srv.base, {
+    data: clientData({ content, posts: content }),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/calendar-history') { json(200, { posts: [{ id: 'ig_9', platform: 'instagram', timestamp: `${ym}-12T12:00:00.000Z`, caption: 'Thank you all', status: 'Published' }] }); return 'handled'; }
+      if (entry.path === '/api/marketing/key-dates' && entry.method === 'GET') { json(200, { country: 'GB', country_known: true, countries: [{ code: 'GB', name: 'United Kingdom' }], dates: [{ date: `${ym}-20`, name: 'Kindness Day', type: 'awareness' }] }); return 'handled'; }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="schedule"]');
+  await expect(page.locator('.nl-cal h1')).toHaveText('Calendar');
+  await expect(page.locator('#nl-cal-sub')).toContainText('1 scheduled · 1 needs review');
+
+  const ig = page.locator(`[data-bq-drop-day="${ym}-10"] .nl-ev`);
+  await expect(ig).toHaveClass(/nl-ev--instagram/);
+  await expect(ig.locator('.nl-dot')).toHaveClass(/nl-dot--scheduled/);
+  await expect(page.locator(`[data-bq-drop-day="${ym}-11"] .nl-ev .nl-dot`)).toHaveClass(/nl-dot--review/);
+  await expect(page.locator(`[data-bq-drop-day="${ym}-12"] .nl-ev .nl-dot`)).toHaveClass(/nl-dot--live/);
+
+  await page.click('[data-nl-plat="tiktok"]');
+  await expect(page.locator('[data-nl-plat="tiktok"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator(`[data-bq-drop-day="${ym}-10"] .nl-ev`)).toHaveCount(0);
+  await expect(page.locator(`[data-bq-drop-day="${ym}-11"] .nl-ev`)).toHaveCount(1);
+  await page.click('[data-nl-plat="all"]');
+  await expect(page.locator(`[data-bq-drop-day="${ym}-10"] .nl-ev`)).toHaveCount(1);
+
+  await expect(page.locator('.nl-cal__aside #key-dates-strip .kd-tile').first()).toContainText('20');
+  await expect(page.locator(`[data-bq-drop-day="${ym}-20"] .kd-badge`)).toBeVisible();
+  await expect(page.locator('#nl-unsched')).toContainText('Five questions for your GP');
+
+  await page.click(`[data-bq-drop-day="${ym}-10"] .nl-ev`);
+  await expect(page.locator('#schedule-date-panel')).toHaveCSS('right', '0px');
+  expect(errors).toEqual([]);
+});

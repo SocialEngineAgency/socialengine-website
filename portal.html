@@ -38,7 +38,7 @@
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
   <script src="./stories-composer.js?v=20261009" defer></script>
   <script src="./marketing-playbook.js?v=20261010" defer></script>
-  <script src="./key-dates.js?v=20261010" defer></script>
+  <script src="./key-dates.js?v=20261016-nl" defer></script>
   <script src="./diagram-posts.js?v=20261010" defer></script>
   <script src="./motion-reels.js?v=20261010-voice" defer></script>
   <script src="./live-updates.js?v=20261012" defer></script>
@@ -3078,8 +3078,8 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261016a">
-  <script src="./new-look.js?v=20261016a" defer></script>
+  <link rel="stylesheet" href="./new-look.css?v=20261016b">
+  <script src="./new-look.js?v=20261016b" defer></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
@@ -19876,7 +19876,38 @@
     const content = document.getElementById('dash-content');
     if (!content) return;
     _batchDragIdx = null;
-    content.innerHTML = `
+    const nlLook = document.documentElement.classList.contains('nl');
+    const nlLayout = `
+<div id="sched-layout" class="nl-cal">
+  <div id="sched-cal-col" class="nl-cal__col">
+    <div class="nl-cal__head">
+      <div>
+        <h1 class="nl-h1">Calendar</h1>
+        <p class="nl-cal__sub" id="nl-cal-sub"></p>
+      </div>
+      <div class="nl-cal__tools">
+        <div class="nl-chips" id="nl-cal-plats" role="group" aria-label="Show platform">
+          ${[['all', 'All'], ['instagram', 'Instagram'], ['facebook', 'Facebook'], ['tiktok', 'TikTok']].map(([k, l]) => `<button type="button" class="nl-chip nl-chip--${k}" data-nl-plat="${k}" aria-pressed="${(window._nlCalPlat || 'all') === k}">${k === 'all' ? '' : '<i class="nl-chip__tab"></i>'}${l}</button>`).join('')}
+        </div>
+        <button type="button" class="nl-btn nl-btn--primary" onclick="_openBatchUpload()">Upload batch</button>
+      </div>
+    </div>
+    <div class="nl-cal__body">
+      <div class="nl-cal__main">
+        <div id="meta-week-planner" class="mwp" aria-live="polite"></div>
+        <div id="sched-cal-wrap"><div class="nl-muted" style="padding:48px 0;text-align:center;">Loading calendar…</div></div>
+      </div>
+      <aside class="nl-cal__aside" aria-label="Key dates and unscheduled posts">
+        <div id="nl-kd-host"></div>
+        <section class="nl-card nl-unsched" id="nl-unsched" hidden></section>
+      </aside>
+    </div>
+  </div>
+  <div id="sched-queue-col" style="width:380px;border-left:1px solid var(--nl-line);display:none;flex-direction:column;overflow:hidden;flex-shrink:0;">
+    <div id="sched-queue-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden;"></div>
+  </div>
+</div>`;
+    content.innerHTML = (nlLook ? nlLayout : `
 <div id="sched-layout" style="display:flex;height:calc(100vh - 64px);min-height:600px;overflow:hidden;">
 
   <!-- Left: Calendar column -->
@@ -19899,7 +19930,7 @@
     <div id="sched-queue-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden;"></div>
   </div>
 
-</div>
+</div>`) + `
 
 <!-- Calendar detail panel (slide-in from right) -->
 <div id="cal-panel" style="position:fixed;right:0;top:0;width:360px;height:100vh;background:#111827;border-left:1px solid rgba(255,255,255,0.08);padding:28px 24px;overflow-y:auto;z-index:1100;transform:translateX(100%);opacity:0;transition:transform 0.25s ease,opacity 0.25s ease;box-shadow:-20px 0 60px rgba(0,0,0,0.5);"></div>
@@ -19916,6 +19947,13 @@
     if (_batchFiles.length) {
       _batchEnsureQueueVisible();
       _renderBatchQueue();
+    }
+    if (nlLook) {
+      content.querySelectorAll('[data-nl-plat]').forEach((b) => b.addEventListener('click', () => {
+        window._nlCalPlat = b.dataset.nlPlat;
+        content.querySelectorAll('[data-nl-plat]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        _renderCalendar();
+      }));
     }
     _loadCalendar();
     _loadMetaPlanner();
@@ -19994,7 +20032,7 @@
     const isThisWeek = p.today >= p.week_start && p.today <= p.week_end;
     const bar = (label, c) => {
       const pct = c.target ? Math.min(100, Math.round((c.filled / c.target) * 100)) : 100;
-      return `<div class="mwp__meter">
+      return `<div class="mwp__meter${c.target && c.filled >= c.target ? ' is-met' : ''}">
         <div class="mwp__meter-top"><span>${label}</span><strong>${c.filled}/${c.target}</strong>${c.in_review ? `<em>+${c.in_review} in review</em>` : ''}</div>
         <div class="mwp__track"><div class="mwp__fill" style="width:${pct}%"></div></div>
       </div>`;
@@ -21111,6 +21149,7 @@
   function _renderCalendar() {
     const el = document.getElementById('sched-cal-wrap');
     if (!el) return;
+    if (document.documentElement.classList.contains('nl') && document.getElementById('nl-cal-plats')) { _renderCalendarNL(el); return; }
 
     const monthLabel = new Date(_calYear, _calMonth, 1)
       .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -21280,6 +21319,138 @@
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
         ${dayHeaders}${cells}
       </div>`;
+  }
+
+  // New look calendar: platform tab on each post, status dot (live posts get the green ring),
+  // time, platform filter, counts in the title, unscheduled posts in the aside.
+  function _nlPlatKey(platform) {
+    const p = String(Array.isArray(platform) ? platform[0] : (platform || '')).toLowerCase();
+    if (p === 'ig' || p.includes('instagram')) return 'instagram';
+    if (p === 'fb' || p.includes('facebook')) return 'facebook';
+    if (p.includes('tiktok')) return 'tiktok';
+    return 'other';
+  }
+  function _nlStatusKey(status, source) {
+    if (source === 'social') return 'live';
+    const s = String(status || '').toLowerCase();
+    if (s === 'published' || s === 'posted' || s === 'live') return 'live';
+    if (s === 'scheduled' || s === 'approved') return 'scheduled';
+    if (s === 'rejected' || s === 'failed') return 'failed';
+    if (s === 'pending' || s.includes('review') || s === 'ready' || s === 'draft') return 'review';
+    return 'draft';
+  }
+  function _nlTime(f) {
+    const raw = String(f.scheduled_date || f.scheduledDate || f.timestamp || '');
+    if (!/T\d{2}:\d{2}/.test(raw)) return '';
+    try {
+      return new Date(raw).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: (typeof _clientTimezone === 'function' ? _clientTimezone() : undefined) });
+    } catch (_) { return raw.slice(11, 16); }
+  }
+  function _renderCalendarNL(el) {
+    const plat = window._nlCalPlat || 'all';
+    const todayStr = (typeof _clientTodayDateKey === 'function') ? _clientTodayDateKey() : _calLocalDateKey(new Date());
+    const firstDow = new Date(_calYear, _calMonth, 1).getDay();
+    const daysInMonth = new Date(_calYear, _calMonth + 1, 0).getDate();
+    const monthKey = `${_calYear}-${String(_calMonth + 1).padStart(2, '0')}`;
+    const byDate = {};
+    const add = (key, item) => { if (!key) return; (byDate[key] = byDate[key] || []).push(item); };
+    for (const p of _calPosts) {
+      const f = p.fields || p;
+      add((f.scheduled_date || f.scheduledDate || '').slice(0, 10), { id: p.id, _source: 'content', ...f });
+    }
+    for (const p of _calHistoryPosts) {
+      add(_calLocalDateKey(p.timestamp), { id: p.id, status: 'Published', platform: p.platform, caption: p.caption, full_post_text: p.caption, timestamp: p.timestamp, _source: 'social' });
+    }
+    let scheduled = 0; let review = 0;
+    Object.keys(byDate).forEach((k) => {
+      if (k.slice(0, 7) !== monthKey) return;
+      byDate[k].forEach((x) => { const st = _nlStatusKey(x.status, x._source); if (st === 'scheduled') scheduled += 1; if (st === 'review') review += 1; });
+    });
+    const monthLabel = new Date(_calYear, _calMonth, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const sub = document.getElementById('nl-cal-sub');
+    if (sub) sub.textContent = `${monthLabel} · ${scheduled} scheduled${review ? ` · ${review} need${review === 1 ? 's' : ''} review` : ''}`;
+
+    let cells = '';
+    for (let i = 0; i < firstDow; i++) cells += '<div class="nl-day nl-day--pad" aria-hidden="true"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateKey = `${monthKey}-${String(d).padStart(2, '0')}`;
+      const isToday = dateKey === todayStr;
+      const isPast = dateKey < todayStr;
+      const all = (byDate[dateKey] || []).filter((x) => plat === 'all' || _nlPlatKey(x.platform || x.platforms) === plat);
+      const shown = all.slice(0, 3);
+      const batch = (_batchFiles || []).filter((f) => f.date === dateKey).map((f) => {
+        const i = _batchFiles.indexOf(f);
+        return `<button type="button" class="nl-ev nl-ev--batch" onclick="event.stopPropagation();_batchToggleExpand(${i})" title="From your upload batch: click to edit"><span class="nl-ev__text">${escapeHtml((f.caption || f.file.name || 'Upload').slice(0, 40))}</span></button>`;
+      }).join('');
+      const evs = shown.map((x) => {
+        const st = _nlStatusKey(x.status, x._source);
+        const pk = _nlPlatKey(x.platform || x.platforms);
+        const t = _nlTime(x);
+        const text = String(x.full_post_text || x.caption || '').replace(/\s+/g, ' ').slice(0, 60) || 'No caption';
+        return `<button type="button" class="nl-ev nl-ev--${pk}" onclick="event.stopPropagation();openDatePanel('${dateKey}')" title="${escapeHtml(text)}">`
+          + `<i class="nl-dot nl-dot--${st}" aria-label="${st === 'live' ? 'Live' : st === 'review' ? 'Needs review' : st === 'failed' ? 'Failed' : st === 'scheduled' ? 'Scheduled' : 'Draft'}"></i>`
+          + (t ? `<span class="nl-ev__time">${t}</span>` : '')
+          + `<span class="nl-ev__text">${escapeHtml(text)}</span></button>`;
+      }).join('');
+      const more = all.length > 3 ? `<span class="nl-day__more">+${all.length - 3} more</span>` : '';
+      cells += `<div class="nl-day${isToday ? ' is-today' : ''}${isPast ? ' is-past' : ''}" data-bq-drop-day="${dateKey}"
+          ondragover="_batchDragOverDay('${dateKey}',event)" ondragleave="_batchDragLeaveDay(event)" ondrop="_batchDropOnDay('${dateKey}',event)"
+          onclick="openDatePanel('${dateKey}',window.__clientData||{content:_calPosts})">
+        <div class="nl-day__num">${d}</div>
+        ${batch}${evs}${more}
+      </div>`;
+    }
+    const heads = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((x) => `<div class="nl-dow">${x}</div>`).join('');
+    el.innerHTML = `
+      <div class="nl-cal__bar">
+        <button type="button" class="nl-month" onclick="_toggleMonthPicker(event)">${monthLabel} <span aria-hidden="true">▾</span></button>
+        <div id="cal-month-picker" class="nl-month-picker" style="display:none;">
+          <div class="nl-month-picker__year">
+            <button type="button" class="nl-btn nl-btn--icon" onclick="_mpYearAdj(-1)" aria-label="Previous year">←</button>
+            <span id="cal-mp-year">${_calYear}</span>
+            <button type="button" class="nl-btn nl-btn--icon" onclick="_mpYearAdj(1)" aria-label="Next year">→</button>
+          </div>
+          <div class="nl-month-picker__grid" id="cal-mp-months">
+            ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => `<button type="button" onclick="_mpSelectMonth(${i})" aria-pressed="${i === _calMonth}">${m}</button>`).join('')}
+          </div>
+        </div>
+        <div class="nl-legend" aria-hidden="true">
+          <span><i class="nl-dot nl-dot--review"></i>Needs review</span>
+          <span><i class="nl-dot nl-dot--scheduled"></i>Scheduled</span>
+          <span><i class="nl-dot nl-dot--live"></i>Live</span>
+        </div>
+        <div class="nl-seg">
+          <button type="button" onclick="_calToday()">Today</button>
+          <button type="button" onclick="_calPrevMonth()" aria-label="Previous month">←</button>
+          <button type="button" onclick="_calNextMonth()" aria-label="Next month">→</button>
+          <button type="button" onclick="_loadCalendar({ refresh: true })" aria-label="Refresh">↻</button>
+        </div>
+      </div>
+      <div class="nl-grid">${heads}${cells}</div>`;
+    _renderUnscheduledNL();
+  }
+  function _renderUnscheduledNL() {
+    const box = document.getElementById('nl-unsched');
+    if (!box) return;
+    const rows = ((window.__clientData && window.__clientData.content) || []).map((r) => ({ ...(r.fields || r), id: r.id || (r.fields || r).id }))
+      .filter((f) => !(f.scheduled_date || f.scheduledDate) && ['approved', 'ready', 'pending', 'ready for review', 'draft'].includes(String(f.status || '').toLowerCase()));
+    if (!rows.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `<div class="nl-card__head"><h2>Unscheduled</h2><span class="nl-muted">${rows.length}</span></div>`
+      + rows.slice(0, 5).map((f) => {
+        const pk = _nlPlatKey(f.platform || f.platforms);
+        const thumb = f.thumbnail_url || f.image_url || '';
+        const st = _nlStatusKey(f.status, 'content');
+        return `<button type="button" class="nl-draft nl-draft--${pk}" data-nl-draft="${escapeHtml(String(f.id || ''))}">
+          <span class="nl-draft__thumb">${thumb ? `<img src="${escapeHtml(thumb)}" alt="" loading="lazy">` : ''}</span>
+          <span class="nl-draft__body"><span class="nl-draft__text">${escapeHtml(String(f.full_post_text || f.caption || 'No caption').replace(/\s+/g, ' ').slice(0, 70))}</span>
+          <span class="nl-draft__meta"><i class="nl-dot nl-dot--${st}"></i>${st === 'review' ? 'Needs review' : 'Ready to schedule'}</span></span>
+        </button>`;
+      }).join('')
+      + (rows.length > 5 ? `<button type="button" class="nl-link" data-nl-all-drafts>See all ${rows.length}</button>` : '');
+    box.querySelectorAll('[data-nl-draft], [data-nl-all-drafts]').forEach((b) => b.addEventListener('click', () => {
+      document.querySelector('.dash-nav-item[data-nav="content"]')?.click();
+    }));
   }
 
   function _calPrevMonth() {

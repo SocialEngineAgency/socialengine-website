@@ -40,6 +40,7 @@
       .kd-country { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: rgba(148,163,184,0.85); }
       .kd-country select { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: #fff; padding: 4px 6px; font-size: 0.72rem; font-family: inherit; }
       .kd-country select option { background: #0f1a2e; }
+      .kd-tile { display: none; }
       .kd-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
       .kd-chip { flex: none; display: flex; flex-direction: column; gap: 2px; min-width: 150px; max-width: 220px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(167,139,250,0.22); background: rgba(124,58,237,0.07); color: #E9D5FF; cursor: pointer; text-align: left; font-family: inherit; width: auto; }
       .kd-chip:hover { border-color: rgba(167,139,250,0.5); }
@@ -84,7 +85,7 @@
       <div class="kd-head"><span class="kd-title">Key dates, next 60 days</span>
         <span class="kd-sub">${d.country_known ? 'Holidays and days worth a post for your kind of business.' : 'Pick your country to add public holidays.'}</span>
         <label class="kd-country">Country <select id="kd-country"><option value="">${d.country_known ? 'Not set' : 'Choose…'}</option>${opts}</select></label></div>
-      <div class="kd-list">${d.dates.length ? d.dates.map((x, i) => `<button type="button" class="kd-chip" data-kd="${i}"><b>${TYPE_ICON[x.type] || ''} ${esc(x.name)}</b><span>${esc(niceDate(x.date))} · Post ideas</span></button>`).join('') : '<span class="kd-hint">Nothing coming up in the next 60 days.</span>'}</div>
+      <div class="kd-list">${d.dates.length ? d.dates.map((x, i) => `<button type="button" class="kd-chip" data-kd="${i}"><span class="kd-tile" aria-hidden="true"><b>${esc(String(Number(x.date.slice(8, 10))))}</b>${esc(new Date(`${x.date}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }))}</span><b>${TYPE_ICON[x.type] || ''} ${esc(x.name)}</b><span>${esc(niceDate(x.date))} · Post ideas</span></button>`).join('') : '<span class="kd-hint">Nothing coming up in the next 60 days.</span>'}</div>
     </div>`;
     host.querySelectorAll('[data-kd]').forEach((b) => b.addEventListener('click', () => openIdeas(d.dates[Number(b.dataset.kd)])));
     host.querySelector('#kd-country').addEventListener('change', async (e) => {
@@ -155,7 +156,9 @@
     injectStyles();
     const host = document.createElement('div');
     host.id = 'key-dates-strip';
-    col.parentNode.insertBefore(host, col.parentNode.firstChild);
+    const nlHost = document.getElementById('nl-kd-host'); // new look: key dates live in the Calendar aside
+    if (nlHost) nlHost.appendChild(host);
+    else col.parentNode.insertBefore(host, col.parentNode.firstChild);
     load(true).then(() => { renderStrip(); badgeCalendar(); }).catch(() => { host.remove(); });
   }
 
