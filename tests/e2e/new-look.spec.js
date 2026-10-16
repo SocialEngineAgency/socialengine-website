@@ -353,6 +353,8 @@ test('new look Review: filter bar, cards with Approve/Reject, the post opens inl
   // Approve from the card goes through the same approve call.
   await c1.locator('button', { hasText: 'Approve' }).click();
   await expect.poll(() => calls.some((c) => c.path === '/api/approve-post' && /recP1/.test(c.body || ''))).toBe(true);
+  // Review refreshes itself after an approve; wait for that before leaving.
+  await expect(page.locator('.nl-rv-card[data-post-id="recP1"] .nl-rv-pill')).toHaveText('Approved');
 
   // Home opens a post on top of the page, as before.
   await page.click('.dash-nav-item[data-nav="dashboard"]');
@@ -450,3 +452,30 @@ test('new look Inbox, Analytics, Coach, Settings and Brand: redesign layouts wit
   await expect(page.locator('.settings-tab[data-settings-tab="account"]')).toHaveClass(/active/);
   expect(errors).toEqual([]);
 });
+
+for (const vp of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+  test(`new look: every sidebar item and Create mode renders without runtime errors at ${vp.width}x${vp.height}`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    const errors = watchErrors(page);
+    await mockApi(page, srv.base);
+    await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+    await login(page, srv.base);
+    const navs = await page.locator('#dash-sidebar .dash-nav-item[data-nav]').evaluateAll((els) => els.map((e) => e.dataset.nav));
+    expect(navs.length).toBeGreaterThan(8);
+    for (const nav of navs) {
+      await page.locator(`.dash-nav-item[data-nav="${nav}"]`).evaluate((el) => el.click());
+      await page.waitForTimeout(250);
+      expect((await page.locator('#dash-content').innerText()).trim().length, nav).toBeGreaterThan(0);
+      if (nav === 'create') {
+        for (const seg of ['creation-studio', 'design-studio', 'brand-design', 'animation-studio']) {
+          await page.locator(`.create-seg[data-segment="${seg}"]`).evaluate((el) => el.click());
+          await page.waitForTimeout(300);
+          expect((await page.locator('#dash-content').innerText()).trim().length, seg).toBeGreaterThan(0);
+        }
+      }
+    }
+    await page.locator('.dash-nav-item[data-nl-brand]').evaluate((el) => el.click());
+    await expect(page.locator('.nl-set-h1')).toHaveText(/Brand|Voice/);
+    expect(errors).toEqual([]);
+  });
+}
