@@ -189,6 +189,7 @@
       box.innerHTML = scenesHtml(stockOn()) || '<div class="mr-hint">Write the script, or add lines yourself.</div>';
       const add = form.querySelector('#mr-scene-add');
       if (add) add.style.display = scenes.length >= 6 ? 'none' : '';
+      syncMusic();
     }
 
     /** First option no other scene has picked, so two scenes rarely show the same clip. */
@@ -290,12 +291,129 @@
         const d = await api('/api/motion/faceless/script', { method: 'POST', body: JSON.stringify({ text: source }) });
         scenes = d.scenes.map((sc) => ({ line: sc.line, search: sc.search || '', searches: sc.searches || (sc.search ? [sc.search] : []), options: [], pick: null }));
         renderScenes();
+        syncMusic();
         findFootage(scenes.slice());
         if (d.cta && !form.querySelector('#mr-cta').value) form.querySelector('#mr-cta').value = d.cta;
       } catch (e) {
         toast(e.message, 'error');
       } finally {
         btn.disabled = false; btn.textContent = 'Write the script for me';
+      }
+    }
+
+    /* ── Music: AI music made to fit, or a Library track with its length ── */
+    const music = { value: null, style: '' };
+    function mmss(secs) {
+      const t = Math.max(0, Math.round(Number(secs) || 0));
+      return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    }
+    function beatSecs(b) { return Math.min(4.5, Math.max(1.6, 0.9 + String(b).trim().split(/\s+/).length * 0.32)); }
+    /** About how long the Reel will be, from what is on the form (the voice sets the real length). */
+    function reelSeconds() {
+      const end = (form.querySelector('#mr-cta')?.value.trim() || form.querySelector('#mr-handle')?.value.trim()) ? 2.2 : 0;
+      if (kind === 'faceless') {
+        const words = scenes.reduce((n, sc) => n + String(sc.line || '').trim().split(/\s+/).filter(Boolean).length, 0);
+        return words ? words / 2.6 + 0.5 + end : 0;
+      }
+      if (kind === 'carousel') return slides.length * (Number(form.querySelector('#mr-secs')?.value) || 2.6) + end;
+      const beats = (form.querySelector('#mr-lines')?.value || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      return beats.length ? beats.reduce((n, b) => n + beatSecs(b), 0) + end : 0;
+    }
+    function reelText() {
+      if (kind === 'faceless') return scenes.map((sc) => sc.line).filter(Boolean).join('\n') || form.querySelector('#mr-idea')?.value || '';
+      if (kind === 'carousel') return [opts.name, opts.text].filter(Boolean).join('\n');
+      return form.querySelector('#mr-lines')?.value || opts.text || '';
+    }
+    function trackOption(m) {
+      const secs = Number(m.length_ms) > 0 ? m.length_ms / 1000 : 0;
+      return `<option value="${esc(m.url)}" data-len="${secs || ''}">${esc(m.name)}${secs ? ` · ${mmss(secs)}` : ''}</option>`;
+    }
+    function musicHtml(o) {
+      const tracks = o.music || [];
+      if (music.value == null) music.value = o.ai_music ? 'ai' : '';
+      if (music.value === 'ai' && !o.ai_music) music.value = '';
+      return `<select class="mr-select" id="mr-music">
+          ${o.ai_music ? `<option value="ai">AI music made to fit this Reel</option>` : ''}
+          <option value="">No music</option>
+          ${tracks.map(trackOption).join('')}
+        </select>
+        ${o.ai_music ? `<div id="mr-music-ai">
+          <div class="mr-fq"><input class="mr-input" id="mr-music-style" maxlength="120" value="${esc(music.style)}" placeholder="Style (optional), e.g. calm piano or upbeat lo-fi" aria-label="Music style">
+          <button type="button" class="mr-btn" id="mr-music-gen">Make it now</button></div>
+          <div class="mr-hint" style="margin-top:4px">Leave the style blank and AI picks one that suits the Reel. It is made at the Reel's exact length when you click Make the Reel, or make it now to hear it first. Saved to your Library.</div>
+        </div>` : ''}
+        <div class="mr-hint" id="mr-music-fit" style="margin-top:4px" role="status"></div>
+        <audio id="mr-music-preview" controls preload="none" hidden style="width:100%;margin-top:6px;height:34px"></audio>
+        ${tracks.length || o.ai_music ? '' : '<div class="mr-hint" style="margin-top:4px">Add your own tracks in Library (kind: music) to use them here. You can also add trending audio in Instagram when you post.</div>'}`;
+    }
+    /** Say how the chosen track fits the Reel; show the AI options or a preview player. */
+    function syncMusic() {
+      const sel = form.querySelector('#mr-music');
+      if (!sel) return;
+      music.value = sel.value;
+      const ai = form.querySelector('#mr-music-ai');
+      if (ai) ai.hidden = sel.value !== 'ai';
+      const fit = form.querySelector('#mr-music-fit');
+      const prev = form.querySelector('#mr-music-preview');
+      const opt = sel.selectedOptions[0];
+      const len = Number(opt && opt.dataset.len) || 0;
+      const reel = reelSeconds();
+      if (prev) {
+        if (sel.value && sel.value !== 'ai') { if (prev.getAttribute('src') !== sel.value) prev.src = sel.value; prev.hidden = false; }
+        else { prev.hidden = true; prev.pause(); }
+      }
+      if (!fit) return;
+      if (!sel.value || sel.value === 'ai' || !reel) { fit.textContent = sel.value === 'ai' && reel ? `The Reel is about ${mmss(reel)}; the music is made to that length.` : ''; return; }
+      if (!len) { fit.textContent = `The Reel is about ${mmss(reel)}.`; return; }
+      fit.textContent = len + 0.25 < reel
+        ? `The Reel is about ${mmss(reel)} and this track is ${mmss(len)}, so it repeats to fill the Reel.`
+        : `The Reel is about ${mmss(reel)} and this track is ${mmss(len)}, so it fades out when the Reel ends.`;
+    }
+    /** Tracks saved without a length: read it from the file, quietly, and label them. */
+    function probeTrackLengths() {
+      form.querySelectorAll('#mr-music option[data-len=""]').forEach((opt) => {
+        if (!/^https:\/\//.test(opt.value)) return;
+        const a = new Audio();
+        a.preload = 'metadata';
+        a.addEventListener('loadedmetadata', () => {
+          if (!Number.isFinite(a.duration) || a.duration <= 0) return;
+          opt.dataset.len = String(a.duration);
+          if (!/ · \d+:\d\d$/.test(opt.textContent)) opt.textContent = `${opt.textContent} · ${mmss(a.duration)}`;
+          const m = (lastOptions.music || []).find((x) => x.url === opt.value);
+          if (m) m.length_ms = Math.round(a.duration * 1000);
+          syncMusic();
+        }, { once: true });
+        a.src = opt.value;
+      });
+    }
+    async function makeMusicNow() {
+      const btn = form.querySelector('#mr-music-gen');
+      const style = (form.querySelector('#mr-music-style')?.value || '').trim();
+      const text = reelText();
+      if (!text.trim() && !style) { toast('Write the Reel first, or describe the music', 'warning'); return; }
+      btn.disabled = true; btn.textContent = 'Making music…';
+      const fit = form.querySelector('#mr-music-fit');
+      if (fit) fit.textContent = 'Making music to fit this Reel. This takes about 20 to 40 seconds.';
+      try {
+        const d = await api('/api/motion/music', { method: 'POST', body: JSON.stringify({ text, style, kind, seconds: Math.ceil((reelSeconds() || 25) + 2) }) });
+        const t = d.track;
+        lastOptions.music = [t, ...(lastOptions.music || []).filter((m) => m.url !== t.url)];
+        const sel = form.querySelector('#mr-music');
+        sel.querySelector(`option[value="${CSS.escape(t.url)}"]`)?.remove();
+        const firstTrack = [...sel.options].find((o) => o.value && o.value !== 'ai');
+        const holder = document.createElement('select');
+        holder.innerHTML = trackOption(t);
+        sel.insertBefore(holder.firstElementChild, firstTrack || null);
+        sel.value = t.url;
+        syncMusic();
+        const prev = form.querySelector('#mr-music-preview');
+        if (prev) prev.play().catch(() => {});
+        toast('Music saved to your Library', 'success');
+      } catch (err) {
+        if (fit) fit.textContent = err.message;
+        toast(err.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Make it now';
       }
     }
 
@@ -325,11 +443,23 @@
         <label class="mr-label" for="mr-font">Font</label>
         <select class="mr-select" id="mr-font">${(o.fonts || ['inter']).map((f) => `<option value="${esc(f)}">${esc(FONT_LABELS[f] || f)}</option>`).join('')}</select>
         <label class="mr-label" for="mr-music">Music</label>
-        <select class="mr-select" id="mr-music"><option value="">No music</option>${(o.music || []).map((m) => `<option value="${esc(m.url)}">${esc(m.name)}</option>`).join('')}</select>
-        ${(o.music || []).length ? '' : '<div class="mr-hint" style="margin-top:4px">Add your own tracks in Library (kind: music) to use them here. You can also add trending audio in Instagram when you post.</div>'}
+        ${musicHtml(o)}
         <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-go" ${ready ? '' : 'disabled'}>Make the Reel</button><span class="mr-hint" id="mr-cap">${esc(capUsed)} of ${esc(capMax)} used today</span></div>`;
       if (kind === 'text' && opts.text && !opts.lines && !form.dataset.beatsTried) { form.dataset.beatsTried = '1'; suggestBeats(true); }
       form.querySelector('#mr-beats')?.addEventListener('click', () => suggestBeats(false));
+      const musicSel = form.querySelector('#mr-music');
+      if ([...musicSel.options].some((x) => x.value === music.value)) musicSel.value = music.value;
+      musicSel.addEventListener('change', syncMusic);
+      form.querySelector('#mr-music-style')?.addEventListener('input', (e) => { music.style = e.target.value; });
+      form.querySelector('#mr-music-gen')?.addEventListener('click', makeMusicNow);
+      // The fit line follows the script, the closing line and the slide timing (wired once: the form outlives its markup).
+      if (!form.dataset.musicWired) {
+        form.dataset.musicWired = '1';
+        form.addEventListener('input', (e) => { if (e.target.id !== 'mr-music-style') syncMusic(); });
+        form.addEventListener('change', (e) => { if (e.target.id === 'mr-secs') syncMusic(); });
+      }
+      syncMusic();
+      probeTrackLengths();
       if (kind === 'faceless') {
         renderScenes();
         form.querySelector('#mr-script').addEventListener('click', () => writeScript(false));
@@ -398,6 +528,7 @@
         const d = await api('/api/motion/beats', { method: 'POST', body: JSON.stringify({ text: source }) });
         box.value = d.beats.join('\n');
         if (d.cta && !form.querySelector('#mr-cta').value) form.querySelector('#mr-cta').value = d.cta;
+        syncMusic();
       } catch (e) {
         if (!auto) toast(e.message, 'error');
         else if (!box.value) box.value = String(opts.text || '').split(/\n+/).slice(0, 6).join('\n');
@@ -424,9 +555,15 @@
         handle: form.querySelector('#mr-handle').value.trim(),
         palette: { bg: form.querySelector('#mr-bg').value, accent: form.querySelector('#mr-accent').value },
         font: form.querySelector('#mr-font').value,
-        music_url: form.querySelector('#mr-music').value,
         name: opts.name || '',
       };
+      const musicPick = form.querySelector('#mr-music').value;
+      if (musicPick === 'ai') {
+        body.music = 'ai';
+        body.music_style = (form.querySelector('#mr-music-style')?.value || '').trim();
+      } else {
+        body.music_url = musicPick;
+      }
       if (kind === 'carousel') {
         body.slides = slides;
         body.seconds_per_slide = Number(form.querySelector('#mr-secs').value);

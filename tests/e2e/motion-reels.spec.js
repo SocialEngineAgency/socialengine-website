@@ -231,6 +231,61 @@ test('Library footage: no stock search, no pickers, scenes sent without picks', 
   expect(renders.find((x) => x.faceless).scenes[0].pick).toBeUndefined();
 });
 
+test('Music: AI music made to fit is the default, with an optional style; tracks show their length and whether they repeat; Make it now saves and selects a track', async ({ page }) => {
+  const renders = [];
+  const made = [];
+  const base = motionMock(renders);
+  await mockApi(page, srv.base, {
+    data: clientData({}),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/motion/options') {
+        json(200, { ...OPTIONS, ai_music: true, music: [{ id: 'm1', name: 'Warm acoustic', url: 'https://cdn.example/music/warm.mp3', length_ms: 6000 }, { id: 'm2', name: 'Long bed', url: 'https://cdn.example/music/long.mp3', length_ms: 95000 }] });
+        return 'handled';
+      }
+      if (entry.path === '/api/motion/music') {
+        made.push(JSON.parse(entry.body || '{}'));
+        json(200, { track: { id: 'm3', name: 'Reel music: calm acoustic', url: 'https://cdn.example/music/made.mp3', length_ms: 19000, label: 'calm acoustic' } });
+        return 'handled';
+      }
+      return base(entry, route, json);
+    },
+  });
+  await login(page, srv.base);
+  await page.evaluate(() => window.seOpenMotionReel({ kind: 'text', lines: 'Linen hates hot water.\nIt *shrinks* in one wash.\nCold wash, low spin.\nHang it to dry.', name: 'Linen care' }));
+  const sel = page.locator('#mr-music');
+  await expect(sel).toHaveValue('ai');
+  await expect(sel.locator('option[value="https://cdn.example/music/warm.mp3"]')).toHaveText('Warm acoustic · 0:06');
+  await expect(page.locator('#mr-music-ai')).toBeVisible();
+  await expect(page.locator('#mr-music-fit')).toContainText('the music is made to that length');
+
+  await sel.selectOption('https://cdn.example/music/warm.mp3');
+  await expect(page.locator('#mr-music-ai')).toBeHidden();
+  await expect(page.locator('#mr-music-fit')).toContainText('this track is 0:06, so it repeats to fill the Reel');
+  await expect(page.locator('#mr-music-preview')).toHaveAttribute('src', 'https://cdn.example/music/warm.mp3');
+  await sel.selectOption('https://cdn.example/music/long.mp3');
+  await expect(page.locator('#mr-music-fit')).toContainText('this track is 1:35, so it fades out when the Reel ends');
+
+  await sel.selectOption('ai');
+  await page.locator('#mr-music-style').fill('soft piano');
+  await page.click('#mr-music-gen');
+  await expect(sel).toHaveValue('https://cdn.example/music/made.mp3');
+  await expect(sel.locator('option[value="https://cdn.example/music/made.mp3"]')).toHaveText('Reel music: calm acoustic · 0:19');
+  expect(made[0]).toMatchObject({ style: 'soft piano', kind: 'text' });
+  expect(made[0].text).toContain('Linen hates hot water.');
+  expect(made[0].seconds).toBeGreaterThan(8);
+
+  await page.click('#mr-go');
+  await expect(page.locator('#mr-video')).toBeVisible({ timeout: 15000 });
+  expect(renders[0]).toMatchObject({ kind: 'text', music_url: 'https://cdn.example/music/made.mp3' });
+  expect(renders[0].music).toBeUndefined();
+
+  await sel.selectOption('ai');
+  await page.click('#mr-go');
+  await expect.poll(() => renders.length).toBe(2);
+  expect(renders[1]).toMatchObject({ music: 'ai', music_style: 'soft piano' });
+  expect(renders[1].music_url).toBeUndefined();
+});
+
 test('Carousel → Reel sends slides in order with seconds per slide; a failed render shows the reason', async ({ page }) => {
   const renders = [];
   const base = motionMock(renders);
