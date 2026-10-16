@@ -364,3 +364,89 @@ test('new look Review: filter bar, cards with Approve/Reject, the post opens inl
   await expect(page.locator('#studio-modal')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('new look Inbox, Analytics, Coach, Settings and Brand: redesign layouts with their controls wired', async ({ page }) => {
+  const errors = watchErrors(page);
+  const ago = (d) => new Date(Date.now() - d * 86400000).toISOString();
+  let saved = null;
+  const rows = [
+    { title: 'Walk day reel', intent: 'grow', views: 41200, eng_rate: 9.1, permalink: 'https://instagram.com/p/1', taxonomy_status: 'proven' },
+    { title: 'Shop restock', intent: 'sell', views: 4000, eng_rate: 1.6, permalink: '', taxonomy_status: 'unknown' },
+  ];
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/inbox' && entry.method === 'GET') {
+        json(200, { connected: true, total: 1, unreplied: 1, counts: { all: 1, needs_reply: 1, done: 0, dm: 0, comment: 1, mention: 0 }, items: [
+          { id: 'c1', type: 'comment', platform: 'instagram', username: 'maya.k', text: 'Is the walk ok for kids?', timestamp: ago(0.01), last_inbound_at: ago(0.01), needs_reply: true, unread: true, status: 'open', thread: [{ id: 'm1', text: 'Is the walk ok for kids?', timestamp: ago(0.01), from_us: false, username: 'maya.k' }] },
+        ], has_more: false, source: 'meta', sync: { quick_at: ago(0), deep_at: ago(0), deep_running: false }, auto_reply_enabled: false, auto_reply_mode: 'draft' });
+        return 'handled';
+      }
+      if (entry.path === '/api/inbox/settings') { saved = JSON.parse(entry.body || '{}'); json(200, { ok: true }); return 'handled'; }
+      if (entry.path === '/api/analytics/scorecard') {
+        json(200, { clientType: 'charity', verdict: 'Reels are carrying the account.', kpis: { views: 184000, followers: 12480, eng_rate: 6.8, untagged: 2 },
+          moves: { scale: [rows[0]], test: [], kill: [rows[1]] }, ranked: rows, rows, sources: [{ id: 'instagram', status: 'connected' }],
+          charts: { labels: ['2026-10-01', '2026-10-02'], interactions: { instagram: [10, 20], facebook: [5, 0] }, reach: {} } });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+
+  // Inbox: AI replies Off / Draft / Auto saves the same settings call.
+  await page.click('.dash-nav-item[data-nav="inbox"]');
+  const ai = page.locator('.nl-ibx-ai');
+  await expect(ai.locator('button[data-v="off"]')).toHaveAttribute('aria-pressed', 'true');
+  await ai.locator('button[data-v="auto"]').click();
+  await expect.poll(() => saved && `${saved.auto_reply_enabled}/${saved.auto_reply_mode}`).toBe('true/auto');
+  await expect(ai.locator('button[data-v="auto"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#inbox-settings-btn')).toBeHidden();
+  await page.locator('.ibx-row').first().click();
+  await expect(page.locator('#inbox-thread-pane .inbox-reply-text')).toBeVisible();
+
+  // Analytics: header, lens tabs, KPI cards, bars, moves and the ranked table.
+  await page.click('.dash-nav-item[data-nav="analytics"]');
+  await expect(page.locator('.nl-an-head h1')).toHaveText('Analytics');
+  await expect(page.locator('#nl-an-sub')).toHaveText('Last 30 days, Instagram.');
+  await expect(page.locator('.nl-an-kpi')).toHaveCount(4);
+  await expect(page.locator('.nl-an-bar')).toHaveCount(2);
+  await expect(page.locator('#analytics-row-0 .nl-an-call')).toHaveText('Scale');
+  await expect(page.locator('#analytics-row-1 .nl-an-call')).toHaveText('Kill');
+  await page.locator('#analytics-period-pills [data-period="7d"]').click();
+  await expect(page.locator('#analytics-period-pills [data-period="7d"]')).toHaveClass(/active/);
+  await expect(page.locator('#nl-an-sub')).toHaveText('Last 7 days, Instagram.');
+  await page.click('#analytics-charts-toggle');
+  await expect(page.locator('#analytics-chart-format')).toBeVisible();
+
+  // Coach: one card; Past conversations opens the projects list.
+  await page.click('.dash-nav-item[data-nav="ai-coach"]');
+  await expect(page.locator('.nl-cp-head h1')).toHaveText('Coach');
+  await expect(page.locator('#chat-workspace-rail')).toBeHidden();
+  await page.click('.nl-cp-past');
+  await expect(page.locator('#chat-workspace-rail')).toBeVisible();
+  await page.locator('.nl-cp-head h1').click();
+  await expect(page.locator('#chat-workspace-rail')).toBeHidden();
+  await expect(page.locator('.chat-container > #chat-suggestions')).toBeVisible();
+  await expect(page.locator('.chat-input-bar #chat-attach-toolbar')).toBeVisible();
+
+  // Settings opens on Account; Brand is its own page from the sidebar.
+  await page.click('.dash-nav-item[data-nav="settings"]');
+  await expect(page.locator('.nl-set-h1')).toHaveText('Settings');
+  await expect(page.locator('.settings-tab[data-settings-tab="account"]')).toHaveClass(/active/);
+  await expect(page.locator('.settings-tab[data-settings-tab="brand"]')).toBeHidden();
+  await page.click('.settings-tab[data-settings-tab="connections"]');
+  const ig = page.locator('.nl-conn-card').filter({ hasText: 'Instagram' }).first();
+  await expect(ig.locator('.nl-conn-card__go')).toBeVisible();
+  await ig.locator('.nl-conn-card__go').click();
+  await expect(ig).toHaveClass(/is-open/);
+  await page.click('.dash-nav-item[data-nl-brand]');
+  await expect(page.locator('.nl-set-h1')).toHaveText(/Brand|Voice/);
+  await expect(page.locator('.dash-nav-item[data-nl-brand]')).toHaveClass(/active/);
+  await expect(page.locator('.settings-tabs')).toBeHidden();
+  await page.click('.dash-nav-item[data-nav="settings"]');
+  await expect(page.locator('.nl-set-h1')).toHaveText('Settings');
+  await expect(page.locator('.settings-tab[data-settings-tab="account"]')).toHaveClass(/active/);
+  expect(errors).toEqual([]);
+});

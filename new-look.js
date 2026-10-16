@@ -415,6 +415,11 @@
     brand.innerHTML = ICON.brand + '<span class="nl-lbl">Brand</span>';
     brand.addEventListener('click', function () { location.hash = '#settings/brand'; });
     nav.appendChild(brand);
+    // Settings opens on Account in the new look (Brand has its own item), unless Brand sent us.
+    var settingsBtn = nav.querySelector('.dash-nav-item[data-nav="settings"]');
+    if (settingsBtn) settingsBtn.addEventListener('click', function (e) {
+      if (e.isTrusted && /^#settings\/brand/.test(location.hash)) history.replaceState(null, '', '#settings/account');
+    }, true);
     // Groups, in the redesign's order. Anything not listed keeps its place at the end.
     var byKey = {};
     Array.prototype.slice.call(nav.querySelectorAll('.dash-nav-item')).forEach(function (b) { byKey[navKey(b)] = b; wrapLabel(b); });

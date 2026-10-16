@@ -131,10 +131,113 @@
     }).join('') || '<p style="color:rgba(255,255,255,.35);font-size:12px">No format split yet.</p>';
   }
 
+  // ── New look (html.nl): the Analytics redesign layout. Same data, ids and handlers. ──
+  function isNL() { return !!(global.document && global.document.documentElement.classList.contains('nl')); }
+  const NL_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7 M20 4v7h-7"/></svg>';
+  function nlPeriodWords() { return _period === '7d' ? 'Last 7 days' : _period === '90d' ? 'Last 90 days' : 'Last 30 days'; }
+  function nlSubline(card) {
+    const live = ((card && card.sources) || []).filter((x) => x.status === 'connected' || x.status === 'thin').map((x) => sourceLabel(x.id));
+    const where = live.length ? live.join(', ') : 'no sources connected yet';
+    return `${nlPeriodWords()}, ${where}.`;
+  }
+  function nlBars(labels, ig, fb) {
+    const n = Math.max((ig || []).length, (fb || []).length, (labels || []).length);
+    if (!n) return '';
+    const vals = [];
+    for (let i = 0; i < n; i += 1) vals.push([Number((ig || [])[i]) || 0, Number((fb || [])[i]) || 0]);
+    const max = Math.max(1, ...vals.map(([a, b]) => a + b));
+    if (max <= 1 && vals.every(([a, b]) => !a && !b)) return '';
+    const step = Math.max(1, Math.ceil(n / 14));
+    const lab = (i) => {
+      const raw = String((labels || [])[i] || '');
+      const m = raw.match(/(\d{1,2})$/) || raw.match(/-(\d{2})(?:T|$)/);
+      return m ? m[1].padStart(2, '0') : raw.slice(-2);
+    };
+    return `<div class="nl-an-bars" role="img" aria-label="Interactions per day by platform">${vals.map(([a, b], i) => `
+      <div class="nl-an-bar" title="${esc((labels || [])[i] || '')}: Instagram ${fmtNum(a)}, Facebook ${fmtNum(b)}">
+        <div class="nl-an-bar__stack" style="height:${(((a + b) / max) * 100).toFixed(1)}%">${a ? `<i class="nl-an-seg--ig" style="flex:${a}"></i>` : ''}${b ? `<i class="nl-an-seg--fb" style="flex:${b}"></i>` : ''}</div>
+        <span>${i % step === 0 ? esc(lab(i)) : ''}</span>
+      </div>`).join('')}</div>
+      <div class="nl-an-legend"><span><i class="nl-an-seg--ig"></i>Instagram</span><span><i class="nl-an-seg--fb"></i>Facebook</span></div>`;
+  }
+  function nlCall(row, moves) {
+    const same = (x) => x && ((x.permalink && x.permalink === row.permalink) || (x.title && x.title === row.title));
+    if ((moves.scale || []).some(same)) return ['ok', 'Scale'];
+    if ((moves.kill || []).some(same)) return ['bad', 'Kill'];
+    if ((moves.test || []).some(same)) return ['info', 'Test'];
+    return row.taxonomy_status === 'unknown' ? ['muted', 'Unknown'] : ['muted', 'Proven'];
+  }
+  function nlMainHtml(card) {
+    const k = card.kpis || {};
+    const moves = card.moves || { scale: [], kill: [], test: [] };
+    const rows = (card.ranked && card.ranked.length ? card.ranked : card.rows) || [];
+    const charts = card.charts || {};
+    const labels = charts.labels;
+    const reachIg = charts.reach?.instagram || charts.instagram;
+    const reachFb = charts.reach?.facebook || charts.facebook;
+    const intIg = charts.interactions?.instagram;
+    const intFb = charts.interactions?.facebook;
+    const bars = nlBars(labels, intIg, intFb) || nlBars(labels, reachIg, reachFb);
+    const barsTitle = nlBars(labels, intIg, intFb) ? 'Interactions per day, by platform' : 'Reach per day, by platform';
+    const kpi = (label, value) => `<div class="nl-an-kpi"><span>${label}</span><b class="analytics-kpi-card__value">${value}</b></div>`;
+    const move = (id, label, tone, item, hint) => item
+      ? `<button type="button" id="${id}" class="nl-an-move nl-an-move--${tone}"><span class="nl-an-move__l">${label}</span><b>${esc(item.title || 'Untitled')}</b><span class="nl-an-move__m">${esc(item.intent || '')}${item.views != null ? ` · ${fmtNum(item.views)} views` : ''}${item.eng_rate != null ? ` · ${item.eng_rate}% eng` : ''}</span><span class="nl-an-move__go">${hint}</span></button>`
+      : `<button type="button" id="${id}" class="nl-an-move nl-an-move--${tone}" disabled><span class="nl-an-move__l">${label}</span><span class="nl-an-move__m">None this period</span></button>`;
+    const table = rows.map((r, i) => {
+      const [tone, call] = nlCall(r, moves);
+      return `<div class="analytics-row nl-an-row" id="analytics-row-${i}" data-permalink="${esc(r.permalink || '')}"${r.permalink ? ' tabindex="0"' : ''}>
+        <span class="nl-an-row__t">${esc(r.title)}<em>${esc(r.intent || '')}</em></span><span class="nl-an-num">${fmtNum(r.views)}</span><span class="nl-an-num">${r.eng_rate != null ? r.eng_rate + '%' : '—'}</span><span><i class="nl-an-call nl-an-call--${tone}">${call}</i></span>
+      </div>`;
+    }).join('') || '<p class="nl-an-none">No proven posts in this book yet.</p>';
+    const chartBox = (id, title, inner) => `<div id="${id}" class="nl-an-card nl-an-mini"><div class="nl-an-card__t">${title}</div>${inner}</div>`;
+    const chartsPanel = _chartsOpen ? `<div id="analytics-charts-panel" class="nl-an-charts">
+        ${chartBox('analytics-chart-reach', 'Reach', lineChartHtml(labels, reachFb, reachIg, 'No reach series for this period.'))}
+        ${chartBox('analytics-chart-interactions', 'Interactions', lineChartHtml(labels, intFb, intIg, 'No interaction series for this period.'))}
+        ${chartBox('analytics-chart-format', 'By format', formatSplitHtml(rows))}
+        ${chartBox('analytics-chart-intent', 'By intent', intentSplitHtml(rows))}
+      </div>` : '<div id="analytics-charts-panel" hidden></div>';
+    return `<div class="nl-an-main">
+      <section class="nl-an-verdict"><b>${esc(card.verdict || 'Proven posts in this book.')}</b> <span>Three moves, ranked only on proven data.</span></section>
+      <div class="nl-an-kpis">${kpi('Views', fmtNum(k.views))}${kpi('Followers', fmtNum(k.followers))}${kpi('Engagement rate', k.eng_rate != null ? k.eng_rate + '%' : '—')}${kpi('Needs review', fmtNum(k.untagged))}</div>
+      <div class="nl-an-two">
+        <div class="nl-an-left">
+          <section class="nl-an-card"><div class="nl-an-card__t">${barsTitle}</div>${bars || '<p class="nl-an-none">No daily series for this period yet.</p>'}</section>
+          <div class="nl-an-moves">
+            ${move('analytics-scale', 'Scale', 'ok', moves.scale[0], 'Remix it')}
+            ${move('analytics-test', 'Test', 'info', moves.test[0], 'Remix it')}
+            ${move('analytics-kill', 'Kill', 'bad', moves.kill[0], 'Open the post')}
+          </div>
+          ${chartsPanel}
+        </div>
+        <section class="nl-an-card nl-an-table">
+          <div class="nl-an-table__h"><span>Posts, best to worst</span></div>
+          <div class="nl-an-row nl-an-row--head"><span>Post</span><span class="nl-an-num">Views</span><span class="nl-an-num">Eng.</span><span>Call</span></div>
+          ${table}
+        </section>
+      </div>
+    </div>`;
+  }
+
   function renderShell() {
     const content = document.getElementById('dash-content');
     if (!content) return;
     const biz = (_clientData && _clientData.client && (_clientData.client.business_name || _clientData.client.contact_name)) || 'Your brand';
+    if (isNL()) {
+      const pill = (v) => `<button type="button" class="grow-pill${_period === v ? ' active' : ''}" data-period="${v}">${v}</button>`;
+      content.innerHTML = `
+      <div id="analytics-cockpit" class="nl-an">
+        <div class="nl-an-head">
+          <div><h1 class="nl-h1">Analytics</h1><p class="nl-an-sub" id="nl-an-sub">${nlPeriodWords()}.</p></div>
+          <div class="nl-an-tools">
+            <span class="grow-updated" id="analytics-updated"></span>
+            <div class="nl-seg" id="analytics-period-pills" role="group" aria-label="Period">${pill('7d')}${pill('30d')}${pill('90d')}</div>
+            <button type="button" class="nl-btn" id="analytics-charts-toggle" aria-pressed="false">More charts</button>
+            <button type="button" class="nl-btn nl-btn--icon" id="analytics-refresh" aria-label="Refresh" title="Refresh">${NL_REFRESH}</button>
+          </div>
+        </div>
+        <div id="analytics-body" class="nl-an-body"><div class="dash-loading" style="flex:1"><div class="dash-loading__spinner"></div></div></div>
+      </div>`;
+    } else
     content.innerHTML = `
       <div id="analytics-cockpit">
         <div class="grow-header">
@@ -223,6 +326,8 @@
           <div><div style="font-size:11px;color:rgba(255,255,255,.4)">Followers</div><div class="analytics-kpi-card__value" style="font-size:28px;font-weight:700">—</div></div>
         </div>
       </div>`;
+    } else if (isNL()) {
+      main = nlMainHtml(card);
     } else {
       const k = card.kpis || {};
       const moves = card.moves || { scale: [], kill: [], test: [] };
@@ -276,6 +381,19 @@
       </div>`;
     }
 
+    if (isNL()) {
+      const tabs = books.map((b) => {
+        const on = _book === b;
+        return `<button type="button" data-book="${esc(b)}" class="${on ? 'is-on' : ''}" aria-pressed="${on ? 'true' : 'false'}">${esc(bookLabel(b, clientType))}</button>`;
+      }).join('');
+      const live = sources.map((s) => `<span class="nl-an-src nl-an-src--${esc(s.status || 'off')}" title="${esc(s.status || '')}"><i></i>${esc(sourceLabel(s.id))}${s.status === 'thin' ? ' · limited' : ''}</span>`).join('');
+      const plain = _book === 'insights' || !card || card.empty;
+      body.innerHTML = `
+        <div class="nl-an-lens"><div class="nl-seg" role="group" aria-label="Lens">${tabs}</div><div class="nl-an-live">${live}</div></div>
+        ${plain ? `<div class="nl-an-card nl-an-plain">${main}</div>` : main}`;
+      const sub = document.getElementById('nl-an-sub');
+      if (sub) sub.textContent = nlSubline(card);
+    } else
     body.innerHTML = `
       <aside style="width:160px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.06);padding:20px 14px">
         <div style="font-size:10px;letter-spacing:.12em;color:rgba(255,255,255,.35);margin-bottom:12px">LENS</div>
@@ -286,7 +404,9 @@
       <main style="flex:1;min-width:0;display:flex">${main}</main>`;
 
     const toggle = document.getElementById('analytics-charts-toggle');
-    if (toggle) {
+    if (toggle && isNL()) {
+      toggle.setAttribute('aria-pressed', _chartsOpen ? 'true' : 'false');
+    } else if (toggle) {
       toggle.style.background = _chartsOpen ? '#7C3AED' : 'transparent';
       toggle.style.color = _chartsOpen ? '#fff' : '';
     }
@@ -331,6 +451,7 @@
     if (_book === 'insights') bindInsights(body);
     body.querySelectorAll('.analytics-row').forEach((el) => {
       el.addEventListener('click', () => openPermalink(el.getAttribute('data-permalink')));
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') openPermalink(el.getAttribute('data-permalink')); });
     });
     if (typeof global.lucide !== 'undefined') global.lucide.createIcons();
   }

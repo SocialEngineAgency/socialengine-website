@@ -33,7 +33,7 @@
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
   <script src="./animation-studio.js?v=20261016-nl2" defer></script>
-  <script src="./analytics-cockpit.js?v=20261010-verdicts" defer></script>
+  <script src="./analytics-cockpit.js?v=20261016-nl" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
   <script src="./stories-composer.js?v=20261009" defer></script>
@@ -3078,8 +3078,8 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261016j">
-  <script src="./new-look.js?v=20261016e" defer></script>
+  <link rel="stylesheet" href="./new-look.css?v=20261016k">
+  <script src="./new-look.js?v=20261016f" defer></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
@@ -11826,6 +11826,62 @@
         mountBrandWorksheet(panel);
       }
       seWriteHash('settings/' + tab);
+      if (document.documentElement.classList.contains('nl')) nlSettingsMode(tab);
+    }
+
+    // New look: Brand is its own page (sidebar item) and Settings keeps Account, Connections and
+    // Billing. Same panels and handlers; the header, tabs and connection cards are restyled.
+    function nlSettingsMode(tab) {
+      const root = document.querySelector('#dash-content .nl-set');
+      if (!root) return;
+      const brand = tab === 'brand';
+      root.classList.toggle('nl-set--brand', brand);
+      const h = root.querySelector('.nl-set-h1');
+      const sub = root.querySelector('.nl-set-sub');
+      if (h) h.textContent = brand ? (root.dataset.brandLabel || 'Brand') : 'Settings';
+      if (sub) sub.textContent = brand
+        ? `What the engine knows about ${root.dataset.biz || 'you'}. Edit anything; the AI reads it on every post.`
+        : 'Your account, connections and plan.';
+      document.querySelector('.dash-nav-item[data-nl-brand]')?.classList.toggle('active', brand);
+      document.querySelector('.dash-nav-item[data-nav="settings"]')?.classList.toggle('active', !brand);
+    }
+    function nlSettingsChrome(content, data, brandLabel) {
+      const wrap = content.firstElementChild;
+      if (!wrap) return;
+      wrap.classList.add('nl-set');
+      wrap.removeAttribute('style');
+      wrap.dataset.brandLabel = brandLabel;
+      wrap.dataset.biz = (data.client && (data.client.business_name || data.client.contact_name)) || '';
+      const head = wrap.firstElementChild;
+      if (head && head.querySelector('h2')) {
+        head.className = 'nl-set-head';
+        head.removeAttribute('style');
+        head.innerHTML = '<h1 class="nl-h1 nl-set-h1">Settings</h1><p class="nl-set-sub"></p>';
+      }
+      const tabs = wrap.querySelector('.settings-tabs');
+      if (tabs) tabs.classList.add('nl-seg');
+      // Connections: each card folds to one row (name, status, Manage or Connect) like the redesign.
+      const conn = wrap.querySelector('[data-settings-panel="connections"]');
+      if (conn) {
+        [...conn.children].forEach((card) => {
+          const hd = card.firstElementChild;
+          if (!hd || !hd.querySelector || !hd.querySelector('h3') || card.children.length < 2) return;
+          card.classList.add('nl-conn-card');
+          const status = String(hd.textContent || '').toLowerCase();
+          const on = /connected|publishing|analytics/.test(status) && !/not connected/.test(status);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'nl-btn nl-btn--xs nl-conn-card__go';
+          btn.textContent = on ? 'Manage' : 'Connect';
+          btn.setAttribute('aria-expanded', 'false');
+          btn.addEventListener('click', () => {
+            const open = card.classList.toggle('is-open');
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            btn.textContent = open ? 'Done' : (on ? 'Manage' : 'Connect');
+          });
+          hd.appendChild(btn);
+        });
+      }
     }
 
     function renderSettingsPage(data) {
@@ -12321,7 +12377,9 @@
         document.getElementById('shopify-oauth-domain')?.focus();
       });
       const _h = seReadHash();
-      openSettingsTab(_h && _h.page === 'settings' && SETTINGS_TABS.includes(_h.sub) ? _h.sub : 'brand');
+      const _nlSet = document.documentElement.classList.contains('nl');
+      if (_nlSet) nlSettingsChrome(content, data, brandTabLabel);
+      openSettingsTab(_h && _h.page === 'settings' && SETTINGS_TABS.includes(_h.sub) ? _h.sub : (_nlSet ? 'account' : 'brand'));
       if (isTTConnected) seLoadTikTokResults();
 
       setTimeout(() => {
@@ -12458,6 +12516,67 @@
     }
 
     // ━━━ AI Coach ━━━
+    // New look: the Coach redesign. Page header with Past conversations (the projects list, now a
+    // dropdown) and Clear thread; one card with starter chips on top, the thread, and the composer.
+    function nlCoachChrome(content) {
+      const page = content.querySelector('.chat-page');
+      if (!page) return;
+      page.classList.add('nl-cp');
+      const head = document.createElement('div');
+      head.className = 'nl-cp-head';
+      head.innerHTML = '<div><h1 class="nl-h1">Coach</h1><p class="nl-cp-sub">Plans, answers, and hand-offs. It reads your posts, your brand and your analytics.</p></div><div class="nl-cp-tools"></div>';
+      page.insertBefore(head, page.firstChild);
+      const tools = head.querySelector('.nl-cp-tools');
+      const rail = page.querySelector('#chat-workspace-rail');
+      const past = document.createElement('button');
+      past.type = 'button';
+      past.setAttribute('aria-expanded', 'false');
+      past.setAttribute('aria-controls', 'chat-workspace-rail');
+      past.innerHTML = 'Past conversations <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+      const setOpen = (on) => {
+        page.classList.toggle('nl-cp--past', on);
+        past.setAttribute('aria-expanded', on ? 'true' : 'false');
+      };
+      past.className = 'nl-btn nl-cp-past';
+      past.addEventListener('click', (e) => { e.stopPropagation(); setOpen(!page.classList.contains('nl-cp--past')); });
+      if (!window.__nlCoachOutside) {
+        // One document listener for every Coach render: a click outside the open list closes it.
+        window.__nlCoachOutside = true;
+        document.addEventListener('click', (e) => {
+          const open = document.querySelector('.chat-page.nl-cp--past');
+          if (!open) return;
+          const list = open.querySelector('#chat-workspace-rail');
+          if (list && list.contains(e.target) && !e.target.closest('[data-thread-id], [data-new-thread]')) return;
+          if (e.target.closest('.nl-cp-past')) return;
+          open.classList.remove('nl-cp--past');
+          open.querySelector('.nl-cp-past')?.setAttribute('aria-expanded', 'false');
+        });
+      }
+      tools.appendChild(past);
+      if (rail) head.appendChild(rail);
+      const clear = page.querySelector('#chat-clear-btn');
+      if (clear) {
+        clear.className = 'nl-btn';
+        clear.removeAttribute('style');
+        clear.removeAttribute('onmouseover');
+        clear.removeAttribute('onmouseout');
+        tools.appendChild(clear);
+      }
+      const free = page.querySelector('#chat-free-pill');
+      if (free) head.firstChild.appendChild(free);
+      const container = page.querySelector('.chat-container');
+      const chips = page.querySelector('#chat-suggestions');
+      if (container && chips) container.insertBefore(chips, container.firstChild);
+      const toolbar = page.querySelector('#chat-attach-toolbar');
+      const bar = page.querySelector('.chat-input-bar');
+      if (toolbar && bar) {
+        toolbar.querySelectorAll('button').forEach((b) => { b.removeAttribute('style'); b.className = 'nl-cp-attach'; });
+        bar.insertBefore(toolbar, bar.firstChild);
+      }
+      const input = page.querySelector('#chat-input');
+      if (input) input.placeholder = 'Ask anything about your posts, your audience, or your competitors';
+    }
+
     function renderAICoach() {
       const content = document.getElementById('dash-content');
       const c = clientData?.client || {};
@@ -12619,6 +12738,7 @@
       `;
 
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
+      if (document.documentElement.classList.contains('nl')) nlCoachChrome(content);
 
       const messagesEl = document.getElementById('chat-messages');
       const inputEl = document.getElementById('chat-input');
@@ -13786,6 +13906,43 @@
         </div>
       `;
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 30);
+      // New look: "AI replies Off / Draft / Auto" in the header, saved with the same settings call.
+      if (document.documentElement.classList.contains('nl')) {
+        const actions = content.querySelector('.ibx-head-actions');
+        const seg = document.createElement('div');
+        seg.className = 'nl-ibx-ai';
+        seg.innerHTML = '<span>AI replies</span><div class="nl-seg" role="group" aria-label="AI replies"><button type="button" data-v="off">Off</button><button type="button" data-v="draft">Draft</button><button type="button" data-v="auto">Auto</button></div>';
+        if (actions) actions.insertBefore(seg, actions.firstChild);
+        seg.addEventListener('click', async (e) => {
+          const b = e.target.closest('button[data-v]');
+          if (!b) return;
+          const v = b.dataset.v;
+          const t = document.getElementById('inbox-auto-toggle');
+          const before = { on: !!(t && t.checked), mode: document.querySelector('.inbox-mode-btn.active')?.dataset?.mode || 'draft' };
+          const mode = v === 'off' ? before.mode : v;
+          if (t) { t.checked = v !== 'off'; t.dispatchEvent(new Event('change')); }
+          paintMode(mode);
+          nlPaintAiSeg();
+          try {
+            const r = await apiFetch(`${API}/api/inbox/settings`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ auto_reply_enabled: v !== 'off', auto_reply_mode: mode }) });
+            if (!r.ok) throw new Error('save failed');
+            showToast(v === 'off' ? 'AI replies are off' : v === 'auto' ? 'AI now replies to new comments. DMs are never auto-sent.' : 'AI drafts replies for you to check and send');
+          } catch (_) {
+            if (t) { t.checked = before.on; t.dispatchEvent(new Event('change')); }
+            paintMode(before.mode);
+            nlPaintAiSeg();
+            showToast('Could not save AI replies, try again');
+          }
+        });
+      }
+      function nlPaintAiSeg() {
+        const seg = document.querySelector('.nl-ibx-ai');
+        if (!seg) return;
+        const on = !!document.getElementById('inbox-auto-toggle')?.checked;
+        const mode = document.querySelector('.inbox-mode-btn.active')?.dataset?.mode || 'draft';
+        const v = on ? mode : 'off';
+        seg.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'));
+      }
 
       document.getElementById('inbox-questions-btn')?.addEventListener('click', () => {
         if (typeof window.seOpenQuestionLog === 'function') window.seOpenQuestionLog({ getItems: () => window.__seInboxItems || [] });
@@ -14073,6 +14230,7 @@
           if (thumb) thumb.style.left = t.checked ? '23px' : '3px';
         }
         paintMode(data.auto_reply_mode === 'auto' ? 'auto' : 'draft');
+        nlPaintAiSeg();
       }
 
       function selectedItem() {
