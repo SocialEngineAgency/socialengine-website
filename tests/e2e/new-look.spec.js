@@ -397,7 +397,10 @@ test('new look Inbox, Analytics, Coach, Settings and Brand: redesign layouts wit
       if (entry.path === '/api/analytics/scorecard') {
         json(200, { clientType: 'charity', verdict: 'Reels are carrying the account.', kpis: { views: 184000, followers: 12480, eng_rate: 6.8, untagged: 2 },
           moves: { scale: [rows[0]], test: [], kill: [rows[1]] }, ranked: rows, rows, sources: [{ id: 'instagram', status: 'connected' }],
-          charts: { labels: ['2026-10-01', '2026-10-02'], interactions: { instagram: [10, 20], facebook: [5, 0] }, reach: {} } });
+          charts: { labels: ['Oct 1', 'Oct 2', 'Oct 3', 'Oct 4'], keys: ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
+            reach: { instagram: [400, 1200, 300, 500], facebook: [100, 300, 100, 100] }, interactions: { instagram: [10, 40, 8, 12], facebook: null },
+            posts: [{ count: 0, items: [] }, { count: 1, items: [{ title: 'Walk day reel', platform: 'instagram', format: 'Reel' }] }, { count: 0, items: [] }, { count: 1, items: [{ title: 'Thank you post', platform: 'facebook', format: 'Photo' }] }],
+            totals: { reach: { value: 3000, prev: 2500, delta_pct: 20 }, interactions: { value: 70, prev: 80, delta_pct: -12.5 } } } });
         return 'handled';
       }
       return undefined;
@@ -422,7 +425,30 @@ test('new look Inbox, Analytics, Coach, Settings and Brand: redesign layouts wit
   await expect(page.locator('.nl-an-head h1')).toHaveText('Analytics');
   await expect(page.locator('#nl-an-sub')).toHaveText('Last 30 days, Instagram.');
   await expect(page.locator('.nl-an-kpi')).toHaveCount(4);
-  await expect(page.locator('.nl-an-bar')).toHaveCount(2);
+  // Daily chart: real numbers and what they mean, not just bars.
+  const daily = page.locator('#nl-daily');
+  await expect(daily.locator('.nl-dc__title')).toHaveText('Daily reach, by platform');
+  await expect(daily.locator('.nl-dc__col')).toHaveCount(4);
+  await expect(daily.locator('.nl-dc__stats')).toContainText('3,000');
+  await expect(daily.locator('.nl-dc__stats')).toContainText('+20% vs previous 30 days');
+  await expect(daily.locator('.nl-dc__stats')).toContainText('Oct 2');
+  await expect(daily.locator('.nl-dc__y span').first()).toHaveText('0');
+  await expect(daily.locator('.nl-dc__legend')).toContainText('Instagram 2,400 80%');
+  await expect(daily.locator('.nl-dc__finds')).toContainText('Best day was Fri, Oct 2: 1,500 reach, 2.0× your daily average. That was the day "Walk day reel" went out.');
+  await expect(daily.locator('.nl-dc__finds')).toContainText('Instagram brought 80% of reach.');
+  await expect(daily.locator('.nl-dc__mk i')).toHaveCount(2);
+  await daily.locator('.nl-dc__col').nth(1).focus();
+  const tip = daily.locator('.nl-dc__tip');
+  await expect(tip).toBeVisible();
+  await expect(tip).toContainText('Friday, Oct 2');
+  await expect(tip).toContainText('1,200Instagram');
+  await expect(tip).toContainText('100% above your daily average');
+  await expect(tip).toContainText('Walk day reel · Reel · Instagram');
+  await daily.locator('summary', { hasText: 'Show the numbers' }).click();
+  await expect(daily.locator('tbody tr')).toHaveCount(4);
+  await daily.locator('[data-nl-metric="interactions"]').click();
+  await expect(daily.locator('.nl-dc__title')).toHaveText('Daily interactions on Instagram');
+  await expect(daily.locator('.nl-dc__stats')).toContainText('-12.5% vs previous 30 days');
   await expect(page.locator('#analytics-row-0 .nl-an-call')).toHaveText('Scale');
   await expect(page.locator('#analytics-row-1 .nl-an-call')).toHaveText('Kill');
   await page.locator('#analytics-period-pills [data-period="7d"]').click();
