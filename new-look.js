@@ -311,14 +311,181 @@
   function navItems() {
     return Array.prototype.slice.call(document.querySelectorAll('.dash-sidebar__nav .dash-nav-item')).filter(function (b) { return b.style.display !== 'none'; });
   }
-  function labelRail() {
-    navItems().forEach(function (b) {
-      var label = (b.textContent || '').replace(/\d+\+?$/, '').trim();
-      if (!label) return;
-      b.setAttribute('data-nl-label', label);
-      b.setAttribute('aria-label', label);
-      b.setAttribute('title', '');
+
+  // ── Sidebar: the redesign's labelled, grouped menu. The portal's own buttons are kept (their
+  // click handlers drive every page); they are relabelled, grouped and given badges. ──
+  var LABELS = { content: 'Review', 'ai-studio': 'All tools', 'ad-studio': 'Ads', 'ai-coach': 'Coach', 'competitor-intel': 'Intel' };
+  var GROUPS = [['dashboard', 'content', 'schedule', 'create'], ['inbox', 'analytics', 'ai-coach'], ['ad-studio', 'competitor-intel', 'fundraise', 'library', 'ai-studio'], ['nl-brand', 'settings']];
+  var WORK = { create: 1, schedule: 1, content: 1, 'creation-studio': 1, 'design-studio': 1, 'brand-design': 1, 'animation-studio': 1 };
+  var RAIL_KEY = 'se-nl-rail';
+  var ICON = {
+    tog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>',
+    cmd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></svg>',
+    brand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>',
+  };
+  function navKey(b) { return b.getAttribute('data-nav') || (b.hasAttribute('data-nl-brand') ? 'nl-brand' : ''); }
+  function wrapLabel(b) {
+    var key = navKey(b);
+    var lbl = b.querySelector('.nl-lbl');
+    if (!lbl) {
+      var text = '';
+      Array.prototype.slice.call(b.childNodes).forEach(function (n) {
+        if (n.nodeType === 3 && n.textContent.trim()) { text += n.textContent.trim(); n.remove(); }
+      });
+      lbl = document.createElement('span');
+      lbl.className = 'nl-lbl';
+      lbl.textContent = LABELS[key] || text;
+      var icon = b.querySelector('i, svg');
+      if (icon && icon.nextSibling) b.insertBefore(lbl, icon.nextSibling); else b.appendChild(lbl);
+    }
+    b.setAttribute('data-nl-label', lbl.textContent);
+    b.setAttribute('aria-label', lbl.textContent);
+  }
+  function clientData() { return window.__clientData || window.clientData || null; }
+  function pendingCount() {
+    if (window.__greetData && typeof window.__greetData.pendingCount === 'number') return window.__greetData.pendingCount;
+    var cd = clientData();
+    var rows = (cd && cd.content) || [];
+    return rows.filter(function (r) {
+      var st = String((r.fields || r).status || '').toLowerCase();
+      return st === 'pending' || st === 'draft' || st === 'ready for review';
+    }).length;
+  }
+  function paintCounts() {
+    var review = document.querySelector('.dash-nav-item[data-nav="content"] .nl-badge');
+    if (review) { var n = pendingCount(); review.textContent = String(n); review.hidden = !n; }
+    var plan = document.querySelector('.nl-plan');
+    var cd = clientData();
+    if (plan && cd && cd.client) {
+      var tier = String(cd.client.tier || '').replace(/^./, function (c) { return c.toUpperCase(); });
+      var credits = (document.getElementById('sidebar-credit-count') || {}).textContent || '';
+      plan.textContent = [tier ? tier + ' plan' : '', /\d/.test(credits) ? credits.trim() + ' credits' : ''].filter(Boolean).join(' · ');
+    }
+    var pill = document.querySelector('.nl-conn');
+    if (pill && cd && cd.client) {
+      var raw = cd.client.social_connected_platforms;
+      var list = Array.isArray(raw) ? raw : String(raw || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      pill.classList.toggle('is-off', !list.length);
+      pill.querySelector('span').textContent = list.length ? 'Connected' : 'Connect accounts';
+      pill.title = list.length ? 'Connected: ' + list.join(', ') : 'No social accounts connected yet';
+    }
+  }
+  function applyRail() {
+    var dash = document.getElementById('dashboard-view');
+    if (!dash) return;
+    var active = document.querySelector('.dash-sidebar__nav .dash-nav-item.active');
+    var pref = read(RAIL_KEY);
+    var narrow = window.matchMedia('(max-width: 1100px)').matches;
+    var min = narrow || (pref ? pref === 'min' : !!(active && WORK[navKey(active)]));
+    dash.classList.toggle('nl-min', min);
+    var tog = document.querySelector('.nl-railtog');
+    if (tog) { var l = min ? 'Expand menu' : 'Collapse menu'; tog.title = l; tog.setAttribute('aria-label', l); }
+  }
+  function buildSidebar() {
+    var side = document.getElementById('dash-sidebar');
+    var nav = side && side.querySelector('.dash-sidebar__nav');
+    if (!side || !nav || side.dataset.nlBuilt) return;
+    side.dataset.nlBuilt = '1';
+    // Brand row with the collapse toggle.
+    var logo = side.querySelector('.dash-sidebar__logo');
+    if (logo) {
+      Array.prototype.slice.call(logo.childNodes).forEach(function (n) {
+        if (n.nodeType === 3 && n.textContent.trim()) { var sp = document.createElement('span'); sp.textContent = n.textContent.trim(); n.replaceWith(sp); }
+      });
+      var row = document.createElement('div');
+      row.className = 'nl-brand';
+      logo.replaceWith(row);
+      row.appendChild(logo);
+      var tog = document.createElement('button');
+      tog.type = 'button';
+      tog.className = 'nl-railtog';
+      tog.innerHTML = ICON.tog;
+      tog.addEventListener('click', function () {
+        var dash = document.getElementById('dashboard-view');
+        store(RAIL_KEY, dash && dash.classList.contains('nl-min') ? 'open' : 'min');
+        applyRail();
+      });
+      row.appendChild(tog);
+    }
+    // Brand: opens Settings on its Brand tab.
+    var brand = document.createElement('button');
+    brand.type = 'button';
+    brand.className = 'dash-nav-item';
+    brand.setAttribute('data-nl-brand', '');
+    brand.innerHTML = ICON.brand + '<span class="nl-lbl">Brand</span>';
+    brand.addEventListener('click', function () { location.hash = '#settings/brand'; });
+    nav.appendChild(brand);
+    // Groups, in the redesign's order. Anything not listed keeps its place at the end.
+    var byKey = {};
+    Array.prototype.slice.call(nav.querySelectorAll('.dash-nav-item')).forEach(function (b) { byKey[navKey(b)] = b; wrapLabel(b); });
+    var frag = document.createDocumentFragment();
+    var placed = {};
+    GROUPS.forEach(function (g, gi) {
+      if (gi) { var gap = document.createElement('div'); gap.className = 'nl-gap'; gap.setAttribute('aria-hidden', 'true'); frag.appendChild(gap); }
+      g.forEach(function (k) { if (byKey[k]) { frag.appendChild(byKey[k]); placed[k] = 1; } });
     });
+    Object.keys(byKey).forEach(function (k) { if (!placed[k]) frag.appendChild(byKey[k]); });
+    nav.appendChild(frag);
+    // Review badge.
+    var review = byKey.content;
+    if (review && !review.querySelector('.nl-badge')) { var bd = document.createElement('span'); bd.className = 'nl-badge'; bd.hidden = true; review.appendChild(bd); }
+    // Foot: Search and tools, then the account with its menu.
+    var foot = document.createElement('div');
+    foot.className = 'nl-foot';
+    var search = document.createElement('button');
+    search.type = 'button';
+    search.className = 'nl-foot__link';
+    search.innerHTML = ICON.cmd + '<span class="nl-lbl">Search and tools</span>';
+    search.addEventListener('click', function () { var i = document.getElementById('nl-cmd-input'); if (i) { i.focus(); i.select(); } });
+    foot.appendChild(search);
+    var user = side.querySelector('.dash-sidebar__user');
+    if (user) {
+      user.parentNode.insertBefore(foot, user);
+      foot.appendChild(user);
+      var info = user.querySelector('.dash-sidebar__user-info');
+      if (info && !info.querySelector('.nl-plan')) { var pl = document.createElement('span'); pl.className = 'nl-plan'; info.appendChild(pl); }
+      user.setAttribute('role', 'button');
+      user.setAttribute('tabindex', '0');
+      user.setAttribute('aria-haspopup', 'menu');
+      user.title = 'Account, credits and help';
+      var menu = document.createElement('div');
+      menu.className = 'nl-acctmenu';
+      menu.hidden = true;
+      menu.setAttribute('role', 'menu');
+      user.appendChild(menu);
+      var openMenu = function (ev) {
+        if (ev && ev.target.closest('.nl-acctmenu')) return;
+        var name = (document.getElementById('dash-user-name') || {}).textContent || '';
+        var plan = (user.querySelector('.nl-plan') || {}).textContent || '';
+        menu.innerHTML = '<div class="nl-acctmenu__hd"><b></b><span></span></div>'
+          + '<button type="button" data-a="billing" role="menuitem">Plan and credits<span></span></button>'
+          + '<button type="button" data-a="connections" role="menuitem">Account and connections</button>'
+          + '<button type="button" data-a="look" role="menuitem">Back to the old look</button>'
+          + '<button type="button" data-a="out" role="menuitem">Sign out</button>';
+        menu.querySelector('b').textContent = name;
+        menu.querySelector('.nl-acctmenu__hd span').textContent = plan;
+        menu.querySelector('[data-a="billing"] span').textContent = ((document.getElementById('sidebar-credit-count') || {}).textContent || '').trim() + ' left';
+        menu.hidden = !menu.hidden;
+      };
+      user.addEventListener('click', openMenu);
+      user.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openMenu(ev); } });
+      menu.addEventListener('click', function (ev) {
+        var b = ev.target.closest('[data-a]');
+        if (!b) return;
+        menu.hidden = true;
+        var a = b.getAttribute('data-a');
+        if (a === 'billing' || a === 'connections') location.hash = '#settings/' + a;
+        else if (a === 'look') window.seNewLook.off();
+        else if (a === 'out') { var lo = document.getElementById('dash-logout'); if (lo) lo.click(); }
+      });
+      document.addEventListener('click', function (ev) { if (!user.contains(ev.target)) menu.hidden = true; });
+    }
+    // Keep labels, badges and the collapsed state right as pages change.
+    new MutationObserver(function () { applyRail(); paintCounts(); }).observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', applyRail);
+    applyRail();
+    [0, 600, 1800].forEach(function (t) { setTimeout(paintCounts, t); });
+    setInterval(paintCounts, 4000);
   }
 
   var EXTRA = [
@@ -389,9 +556,15 @@
       actions.insertBefore(themeBtn, actions.firstChild);
       paintThemeButton();
     }
-    labelRail();
-    var nav = document.querySelector('.dash-sidebar__nav');
-    if (nav) new MutationObserver(labelRail).observe(nav, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style'] });
+    if (actions && !actions.querySelector('.nl-conn')) {
+      var conn = document.createElement('button');
+      conn.type = 'button';
+      conn.className = 'nl-conn';
+      conn.innerHTML = '<i></i><span>Connected</span>';
+      conn.addEventListener('click', function () { location.hash = '#settings/connections'; });
+      actions.insertBefore(conn, actions.firstChild);
+    }
+    buildSidebar();
   }
 
   function start() {
