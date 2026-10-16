@@ -133,3 +133,27 @@ test('new look Calendar: platform tabs and filter, live ring, counts, key dates 
   await expect(page.locator('#schedule-date-panel')).toHaveCSS('right', '0px');
   expect(errors).toEqual([]);
 });
+
+test('new look Post: options out of drawers, size control drives the size, caption has its own card, handlers still work', async ({ page }) => {
+  const errors = watchErrors(page);
+  await mockApi(page, srv.base, { data: clientData() });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="design-studio"]');
+  await expect(page.locator('.nl-post')).toBeVisible();
+  await expect(page.locator('.nl-post__opts #cs-style')).toBeVisible();
+  await expect(page.locator('.nl-post__opts #cs-engine')).toBeVisible();
+  await page.click('.nl-seg--fill button[data-aspect="1:1"]');
+  await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
+  await expect(page.locator('.nl-seg--fill button[data-aspect="1:1"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => { document.getElementById('cs-aspect').value = '4:5'; });
+  await expect(page.locator('.nl-seg--fill button[data-aspect="4:5"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.nl-caption #cs-caption')).toHaveText('Get caption');
+  await expect(page.locator('.nl-caption #cs-caption-box')).toBeVisible();
+  await expect(page.locator('.atelier-essentials #cs-generate')).toBeInViewport();
+  // A handler bound before the move still fires.
+  await page.click('#cs-new-post');
+  await expect(page.locator('#cs-brief')).toHaveValue('');
+  expect(errors).toEqual([]);
+});
