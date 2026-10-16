@@ -454,12 +454,18 @@
         if (cap && job.daily_cap) cap.textContent = `${job.used_today} of ${job.daily_cap} used today`;
         const s = await poll(job.job_id);
         if (!s) return;
-        if (s.status !== 'done') throw new Error(s.error || 'The video did not render.');
+        if (s.status !== 'done') throw Object.assign(new Error(s.error || 'The video did not render.'), { detail: s.detail || '', failedJob: !!s.job_id });
         stage.innerHTML = `<video id="mr-video" src="${esc(s.video_url)}" controls autoplay muted loop playsinline></video>`;
         out.innerHTML = `<a class="mr-btn mr-btn--primary" id="mr-download" href="${esc(s.video_url)}" download="reel.mp4" target="_blank" rel="noopener">Download MP4</a><span class="mr-hint">Saved to Library, Motion reels.</span>${s.note ? `<div class="mr-done-note" id="mr-note">${esc(s.note)}</div>` : ''}`;
         toast('Reel ready');
       } catch (err) {
-        stage.innerHTML = `<div class="mr-note" style="padding:20px;text-align:center">${esc(err.message)}</div>`;
+        stage.innerHTML = `<div style="padding:20px;text-align:center"><div class="mr-note" id="mr-error">${esc(err.message)}</div>${err.detail ? `<div class="mr-hint" id="mr-error-detail" style="margin-top:10px;word-break:break-word">Details: ${esc(err.detail)}</div>` : ''}${err.failedJob ? '<div class="mr-hint" style="margin-top:10px">This one did not count toward today.</div>' : ''}</div>`;
+        // A Reel that did not render is not counted; show the real number.
+        if (err.failedJob) api('/api/motion/options').then((o) => {
+          const cap = form.querySelector('#mr-cap');
+          const fl = o.faceless || {};
+          if (cap) cap.textContent = kind === 'faceless' ? `${fl.used_today || 0} of ${fl.daily_cap || 5} used today` : `${o.used_today || 0} of ${o.daily_cap || 20} used today`;
+        }).catch(() => {});
       } finally {
         busy = false;
         btn.disabled = false; btn.textContent = 'Make another version';
