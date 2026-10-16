@@ -60,6 +60,8 @@ async function mockApi(page, base, { data = clientData(), onRequest, assets = []
   const library = Array.isArray(assets) ? assets.slice() : [];
   const projects = new Map((animProjects || []).map((p) => [p.id, p]));
   const ctx = page.context();
+  // These specs were written for the old look; new-look.spec.js switches the new look on itself.
+  await page.addInitScript(() => { try { if (!localStorage.getItem('se-look2')) localStorage.setItem('se-look2', 'old'); } catch (_) {} });
   await ctx.route('**/*', (route) => {
     const u = route.request().url();
     if (u.startsWith(base) || u.startsWith(FAKE_API) || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('about:')) return route.fallback();

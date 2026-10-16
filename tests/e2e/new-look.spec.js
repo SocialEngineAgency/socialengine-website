@@ -1,4 +1,4 @@
-// New look (graphite redesign): off unless switched on with ?look=new; the rail keeps every
+// New look (graphite redesign): on by default, ?look=old switches a browser back; the rail keeps every
 // page reachable, the ⌘K bar jumps between pages, Day/Dark sticks, inline navy and purple
 // map to the new palette, and ?look=old switches it off again. Hermetic.
 const { test, expect } = require('@playwright/test');
@@ -10,13 +10,22 @@ test.afterAll(async () => { srv.close(); });
 
 const rgb = (page, sel, prop) => page.locator(sel).first().evaluate((el, p) => getComputedStyle(el)[p], prop);
 
-test('old look stays the default; nothing from the new look shows', async ({ page }) => {
+test('the new look is the default; ?look=old switches it off and sticks, ?look=new brings it back', async ({ page }) => {
   await mockApi(page, srv.base, { data: clientData() });
+  // No stored choice at all, like a first visit.
+  await page.addInitScript(() => { try { if (!sessionStorage.getItem('nl-first')) { sessionStorage.setItem('nl-first', '1'); localStorage.removeItem('se-look2'); } } catch (_) {} });
   await login(page, srv.base);
+  await expect(page.locator('html')).toHaveClass(/\bnl\b/);
+  await page.goto(`${srv.base}/portal.html?look=old`);
+  await expect(page.locator('html')).not.toHaveClass(/\bnl\b/);
+  await page.goto(`${srv.base}/portal.html`); // remembered, and the session signs back in
+  await expect(page.locator('#dashboard-view')).toHaveClass(/active/, { timeout: 15000 });
   await expect(page.locator('html')).not.toHaveClass(/\bnl\b/);
   await expect(page.locator('.nl-cmd')).toBeHidden();
   await expect(page.locator('.nl-theme-btn')).toHaveCount(0);
   expect(await rgb(page, '.dash-sidebar', 'width')).not.toBe('68px');
+  await page.goto(`${srv.base}/portal.html?look=new`);
+  await expect(page.locator('html')).toHaveClass(/\bnl\b/);
 });
 
 test('?look=new: icon rail, jump bar, Day/Dark that sticks, palette mapped, ?look=old turns it off', async ({ page }) => {
@@ -114,7 +123,7 @@ test('new look Calendar: platform tabs and filter, live ring, counts, key dates 
       return undefined;
     },
   });
-  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="schedule"]');
   await expect(page.locator('.nl-cal h1')).toHaveText('Calendar');
@@ -145,7 +154,7 @@ test('new look Calendar: platform tabs and filter, live ring, counts, key dates 
 test('new look Post: options out of drawers, size control drives the size, caption has its own card, handlers still work', async ({ page }) => {
   const errors = watchErrors(page);
   await mockApi(page, srv.base, { data: clientData() });
-  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="create"]');
   await page.click('.create-seg[data-segment="design-studio"]');
@@ -191,7 +200,7 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
       return undefined;
     },
   });
-  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="create"]');
   await page.click('.create-seg[data-segment="animation-studio"]');
@@ -280,7 +289,7 @@ test('new look Home: greeting, approvals with Approve/Reject, goes live today, c
       return undefined;
     },
   });
-  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
   await expect(page.locator('.nl-page h1')).toContainText(/^Good (morning|afternoon|evening), Owner\.$/);
   const row = page.locator('.nl-qrow').first();
@@ -307,7 +316,7 @@ test('new look Review: filter bar, cards with Approve/Reject, the post opens inl
     { id: 'recArch', status: 'Archived', archived_from: 'Ready for Review', platform: 'instagram', full_post_text: 'Old draft' },
   ];
   const calls = await mockApi(page, srv.base, { data: clientData({ content: posts.map((p) => ({ ...p })) }) });
-  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="content"]');
   await expect(page.locator('.nl-rv-head h1')).toHaveText('Review');
@@ -394,7 +403,7 @@ test('new look Inbox, Analytics, Coach, Settings and Brand: redesign layouts wit
       return undefined;
     },
   });
-  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
 
   // Inbox: AI replies Off / Draft / Auto saves the same settings call.
@@ -458,7 +467,7 @@ for (const vp of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(vp);
     const errors = watchErrors(page);
     await mockApi(page, srv.base);
-    await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+    await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
     await login(page, srv.base);
     const navs = await page.locator('#dash-sidebar .dash-nav-item[data-nav]').evaluateAll((els) => els.map((e) => e.dataset.nav));
     expect(navs.length).toBeGreaterThan(8);

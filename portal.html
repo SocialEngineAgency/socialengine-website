@@ -4,16 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
-    // New look (graphite redesign): ?look=new turns it on in this browser, ?look=old turns it off.
+    // New look (graphite redesign) is the default. ?look=old, or "Back to the old look" in the
+    // account menu, switches this browser back; ?look=new switches it on again.
     (function () {
+      var look = 'new';
+      var theme = 'dark';
       try {
         var q = new URLSearchParams(location.search).get('look');
-        if (q === 'new' || q === 'old') localStorage.setItem('se-look', q);
-        if (localStorage.getItem('se-look') === 'new') {
-          document.documentElement.classList.add('nl');
-          document.documentElement.setAttribute('data-nl-theme', localStorage.getItem('se-nl-theme') === 'day' ? 'day' : 'dark');
-        }
+        if (q === 'new' || q === 'old') localStorage.setItem('se-look2', q);
+        if (localStorage.getItem('se-look2') === 'old') look = 'old';
+        if (localStorage.getItem('se-nl-theme') === 'day') theme = 'day';
       } catch (_) {}
+      if (look === 'new') {
+        document.documentElement.classList.add('nl');
+        document.documentElement.setAttribute('data-nl-theme', theme);
+      }
     })();
   </script>
   <title>Client Portal — SocialEngine</title>
@@ -3079,7 +3084,7 @@
 </style>
 <!-- Adobe Express Embed SDK v4 -->
   <link rel="stylesheet" href="./new-look.css?v=20261016l">
-  <script src="./new-look.js?v=20261016f" defer></script>
+  <script src="./new-look.js?v=20261016g" defer></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>

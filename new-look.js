@@ -6,13 +6,13 @@
  *   purple tints → neutral tints         solid purples → the one signal violet
  * and for Day, the same values flipped onto light surfaces with dark text.
  *
- * On:  ?look=new   (remembered in this browser)      Off: ?look=old
+ * Default on. Off: ?look=old or the account menu (remembered in this browser). On again: ?look=new
  * Theme: the sun/moon button in the top bar (remembered).
  */
 (function () {
   'use strict';
   var html = document.documentElement;
-  var LOOK_KEY = 'se-look';
+  var LOOK_KEY = 'se-look2';
   var THEME_KEY = 'se-nl-theme';
 
   function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) {} }
