@@ -1,0 +1,199 @@
+/* New look (graphite redesign). Everything is scoped to html.nl, so this file does nothing
+ * until the look is switched on (?look=new, remembered per browser). Colours that live in
+ * inline styles and older stylesheets are mapped at runtime by new-look.js; this file owns
+ * the tokens, the fonts, the app shell (icon rail, top bar) and shared components.
+ * Figtree, Instrument Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1. */
+
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 300 900; font-display: swap;
+  src: url(./fonts/figtree-latin-ext-var-bf7828e2.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 300 900; font-display: swap;
+  src: url(./fonts/figtree-latin-var-4ba7d3d0.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url(./fonts/instrument-sans-latin-ext-var-c4fcfea4.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url(./fonts/instrument-sans-latin-var-2ee17598.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 100 800; font-display: swap;
+  src: url(./fonts/jetbrains-mono-latin-ext-var-79bfdab9.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 100 800; font-display: swap;
+  src: url(./fonts/jetbrains-mono-latin-var-18be4527.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* ── Tokens ── */
+html.nl {
+  --nl-bg: #0d0e11; --nl-surface: #101216; --nl-s2: #14161b; --nl-s3: #191c22; --nl-s4: #1f232a;
+  --nl-line: #1e2127; --nl-line-strong: #282c34;
+  --nl-fg: #e8e6e1; --nl-fg2: #a3a09a; --nl-fg3: #75736c; --nl-fg4: #514f49;
+  --nl-signal: #9d8cff; --nl-signal-ink: #0b0820; --nl-signal-soft: rgba(157,140,255,0.16);
+  --nl-ok: #2ee6a6; --nl-warn: #f2b84b; --nl-bad: #ff5c6c; --nl-info: #58b4ff;
+  --nl-primary-bg: #e8e6e1; --nl-primary-fg: #0d0e11;
+  --nl-ig: #e4405f; --nl-tt: #25f4ee; --nl-fb: #1877f2;
+  --nl-display: 'Figtree', 'Instrument Sans', system-ui, sans-serif;
+  --nl-body: 'Instrument Sans', 'Figtree', system-ui, sans-serif;
+  --nl-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: dark;
+}
+html.nl[data-nl-theme="day"] {
+  --nl-bg: #f4f3ef; --nl-surface: #ffffff; --nl-s2: #fbfaf7; --nl-s3: #f3f1ec; --nl-s4: #e9e6df;
+  --nl-line: #e6e3dc; --nl-line-strong: #d6d2c8;
+  --nl-fg: #1b1a17; --nl-fg2: #55524b; --nl-fg3: #7a776f; --nl-fg4: #a8a49b;
+  --nl-signal: #5b47d6; --nl-signal-ink: #ffffff; --nl-signal-soft: rgba(91,71,214,0.10);
+  --nl-ok: #0f8f63; --nl-warn: #b7791f; --nl-bad: #c2414f; --nl-info: #2a74c4;
+  --nl-primary-bg: #1b1a17; --nl-primary-fg: #ffffff;
+  --nl-tt: #0fb5b0;
+  color-scheme: light;
+}
+
+/* The site's own tokens, pointed at the new palette. */
+html.nl, html.nl[data-theme], html.nl [data-theme] {
+  --bg-primary: var(--nl-bg); --bg-surface: var(--nl-surface); --bg-surface-raised: var(--nl-s2); --bg-surface-hover: var(--nl-s3);
+  --border-subtle: var(--nl-line); --border-default: var(--nl-line-strong); --border-strong: var(--nl-fg4);
+  --text-primary: var(--nl-fg); --text-secondary: var(--nl-fg2); --text-tertiary: var(--nl-fg3);
+  --primary: var(--nl-signal); --primary-hover: var(--nl-signal); --primary-strong: var(--nl-signal);
+  --primary-muted: var(--nl-signal-soft); --primary-glow: transparent;
+  --cta: var(--nl-signal); --cta-hover: var(--nl-signal); --cta-soft: var(--nl-signal); --cta-glow: transparent;
+  --accent-cyan: var(--nl-info); --accent-cyan-muted: transparent; --accent-cyan-glow: transparent;
+  --success: var(--nl-ok); --warning: var(--nl-warn); --error: var(--nl-bad);
+  --gradient-ai: linear-gradient(0deg, var(--nl-signal), var(--nl-signal));
+  --gradient-cta: linear-gradient(0deg, var(--nl-signal), var(--nl-signal));
+  --gradient-indigo: linear-gradient(0deg, var(--nl-signal), var(--nl-signal));
+  --dark-bg: var(--nl-bg); --dark-surface: var(--nl-surface); --dark-surface-2: var(--nl-s2);
+  --dark-border: var(--nl-line); --dark-border-hover: var(--nl-line-strong);
+  --dark-text: var(--nl-fg); --dark-muted: var(--nl-fg2); --dark-faint: var(--nl-fg3);
+  --color-bg: var(--nl-bg); --color-surface: var(--nl-surface); --color-surface-2: var(--nl-s2);
+  --color-border: var(--nl-line); --color-border-hover: var(--nl-line-strong);
+  --color-text: var(--nl-fg); --color-muted: var(--nl-fg2); --color-faint: var(--nl-fg3);
+  --color-text-muted: var(--nl-fg2); --color-text-faint: var(--nl-fg3);
+  --color-accent: var(--nl-signal); --color-primary: var(--nl-signal); --color-accent-hover: var(--nl-signal);
+  --glow-primary: transparent; --glow-accent: transparent;
+  --font-display: var(--nl-display); --font-body: var(--nl-body);
+}
+
+html.nl body {
+  background: var(--nl-bg) !important;
+  color: var(--nl-fg);
+  font-family: var(--nl-body);
+  font-size: 13.5px;
+  -webkit-font-smoothing: antialiased;
+}
+html.nl ::selection { background: var(--nl-signal-soft); color: var(--nl-fg); }
+html.nl ::-webkit-scrollbar-thumb { background: var(--nl-line-strong); }
+html.nl :focus-visible { outline: 2px solid var(--nl-signal); outline-offset: 2px; }
+
+/* ── Shell: icon rail ── */
+html.nl .dashboard.active { grid-template-columns: 68px minmax(0, 1fr); }
+html.nl .dash-sidebar {
+  width: 68px; box-sizing: border-box; padding: 14px 0 16px !important; align-items: center; gap: 0;
+  background: var(--nl-bg) !important; border-right: 1px solid var(--nl-line) !important; height: 100vh; min-height: 0; overflow: visible;
+  z-index: 40;
+}
+html.nl .dash-sidebar__logo {
+  font-size: 0 !important; gap: 0 !important; width: 40px; height: 40px; padding: 0 !important; margin: 0 0 14px !important;
+  border-radius: 10px; background: var(--nl-fg); color: var(--nl-bg) !important; justify-content: center; flex: 0 0 auto;
+}
+html.nl .dash-sidebar__logo svg { width: 24px; height: 24px; }
+html.nl .dash-sidebar__logo svg rect { stroke: transparent; }
+html.nl .dash-sidebar__nav { align-items: center; gap: 6px !important; flex: 1 1 auto; overflow: visible; }
+html.nl .dash-nav-item {
+  position: relative; font-size: 0 !important; gap: 0 !important; width: 44px !important; height: 44px; padding: 0 !important;
+  justify-content: center; border-radius: 9px !important; border: 0 !important; color: var(--nl-fg3) !important;
+  background: transparent !important; box-shadow: none !important; flex: 0 0 auto;
+}
+html.nl .dash-nav-item i, html.nl .dash-nav-item svg { width: 18px !important; height: 18px !important; color: inherit !important; stroke-width: 1.7; }
+html.nl .dash-nav-item:hover { color: var(--nl-fg) !important; background: var(--nl-s2) !important; }
+html.nl .dash-nav-item.active { color: var(--nl-fg) !important; background: var(--nl-s3) !important; box-shadow: inset 0 0 0 1px var(--nl-line-strong) !important; }
+html.nl .dash-nav-item.active i, html.nl .dash-nav-item.active svg { color: var(--nl-fg) !important; }
+html.nl .dash-nav-item::after {
+  content: attr(data-nl-label); position: absolute; left: 54px; top: 50%; transform: translateY(-50%);
+  padding: 5px 9px; border-radius: 6px; background: var(--nl-fg); color: var(--nl-bg);
+  font: 500 12px/1.2 var(--nl-body); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.12s; z-index: 60;
+}
+html.nl .dash-nav-item:hover::after, html.nl .dash-nav-item:focus-visible::after { opacity: 1; }
+html.nl .dash-nav-item .engage-badge {
+  position: absolute !important; top: 8px; right: 8px; min-width: 7px !important; width: 7px; height: 7px !important; padding: 0 !important;
+  border-radius: 4px !important; font-size: 0 !important; background: var(--nl-warn) !important; box-shadow: 0 0 0 2px var(--nl-bg);
+}
+html.nl #sidebar-credits { display: none !important; }
+html.nl .dash-sidebar__user { padding: 12px 0 0 !important; border-top: 0 !important; justify-content: center; }
+html.nl .dash-sidebar__user-info { display: none !important; }
+html.nl .dash-sidebar__avatar {
+  width: 30px; height: 30px; background: var(--nl-s4) !important; border: 1px solid var(--nl-line-strong);
+  color: var(--nl-fg2) !important; font: 500 10px/1 var(--nl-mono) !important; letter-spacing: 0 !important;
+}
+
+/* ── Shell: top bar ── */
+html.nl .dash-main { background: var(--nl-bg) !important; }
+html.nl .dash-topbar {
+  background: var(--nl-bg) !important; border-bottom: 1px solid var(--nl-line) !important;
+  padding: 10px 24px !important; min-height: 56px !important; gap: 16px; flex-wrap: wrap;
+}
+html.nl .dash-topbar__greeting { font: 400 20px/1.2 var(--nl-display) !important; letter-spacing: -0.015em !important; color: var(--nl-fg) !important; }
+html.nl .dash-topbar__subtitle { font-size: 12px !important; color: var(--nl-fg3) !important; }
+html.nl .dash-topbar__breadcrumb-home { color: var(--nl-fg2) !important; }
+html.nl .dash-topbar__actions { gap: 8px !important; }
+html.nl .dash-logout-btn {
+  height: 32px; padding: 0 12px !important; border-radius: 8px !important; border: 1px solid var(--nl-line-strong) !important;
+  background: transparent !important; color: var(--nl-fg2) !important; font: 500 12.5px var(--nl-body) !important;
+}
+html.nl .dash-logout-btn:hover { color: var(--nl-fg) !important; background: var(--nl-s2) !important; }
+
+.nl-cmd { display: none; }
+html.nl .nl-cmd { display: block; position: relative; flex: 0 1 380px; min-width: 200px; }
+html.nl .nl-cmd__box {
+  display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; box-sizing: border-box;
+  border: 1px solid var(--nl-line-strong); border-radius: 8px; background: var(--nl-s2); color: var(--nl-fg3);
+}
+html.nl .nl-cmd__box:focus-within { border-color: var(--nl-fg4); }
+html.nl .nl-cmd__box input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--nl-fg); font: 13px var(--nl-body); outline: none; }
+html.nl .nl-cmd__box input::placeholder { color: var(--nl-fg3); }
+html.nl .nl-kbd { font: 10px/1 var(--nl-mono); border: 1px solid var(--nl-line-strong); border-radius: 4px; padding: 3px 6px; color: var(--nl-fg3); }
+html.nl .nl-cmd__list {
+  position: absolute; top: 42px; left: 0; right: 0; z-index: 80; margin: 0; padding: 6px; list-style: none;
+  background: var(--nl-surface); border: 1px solid var(--nl-line-strong); border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.35); max-height: 360px; overflow: auto;
+}
+html.nl .nl-cmd__list[hidden] { display: none; }
+html.nl .nl-cmd__item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--nl-fg); font: 13px var(--nl-body); text-align: left; cursor: pointer;
+}
+html.nl .nl-cmd__item small { margin-left: auto; color: var(--nl-fg3); font: 11px var(--nl-mono); }
+html.nl .nl-cmd__item[aria-selected="true"], html.nl .nl-cmd__item:hover { background: var(--nl-s3); }
+html.nl .nl-cmd__empty { padding: 10px; color: var(--nl-fg3); font-size: 12.5px; }
+
+.nl-theme-btn { display: none; }
+html.nl .nl-theme-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px;
+  border: 1px solid var(--nl-line-strong); border-radius: 8px; background: transparent; color: var(--nl-fg2);
+  font: 500 12.5px var(--nl-body); cursor: pointer;
+}
+html.nl .nl-theme-btn:hover { color: var(--nl-fg); background: var(--nl-s2); }
+html.nl .nl-theme-btn svg { width: 15px; height: 15px; }
+
+/* ── Content: type and shared components ── */
+html.nl .dash-content { padding: 24px 24px 48px !important; }
+html.nl h1, html.nl h2, html.nl h3, html.nl .section-title, html.nl [class*="__title"] { font-family: var(--nl-display); letter-spacing: -0.01em; }
+html.nl h1 { font-weight: 400; }
+html.nl code, html.nl kbd, html.nl pre { font-family: var(--nl-mono); }
+html.nl input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+html.nl textarea, html.nl select {
+  font-family: var(--nl-body);
+}
+html.nl input[type="checkbox"], html.nl input[type="radio"], html.nl input[type="range"] { accent-color: var(--nl-signal); }
+
+/* Mobile: the rail becomes the old labelled drawer. */
+@media (max-width: 768px) {
+  html.nl .dashboard.active { grid-template-columns: minmax(0, 1fr); }
+  html.nl .dash-sidebar { width: 240px; align-items: stretch; padding: 16px 12px !important; }
+  html.nl .dash-sidebar__logo { margin: 0 0 14px 4px !important; }
+  html.nl .dash-sidebar__nav { align-items: stretch; }
+  html.nl .dash-nav-item { font-size: 13px !important; width: 100% !important; height: 40px; justify-content: flex-start; gap: 10px !important; padding: 0 12px !important; }
+  html.nl .dash-nav-item::after { display: none; }
+  html.nl .dash-nav-item .engage-badge { position: static !important; margin-left: auto; }
+  html.nl .nl-cmd { flex-basis: 100%; order: 3; }
+  html.nl .dash-topbar { padding: 10px 16px 10px 60px !important; }
+}

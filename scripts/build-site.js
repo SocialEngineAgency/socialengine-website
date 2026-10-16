@@ -28,6 +28,13 @@ const ALLOWLIST = [
   'fonts/inter-latin-ext-400-700-a28eb6d3.woff2',
   'fonts/plus-jakarta-sans-latin-400-800-cd8db90c.woff2',
   'fonts/plus-jakarta-sans-latin-ext-400-800-0303e02b.woff2',
+  // New look (new-look.css): Figtree, Instrument Sans, JetBrains Mono.
+  'fonts/figtree-latin-var-4ba7d3d0.woff2',
+  'fonts/figtree-latin-ext-var-bf7828e2.woff2',
+  'fonts/instrument-sans-latin-var-2ee17598.woff2',
+  'fonts/instrument-sans-latin-ext-var-c4fcfea4.woff2',
+  'fonts/jetbrains-mono-latin-var-18be4527.woff2',
+  'fonts/jetbrains-mono-latin-ext-var-79bfdab9.woff2',
   // Scripts
   'app.js', // index.html
   'portal-native-oauth.js', // portal.html
@@ -41,6 +48,8 @@ const ALLOWLIST = [
   'diagram-posts.js', // portal.html — diagram graphics (steps, timeline, compare, cycle, funnel)
   'motion-reels.js', // portal.html — carousel → Reel and text Reels (HyperFrames)
   'live-updates.js', // portal.html — live updates stream (Server-Sent Events)
+  'new-look.css', // portal.html — graphite redesign (on with ?look=new)
+  'new-look.js', // portal.html — palette mapping, icon rail, jump bar, Day/Dark
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'carousel-templates.js', // portal.html
