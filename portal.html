@@ -3078,8 +3078,8 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261016f">
-  <script src="./new-look.js?v=20261016c" defer></script>
+  <link rel="stylesheet" href="./new-look.css?v=20261016h">
+  <script src="./new-look.js?v=20261016e" defer></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
@@ -5585,6 +5585,11 @@
         </div>`;
       }
 
+      if (document.documentElement.classList.contains('nl')) {
+        renderHomeNL(data, { content, posts, pending, firstName, tod, previewBanner });
+        return;
+      }
+
       content.innerHTML = `
         ${previewBanner}
         <div id="se-getting-started-slot"></div>
@@ -5696,6 +5701,180 @@
       // Fetch and render widgets asynchronously
       loadAIIntelligenceWidget();
       loadAttributedRevenueWidget();
+    }
+
+    // ━━━ New look Home (redesign): approvals first, what goes live today, one coach move, the month in numbers ━━━
+    function nlPlatform(p) {
+      const raw = String(Array.isArray(p.platform || p.platforms) ? (p.platform || p.platforms)[0] : (p.platform || p.platforms || '')).toLowerCase();
+      if (raw === 'ig' || raw.includes('instagram')) return ['ig', 'Instagram'];
+      if (raw === 'fb' || raw.includes('facebook')) return ['fb', 'Facebook'];
+      if (raw.includes('tiktok')) return ['tt', 'TikTok'];
+      return ['other', raw ? raw.replace(/^./, (ch) => ch.toUpperCase()) : 'Post'];
+    }
+    function nlFormat(p) {
+      const t = String(p.content_type || p.media_type || p.format || '').toLowerCase();
+      if (t.includes('carousel')) return 'Carousel';
+      if (t.includes('reel') || t.includes('video')) return 'Reel';
+      if (t.includes('story')) return 'Story';
+      return 'Static';
+    }
+    function nlDateKey(v) {
+      if (!v) return '';
+      const s = String(v);
+      if (/T\d{2}:/.test(s) && typeof window._calLocalDateKey === 'function') return window._calLocalDateKey(s);
+      return s.slice(0, 10);
+    }
+    function nlWhen(p) {
+      const raw = String(p.scheduled_date || p.scheduledDate || '');
+      if (!raw) return '';
+      const key = nlDateKey(raw);
+      const today = typeof _clientTodayDateKey === 'function' ? _clientTodayDateKey() : new Date().toISOString().slice(0, 10);
+      const tz = typeof _clientTimezone === 'function' ? _clientTimezone() : undefined;
+      let time = '';
+      if (/T\d{2}:/.test(raw)) { try { time = new Date(raw).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz }); } catch (_) { time = raw.slice(11, 16); } }
+      let day = '';
+      if (key === today) day = 'Today';
+      else { try { day = new Date(`${key}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); } catch (_) { day = key; } }
+      return time ? `${day} ${time}` : day;
+    }
+    function nlThumb(p) {
+      const u = p.thumbnail_url || p.image_url || (Array.isArray(p.slide_urls) && p.slide_urls[0]) || '';
+      return u ? `<img src="${escapeHtml(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="nl-qrow__ph" aria-hidden="true"></span>';
+    }
+    function renderHomeNL(data, ctx) {
+      const { content, posts, pending, firstName, tod, previewBanner } = ctx;
+      const c = data.client || {};
+      studioPostsList = posts;
+      const today = typeof _clientTodayDateKey === 'function' ? _clientTodayDateKey() : new Date().toISOString().slice(0, 10);
+      const month = today.slice(0, 7);
+      const status = (p) => String(p.status || '').toLowerCase();
+      const all = (data.content || []).map((r) => ({ ...(r.fields || r), id: r.id || (r.fields || r).id })).filter((p) => !/^archived$/i.test(String(p.status || '')));
+      const liveToday = all.filter((p) => nlDateKey(p.scheduled_date || p.scheduledDate) === today && ['scheduled', 'approved', 'posted', 'published', 'live'].includes(status(p)));
+      const liveMonth = (data.content || []).filter((p) => ['posted', 'published', 'live'].includes(status(p)) && nlDateKey(p.scheduled_date || p.scheduledDate || p.posted_at || p.created_at).slice(0, 7) === month).length;
+      const scheduled = all.filter((p) => ['scheduled', 'approved'].includes(status(p)) && nlDateKey(p.scheduled_date || p.scheduledDate) >= today).length;
+      const dateLine = new Date(`${today}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+      const subBits = [];
+      subBits.push(pending.length ? `${pending.length} post${pending.length === 1 ? '' : 's'} need${pending.length === 1 ? 's' : ''} your approval` : 'Nothing waiting for your approval');
+      if (liveToday.length) subBits.push(`${liveToday.length} go${liveToday.length === 1 ? 'es' : ''} live today`);
+      const rows = pending.slice(0, 4).map((p) => {
+        const i = posts.indexOf(p);
+        const [pk, pl] = nlPlatform(p);
+        const when = nlWhen(p);
+        const id = String(p.id || '').replace(/['"\\]/g, '');
+        return `<div class="nl-qrow">
+          <button type="button" class="nl-qrow__thumb" onclick="openStudioModal(${i})" aria-label="Open this post">${nlThumb(p)}</button>
+          <div class="nl-qrow__main" onclick="openStudioModal(${i})">
+            <div class="nl-qrow__text">${escapeHtml(String(p.full_post_text || p.caption || 'No caption yet').replace(/\s+/g, ' ').slice(0, 140))}</div>
+            <div class="nl-qrow__meta"><span class="nl-pf nl-pf--${pk}">${escapeHtml(pl)}</span><span>${nlFormat(p)}${Array.isArray(p.slide_urls) && p.slide_urls.length > 1 ? ` · ${p.slide_urls.length} slides` : ''}</span>${when ? `<span>${escapeHtml(when)}</span>` : ''}</div>
+          </div>
+          <span class="nl-pill nl-pill--warn">Needs review</span>
+          <div class="nl-qrow__acts">
+            <button type="button" class="nl-btn nl-btn--xs nl-btn--ok" onclick="event.stopPropagation();studioQuickApprove('${id}',this)">Approve</button>
+            <button type="button" class="nl-btn nl-btn--xs" onclick="event.stopPropagation();openRejectModal('${id}')">Reject</button>
+            <button type="button" class="nl-btn nl-btn--xs nl-btn--icon" onclick="event.stopPropagation();openStudioModal(${i})" aria-label="More">⋯</button>
+          </div>
+        </div>`;
+      }).join('');
+      const live = liveToday.slice(0, 4).map((p) => {
+        const [pk, pl] = nlPlatform(p);
+        const isLive = ['posted', 'published', 'live'].includes(status(p));
+        const t = (nlWhen(p).split(' ')[1]) || '';
+        return `<div class="nl-lrow">
+          <div class="nl-lrow__main"><span class="nl-pf nl-pf--${pk}">${escapeHtml(String(p.full_post_text || p.caption || 'Post').replace(/\s+/g, ' ').slice(0, 60))}</span><div class="nl-lrow__sub">${escapeHtml(pl)} · ${nlFormat(p)}</div></div>
+          <span class="nl-pill ${isLive ? 'nl-pill--ok' : 'nl-pill--info'}">${isLive ? '<i></i>Live' : 'Scheduled'}${t ? ' ' + escapeHtml(t) : ''}</span>
+          <button type="button" class="nl-btn nl-btn--xs nl-btn--icon" onclick="window._pendingOpenDate='${today}';document.querySelector('[data-nav=schedule]').click();" aria-label="Open in Calendar">↗</button>
+        </div>`;
+      }).join('');
+      const charity = typeof isCharityClient === 'function' && isCharityClient(data);
+      content.innerHTML = `
+        <div class="nl-page">
+          ${previewBanner}
+          <div id="se-getting-started-slot"></div>
+          ${!isPaid() ? upgradePromptHTML() : ''}
+          <div class="nl-title">
+            <div><h1 class="nl-h1">Good ${tod}, ${escapeHtml(firstName)}.</h1><p class="nl-sub">${escapeHtml(dateLine)}. ${escapeHtml(subBits.join(', '))}.</p></div>
+            ${pending.length ? `<div class="nl-title__acts"><button type="button" class="nl-btn nl-btn--primary" onclick="document.querySelector('[data-nav=content]').click();">Review ${pending.length} post${pending.length === 1 ? '' : 's'}</button></div>` : ''}
+          </div>
+          <section class="nl-card nl-card--flush" aria-labelledby="nl-approve-h">
+            <div class="nl-sechd"><h2 id="nl-approve-h">Needs your approval</h2><button type="button" class="nl-link" onclick="document.querySelector('[data-nav=content]').click();">Open Review</button></div>
+            ${rows || '<div class="nl-empty">Nothing waiting for you. New posts land here for approval.</div>'}
+          </section>
+          <div class="nl-two">
+            <section class="nl-card nl-card--flush" aria-labelledby="nl-live-h">
+              <div class="nl-sechd"><h2 id="nl-live-h">Goes live today</h2><button type="button" class="nl-link" onclick="document.querySelector('[data-nav=schedule]').click();">Calendar</button></div>
+              ${live || '<div class="nl-empty">Nothing goes live today. <button type="button" class="nl-link" onclick="document.querySelector(\'[data-nav=schedule]\').click();">Schedule a post</button></div>'}
+            </section>
+            <section class="nl-card nl-card--flush" aria-labelledby="nl-coach-h">
+              <div class="nl-sechd"><h2 id="nl-coach-h">From your coach</h2><button type="button" class="nl-link" onclick="document.querySelector('[data-nav=ai-coach]').click();">Open Coach</button></div>
+              <div class="nl-coach" id="nl-home-coach"><div class="nl-coach__msg nl-muted">Looking at your week…</div></div>
+            </section>
+          </div>
+          <section class="nl-card nl-stat" aria-label="This month">
+            <div><span class="nl-stat__k">Live this month</span><span class="nl-stat__v">${liveMonth}</span></div>
+            <div><span class="nl-stat__k">Scheduled</span><span class="nl-stat__v nl-stat__v--info">${scheduled}</span></div>
+            <div><span class="nl-stat__k">Needs review</span><span class="nl-stat__v nl-stat__v--warn">${pending.length}</span></div>
+            <div><span class="nl-stat__k">${charity ? 'Attributed donations' : 'Attributed revenue'}, 30 days</span><span class="nl-stat__v" id="nl-home-rev">—</span></div>
+            <button type="button" class="nl-btn nl-btn--xs" onclick="document.querySelector('[data-nav=analytics]').click();">Analytics</button>
+          </section>
+        </div>`;
+      homeCoachNL();
+      apiFetch('/api/attribution-summary?days=30').then((r) => r.json()).then((d) => {
+        const el = document.getElementById('nl-home-rev');
+        if (!el || !d || !d.success) return;
+        el.textContent = Number(d.total_attributed_revenue || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+      }).catch(() => {});
+    }
+    async function homeCoachNL() {
+      const box = document.getElementById('nl-home-coach');
+      if (!box) return;
+      const paint = (who, msg, actions) => {
+        if (!document.getElementById('nl-home-coach')) return;
+        box.innerHTML = `<div class="nl-coach__msg"><div class="nl-coach__who">${escapeHtml(who)}</div>${escapeHtml(msg)}</div><div class="nl-coach__acts"></div>`;
+        const acts = box.querySelector('.nl-coach__acts');
+        actions.forEach(([label, fn, primary]) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = `nl-btn nl-btn--xs${primary ? ' nl-btn--primary' : ''}`;
+          b.textContent = label;
+          b.addEventListener('click', fn);
+          acts.appendChild(b);
+        });
+      };
+      const notNow = () => { box.innerHTML = '<div class="nl-coach__msg nl-muted">Noted. Ask your coach any time.</div>'; };
+      const today = typeof _clientTodayDateKey === 'function' ? _clientTodayDateKey() : new Date().toISOString().slice(0, 10);
+      try {
+        const res = await apiFetch(`${API}/api/meta-planner`, { headers: authHeaders() });
+        const p = res.ok ? await res.json() : null;
+        const slot = p && Array.isArray(p.slots) ? p.slots.find((sl) => sl.status === 'open' && sl.date >= today) : null;
+        if (slot) {
+          const day = new Date(`${slot.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
+          const fmt = slot.format === 'reel' ? 'Reel' : 'feed post';
+          paint('Coach · this week', `Your plan has an open ${fmt} on ${day}${slot.story_type_label ? `: ${slot.story_type_label}` : ''}. Making it now keeps the week on target.`, [
+            ['Create this', () => {
+              if (slot.format === 'reel') { window.__SE_ANIM_STORY_PRESET = { story_type: slot.story_type }; window.switchNav('animation-studio'); }
+              else window.switchNav('design-studio');
+            }, true],
+            ['Not now', notNow],
+          ]);
+          return;
+        }
+      } catch (_) { /* fall through */ }
+      try {
+        const res = await apiFetch(`${API}/api/marketing/key-dates?days=30`, { headers: authHeaders() });
+        const d = res.ok ? await res.json() : null;
+        const next = d && Array.isArray(d.dates) ? d.dates.find((x) => x.date >= today) : null;
+        if (next) {
+          const when = new Date(`${next.date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+          paint('Coach · coming up', `${next.name} is on ${when}. A post planned now beats a rushed one on the day.`, [
+            ['Get post ideas', () => { if (window.seKeyDates) window.seKeyDates.openIdeas(next); }, true],
+            ['Not now', notNow],
+          ]);
+          return;
+        }
+      } catch (_) { /* fall through */ }
+      paint('Coach', 'Not sure what to post next? Ask me and I will look at your recent posts and your plan.', [
+        ['Ask Coach', () => document.querySelector('[data-nav=ai-coach]')?.click(), true],
+      ]);
     }
 
     async function triggerCompetitorSnipe(btn) {

@@ -28,8 +28,10 @@ test('?look=new: icon rail, jump bar, Day/Dark that sticks, palette mapped, ?loo
   await expect(page.locator('html')).toHaveClass(/\bnl\b/);
   await expect(page.locator('html')).toHaveAttribute('data-nl-theme', 'dark');
 
-  // Rail: 68px, every page still there with its name as the label.
-  expect(await rgb(page, '.dash-sidebar', 'width')).toBe('68px');
+  // Labelled sidebar on Home, every page still there with its name as the label; Review is renamed.
+  expect(await rgb(page, '.dash-sidebar', 'width')).toBe('220px');
+  await expect(page.locator('.dash-nav-item[data-nav="content"] .nl-lbl')).toHaveText('Review');
+  await expect(page.locator('.dash-nav-item[data-nl-brand]')).toBeVisible();
   await expect(page.locator('.dash-nav-item[data-nav="schedule"]')).toHaveAttribute('data-nl-label', 'Calendar');
   await expect(page.locator('.dash-nav-item[data-nav="schedule"]')).toHaveAttribute('aria-label', 'Calendar');
   expect(await rgb(page, 'body', 'backgroundColor')).toBe('rgb(13, 14, 17)');
@@ -41,6 +43,12 @@ test('?look=new: icon rail, jump bar, Day/Dark that sticks, palette mapped, ?loo
   await expect(page.locator('#nl-cmd-list')).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.locator('.dash-nav-item[data-nav="schedule"]')).toHaveClass(/active/);
+  // Work screens collapse to the rail; the toggle opens it again and is remembered.
+  await expect.poll(() => rgb(page, '.dash-sidebar', 'width')).toBe('68px');
+  await page.click('.nl-railtog');
+  await expect.poll(() => rgb(page, '.dash-sidebar', 'width')).toBe('220px');
+  await page.click('.nl-railtog');
+  await expect.poll(() => rgb(page, '.dash-sidebar', 'width')).toBe('68px');
 
   // Inline colours follow the palette, including ones added later.
   await page.evaluate(() => {
@@ -180,5 +188,38 @@ test('new look Animate: steps show where the project is; the studio still opens 
   await expect(steps.nth(3)).toHaveAttribute('aria-current', 'step');
   await page.click('#anim-home');
   await expect(page.locator('.anim-canvas-header .nl-steps')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('new look Home: greeting, approvals with Approve/Reject, goes live today, coach move, month in numbers; account menu signs out', async ({ page }) => {
+  const errors = watchErrors(page);
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const content = [
+    { id: 'recR', status: 'Ready for Review', caption: 'Walk on Sunday, bring a friend', platform: 'Instagram', content_type: 'image', scheduled_date: `${ymd}T17:00:00.000Z` },
+    { id: 'recS', status: 'Scheduled', caption: 'Last call for sign-ups', platform: 'Facebook', content_type: 'reel', scheduled_date: `${ymd}T18:00:00.000Z` },
+  ];
+  await mockApi(page, srv.base, {
+    data: clientData({ content, posts: content, client: { tier: 'growth', social_connected_platforms: ['instagram'] } }),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/meta-planner') { json(200, { slots: [{ date: '2999-01-01', format: 'reel', story_type: 'pov', story_type_label: 'POV', status: 'open' }] }); return 'handled'; }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await expect(page.locator('.nl-page h1')).toContainText(/^Good (morning|afternoon|evening), Owner\.$/);
+  const row = page.locator('.nl-qrow').first();
+  await expect(row).toContainText('Walk on Sunday');
+  await expect(row.locator('button', { hasText: 'Approve' })).toBeVisible();
+  await expect(row.locator('button', { hasText: 'Reject' })).toBeVisible();
+  await expect(page.locator('.nl-lrow')).toContainText('Last call for sign-ups');
+  await expect(page.locator('#nl-home-coach')).toContainText('open Reel');
+  await expect(page.locator('.nl-conn')).toHaveText('Connected');
+  await expect(page.locator('.nl-plan')).toContainText('Growth plan');
+  await page.click('.dash-sidebar__user');
+  await expect(page.locator('.nl-acctmenu')).toBeVisible();
+  await page.click('.nl-acctmenu [data-a="out"]');
+  await expect(page.locator('#dashboard-view')).not.toHaveClass(/active/);
   expect(errors).toEqual([]);
 });
