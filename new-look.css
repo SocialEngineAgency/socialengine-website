@@ -1139,3 +1139,44 @@ html.nl .nl-set > p:last-child { color: var(--nl-fg3) !important; }
 html.nl .nl-set [style*="text-transform:uppercase"] { text-transform: none !important; letter-spacing: 0 !important; }
 html.nl .nl-set [data-settings-panel="billing"] > div:first-child h3 { font: 400 24px var(--nl-display) !important; letter-spacing: -0.02em !important; }
 html.nl .nl-set #settings-brand-panel h2 { font: 400 22px var(--nl-display) !important; letter-spacing: -0.02em !important; color: var(--nl-fg) !important; }
+
+/* ── Create header (all modes): "Create" title with the mode segment and Video Studio on the right ── */
+html.nl .create-segments:not([hidden]) { display: flex !important; align-items: center; flex-wrap: wrap; row-gap: 10px; padding: 22px 24px 2px !important; border-bottom: 0 !important; max-width: 1340px; width: 100%; margin: 0 auto; box-sizing: border-box; gap: 0 !important; background: transparent !important; }
+html.nl .create-segments::before { content: 'Create'; margin-right: auto; padding-right: 16px; font: 400 28px/1.1 var(--nl-display); letter-spacing: -0.02em; color: var(--nl-fg); }
+html.nl .create-seg:not(.create-seg--studio) { height: 38px !important; padding: 0 14px !important; border-radius: 0 !important; background: var(--nl-s2) !important; border-top: 1px solid var(--nl-line-strong) !important; border-bottom: 1px solid var(--nl-line-strong) !important; color: var(--nl-fg3) !important; font: 500 13px var(--nl-body) !important; box-shadow: inset 0 0 0 3px var(--nl-s2) !important; }
+html.nl .create-seg:not(.create-seg--studio)::after { display: none !important; }
+html.nl .create-seg:first-child { border-left: 1px solid var(--nl-line-strong) !important; border-radius: 9px 0 0 9px !important; }
+html.nl .create-seg:nth-last-child(2) { border-right: 1px solid var(--nl-line-strong) !important; border-radius: 0 9px 9px 0 !important; }
+html.nl .create-seg:not(.create-seg--studio).active, html.nl .create-seg:not(.create-seg--studio)[aria-selected="true"] { background: var(--nl-s4) !important; color: var(--nl-fg) !important; border-radius: 9px !important; }
+html.nl .create-seg:first-child.active { border-radius: 9px !important; }
+html.nl .create-seg--studio { margin-left: 8px !important; height: 38px !important; padding: 0 12px !important; border: 1px solid var(--nl-line-strong) !important; border-radius: 8px !important; background: transparent !important; color: var(--nl-fg) !important; font: 500 13px var(--nl-body) !important; text-transform: none !important; letter-spacing: 0 !important; }
+html.nl .anim-shell.nl-anim-on .anim-canvas-header h2 { display: none !important; }
+html.nl .anim-shell.nl-anim-on { padding-top: 14px !important; }
+
+/* Video (Create) polish: card columns, plain-case labels */
+html.nl .atelier-shell [style*="text-transform:uppercase"], html.nl .atelier-shell [class*="eyebrow"], html.nl .atelier-inspector__title { text-transform: none !important; letter-spacing: 0 !important; }
+
+/* Ads polish */
+html.nl #dash-content > div > h2:first-child, html.nl .ads-head h2 { font: 400 28px/1.1 var(--nl-display) !important; letter-spacing: -0.02em !important; }
+
+/* ── Create → Video: the same three-card layout as Post ── */
+html.nl .create-seg::before { display: none !important; }
+html.nl #dash-content:has(> .atelier-shell:not(.anim-shell)) { padding: 0 !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) { gap: 14px; padding: 14px 24px 24px !important; box-sizing: border-box; max-width: 1340px; margin: 0 auto; width: 100%; height: calc(100vh - 140px) !important; background: transparent !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-essentials,
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-stage,
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-inspector { border: 1px solid var(--nl-line) !important; border-radius: 12px; background: var(--nl-surface) !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-essentials { padding: 16px !important; gap: 14px !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-essentials > div:first-child > div:first-child { font: 400 22px/1.15 var(--nl-display) !important; letter-spacing: -0.02em !important; color: var(--nl-fg) !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-stage > div:first-child { border-bottom: 1px solid var(--nl-line) !important; color: var(--nl-fg3) !important; font: 500 11px var(--nl-mono) !important; letter-spacing: 0.04em !important; text-transform: none !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-inspector > div:first-child { font: 500 14px var(--nl-display) !important; color: var(--nl-fg) !important; border-bottom: 1px solid var(--nl-line) !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) .dash-card { background: var(--nl-s2) !important; border: 1px solid var(--nl-line) !important; border-radius: 10px !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) .dash-card:hover { border-color: var(--nl-line-strong) !important; }
+html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) textarea, html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) select, html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) input[type="text"] { background: var(--nl-s2) !important; border: 1px solid var(--nl-line-strong) !important; border-radius: 9px !important; color: var(--nl-fg) !important; }
+html.nl #dash-content.dash-content--animate { padding: 0 !important; }
+html.nl .anim-shell.nl-anim-on .anim-canvas-header .nl-steps { order: 0 !important; flex: 1 1 auto !important; margin: 0 !important; }
+@media (max-width: 1100px) {
+  html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) { flex-wrap: wrap; height: auto !important; overflow: visible !important; }
+  html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-essentials, html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-inspector { width: 100% !important; }
+}
+html.nl .anim-shell.nl-anim-on { width: 100% !important; box-sizing: border-box !important; }

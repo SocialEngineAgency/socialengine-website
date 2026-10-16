@@ -353,6 +353,8 @@ test('new look Review: filter bar, cards with Approve/Reject, the post opens inl
   // Approve from the card goes through the same approve call.
   await c1.locator('button', { hasText: 'Approve' }).click();
   await expect.poll(() => calls.some((c) => c.path === '/api/approve-post' && /recP1/.test(c.body || ''))).toBe(true);
+  // Review refreshes itself after an approve; wait for that before leaving.
+  await expect(page.locator('.nl-rv-card[data-post-id="recP1"] .nl-rv-pill')).toHaveText('Approved');
 
   // Home opens a post on top of the page, as before.
   await page.click('.dash-nav-item[data-nav="dashboard"]');
