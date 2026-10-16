@@ -3,6 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // New look (graphite redesign): ?look=new turns it on in this browser, ?look=old turns it off.
+    (function () {
+      try {
+        var q = new URLSearchParams(location.search).get('look');
+        if (q === 'new' || q === 'old') localStorage.setItem('se-look', q);
+        if (localStorage.getItem('se-look') === 'new') {
+          document.documentElement.classList.add('nl');
+          document.documentElement.setAttribute('data-nl-theme', localStorage.getItem('se-nl-theme') === 'day' ? 'day' : 'dark');
+        }
+      } catch (_) {}
+    })();
+  </script>
   <title>Client Portal — SocialEngine</title>
   <meta name="description" content="Sign in to your SocialEngine client portal. Manage your social media content, analytics, and brand voice all in one place.">
   <link rel="preload" as="font" type="font/woff2" crossorigin href="./fonts/inter-latin-400-700-c9407645.woff2">
@@ -3065,6 +3078,8 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
+  <link rel="stylesheet" href="./new-look.css?v=20261016a">
+  <script src="./new-look.js?v=20261016a" defer></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
