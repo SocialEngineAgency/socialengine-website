@@ -238,7 +238,7 @@ test('Carousel → Reel sends slides in order with seconds per slide; a failed r
     data: clientData({}),
     onRequest: async (entry, route, json) => {
       if (entry.path === '/api/motion/jobs/mot_1' && renders.length === 1) {
-        json(200, { job_id: 'mot_1', status: 'failed', error: 'The render worker is busy. Try again in a minute.' });
+        json(200, { job_id: 'mot_1', status: 'failed', error: 'The render worker is busy. Try again in a minute.', detail: 'render worker 429: busy' });
         return 'handled';
       }
       return base(entry, route, json);
@@ -250,6 +250,8 @@ test('Carousel → Reel sends slides in order with seconds per slide; a failed r
   await page.selectOption('#mr-secs', '3.5');
   await page.click('#mr-go');
   await expect(page.locator('#mr-stage')).toContainText('The render worker is busy', { timeout: 15000 });
+  await expect(page.locator('#mr-error-detail')).toHaveText('Details: render worker 429: busy');
+  await expect(page.locator('#mr-stage')).toContainText('This one did not count toward today.');
   expect(renders[0]).toMatchObject({ kind: 'carousel', slides: ['https://cdn.example/s1.png', 'https://cdn.example/s3.png'], seconds_per_slide: 3.5, name: 'Linen care' });
   await page.click('#mr-go');
   await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel.mp4', { timeout: 15000 });
