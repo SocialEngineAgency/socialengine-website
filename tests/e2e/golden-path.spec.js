@@ -293,6 +293,8 @@ const TAB_DEFINITIONS = [
 
 test.describe('SocialEngine portal golden path', () => {
   test.beforeEach(async ({ page }) => {
+    // These checks use the old look's markup; the new look is covered by new-look.spec.js.
+    await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'old'); } catch (_) {} });
     const jsErrors = [];
     const pageErrors = [];
     const failedRequests = [];
