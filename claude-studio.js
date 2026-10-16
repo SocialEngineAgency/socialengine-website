@@ -1188,6 +1188,106 @@
     return true;
   }
 
+  // New look (html.nl): the same controls, laid out like the redesign. Every element keeps its
+  // id, so the handlers bound below work unchanged. Style, size and engine come out of their
+  // drawers; size becomes a segmented control; the caption gets its own card under the stage.
+  function arrangePostNL(content, isCarouselMode) {
+    const shell = content.querySelector('.atelier-shell');
+    if (!shell) return;
+    shell.classList.add('nl-post');
+    const left = shell.querySelector('.atelier-essentials');
+    const brief = content.querySelector('#cs-brief');
+    const gen = content.querySelector('#cs-generate');
+    const style = content.querySelector('#cs-style');
+    const aspect = content.querySelector('#cs-aspect');
+    const engine = content.querySelector('#cs-engine');
+    const hint = content.querySelector('#cs-engine-hint');
+    if (!left || !brief || !gen || !style || !aspect || !engine) return;
+    const field = (label, forId) => {
+      const w = document.createElement('div');
+      w.className = 'nl-field';
+      const l = document.createElement(forId ? 'label' : 'span');
+      l.className = 'nl-field__label';
+      l.textContent = label;
+      if (forId) l.htmlFor = forId;
+      w.appendChild(l);
+      return w;
+    };
+    const opts = document.createElement('div');
+    opts.className = 'nl-post__opts';
+    const fStyle = field('Style', 'cs-style');
+    fStyle.appendChild(style);
+    const row = document.createElement('div');
+    row.className = 'nl-post__row';
+    const fSize = field('Size');
+    const seg = document.createElement('div');
+    seg.className = 'nl-seg nl-seg--fill';
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Size');
+    ['9:16', '4:5', '1:1'].forEach((v) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = v;
+      b.dataset.aspect = v;
+      b.addEventListener('click', () => {
+        aspect.value = v;
+        aspect.dispatchEvent(new Event('change', { bubbles: true }));
+        syncSeg();
+      });
+      seg.appendChild(b);
+    });
+    aspect.classList.add('nl-hidden-select');
+    fSize.appendChild(seg);
+    fSize.appendChild(aspect);
+    const fEngine = field('Engine', 'cs-engine');
+    fEngine.appendChild(engine);
+    row.appendChild(fSize);
+    row.appendChild(fEngine);
+    opts.appendChild(fStyle);
+    opts.appendChild(row);
+    if (hint) { hint.classList.add('nl-hint'); opts.appendChild(hint); }
+    const syncSeg = () => seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.aspect === aspect.value)));
+    syncSeg();
+    const timer = setInterval(() => { if (!document.body.contains(seg)) clearInterval(timer); else syncSeg(); }, 700);
+    // Brief's block, then the options, then the brand chip and Generate.
+    const briefBlock = brief.parentElement;
+    briefBlock.insertAdjacentElement('afterend', opts);
+    const brand = document.createElement('div');
+    brand.className = 'nl-brand-chip';
+    brand.innerHTML = '<i></i><span></span>';
+    brand.querySelector('span').textContent = `${_csBrandName} · colours, logo, voice`;
+    brand.title = 'Your brand colours, logo and voice are applied to every design';
+    opts.insertAdjacentElement('afterend', brand);
+    brand.insertAdjacentElement('afterend', gen);
+    gen.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Generate design';
+    // The emptied drawers go.
+    left.querySelectorAll('details.atelier-drawer').forEach((d) => {
+      if (!d.querySelector('input, select, textarea, button, #cs-saved-designs')) d.remove();
+    });
+    // Caption card under the stage.
+    const bar = content.querySelector('#cs-finish-bar');
+    const capBtn = content.querySelector('#cs-caption');
+    const capBox = content.querySelector('#cs-caption-box');
+    if (bar && capBtn && capBox) {
+      const card = document.createElement('section');
+      card.className = 'nl-caption';
+      card.setAttribute('aria-labelledby', 'nl-caption-title');
+      card.innerHTML = '<div class="nl-caption__head"><h2 id="nl-caption-title">Caption</h2><span class="nl-muted">Reads the image, watches and listens to video</span></div>';
+      card.querySelector('.nl-caption__head').appendChild(capBtn);
+      capBtn.textContent = 'Get caption';
+      card.appendChild(capBox);
+      bar.appendChild(card);
+      const actions = bar.firstElementChild;
+      if (actions) actions.classList.add('nl-post__actions');
+    }
+    // New / Save / Archive / Delete sit with the drawers, so Generate stays in view.
+    const fileRow = content.querySelector('#cs-new-post')?.parentElement;
+    const drawers = left.querySelector('details.atelier-drawer')?.parentElement;
+    if (fileRow && drawers) { fileRow.classList.add('nl-post__file'); drawers.appendChild(fileRow); }
+    const coachHead = content.querySelector('#cs-coach-rail > div');
+    if (coachHead) { coachHead.textContent = 'Coach'; coachHead.classList.add('nl-coach__head'); }
+  }
+
   function renderClaudeStudio() {
     const content = document.getElementById('dash-content');
     if (!content) return;
@@ -1428,6 +1528,7 @@
 
       <div id="cs-export-mount" style="position:fixed;left:-10000px;top:0;width:1080px;height:1080px;overflow:hidden;pointer-events:none;"></div>
     `;
+    if (document.documentElement.classList.contains('nl')) arrangePostNL(content, isCarouselMode);
 
     renderRefSummary();
     syncSplitButton();
