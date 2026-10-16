@@ -140,26 +140,243 @@
     const where = live.length ? live.join(', ') : 'no sources connected yet';
     return `${nlPeriodWords()}, ${where}.`;
   }
-  function nlBars(labels, ig, fb) {
-    const n = Math.max((ig || []).length, (fb || []).length, (labels || []).length);
-    if (!n) return '';
-    const vals = [];
-    for (let i = 0; i < n; i += 1) vals.push([Number((ig || [])[i]) || 0, Number((fb || [])[i]) || 0]);
-    const max = Math.max(1, ...vals.map(([a, b]) => a + b));
-    if (max <= 1 && vals.every(([a, b]) => !a && !b)) return '';
-    const step = Math.max(1, Math.ceil(n / 14));
-    const lab = (i) => {
-      const raw = String((labels || [])[i] || '');
-      const m = raw.match(/(\d{1,2})$/) || raw.match(/-(\d{2})(?:T|$)/);
-      return m ? m[1].padStart(2, '0') : raw.slice(-2);
-    };
-    return `<div class="nl-an-bars" role="img" aria-label="Interactions per day by platform">${vals.map(([a, b], i) => `
-      <div class="nl-an-bar" title="${esc((labels || [])[i] || '')}: Instagram ${fmtNum(a)}, Facebook ${fmtNum(b)}">
-        <div class="nl-an-bar__stack" style="height:${(((a + b) / max) * 100).toFixed(1)}%">${a ? `<i class="nl-an-seg--ig" style="flex:${a}"></i>` : ''}${b ? `<i class="nl-an-seg--fb" style="flex:${b}"></i>` : ''}</div>
-        <span>${i % step === 0 ? esc(lab(i)) : ''}</span>
-      </div>`).join('')}</div>
-      <div class="nl-an-legend"><span><i class="nl-an-seg--ig"></i>Instagram</span><span><i class="nl-an-seg--fb"></i>Facebook</span></div>`;
+  // ── New look: the daily chart (reach or interactions per day, by platform) ──
+  // Reads charts.{labels,keys,reach,interactions,posts,totals}. Everything it shows is derived
+  // from those series: totals and the change on the previous period, daily average, best day,
+  // what posting days earned against quiet days, platform share, and what went out each day.
+  let _nlMetric = 'reach';
+  const NL_PLAT = { instagram: 'Instagram', facebook: 'Facebook' };
+  function nlCompact(n) {
+    const v = Number(n) || 0;
+    const a = Math.abs(v);
+    if (a >= 1e6) return `${(v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '')}M`;
+    if (a >= 1e3) return `${(v / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, '')}K`;
+    return String(Math.round(v));
   }
+  function nlDay(key, label, opts) {
+    if (key) {
+      const d = new Date(`${key}T12:00:00Z`);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString('en-US', Object.assign({ month: 'short', day: 'numeric', timeZone: 'UTC' }, opts || {}));
+    }
+    return String(label || '');
+  }
+  function nlNiceStep(raw) {
+    if (!(raw > 0)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const f = raw / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  }
+  function nlDailyData(card, metric) {
+    const ch = (card && card.charts) || {};
+    const src = metric === 'interactions'
+      ? { instagram: ch.interactions && ch.interactions.instagram, facebook: ch.interactions && ch.interactions.facebook }
+      : { instagram: (ch.reach && ch.reach.instagram) || ch.instagram, facebook: (ch.reach && ch.reach.facebook) || ch.facebook };
+    const series = ['instagram', 'facebook']
+      .filter((id) => Array.isArray(src[id]) && src[id].some((v) => Number(v) > 0))
+      .map((id) => ({ id, label: NL_PLAT[id], vals: src[id].map((v) => Number(v) || 0) }));
+    const n = Math.max(0, ...series.map((s) => s.vals.length));
+    if (!series.length || !n) return null;
+    const labels = ch.labels || [];
+    const keys = Array.isArray(ch.keys) ? ch.keys : [];
+    const posts = Array.isArray(ch.posts) ? ch.posts : null;
+    const days = [];
+    for (let i = 0; i < n; i += 1) {
+      const parts = series.map((s) => s.vals[i] || 0);
+      const p = posts && posts[i] ? posts[i] : null;
+      days.push({ i, key: keys[i] || '', label: labels[i] || '', parts, total: parts.reduce((a, b) => a + b, 0), posts: p ? (p.items || []) : [], postCount: p ? (Number(p.count) || 0) : 0 });
+    }
+    const total = days.reduce((a, d) => a + d.total, 0);
+    const avg = total / n;
+    const best = days.reduce((b, d) => (d.total > b.total ? d : b), days[0]);
+    const sums = series.map((s) => s.vals.reduce((a, b) => a + b, 0));
+    let lift = null;
+    if (posts) {
+      const on = days.filter((d) => d.postCount > 0);
+      const off = days.filter((d) => d.postCount === 0);
+      if (on.length >= 2 && off.length >= 2) {
+        const aOn = on.reduce((a, d) => a + d.total, 0) / on.length;
+        const aOff = off.reduce((a, d) => a + d.total, 0) / off.length;
+        lift = { on: aOn, off: aOff, ratio: aOff > 0 ? aOn / aOff : null, days: on.length };
+      }
+    }
+    const totals = ch.totals || {};
+    const t = metric === 'interactions' ? totals.interactions : totals.reach;
+    const delta = t && typeof t.delta_pct === 'number' ? t.delta_pct : null;
+    const step = nlNiceStep((best.total || 1) / 4);
+    const top = Math.max(step, Math.ceil((best.total || 1) / step) * step);
+    return { metric, series, days, n, total, avg, best, sums, lift, delta, step, top, hasPosts: !!posts };
+  }
+  function nlDailyHtml(card) {
+    const metrics = ['reach', 'interactions'].filter((m) => nlDailyData(card, m));
+    if (!metrics.length) return '<div class="nl-an-card__t">Daily performance</div><p class="nl-an-none">Daily numbers show here once Instagram or Facebook insights are connected for this period.</p>';
+    if (!metrics.includes(_nlMetric)) _nlMetric = metrics[0];
+    const d = nlDailyData(card, _nlMetric);
+    const word = _nlMetric === 'interactions' ? 'interactions' : 'reach';
+    const Word = word[0].toUpperCase() + word.slice(1);
+    const periodDays = { '7d': 7, '30d': 30, '90d': 90 }[_period] || d.n;
+    const names = d.series.map((s) => s.label).join(' and ');
+    const pct = (v) => (d.total > 0 ? Math.round((v / d.total) * 100) : 0);
+    const deltaHtml = d.delta == null ? '<em>No earlier period to compare</em>'
+      : `<em class="${d.delta > 0 ? 'is-up' : d.delta < 0 ? 'is-down' : ''}">${d.delta > 0 ? '+' : ''}${d.delta}% vs previous ${periodDays} days</em>`;
+    const bestDay = nlDay(d.best.key, d.best.label, { weekday: 'short' });
+    const seg = metrics.length > 1
+      ? `<div class="nl-seg" role="group" aria-label="Metric">${metrics.map((m) => `<button type="button" data-nl-metric="${m}" aria-pressed="${m === _nlMetric ? 'true' : 'false'}">${m === 'reach' ? 'Reach' : 'Interactions'}</button>`).join('')}</div>`
+      : '';
+    const ticks = [];
+    for (let v = 0; v <= d.top + 1e-9; v += d.step) ticks.push(v);
+    const yPct = (v) => (d.top > 0 ? (v / d.top) * 100 : 0);
+    const xStep = Math.max(1, Math.ceil(d.n / 8));
+    const cols = d.days.map((day) => {
+      const h = yPct(day.total);
+      const segs = day.parts.map((v, si) => (v > 0 ? `<i class="nl-dc__seg nl-dc__seg--${d.series[si].id}" style="flex:${v}"></i>` : '')).join('');
+      const when = nlDay(day.key, day.label, { weekday: 'short' });
+      const aria = `${when}: ${d.series.map((s, si) => `${s.label} ${fmtNum(day.parts[si])}`).join(', ')}${d.series.length > 1 ? `, total ${fmtNum(day.total)}` : ''} ${word}${day.postCount ? `. ${day.postCount} post${day.postCount === 1 ? '' : 's'} went out` : ''}`;
+      return `<button type="button" class="nl-dc__col${day.i === d.best.i ? ' is-best' : ''}" data-i="${day.i}" aria-label="${esc(aria)}">
+        <span class="nl-dc__bar">${day.total > 0 ? `<span class="nl-dc__stack" style="height:${h.toFixed(2)}%">${segs}</span>` : ''}${day.i === d.best.i && day.total > 0 ? `<span class="nl-dc__peak" style="bottom:calc(${h.toFixed(2)}% + 4px)">${nlCompact(day.total)}</span>` : ''}</span>
+        <span class="nl-dc__mk">${day.postCount ? `<i title="${day.postCount} post${day.postCount === 1 ? '' : 's'}"></i>` : ''}</span>
+      </button>`;
+    }).join('');
+    const xs = d.days.map((day) => `<span>${day.i % xStep === 0 || day.i === d.n - 1 ? esc(nlDay(day.key, day.label)) : ''}</span>`).join('');
+    const legend = d.series.length > 1
+      ? d.series.map((s, si) => `<span><i class="nl-dc__key nl-dc__key--${s.id}"></i>${esc(s.label)} <b>${fmtNum(d.sums[si])}</b> <em>${pct(d.sums[si])}%</em></span>`).join('')
+      : '';
+    // Plain-English findings, all computed from the series above.
+    const finds = [];
+    if (d.delta != null) finds.push(`${Word} is ${d.delta > 0 ? 'up' : d.delta < 0 ? 'down' : 'flat'}${d.delta ? ` ${Math.abs(d.delta)}%` : ''} on the previous ${periodDays} days.`);
+    if (d.best.total > 0) {
+      const x = d.avg > 0 ? d.best.total / d.avg : null;
+      const what = d.best.posts.length ? ` That was the day "${d.best.posts[0].title}" went out${d.best.postCount > 1 ? `, with ${d.best.postCount - 1} other post${d.best.postCount > 2 ? 's' : ''}` : ''}.` : (d.hasPosts ? ' Nothing new went out that day, so it was older posts still travelling.' : '');
+      finds.push(`Best day was ${bestDay}: ${fmtNum(d.best.total)} ${word}${x && x >= 1.2 ? `, ${x.toFixed(1)}× your daily average` : ''}.${what}`);
+    }
+    if (d.lift && d.lift.ratio) {
+      finds.push(d.lift.ratio >= 1.1
+        ? `Days you posted averaged ${fmtNum(Math.round(d.lift.on))} ${word}, against ${fmtNum(Math.round(d.lift.off))} on days you didn't (${d.lift.ratio.toFixed(1)}×). Posting more often should lift this.`
+        : `Posting days averaged ${fmtNum(Math.round(d.lift.on))} ${word}, about the same as quiet days (${fmtNum(Math.round(d.lift.off))}). What you post matters more here than how often.`);
+    }
+    if (d.series.length > 1 && d.total > 0) {
+      const lead = d.sums[0] >= d.sums[1] ? 0 : 1;
+      finds.push(`${d.series[lead].label} brought ${pct(d.sums[lead])}% of ${word}.`);
+    }
+    const rows = d.days.slice().reverse().map((day) => `<tr><td>${esc(nlDay(day.key, day.label, { weekday: 'short' }))}</td>${d.series.map((s, si) => `<td class="nl-dc__num">${fmtNum(day.parts[si])}</td>`).join('')}${d.series.length > 1 ? `<td class="nl-dc__num">${fmtNum(day.total)}</td>` : ''}<td>${day.posts.length ? esc(day.posts.map((p) => p.title).join('; ')) + (day.postCount > day.posts.length ? ` +${day.postCount - day.posts.length}` : '') : ''}</td></tr>`).join('');
+    return `
+      <div class="nl-dc__head">
+        <div>
+          <h2 class="nl-dc__title">Daily ${word}${d.series.length > 1 ? ', by platform' : ` on ${esc(d.series[0].label)}`}</h2>
+          <p class="nl-dc__sub">${esc(nlPeriodWords())} · ${esc(names)}${d.hasPosts ? ' · dots mark days you posted' : ''}</p>
+        </div>
+        ${seg}
+      </div>
+      <div class="nl-dc__stats">
+        <div><span>Total ${word}</span><b>${fmtNum(d.total)}</b>${deltaHtml}</div>
+        <div><span>Daily average</span><b>${fmtNum(Math.round(d.avg))}</b><em>${d.n} days</em></div>
+        <div><span>Best day</span><b>${esc(nlDay(d.best.key, d.best.label))}</b><em>${fmtNum(d.best.total)} ${word}</em></div>
+        ${d.lift && d.lift.ratio ? `<div><span>Days you posted</span><b>${d.lift.ratio.toFixed(1)}×</b><em>${nlCompact(d.lift.on)} vs ${nlCompact(d.lift.off)} a day</em></div>` : ''}
+      </div>
+      ${legend || d.avg > 0 ? `<div class="nl-dc__legend">${legend}${d.avg > 0 ? '<span><i class="nl-dc__key nl-dc__key--avg"></i>Daily average</span>' : ''}</div>` : ''}
+      <div class="nl-dc__chart">
+        <div class="nl-dc__y" aria-hidden="true">${ticks.map((v) => `<span style="bottom:${yPct(v).toFixed(2)}%">${nlCompact(v)}</span>`).join('')}</div>
+        <div class="nl-dc__plot" role="group" aria-label="Daily ${word}. Use Tab to move between days.">
+          <div class="nl-dc__area" aria-hidden="true">
+            ${ticks.map((v) => `<i class="nl-dc__grid" style="bottom:${yPct(v).toFixed(2)}%"></i>`).join('')}
+            ${d.avg > 0 ? `<i class="nl-dc__avg" style="bottom:${yPct(d.avg).toFixed(2)}%"><span>Avg ${nlCompact(d.avg)}</span></i>` : ''}
+          </div>
+          <div class="nl-dc__cols" style="--n:${d.n}">${cols}</div>
+          <div class="nl-dc__tip" role="status" aria-live="polite" hidden></div>
+        </div>
+        <div class="nl-dc__x" aria-hidden="true" style="--n:${d.n}">${xs}</div>
+      </div>
+      ${finds.length ? `<ul class="nl-dc__finds">${finds.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+      <details class="nl-dc__table">
+        <summary>Show the numbers</summary>
+        <div class="nl-dc__tablewrap"><table>
+          <thead><tr><th>Day</th>${d.series.map((s) => `<th class="nl-dc__num">${esc(s.label)}</th>`).join('')}${d.series.length > 1 ? '<th class="nl-dc__num">Total</th>' : ''}<th>Posts that day</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </details>`;
+  }
+  function nlPaintDaily(card) {
+    const host = document.getElementById('nl-daily');
+    if (!host) return;
+    host.innerHTML = nlDailyHtml(card);
+    const d = nlDailyData(card, _nlMetric);
+    host.querySelectorAll('[data-nl-metric]').forEach((b) => b.addEventListener('click', () => {
+      _nlMetric = b.getAttribute('data-nl-metric');
+      nlPaintDaily(card);
+    }));
+    if (!d) return;
+    const plot = host.querySelector('.nl-dc__plot');
+    const tip = host.querySelector('.nl-dc__tip');
+    const word = _nlMetric === 'interactions' ? 'interactions' : 'reach';
+    const show = (col) => {
+      const day = d.days[Number(col.dataset.i)];
+      if (!day || !tip) return;
+      host.querySelectorAll('.nl-dc__col.is-on').forEach((c) => c.classList.remove('is-on'));
+      col.classList.add('is-on');
+      tip.textContent = '';
+      const h = document.createElement('div');
+      h.className = 'nl-dc__tip-h';
+      h.textContent = nlDay(day.key, day.label, { weekday: 'long' });
+      tip.appendChild(h);
+      const row = (key, value, label) => {
+        const r = document.createElement('div');
+        r.className = 'nl-dc__tip-r';
+        const k = document.createElement('i');
+        k.className = `nl-dc__tip-k${key ? ` nl-dc__tip-k--${key}` : ''}`;
+        const v = document.createElement('b');
+        v.textContent = value;
+        const l = document.createElement('span');
+        l.textContent = label;
+        r.append(k, v, l);
+        tip.appendChild(r);
+      };
+      d.series.forEach((s, si) => row(s.id, fmtNum(day.parts[si]), s.label));
+      if (d.series.length > 1) row('', fmtNum(day.total), `total ${word}`);
+      const vs = document.createElement('div');
+      vs.className = 'nl-dc__tip-vs';
+      if (d.avg > 0) {
+        const diff = Math.round(((day.total - d.avg) / d.avg) * 100);
+        vs.textContent = diff === 0 ? 'Same as your daily average' : `${Math.abs(diff)}% ${diff > 0 ? 'above' : 'below'} your daily average`;
+        tip.appendChild(vs);
+      }
+      if (day.postCount) {
+        const p = document.createElement('div');
+        p.className = 'nl-dc__tip-posts';
+        const t = document.createElement('div');
+        t.className = 'nl-dc__tip-pt';
+        t.textContent = `${day.postCount} post${day.postCount === 1 ? '' : 's'} went out`;
+        p.appendChild(t);
+        day.posts.forEach((post) => {
+          const li = document.createElement('div');
+          li.textContent = `${post.title} · ${post.format || ''}${post.platform ? ` · ${NL_PLAT[post.platform] || post.platform}` : ''}`;
+          p.appendChild(li);
+        });
+        tip.appendChild(p);
+      } else if (d.hasPosts) {
+        const p = document.createElement('div');
+        p.className = 'nl-dc__tip-pt';
+        p.textContent = 'No new posts this day';
+        tip.appendChild(p);
+      }
+      tip.hidden = false;
+      const pr = plot.getBoundingClientRect();
+      const cr = col.getBoundingClientRect();
+      const tw = tip.offsetWidth;
+      let x = cr.left - pr.left + cr.width / 2 + 10;
+      if (x + tw > pr.width) x = cr.left - pr.left + cr.width / 2 - tw - 10;
+      tip.style.left = `${Math.max(0, x)}px`;
+    };
+    const hide = () => {
+      if (tip) tip.hidden = true;
+      host.querySelectorAll('.nl-dc__col.is-on').forEach((c) => c.classList.remove('is-on'));
+    };
+    host.querySelectorAll('.nl-dc__col').forEach((col) => {
+      col.addEventListener('pointerenter', () => show(col));
+      col.addEventListener('focus', () => show(col));
+      col.addEventListener('blur', hide);
+    });
+    plot.addEventListener('pointerleave', hide);
+  }
+
   function nlCall(row, moves) {
     const same = (x) => x && ((x.permalink && x.permalink === row.permalink) || (x.title && x.title === row.title));
     if ((moves.scale || []).some(same)) return ['ok', 'Scale'];
@@ -177,8 +394,6 @@
     const reachFb = charts.reach?.facebook || charts.facebook;
     const intIg = charts.interactions?.instagram;
     const intFb = charts.interactions?.facebook;
-    const bars = nlBars(labels, intIg, intFb) || nlBars(labels, reachIg, reachFb);
-    const barsTitle = nlBars(labels, intIg, intFb) ? 'Interactions per day, by platform' : 'Reach per day, by platform';
     const kpi = (label, value) => `<div class="nl-an-kpi"><span>${label}</span><b class="analytics-kpi-card__value">${value}</b></div>`;
     const move = (id, label, tone, item, hint) => item
       ? `<button type="button" id="${id}" class="nl-an-move nl-an-move--${tone}"><span class="nl-an-move__l">${label}</span><b>${esc(item.title || 'Untitled')}</b><span class="nl-an-move__m">${esc(item.intent || '')}${item.views != null ? ` · ${fmtNum(item.views)} views` : ''}${item.eng_rate != null ? ` · ${item.eng_rate}% eng` : ''}</span><span class="nl-an-move__go">${hint}</span></button>`
@@ -199,9 +414,9 @@
     return `<div class="nl-an-main">
       <section class="nl-an-verdict"><b>${esc(card.verdict || 'Proven posts in this book.')}</b> <span>Three moves, ranked only on proven data.</span></section>
       <div class="nl-an-kpis">${kpi('Views', fmtNum(k.views))}${kpi('Followers', fmtNum(k.followers))}${kpi('Engagement rate', k.eng_rate != null ? k.eng_rate + '%' : '—')}${kpi('Needs review', fmtNum(k.untagged))}</div>
+      <section class="nl-an-card nl-dc" id="nl-daily" aria-label="Daily performance"></section>
       <div class="nl-an-two">
         <div class="nl-an-left">
-          <section class="nl-an-card"><div class="nl-an-card__t">${barsTitle}</div>${bars || '<p class="nl-an-none">No daily series for this period yet.</p>'}</section>
           <div class="nl-an-moves">
             ${move('analytics-scale', 'Scale', 'ok', moves.scale[0], 'Remix it')}
             ${move('analytics-test', 'Test', 'info', moves.test[0], 'Remix it')}
@@ -393,6 +608,7 @@
         ${plain ? `<div class="nl-an-card nl-an-plain">${main}</div>` : main}`;
       const sub = document.getElementById('nl-an-sub');
       if (sub) sub.textContent = nlSubline(card);
+      if (!plain) nlPaintDaily(card);
     } else
     body.innerHTML = `
       <aside style="width:160px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.06);padding:20px 14px">

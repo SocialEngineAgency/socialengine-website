@@ -1180,3 +1180,77 @@ html.nl .anim-shell.nl-anim-on .anim-canvas-header .nl-steps { order: 0 !importa
   html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-essentials, html.nl #dash-content > .atelier-shell:not(.anim-shell):not(.nl-post) > .atelier-inspector { width: 100% !important; }
 }
 html.nl .anim-shell.nl-anim-on { width: 100% !important; box-sizing: border-box !important; }
+
+/* ── Analytics: the daily chart (validated categorical steps: Instagram magenta, Facebook blue) ── */
+html.nl { --nl-dc-instagram: #d55181; --nl-dc-facebook: #3987e5; }
+html.nl[data-nl-theme="day"] { --nl-dc-instagram: #e87ba4; --nl-dc-facebook: #2a78d6; }
+html.nl .nl-an-left .nl-an-moves { grid-template-columns: 1fr; }
+html.nl .nl-dc { padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 14px; }
+html.nl .nl-dc__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+html.nl .nl-dc__title { margin: 0; font: 500 15px var(--nl-display); color: var(--nl-fg); }
+html.nl .nl-dc__sub { margin: 3px 0 0; font: 400 12px var(--nl-body); color: var(--nl-fg3); }
+html.nl .nl-dc__head .nl-seg button[aria-pressed="true"] { background: var(--nl-s4); color: var(--nl-fg); }
+html.nl .nl-dc__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border: 1px solid var(--nl-line); border-radius: 10px; overflow: hidden; }
+html.nl .nl-dc__stats > div { display: flex; flex-direction: column; gap: 3px; padding: 10px 14px; border-right: 1px solid var(--nl-line); min-width: 0; }
+html.nl .nl-dc__stats > div:last-child { border-right: 0; }
+html.nl .nl-dc__stats span { font: 400 11.5px var(--nl-body); color: var(--nl-fg3); }
+html.nl .nl-dc__stats b { font: 500 22px/1.15 var(--nl-display); color: var(--nl-fg); letter-spacing: -0.01em; white-space: nowrap; }
+html.nl .nl-dc__stats em { font: normal 400 11.5px var(--nl-body); color: var(--nl-fg3); }
+html.nl .nl-dc__stats em.is-up { color: var(--nl-ok); }
+html.nl .nl-dc__stats em.is-down { color: var(--nl-bad); }
+html.nl .nl-dc__legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 400 12px var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__legend span { display: inline-flex; align-items: center; gap: 6px; }
+html.nl .nl-dc__legend b { font-weight: 500; color: var(--nl-fg); }
+html.nl .nl-dc__legend em { font-style: normal; color: var(--nl-fg3); }
+html.nl .nl-dc__key { width: 10px; height: 10px; border-radius: 2px; background: var(--nl-fg4); }
+html.nl .nl-dc__key--instagram { background: var(--nl-dc-instagram); }
+html.nl .nl-dc__key--facebook { background: var(--nl-dc-facebook); }
+html.nl .nl-dc__key--avg { height: 0; border-top: 1.5px solid var(--nl-fg2); border-radius: 0; width: 14px; background: transparent; }
+html.nl .nl-dc__chart { display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: 236px auto; column-gap: 8px; }
+html.nl .nl-dc__y { position: relative; grid-row: 1; height: calc(100% - 16px); }
+html.nl .nl-dc__y span { position: absolute; right: 0; transform: translateY(50%); font: 400 10.5px var(--nl-mono); color: var(--nl-fg3); font-variant-numeric: tabular-nums; }
+html.nl .nl-dc__plot { position: relative; grid-row: 1; grid-column: 2; }
+html.nl .nl-dc__area { position: absolute; left: 0; right: 0; top: 0; bottom: 16px; pointer-events: none; }
+html.nl .nl-dc__grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--nl-line); }
+html.nl .nl-dc__grid:first-child { border-top-color: var(--nl-line-strong); }
+html.nl .nl-dc__avg { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid var(--nl-fg2); opacity: 0.75; z-index: 2; }
+html.nl .nl-dc__avg span { position: absolute; right: 0; bottom: 3px; padding: 1px 6px; border-radius: 4px; background: var(--nl-surface); font: 500 10.5px var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); z-index: 1; }
+html.nl .nl-dc__col { position: relative; display: flex; flex-direction: column; padding: 0; margin: 0; border: 0; background: transparent; cursor: default; min-width: 0; }
+html.nl .nl-dc__col:focus-visible { outline: 2px solid var(--nl-signal); outline-offset: -2px; border-radius: 4px; }
+html.nl .nl-dc__col.is-on { background: color-mix(in srgb, var(--nl-fg) 5%, transparent); border-radius: 4px; }
+html.nl .nl-dc__bar { position: relative; flex: 1 1 auto; display: flex; align-items: flex-end; justify-content: center; }
+html.nl .nl-dc__stack { width: min(24px, 72%); display: flex; flex-direction: column-reverse; gap: 2px; border-radius: 4px 4px 0 0; overflow: hidden; min-height: 2px; }
+html.nl .nl-dc__seg { display: block; min-height: 1px; background: var(--nl-fg4); }
+html.nl .nl-dc__seg--instagram { background: var(--nl-dc-instagram); }
+html.nl .nl-dc__seg--facebook { background: var(--nl-dc-facebook); }
+html.nl .nl-dc__col.is-on .nl-dc__stack { filter: brightness(1.15); }
+html.nl .nl-dc__peak { position: absolute; left: 50%; transform: translateX(-50%); font: 500 11px var(--nl-body); color: var(--nl-fg); white-space: nowrap; pointer-events: none; }
+html.nl .nl-dc__mk { flex: 0 0 16px; display: flex; align-items: center; justify-content: center; }
+html.nl .nl-dc__mk i { width: 6px; height: 6px; border-radius: 3px; background: var(--nl-fg2); box-shadow: 0 0 0 2px var(--nl-surface); }
+html.nl .nl-dc__x { grid-row: 2; grid-column: 2; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); margin-top: 4px; }
+html.nl .nl-dc__x span { font: 400 10.5px var(--nl-mono); color: var(--nl-fg3); white-space: nowrap; overflow: visible; text-align: left; }
+html.nl .nl-dc__tip { position: absolute; top: 6px; z-index: 5; min-width: 180px; max-width: 280px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--nl-line-strong); background: var(--nl-s2); box-shadow: 0 12px 30px rgba(0,0,0,0.28); pointer-events: none; display: flex; flex-direction: column; gap: 5px; }
+html.nl .nl-dc__tip[hidden] { display: none; }
+html.nl .nl-dc__tip-h { font: 500 12.5px var(--nl-body); color: var(--nl-fg); margin-bottom: 2px; }
+html.nl .nl-dc__tip-r { display: flex; align-items: center; gap: 8px; font: 400 12px var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__tip-r b { font-weight: 600; color: var(--nl-fg); font-variant-numeric: tabular-nums; min-width: 52px; }
+html.nl .nl-dc__tip-k { width: 12px; height: 0; border-top: 2px solid transparent; }
+html.nl .nl-dc__tip-k--instagram { border-top-color: var(--nl-dc-instagram); }
+html.nl .nl-dc__tip-k--facebook { border-top-color: var(--nl-dc-facebook); }
+html.nl .nl-dc__tip-vs { font: 400 11.5px var(--nl-body); color: var(--nl-fg3); }
+html.nl .nl-dc__tip-posts { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; border-top: 1px solid var(--nl-line); font: 400 11.5px/1.4 var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__tip-pt { font: 500 11.5px var(--nl-body); color: var(--nl-fg); }
+html.nl .nl-dc__finds { margin: 0; padding: 12px 14px 12px 30px; border-radius: 10px; background: var(--nl-s2); border: 1px solid var(--nl-line); display: flex; flex-direction: column; gap: 6px; font: 400 13px/1.5 var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__finds li::marker { color: var(--nl-fg4); }
+html.nl .nl-dc__table summary { cursor: pointer; font: 500 12.5px var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__table summary:hover { color: var(--nl-fg); }
+html.nl .nl-dc__tablewrap { margin-top: 10px; max-height: 320px; overflow: auto; border: 1px solid var(--nl-line); border-radius: 10px; }
+html.nl .nl-dc__table table { width: 100%; border-collapse: collapse; font: 400 12.5px var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-dc__table th { position: sticky; top: 0; background: var(--nl-s2); text-align: left; font-weight: 500; color: var(--nl-fg3); padding: 8px 12px; border-bottom: 1px solid var(--nl-line); }
+html.nl .nl-dc__table td { padding: 7px 12px; border-bottom: 1px solid var(--nl-line); }
+html.nl .nl-dc__num { text-align: right !important; font-variant-numeric: tabular-nums; color: var(--nl-fg); white-space: nowrap; }
+@media (max-width: 700px) {
+  html.nl .nl-dc__chart { grid-template-columns: 36px minmax(0, 1fr); grid-template-rows: 200px auto; }
+  html.nl .nl-dc__stats > div { border-right: 0; border-bottom: 1px solid var(--nl-line); }
+}
