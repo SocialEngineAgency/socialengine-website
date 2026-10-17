@@ -148,6 +148,51 @@ test('new look Calendar: platform tabs and filter, live ring, counts, key dates 
 
   await page.click(`[data-bq-drop-day="${ym}-10"] .nl-ev`);
   await expect(page.locator('#schedule-date-panel')).toHaveCSS('right', '0px');
+
+  // The day panel is drawn in the new look, with no leftover violet or blue buttons
+  const dp = page.locator('#schedule-date-panel');
+  await expect(dp.locator('.nl-dp__title')).toBeVisible();
+  await expect(dp.locator('.nl-dpc')).toHaveCount(1);
+  await expect(dp.locator('.nl-dpc .nl-pill')).toHaveText('Scheduled');
+  await expect(dp.locator('.nl-dpc .nl-dpc__line')).not.toContainText(String(d.getFullYear())); // the date is in the header, not on every card
+  await expect(dp.locator('.nl-dpc')).toContainText('Publish now');
+  expect(await rgb(page, '#schedule-date-panel', 'background-color')).not.toBe('rgb(26, 26, 46)');
+  // Every button still calls a handler the page defines
+  const unhandled = () => page.evaluate(() => [...document.querySelectorAll('#schedule-date-panel [onclick], #cal-panel [onclick]')]
+    .map((el) => (el.getAttribute('onclick').match(/^\s*([A-Za-z_$][\w$]*)\(/) || [])[1])
+    .filter((fn) => fn && typeof window[fn] !== 'function'));
+  expect(await unhandled()).toEqual([]);
+
+  // A post opens in the detail panel, and back returns to the day
+  await dp.locator('.nl-dpc__thumb').click();
+  const cp = page.locator('#cal-panel');
+  await expect(cp.locator('.nl-dp--detail')).toBeVisible();
+  await expect(cp.locator('.nl-dpd__cap')).toContainText('Walk on Sunday');
+  await expect(cp.getByRole('button', { name: 'Publish now' })).toBeVisible();
+  await cp.locator('.nl-dp__back').click();
+  await expect(dp.locator('.nl-dp__title')).toBeVisible();
+
+  // A past day with a live post: stats, repost, and its own detail panel
+  await page.evaluate((ds) => window.openDatePanel(ds, window.__clientData), `${ym}-12`);
+  await expect(dp.locator('.nl-dpc .nl-pill')).toHaveText('Live');
+  await expect(dp.getByRole('button', { name: 'Repost', exact: true })).toBeVisible();
+  await expect(dp.getByRole('button', { name: 'Repost the best one' })).toBeVisible();
+  await dp.locator('.nl-dpc__thumb').click();
+  await expect(cp.locator('.nl-dp--detail')).toBeVisible();
+  await expect(cp.getByRole('button', { name: 'Repost', exact: true })).toBeVisible();
+  expect(await unhandled()).toEqual([]);
+
+  // A day ahead: the quick scheduler keeps its fields, with the file picker as a button
+  const ahead = new Date(Date.now() + 20 * 864e5);
+  await page.evaluate((ds) => window.openDatePanel(ds, window.__clientData), `${ahead.getFullYear()}-${String(ahead.getMonth() + 1).padStart(2, '0')}-${String(ahead.getDate()).padStart(2, '0')}`);
+  await expect(dp.locator('.nl-dp__eyebrow')).toHaveText('Upcoming');
+  await expect(dp.locator('#quick-schedule-caption')).toBeVisible();
+  await expect(dp.locator('#quick-schedule-time')).toBeVisible();
+  await expect(dp.locator('#quick-schedule-file')).toBeAttached();
+  await dp.locator('#quick-schedule-file').setInputFiles({ name: 'walk.png', mimeType: 'image/png', buffer: Buffer.from('x') });
+  await expect(dp.locator('.nl-dps__fname')).toHaveText('walk.png');
+  await expect(dp.getByRole('button', { name: 'Schedule post' })).toBeVisible();
+  expect(await unhandled()).toEqual([]);
   expect(errors).toEqual([]);
 });
 

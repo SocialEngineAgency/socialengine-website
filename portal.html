@@ -3083,8 +3083,9 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261017post2">
+  <link rel="stylesheet" href="./new-look.css?v=20261017cal1">
   <script src="./new-look.js?v=20261016g" defer></script>
+  <script src="./nl-cal-panels.js?v=20261017cal1" defer></script>
 </head>
 <body>
   <a href="#main" class="sr-only" style="position:absolute;top:0;left:0;padding:1rem;background:var(--color-primary);color:#fff;z-index:200;">Skip to content</a>
@@ -22098,6 +22099,13 @@
     if (!panel) return;
     const returnDate = window._calPanelReturnDate || '';
 
+    if (window.seNlCal && window.seNlCal.on()) {
+      panel.innerHTML = window.seNlCal.postPanel({ postId, returnDate, status, statusLabel: b.label, platformText: Array.isArray(platform) ? platform.join(',') : String(platform), formatLabel, dateLabel, caption: String(caption || ''), videoUrl: isVideo ? videoUrl : '', imageUrl: f.image_url || '' });
+      panel.style.transform = 'translateX(0)';
+      panel.style.opacity   = '1';
+      return;
+    }
+
     panel.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;">
         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
@@ -22339,6 +22347,13 @@
     const safeCaption = (post.caption || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const safeId = (post.id || '').replace(/'/g, "\\'");
     const returnDate = window._calPanelReturnDate || window._datePanelDate || '';
+
+    if (window.seNlCal && window.seNlCal.on()) {
+      panel.innerHTML = window.seNlCal.socialPanel({ post, platLabel, dateLabel, returnDate });
+      panel.style.transform = 'translateX(0)';
+      panel.style.opacity   = '1';
+      return;
+    }
 
     panel.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px;">
@@ -23097,7 +23112,8 @@
       }, 120);
     };
 
-    let html = `
+    const NLP = !!(window.seNlCal && window.seNlCal.on());
+    let html = NLP ? window.seNlCal.dayHead({ dateLabel: formatDate(dateStr), isPast, isToday, count: allOnDay.length, igCount, fbCount, hasSocial: socialOnDay.length > 0 }) : `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.07);">
         <div>
           <div style="font-size:0.68rem;font-weight:700;color:${isPast ? 'rgba(255,255,255,0.3)' : isToday ? '#A78BFA' : '#34D399'};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${isPast ? 'Past' : isToday ? 'Today' : 'Upcoming'}</div>
@@ -23107,7 +23123,9 @@
         <button onclick="closeDatePanel()" style="background:rgba(255,255,255,0.06);border:none;border-radius:8px;width:30px;height:30px;color:rgba(255,255,255,0.5);cursor:pointer;font-size:1rem;font-family:var(--font-body);">\u2715</button>
       </div>`;
 
-    if (socialOnDay.length > 0) {
+    if (socialOnDay.length > 0 && NLP) {
+      html += window.seNlCal.dayActions();
+    } else if (socialOnDay.length > 0) {
       html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
         <button onclick="_datePanelRepostAll()" style="width:100%;padding:10px 14px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:10px;color:#fff;font-size:0.8rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Repost to all channels</button>
         <button onclick="_datePanelAnalyze()" style="width:100%;padding:10px 14px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.28);border-radius:10px;color:#A5B4FC;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Analyze day</button>
@@ -23116,7 +23134,9 @@
     }
 
     if (allOnDay.length > 0) {
-      html += `<div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;">${isPast ? 'Published' : 'On this day'} \u00b7 ${allOnDay.length}</div>`;
+      html += NLP
+        ? window.seNlCal.section(`${isPast ? 'Published' : 'On this day'} \u00b7 ${allOnDay.length}`)
+        : `<div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;">${isPast ? 'Published' : 'On this day'} \u00b7 ${allOnDay.length}</div>`;
       allOnDay.forEach((p, idx) => {
         const badge  = platBadge(p);
         const caption = p.caption || p.full_post_text || '';
@@ -23132,6 +23152,7 @@
         if (isBatch) {
           const timeLabel = p.scheduled_time || '09:00';
           const st = String(p.status || 'Ready');
+          if (NLP) { html += window.seNlCal.batchCard({ p, dateStr, caption, thumbUrl: thumb, st }); return; }
           const stColor = st === 'Scheduled' ? '#86EFAC' : '#C4B5FD';
           const media = p.video_url
             ? `<video src="${String(p.video_url).replace(/"/g,'&quot;')}" muted preload="metadata" playsinline style="width:100%;height:110px;object-fit:cover;display:block;background:#000;"></video>`
@@ -23221,6 +23242,11 @@
           && p.id
           && !methodHasIg
           && (listedIg || igPartialFail || (listedFb && fbOnlyMethod) || (listedFb && !listedIg));
+        if (NLP) {
+          const thumbOk = thumb && !/\.(mp4|mov|webm)(\?|$)/i.test(String(thumb)) ? thumb : '';
+          html += window.seNlCal.dayCard({ p, idx, dateStr, isSocial, caption, whenLabel, isVidCard, metrics, pubErr, canRetry, canPostFacebook, canPostInstagram, listedFb, playUrl, thumbUrl: thumbOk });
+          return;
+        }
         html += `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;margin-bottom:10px;overflow:hidden;">
           ${mediaBlock}
           <div style="padding:12px 13px;">
@@ -23256,6 +23282,8 @@
           </div>
         </div>`;
       });
+    } else if (NLP) {
+      html += window.seNlCal.empty(isPast);
     } else {
       html += `<div style="text-align:center;padding:28px 16px;margin-bottom:8px;">
         <div style="font-size:0.88rem;font-weight:600;color:rgba(255,255,255,0.55);margin-bottom:6px;">Nothing on this day</div>
@@ -23263,7 +23291,9 @@
       </div>`;
     }
 
-    if (!isPast && readyToSchedule.length > 0) {
+    if (!isPast && readyToSchedule.length > 0 && NLP) {
+      html += window.seNlCal.ready(readyToSchedule, dateStr);
+    } else if (!isPast && readyToSchedule.length > 0) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:6px;padding-top:14px;">
         <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:9px;">Ready to Schedule (${readyToSchedule.length})</div>`;
       readyToSchedule.slice(0, 8).forEach((p, idx) => {
@@ -23277,7 +23307,9 @@
       html += `</div>`;
     }
 
-    if (!isPast) {
+    if (!isPast && NLP) {
+      html += window.seNlCal.schedule({ dateStr, rec, dayOfWeek, time24: window.convertTo24h(rec) });
+    } else if (!isPast) {
       html += `<div style="border-top:1px solid rgba(255,255,255,0.06);margin-top:14px;padding-top:14px;">
         <div style="font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;">Schedule for this day</div>
         <div style="font-size:0.71rem;color:rgba(255,255,255,0.3);margin-bottom:8px;">Best time tip: <strong style="color:rgba(255,255,255,0.6);">${rec}</strong> on ${dayOfWeek}</div>
@@ -23293,6 +23325,7 @@
       </div>`;
     }
 
+    if (NLP) html += window.seNlCal.close();
     content.innerHTML = html;
     if (window._quickScheduleDraft?.caption) {
       const ta = document.getElementById('quick-schedule-caption');
