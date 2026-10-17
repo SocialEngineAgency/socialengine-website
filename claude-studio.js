@@ -13,6 +13,11 @@
   let _csSpec = { w: 1080, h: 1920, ratio: '9:16', label: '9:16', format: 'portrait' };
   let _csGeneratedUrl = null;
   let _csBrandName = '';
+  let _csCharity = false;
+  // New look, Post: the minimal canvas (no Brief column). Element refs and its own state.
+  let _nlP2 = null;
+  let _nlP2Finished = false; // a finished graphic was dropped in: it is the post, not a reference
+  let _nlP2Platforms = null; // ['Instagram', 'Facebook'] when the toggles are shown
   let _csRef = null; // { url, type, title, source, product_id?, video_url?, poster_url? }
   let _csPickerTab = 'products';
   let _csCarousel = null; // { originalUrl, width, height, method, slides: [{ url, y0, y1 }], queueOrder: number[], selected: 0 }
@@ -476,6 +481,7 @@
     if (briefEl && !opts.keepBrief) briefEl.value = '';
     const cap = document.getElementById('cs-caption-box');
     if (cap) cap.value = '';
+    _nlP2Finished = false;
     renderRefSummary();
     renderCoachStyleChip();
     renderSavedDesigns();
@@ -664,6 +670,11 @@
   }
 
   function queuePlatform() {
+    if (_nlP2 && document.body.contains(_nlP2.root) && Array.isArray(_nlP2Platforms) && _nlP2Platforms.length) return _nlP2Platforms.join(',');
+    return connectedQueuePlatform();
+  }
+
+  function connectedQueuePlatform() {
     const data = window.__clientData || window.clientData || window._studioClientData || {};
     const c = data?.client || {};
     const raw = c.social_connected_platforms;
@@ -847,6 +858,7 @@
       </div>`;
     document.getElementById('cs-ref-open')?.addEventListener('click', openPicker);
     document.getElementById('cs-ref-clear')?.addEventListener('click', () => setReference(null));
+    nlP2Sync();
   }
 
   function openPicker() {
@@ -1288,6 +1300,426 @@
     if (coachHead) { coachHead.textContent = 'Coach'; coachHead.classList.add('nl-coach__head'); }
   }
 
+  /* ── New look, Post: one canvas and the Coach ──────────────────────────────
+   * No Brief column. Starting a post is one line in the middle of the canvas
+   * (reference and style beside it, quick starts under it); once there is a
+   * post, it sits beside its caption with the queue controls, and changes go
+   * through the Coach. Drafts and the rarer tools live in two small menus.
+   * The original controls are moved, not copied, so every handler still runs. */
+  const NL_ICON = {
+    spark: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>',
+    drafts: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>',
+    more: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
+    image: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-9 9"/></svg>',
+    style: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 100 18c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 005-5c0-4.3-4-7.8-9-7.8z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>',
+    clip: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.5l-8.6 8.6a5 5 0 01-7.1-7.1l9.2-9.2a3.3 3.3 0 014.7 4.7l-9.2 9.2a1.7 1.7 0 01-2.4-2.4l8.5-8.5"/></svg>',
+    send: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  };
+
+  function nlP2Starts() {
+    return _csCharity
+      ? [['Awareness', 'An awareness post: '], ['Fundraiser', 'A fundraiser post: '], ['Event', 'An event post: '], ['Thank you', 'A thank-you post for '], ['Story', 'A real story post: '], ['Quick tip', 'A quick tip: '], ['Diagram', '']]
+      : [['Product spotlight', 'A product spotlight on '], ['Offer or sale', 'An offer post: '], ['Quick tip', 'A quick tip: '], ['Quote', 'A quote post: '], ['Event', 'An event post: '], ['Behind the scenes', 'A behind-the-scenes post: '], ['Diagram', '']];
+  }
+
+  function nlP2Menu(label, html, { icon = '', id, right = false, iconOnly = false } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'nl-p2-menu';
+    wrap.innerHTML = `<button type="button" class="nl-p2-chip${iconOnly ? ' nl-p2-chip--icon' : ''}" aria-haspopup="true" aria-expanded="false" aria-controls="${id}"${iconOnly ? ` aria-label="${label}" title="${label}"` : ''}>${icon}${iconOnly ? '' : `<span>${label}</span>`}</button>
+      <div class="nl-p2-pop${right ? ' nl-p2-pop--right' : ''}" id="${id}" role="menu" hidden>${html}</div>`;
+    const btn = wrap.firstElementChild;
+    const pop = wrap.querySelector('.nl-p2-pop');
+    const close = () => { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = pop.hidden;
+      document.querySelectorAll('.nl-p2-pop').forEach((p) => { p.hidden = true; });
+      document.querySelectorAll('.nl-p2-menu > .nl-p2-chip').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+      pop.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    pop.addEventListener('click', (e) => {
+      if (e.target.closest('button:not([data-keep-open]), a')) setTimeout(close, 0);
+    });
+    wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); btn.focus(); } });
+    return wrap;
+  }
+
+  function nlP2MenuItem(label, onClick, { danger = false, id } = {}) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `nl-p2-item${danger ? ' nl-p2-item--danger' : ''}`;
+    b.setAttribute('role', 'menuitem');
+    if (id) b.id = id;
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function arrangePostMinimalNL(content) {
+    const shell = content.querySelector('.atelier-shell');
+    const stage = content.querySelector('.atelier-stage');
+    const left = content.querySelector('.atelier-essentials');
+    const brief = content.querySelector('#cs-brief');
+    const gen = content.querySelector('#cs-generate');
+    const wrap = content.querySelector('#cs-preview-wrap');
+    const finish = content.querySelector('#cs-finish-bar');
+    if (!shell || !stage || !left || !brief || !gen || !wrap || !finish) return;
+    shell.classList.add('nl-post', 'nl-p2');
+    const $ = (sel) => content.querySelector(sel);
+    const rescue = document.createElement('div'); // controls no layout shows, still alive for their handlers
+    rescue.hidden = true;
+    rescue.className = 'nl-p2-rescue';
+
+    /* Toolbar */
+    const bar = document.createElement('div');
+    bar.className = 'nl-p2-bar';
+    const drafts = nlP2Menu('Drafts', '', { icon: NL_ICON.drafts, id: 'nl-p2-drafts' });
+    const dPop = drafts.querySelector('.nl-p2-pop');
+    const head = (t) => { const h = document.createElement('div'); h.className = 'nl-p2-pophead'; h.textContent = t; return h; };
+    const relabel = (el, text) => { if (el) { el.textContent = text; el.className = 'nl-p2-item'; el.removeAttribute('style'); el.setAttribute('role', 'menuitem'); } return el; };
+    dPop.appendChild(relabel($('#cs-new-post'), 'New post'));
+    dPop.appendChild(relabel($('#cs-save-later'), 'Save for later'));
+    dPop.appendChild(relabel($('#cs-save-template'), 'Save as template'));
+    dPop.appendChild(head('Saved'));
+    const saved = $('#cs-saved-designs');
+    if (saved) { saved.removeAttribute('style'); saved.classList.add('nl-p2-saved'); dPop.appendChild(saved); }
+    const sep = document.createElement('div'); sep.className = 'nl-p2-sep'; dPop.appendChild(sep);
+    dPop.appendChild(relabel($('#cs-archive-design'), 'Archive'));
+    const del = relabel($('#cs-delete-design'), 'Delete');
+    if (del) { del.classList.add('nl-p2-item--danger'); dPop.appendChild(del); }
+    bar.appendChild(drafts);
+    const title = document.createElement('span');
+    title.className = 'nl-p2-title';
+    bar.appendChild(title);
+    const sp = document.createElement('span'); sp.className = 'nl-p2-sp'; bar.appendChild(sp);
+    const ws = $('#cs-workspace-chip');
+    if (ws) { ws.classList.add('nl-p2-ws'); bar.appendChild(ws); }
+    const brand = document.createElement('span');
+    brand.className = 'nl-p2-brand';
+    brand.title = 'Your brand colours, logo and voice are applied to every design';
+    brand.innerHTML = '<i></i><span></span>';
+    brand.querySelector('span').textContent = `${_csBrandName} brand`;
+    bar.appendChild(brand);
+    const aspect = $('#cs-aspect');
+    const size = document.createElement('div');
+    size.className = 'nl-p2-size';
+    size.setAttribute('role', 'group');
+    size.setAttribute('aria-label', 'Size');
+    ['9:16', '4:5', '1:1'].forEach((v) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = v;
+      b.dataset.aspect = v;
+      b.addEventListener('click', () => {
+        aspect.value = v;
+        aspect.dispatchEvent(new Event('change', { bubbles: true }));
+        nlP2Sync();
+      });
+      size.appendChild(b);
+    });
+    if (aspect) { aspect.classList.add('nl-hidden-select'); rescue.appendChild(aspect); }
+    bar.appendChild(size);
+    const more = nlP2Menu('More', '', { icon: NL_ICON.more, id: 'nl-p2-more', right: true, iconOnly: true });
+    const mPop = more.querySelector('.nl-p2-pop');
+    mPop.appendChild(nlP2MenuItem('Edit the prompt', () => nlP2Edit(true), { id: 'nl-p2-edit' }));
+    mPop.appendChild(nlP2MenuItem('Download PNG', () => $('#cs-export')?.click()));
+    mPop.appendChild(nlP2MenuItem('Upload a finished graphic', () => nlP2PickFinished()));
+    const engWrap = document.createElement('div');
+    engWrap.className = 'nl-p2-field';
+    engWrap.innerHTML = '<label for="cs-engine">Image engine</label>';
+    const engine = $('#cs-engine');
+    if (engine) engWrap.appendChild(engine);
+    const hint = $('#cs-engine-hint');
+    if (hint) { hint.removeAttribute('style'); hint.className = 'nl-p2-hint'; engWrap.appendChild(hint); }
+    mPop.appendChild(head('Settings'));
+    mPop.appendChild(engWrap);
+    const urlWrap = document.createElement('div');
+    urlWrap.className = 'nl-p2-field';
+    urlWrap.innerHTML = '<label for="cs-photo">Use an image or product URL</label><div class="nl-p2-inline"></div>';
+    const photo = $('#cs-photo');
+    const resolve = $('#cs-resolve-url');
+    if (photo && resolve) {
+      resolve.textContent = 'Use';
+      resolve.removeAttribute('style');
+      resolve.className = 'nl-p2-btn';
+      resolve.dataset.keepOpen = '1';
+      urlWrap.lastElementChild.append(photo, resolve);
+      mPop.appendChild(urlWrap);
+    }
+    const sep2 = document.createElement('div'); sep2.className = 'nl-p2-sep'; mPop.appendChild(sep2);
+    mPop.appendChild(nlP2MenuItem('Making a carousel? Open Carousels', () => $('#cs-mode-carousels')?.click()));
+    bar.appendChild(more);
+
+    /* Composer: start a post (also the "Edit the prompt" sheet) */
+    const compose = document.createElement('section');
+    compose.className = 'nl-p2-compose';
+    compose.setAttribute('aria-labelledby', 'nl-p2-ask');
+    compose.innerHTML = `<div class="nl-p2-compose__in">
+        <h2 id="nl-p2-ask">What are we posting?</h2>
+        <p class="nl-p2-sub"></p>
+        <div class="nl-p2-box"><div class="nl-p2-row">
+          <button type="button" class="nl-p2-chip nl-p2-ref" id="nl-p2-ref"></button>
+          <div class="nl-p2-stylewrap"></div>
+          <span class="nl-p2-sp"></span>
+          <button type="button" class="nl-p2-ghost" id="nl-p2-cancel" hidden>Cancel</button>
+        </div></div>
+        <div class="nl-p2-starts nl-p2-quick" role="group" aria-label="Quick starts"></div>
+        <div class="nl-p2-drop">or <button type="button" class="nl-p2-link" id="nl-p2-finished">upload a finished graphic</button>, or drop one here</div>
+        <input type="file" id="nl-p2-file" accept="image/png,image/jpeg,image/webp" hidden>
+      </div>`;
+    compose.querySelector('.nl-p2-sub').textContent = `Describe it in a line. ${_csBrandName}'s colours, logo and voice are applied.`;
+    const box = compose.querySelector('.nl-p2-box');
+    brief.setAttribute('placeholder', 'A calm poster: let your tea cool before you drink it');
+    brief.setAttribute('aria-labelledby', 'nl-p2-ask');
+    brief.removeAttribute('style');
+    brief.rows = 2;
+    box.insertBefore(brief, box.firstChild);
+    gen.removeAttribute('style');
+    gen.innerHTML = `${NL_ICON.spark}Generate`;
+    compose.querySelector('.nl-p2-row').appendChild(gen);
+    const styleIn = $('#cs-style');
+    const styleMenu = nlP2Menu('Style', '', { icon: NL_ICON.style, id: 'nl-p2-style' });
+    const sPop = styleMenu.querySelector('.nl-p2-pop');
+    sPop.setAttribute('role', 'dialog');
+    sPop.setAttribute('aria-label', 'Style');
+    const sField = document.createElement('div');
+    sField.className = 'nl-p2-field';
+    sField.innerHTML = '<label for="cs-style">Style, in a few words</label>';
+    if (styleIn) { styleIn.placeholder = 'Leave blank for your usual style'; sField.appendChild(styleIn); }
+    sPop.appendChild(sField);
+    const sSugs = document.createElement('div');
+    sSugs.className = 'nl-p2-starts nl-p2-starts--small';
+    ['Bold and minimal', 'Warm and photographic', 'Clean editorial', 'Playful and bright'].forEach((t) => {
+      const c = document.createElement('button');
+      c.type = 'button';
+      c.textContent = t;
+      c.dataset.keepOpen = '1';
+      c.addEventListener('click', () => { styleIn.value = t; nlP2Sync(); });
+      sSugs.appendChild(c);
+    });
+    sPop.appendChild(sSugs);
+    styleIn?.addEventListener('input', () => nlP2Sync());
+    compose.querySelector('.nl-p2-stylewrap').appendChild(styleMenu);
+    const starts = compose.querySelector('.nl-p2-quick');
+    nlP2Starts().forEach(([label, lead]) => {
+      const c = document.createElement('button');
+      c.type = 'button';
+      c.textContent = label;
+      c.addEventListener('click', () => {
+        if (label === 'Diagram') {
+          if (typeof window.seOpenDiagram === 'function') window.seOpenDiagram({ text: brief.value.trim(), autoDraft: !!brief.value.trim() });
+          return;
+        }
+        const rest = brief.value.trim().replace(/^(an? [a-z -]+ (post|on|for)|a quick tip)[:]?\s*/i, '');
+        brief.value = `${lead}${rest}`;
+        brief.focus();
+        brief.setSelectionRange(brief.value.length, brief.value.length);
+      });
+      starts.appendChild(c);
+    });
+    compose.querySelector('#nl-p2-ref').addEventListener('click', () => openPicker());
+    compose.querySelector('#nl-p2-cancel').addEventListener('click', () => nlP2Edit(false));
+    compose.querySelector('#nl-p2-finished').addEventListener('click', () => nlP2PickFinished());
+    compose.querySelector('#nl-p2-file').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (f) nlP2UseFinished(f);
+    });
+    brief.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); gen.click(); }
+    });
+    gen.addEventListener('click', () => nlP2Edit(false));
+
+    /* Result: the post beside its caption */
+    const result = document.createElement('div');
+    result.className = 'nl-p2-result';
+    stage.insertBefore(result, wrap);
+    result.appendChild(wrap);
+    const side = document.createElement('aside');
+    side.className = 'nl-p2-side';
+    side.setAttribute('aria-label', 'Caption and posting');
+    side.innerHTML = `<div class="nl-p2-caphead"><h2 id="nl-p2-cap">Caption</h2></div>
+      <div class="nl-p2-capbox"></div>
+      <div class="nl-p2-meta" aria-live="polite"><span class="nl-p2-count"></span><span class="nl-p2-tags"></span></div>
+      <div class="nl-p2-plats" role="group" aria-label="Post to"></div>
+      <div class="nl-p2-cta"></div>
+      <div class="nl-p2-links"></div>`;
+    const capBtn = $('#cs-caption');
+    const capBox = $('#cs-caption-box');
+    if (capBtn) { capBtn.removeAttribute('style'); capBtn.className = 'nl-p2-link nl-p2-link--sig'; capBtn.innerHTML = `${NL_ICON.spark}Write it for me`; side.querySelector('.nl-p2-caphead').appendChild(capBtn); }
+    if (capBox) {
+      capBox.removeAttribute('style');
+      capBox.setAttribute('aria-labelledby', 'nl-p2-cap');
+      capBox.placeholder = 'Write the caption, or let AI write it from the post.';
+      side.querySelector('.nl-p2-capbox').appendChild(capBox);
+      capBox.addEventListener('input', () => nlP2Sync());
+    }
+    const queue = $('#cs-queue');
+    const exportBtn = $('#cs-export');
+    if (queue) { queue.removeAttribute('style'); queue.className = 'nl-p2-primary'; side.querySelector('.nl-p2-cta').appendChild(queue); }
+    if (exportBtn) { exportBtn.removeAttribute('style'); exportBtn.className = 'nl-p2-secondary'; side.querySelector('.nl-p2-cta').appendChild(exportBtn); }
+    const links = side.querySelector('.nl-p2-links');
+    const regen = $('#cs-regen');
+    const prev = $('#cs-restore-prev');
+    if (regen) { regen.removeAttribute('style'); regen.className = 'nl-p2-link'; regen.textContent = 'Regenerate'; links.appendChild(regen); }
+    if (prev) { prev.removeAttribute('style'); prev.className = 'nl-p2-link'; prev.textContent = 'Previous version'; links.appendChild(prev); }
+    result.appendChild(side);
+    // Platforms: the connected ones, both on by default.
+    const plats = side.querySelector('.nl-p2-plats');
+    const defaults = connectedQueuePlatform().split(',');
+    if (!Array.isArray(_nlP2Platforms) || !_nlP2Platforms.length) _nlP2Platforms = defaults.slice();
+    ['Instagram', 'Facebook'].forEach((p) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'nl-p2-plat';
+      b.dataset.plat = p;
+      b.textContent = p;
+      b.addEventListener('click', () => {
+        const on = _nlP2Platforms.includes(p);
+        if (on && _nlP2Platforms.length === 1) { toast('Post to at least one platform', 'warning'); return; }
+        _nlP2Platforms = on ? _nlP2Platforms.filter((x) => x !== p) : [..._nlP2Platforms, p];
+        nlP2Sync();
+      });
+      plats.appendChild(b);
+    });
+
+    /* Stage parts no longer shown, kept for their handlers */
+    const header = $('#cs-preview-header');
+    if (header) header.hidden = true;
+    finish.hidden = true;
+    rescue.append(...[...finish.querySelectorAll('button, textarea')].filter((el) => !side.contains(el)));
+    left.hidden = true;
+    stage.insertBefore(bar, result);
+    stage.insertBefore(compose, result);
+    stage.appendChild(rescue);
+    // Drop a finished graphic anywhere on the canvas.
+    stage.addEventListener('dragover', (e) => {
+      if (![...(e.dataTransfer?.items || [])].some((it) => it.kind === 'file')) return;
+      e.preventDefault();
+      stage.classList.add('nl-p2--drop');
+    });
+    stage.addEventListener('dragleave', (e) => { if (!stage.contains(e.relatedTarget)) stage.classList.remove('nl-p2--drop'); });
+    stage.addEventListener('drop', (e) => {
+      const f = [...(e.dataTransfer?.files || [])].find((x) => /^image\//.test(x.type));
+      stage.classList.remove('nl-p2--drop');
+      if (!f) return;
+      e.preventDefault();
+      nlP2UseFinished(f);
+    });
+
+    /* Coach: same conversation, quieter chrome */
+    const coachHead = $('#cs-coach-rail > div');
+    if (coachHead) { coachHead.innerHTML = `${NL_ICON.spark}<span>Coach</span>`; coachHead.classList.add('nl-coach__head'); }
+    const send = $('#cs-coach-send');
+    const attach = $('#cs-coach-style');
+    const input = $('#cs-coach-input');
+    if (send && attach && input) {
+      send.innerHTML = NL_ICON.send;
+      send.setAttribute('aria-label', 'Send');
+      send.title = 'Send';
+      attach.innerHTML = NL_ICON.clip;
+      attach.setAttribute('aria-label', 'Add a style reference photo');
+      attach.title = 'Add a style reference photo';
+      input.placeholder = 'Ask for a change…';
+      const row = send.parentElement;
+      row.classList.add('nl-p2-coachin');
+      row.insertBefore(input, send);
+    }
+
+    _nlP2 = { root: shell, stage, bar, title, size, compose, result, side, brief, styleMenu, ref: compose.querySelector('#nl-p2-ref'), plats, editing: false };
+    const tick = setInterval(() => { if (!document.body.contains(shell)) clearInterval(tick); else nlP2Sync(); }, 800);
+    document.addEventListener('click', nlP2CloseMenus);
+    nlP2Sync();
+  }
+
+  function nlP2CloseMenus(e) {
+    if (e && e.target && e.target.closest && e.target.closest('.nl-p2-menu')) return;
+    document.querySelectorAll('.nl-p2-pop').forEach((p) => { p.hidden = true; });
+    document.querySelectorAll('.nl-p2-menu > .nl-p2-chip').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  }
+
+  function nlP2PickFinished() {
+    document.getElementById('nl-p2-file')?.click();
+  }
+
+  async function nlP2UseFinished(file) {
+    try {
+      toast('Uploading your graphic…', 'info');
+      const url = await uploadStudioImage(file);
+      if (!url) throw new Error('Upload failed');
+      _nlP2Finished = true;
+      setReference({ url, type: 'image', title: file.name || 'Finished graphic', source: 'upload' });
+      nlP2Sync();
+    } catch (e) {
+      toast(e.message || 'Upload failed', 'error');
+    }
+  }
+
+  /** Show the composer over the post to change the prompt and generate again. */
+  function nlP2Edit(on) {
+    if (!_nlP2) return;
+    _nlP2.editing = !!on;
+    nlP2Sync();
+    if (on) setTimeout(() => _nlP2 && _nlP2.brief.focus(), 0);
+  }
+
+  /** Which view the canvas shows, and the small labels that follow the state. */
+  function nlP2Sync() {
+    const p = _nlP2;
+    if (!p || !document.body.contains(p.root)) return;
+    const hasPost = !!(_csGeneratedUrl || _csHtml || _csScene || hasCarousel() || _csGenerating || (_nlP2Finished && _csOriginalPreviewUrl));
+    p.root.classList.toggle('nl-p2--result', hasPost);
+    p.root.classList.toggle('nl-p2--compose', !hasPost);
+    p.root.classList.toggle('nl-p2--editing', hasPost && p.editing);
+    if (!hasPost) p.editing = false;
+    const cancel = p.compose.querySelector('#nl-p2-cancel');
+    if (cancel) cancel.hidden = !p.editing;
+    const ask = p.compose.querySelector('#nl-p2-ask');
+    if (ask) ask.textContent = p.editing ? 'Change the prompt' : 'What are we posting?';
+    const edit = document.getElementById('nl-p2-edit');
+    if (edit) edit.hidden = !hasPost || _nlP2Finished;
+    const brief = String(p.brief.value || _csBrief || '').replace(/\s+/g, ' ').trim();
+    p.title.textContent = hasPost ? (_nlP2Finished && !brief ? 'Finished graphic' : brief.slice(0, 60) || 'Untitled post') : '';
+    p.title.title = brief;
+    const aspect = document.getElementById('cs-aspect');
+    p.size.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(!!aspect && b.dataset.aspect === aspect.value)));
+    // Reference chip: the photo the design starts from (not the design itself).
+    const ref = _csRef && _csRef.source !== 'generate' && !_nlP2Finished ? _csRef : null;
+    const refHtml = ref
+      ? `<img src="${escapeHtml(mediaSrc(ref.poster_url || ref.url))}" alt="" referrerpolicy="no-referrer"><span>${escapeHtml(String(ref.title || 'Reference').slice(0, 24))}</span>`
+      : `${NL_ICON.image}<span>Reference</span>`;
+    if (p.ref.dataset.html !== refHtml) {
+      p.ref.innerHTML = refHtml;
+      p.ref.dataset.html = refHtml;
+      p.ref.setAttribute('aria-label', ref ? `Reference: ${ref.title || 'photo'}. Change it` : 'Add a reference photo or product');
+    }
+    const style = document.getElementById('cs-style');
+    const sLabel = p.styleMenu.querySelector('.nl-p2-chip > span');
+    if (sLabel) sLabel.textContent = style && style.value.trim() ? `Style: ${style.value.trim().slice(0, 22)}` : 'Style';
+    // Caption: length and hashtags; platform toggles.
+    const cap = document.getElementById('cs-caption-box');
+    const text = cap ? cap.value : '';
+    const count = p.side.querySelector('.nl-p2-count');
+    const tags = (text.match(/#[\p{L}\p{N}_]+/gu) || []).length;
+    if (count) {
+      count.textContent = `${text.length.toLocaleString()} / 2,200`;
+      count.classList.toggle('nl-p2-over', text.length > 2200);
+    }
+    const tagEl = p.side.querySelector('.nl-p2-tags');
+    if (tagEl) tagEl.textContent = tags ? `${tags} hashtag${tags === 1 ? '' : 's'}` : '';
+    p.plats.querySelectorAll('.nl-p2-plat').forEach((b) => b.setAttribute('aria-pressed', String((_nlP2Platforms || []).includes(b.dataset.plat))));
+    const queue = document.getElementById('cs-queue');
+    if (queue && !/…|✓/.test(queue.textContent)) queue.textContent = hasCarousel() ? 'Add slides to Queue' : 'Add to Queue';
+    const exp = document.getElementById('cs-export');
+    if (exp) exp.textContent = hasCarousel() ? 'Download ZIP' : 'Download';
+    // Buttons that write their own plain labels get their icon back once idle.
+    const gen = document.getElementById('cs-generate');
+    if (gen && !_csGenerating && /^Generate( design)?$/.test(gen.textContent.trim()) && !gen.querySelector('svg')) gen.innerHTML = `${NL_ICON.spark}Generate`;
+    const capBtn = document.getElementById('cs-caption');
+    if (capBtn && /^Get caption$/i.test(capBtn.textContent.trim())) capBtn.innerHTML = `${NL_ICON.spark}Write it for me`;
+  }
+
   function renderClaudeStudio() {
     const content = document.getElementById('dash-content');
     if (!content) return;
@@ -1297,6 +1729,7 @@
 
     const data = window._studioClientData || window.__clientData || window.clientData || {};
     _csBrandName = data?.client?.business_name || data?.business_name || 'Your Brand';
+    _csCharity = /charit|nonprofit|non-profit/i.test(String(data?.client?.client_type || data?.client_type || ''));
     _csHtml = '';
     _csGeneratedUrl = null;
     _csBrief = '';
@@ -1528,7 +1961,10 @@
 
       <div id="cs-export-mount" style="position:fixed;left:-10000px;top:0;width:1080px;height:1080px;overflow:hidden;pointer-events:none;"></div>
     `;
-    if (document.documentElement.classList.contains('nl')) arrangePostNL(content, isCarouselMode);
+    if (document.documentElement.classList.contains('nl')) {
+      if (isCarouselMode) arrangePostNL(content, isCarouselMode);
+      else arrangePostMinimalNL(content);
+    }
 
     renderRefSummary();
     syncSplitButton();
@@ -1738,6 +2174,7 @@
     setActionEnabled('cs-regen', designed && !carousel);
     setActionEnabled('cs-caption', carousel || designed || !!_csOriginalPreviewUrl || single);
     refreshRestorePreviousButton();
+    nlP2Sync();
   }
 
   function setBusy(busy, msg) {
@@ -1768,6 +2205,7 @@
       });
       if (loadingOn && !shown) restorePreview();
     }
+    nlP2Sync();
   }
 
   /** Session poll / nav remount wipes #cs-loading; keep the purple spinner if a generate is in flight. */
@@ -2617,7 +3055,7 @@
       }
     });
     if (!log.childElementCount) {
-      appendDesignCoachBubble('assistant', 'Stay here. Ask for a change and the preview updates in this window.');
+      appendDesignCoachBubble('assistant', 'Tell me what you want to post, or start from the box on the left. Once it is made, ask me for any change and it updates here.');
     }
   }
 
