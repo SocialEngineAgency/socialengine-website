@@ -153,7 +153,7 @@ test('new look Calendar: platform tabs and filter, live ring, counts, key dates 
 
 test('new look Post: one canvas and the Coach; start from a line, quick starts, size, style; the post sits beside its caption; platforms, queue, drafts and edit still work', async ({ page }) => {
   const errors = watchErrors(page);
-  const sent = { generate: [], queue: [], upload: 0 };
+  const sent = { generate: [], queue: [], upload: 0, coach: [] };
   const poster = 'https://store.test/poster.png';
   await mockApi(page, srv.base, {
     data: clientData(),
@@ -166,6 +166,11 @@ test('new look Post: one canvas and the Coach; start from a line, quick starts, 
       if (entry.path === '/api/studio/design-queue') {
         sent.queue.push(JSON.parse(entry.body || '{}'));
         json(200, { ok: true });
+        return 'handled';
+      }
+      if (entry.path === '/api/chat/v2') {
+        sent.coach.push(JSON.parse(entry.body || '{}'));
+        json(200, { reply: 'Sure. Tell me which line to make bigger.', coach_actions: [] });
         return 'handled';
       }
       if (entry.path === '/api/studio/upload-image') {
@@ -205,6 +210,16 @@ test('new look Post: one canvas and the Coach; start from a line, quick starts, 
   expect(sent.generate[0]).toMatchObject({ brief: 'A quick tip: wash linen cold', aspect_ratio: '1:1', style_hint: 'Clean editorial' });
   await expect(page.locator('.nl-p2-title')).toHaveText('A quick tip: wash linen cold');
   await expect(page.locator('.nl-p2-compose')).toBeHidden();
+  // Only what applies is shown; one-tap changes go to the Coach.
+  await expect(page.locator('#cs-export')).toBeVisible();
+  await expect(page.locator('#cs-regen')).toBeVisible();
+  await expect(page.locator('#cs-restore-prev')).toBeHidden();
+  await expect(page.locator('.nl-p2-sugs')).toBeVisible();
+  await page.locator('.nl-p2-sugs button', { hasText: 'Bigger headline' }).click();
+  await expect.poll(() => sent.coach.length).toBe(1);
+  expect(sent.coach[0].message).toBe('Bigger headline');
+  await expect(page.locator('#cs-coach-log .cs-cb--me').last()).toHaveText('Bigger headline');
+  await expect(page.locator('#cs-coach-input')).toHaveAttribute('placeholder', 'Ask for a change…');
 
   // The post beside its caption: counts, platforms, queue.
   await expect(page.locator('.nl-p2-side #cs-caption-box')).toBeVisible();

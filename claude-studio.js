@@ -1477,6 +1477,7 @@
     box.insertBefore(brief, box.firstChild);
     gen.removeAttribute('style');
     gen.innerHTML = `${NL_ICON.spark}Generate`;
+    gen.title = `Generate (${/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} + Enter)`;
     compose.querySelector('.nl-p2-row').appendChild(gen);
     const styleIn = $('#cs-style');
     const styleMenu = nlP2Menu('Style', '', { icon: NL_ICON.style, id: 'nl-p2-style' });
@@ -1622,9 +1623,22 @@
       attach.setAttribute('aria-label', 'Add a style reference photo');
       attach.title = 'Add a style reference photo';
       input.placeholder = 'Ask for a change…';
+      input.dataset.placeholder = 'Ask for a change…';
       const row = send.parentElement;
       row.classList.add('nl-p2-coachin');
       row.insertBefore(input, send);
+      const sugs = document.createElement('div');
+      sugs.className = 'nl-p2-sugs';
+      sugs.setAttribute('role', 'group');
+      sugs.setAttribute('aria-label', 'Quick changes');
+      ['Make it brighter', 'Bigger headline', 'Shorter text', 'Try it with a photo', 'Add our logo'].forEach((t) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = t;
+        b.addEventListener('click', () => designCoachAsk(t));
+        sugs.appendChild(b);
+      });
+      row.parentElement.insertBefore(sugs, row.parentElement.firstChild);
     }
 
     _nlP2 = { root: shell, stage, bar, title, size, compose, result, side, brief, styleMenu, ref: compose.querySelector('#nl-p2-ref'), plats, editing: false };
@@ -1680,7 +1694,7 @@
     const edit = document.getElementById('nl-p2-edit');
     if (edit) edit.hidden = !hasPost || _nlP2Finished;
     const brief = String(p.brief.value || _csBrief || '').replace(/\s+/g, ' ').trim();
-    p.title.textContent = hasPost ? (_nlP2Finished && !brief ? 'Finished graphic' : brief.slice(0, 60) || 'Untitled post') : '';
+    p.title.textContent = hasPost ? (_nlP2Finished && !brief ? 'Finished graphic' : brief || 'Untitled post') : '';
     p.title.title = brief;
     const aspect = document.getElementById('cs-aspect');
     p.size.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(!!aspect && b.dataset.aspect === aspect.value)));
@@ -1713,6 +1727,18 @@
     if (queue && !/…|✓/.test(queue.textContent)) queue.textContent = hasCarousel() ? 'Add slides to Queue' : 'Add to Queue';
     const exp = document.getElementById('cs-export');
     if (exp) exp.textContent = hasCarousel() ? 'Download ZIP' : 'Download';
+    // Only what applies to this post is shown: nothing greyed out.
+    [['cs-export', exp], ['cs-regen', document.getElementById('cs-regen')], ['cs-restore-prev', document.getElementById('cs-restore-prev')]].forEach(([, el]) => {
+      if (el) el.classList.toggle('nl-p2-na', !!el.disabled);
+    });
+    const loading = document.getElementById('cs-loading');
+    if (loading) {
+      const r = (aspect && aspect.value) || '9:16';
+      loading.dataset.ratio = r;
+      loading.style.setProperty('--nl-p2-ratio', r.replace(':', ' / '));
+    }
+    const sugs = p.root.querySelector('.nl-p2-sugs');
+    if (sugs) sugs.hidden = !hasPost || _csGenerating || !(_csGeneratedUrl || _csHtml);
     // Buttons that write their own plain labels get their icon back once idle.
     const gen = document.getElementById('cs-generate');
     if (gen && !_csGenerating && /^Generate( design)?$/.test(gen.textContent.trim()) && !gen.querySelector('svg')) gen.innerHTML = `${NL_ICON.spark}Generate`;
@@ -2882,6 +2908,7 @@
     if (!log) return;
     const mine = role === 'user';
     const row = document.createElement('div');
+    row.className = mine ? 'cs-cb cs-cb--me' : 'cs-cb cs-cb--ai';
     row.style.cssText = mine
       ? 'align-self:flex-end;max-width:92%;background:#7C3AED;color:#fff;border-radius:14px 14px 4px 14px;padding:8px 11px;font-size:0.78rem;line-height:1.55;'
       : 'align-self:flex-start;max-width:92%;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.86);border-radius:14px 14px 14px 4px;padding:8px 11px;font-size:0.78rem;line-height:1.55;';
@@ -3055,7 +3082,7 @@
       }
     });
     if (!log.childElementCount) {
-      appendDesignCoachBubble('assistant', 'Tell me what you want to post, or start from the box on the left. Once it is made, ask me for any change and it updates here.');
+      appendDesignCoachBubble('assistant', 'Tell me what you want to post, or describe it on the canvas. Once it is made, ask me for any change and it updates here.');
     }
   }
 
@@ -3339,7 +3366,7 @@
     }
     if (!busy) {
       if (wrap) wrap.style.display = 'none';
-      if (input) input.placeholder = 'Ask your coach…';
+      if (input) input.placeholder = input.dataset.placeholder || 'Ask your coach…';
       return;
     }
     const phrases = coachStatusPhrases(hasStyleRefs);

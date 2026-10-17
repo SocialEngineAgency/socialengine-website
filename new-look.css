@@ -1391,3 +1391,37 @@ html.nl .nl-p2 .nl-p2-pop #cs-new-post, html.nl .nl-p2 .nl-p2-pop #cs-save-later
   display: block; width: 100%; height: auto !important; text-align: left; padding: 8px 10px !important; margin: 0 !important; border: 0 !important; border-radius: 8px !important; background: transparent !important; color: var(--nl-fg) !important; font: 500 13px var(--nl-body) !important; }
 html.nl .nl-p2 .nl-p2-pop #cs-delete-design { color: var(--nl-bad) !important; }
 html.nl .nl-p2 .nl-p2-pop #cs-new-post:hover, html.nl .nl-p2 .nl-p2-pop #cs-save-later:hover, html.nl .nl-p2 .nl-p2-pop #cs-archive-design:hover, html.nl .nl-p2 .nl-p2-pop #cs-delete-design:hover, html.nl .nl-p2 .nl-p2-pop #cs-save-template:hover { background: var(--nl-s4) !important; }
+
+/* Post: review polish */
+html.nl .nl-p2-na { display: none !important; }
+html.nl #nl-p2-style { min-width: 320px; }
+html.nl .nl-p2 #cs-loading { position: relative; height: min(calc(100vh - 320px), 620px); width: auto; aspect-ratio: var(--nl-p2-ratio, 9 / 16); border-radius: 12px; border: 1px solid var(--nl-line-strong); overflow: hidden;
+  background: linear-gradient(110deg, var(--nl-s2) 30%, var(--nl-s3) 50%, var(--nl-s2) 70%) 0 0 / 300% 100%; animation: nlP2Shimmer 1.8s ease-in-out infinite; }
+html.nl .nl-p2 #cs-loading > div:first-child { position: absolute; top: calc(50% - 26px); left: calc(50% - 26px); margin: 0 !important; border-color: var(--nl-signal-soft) !important; border-top-color: var(--nl-signal) !important; }
+html.nl .nl-p2 #cs-loading-msg { position: absolute; left: 16px; right: 16px; bottom: 18px; font: 500 13px var(--nl-body) !important; color: var(--nl-fg2) !important; text-align: center; }
+@keyframes nlP2Shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { html.nl .nl-p2 #cs-loading { animation: none; } }
+html.nl .nl-p2 .cs-cb { font: 400 13px/1.5 var(--nl-body) !important; padding: 9px 12px !important; border-radius: 12px !important; max-width: 88% !important; }
+html.nl .nl-p2 .cs-cb--me { background: var(--nl-signal-soft) !important; color: var(--nl-fg) !important; border-radius: 12px 12px 4px 12px !important; }
+html.nl .nl-p2 .cs-cb--ai { background: var(--nl-s3) !important; color: var(--nl-fg2) !important; border-radius: 12px 12px 12px 4px !important; }
+html.nl .nl-p2-sugs { display: flex; flex-wrap: wrap; gap: 6px; }
+html.nl .nl-p2-sugs button { height: 28px; padding: 0 10px; border: 1px solid var(--nl-line); border-radius: 999px; background: transparent; color: var(--nl-fg2); font: 500 12px var(--nl-body); cursor: pointer; width: auto; }
+html.nl .nl-p2-sugs button:hover { color: var(--nl-fg); border-color: var(--nl-line-strong); background: var(--nl-s2); }
+html.nl .nl-p2 :is(.nl-p2-chip, .nl-p2-size button, .nl-p2-starts button, .nl-p2-sugs button, .nl-p2-plat, .nl-p2-item, .nl-p2-link, .nl-p2-primary, .nl-p2-secondary, .nl-p2-ghost, .nl-p2-btn, #cs-generate, #cs-coach-send, #cs-coach-style):focus-visible { outline: 2px solid var(--nl-signal) !important; outline-offset: 2px; }
+@media (max-width: 640px) {
+  html.nl .nl-p2-size button { padding: 9px 12px; }
+  html.nl .nl-p2-chip { height: 38px; }
+  html.nl .nl-p2-chip--icon { width: 38px; }
+  html.nl .nl-p2-starts button, html.nl .nl-p2-plat, html.nl .nl-p2-sugs button { height: 38px; }
+  html.nl .nl-p2 #cs-loading { height: min(62vh, 520px); }
+}
+html.nl .nl-p2-bar > * { flex-shrink: 0; }
+html.nl .nl-p2-bar > .nl-p2-title, html.nl .nl-p2-bar > .nl-p2-brand, html.nl .nl-p2-bar > .nl-p2-ws { flex-shrink: 1; min-width: 0; }
+html.nl .nl-p2-bar > .nl-p2-sp { flex: 1 1 0; min-width: 0; }
+@media (max-width: 640px) {
+  /* Create header: the title on its own row, the four tabs on one row, Video Studio beside them. */
+  html.nl .create-segments:not([hidden]) { padding: 16px 16px 2px !important; }
+  html.nl .create-segments::before { flex-basis: 100%; margin-bottom: 10px; font-size: 26px; }
+  html.nl .create-seg:not(.create-seg--studio) { padding: 0 11px !important; }
+  html.nl .create-seg--studio { margin-left: auto !important; padding: 0 10px !important; }
+}
