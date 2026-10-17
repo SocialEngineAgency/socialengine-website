@@ -1564,3 +1564,46 @@ html.nl .nl-dpc__acts > .nl-dpb--icon { flex: none; width: 34px; padding: 0; col
 html.nl .nl-dpc__acts > .nl-dpb--icon:hover { color: var(--nl-bad); border-color: color-mix(in srgb, var(--nl-bad) 45%, transparent); }
 html.nl :is(.nl-dpb, .nl-dpl, .nl-dps__tip, .nl-dps__fbtn, .nl-dp__x, .nl-dp__back) svg { flex: none; }
 html.nl .nl-dpr__row > .nl-dpb { flex: none; }
+
+/* ── Animate: the prompt leads (nl-ahero) ─────────────────────────────── */
+html.nl .nl-aask.nl-ahero { border: 0; background: transparent; padding: 4px 0 2px; gap: 12px; }
+html.nl .nl-ahero__t { margin: 0; font: 400 30px/1.1 var(--nl-display); letter-spacing: -0.02em; color: var(--nl-fg); }
+html.nl .nl-ahero--edit .nl-ahero__t { font-size: 22px; }
+html.nl .nl-ahero__s { margin: 6px 0 0; font: 400 13.5px/1.5 var(--nl-body); color: var(--nl-fg3); }
+html.nl .nl-ahero__box { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 10px; border: 1px solid var(--nl-line-strong); border-radius: 16px; background: var(--nl-s2); transition: border-color .15s; }
+html.nl .nl-ahero__box:focus-within { border-color: var(--nl-fg4); }
+html.nl .nl-ahero #anim-prompt { min-height: 104px; font: 400 15px/1.55 var(--nl-body) !important; padding: 2px 2px !important; color: var(--nl-fg) !important; }
+html.nl .nl-ahero--edit #anim-prompt { min-height: 56px; font-size: 14px !important; }
+html.nl .nl-ahero #anim-prompt::placeholder { color: var(--nl-fg4); }
+html.nl .nl-ahero__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--nl-line); }
+html.nl .nl-ahero .anim-entry-mode { display: inline-flex !important; margin: 0 !important; padding: 3px; gap: 2px; border-radius: 8px; border: 1px solid var(--nl-line-strong) !important; background: var(--nl-surface) !important; }
+html.nl .nl-ahero .anim-entry-seg { flex: 0 0 auto; height: 28px; padding: 0 11px; border: 0 !important; border-radius: 6px !important; background: transparent !important; color: var(--nl-fg3) !important; font: 500 12.5px var(--nl-body) !important; cursor: pointer; }
+html.nl .nl-ahero .anim-entry-seg.active { background: var(--nl-s4) !important; color: var(--nl-fg) !important; }
+html.nl .nl-ahero .nl-aseg { background: var(--nl-surface) !important; }
+html.nl .nl-ahero .nl-aseg button { height: 28px; padding: 0 11px; }
+html.nl .nl-ahero #anim-story-type { height: 36px; min-width: 150px; max-width: 200px; padding: 0 8px !important; font-size: 12.5px !important; margin: 0 !important; background-color: var(--nl-surface) !important; }
+html.nl .nl-ahero #anim-send { height: 38px; padding: 0 18px !important; font-size: 13.5px !important; }
+html.nl .nl-ahero__ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+html.nl .nl-ahero__ideas[hidden], html.nl .nl-ahero:has(#anim-brief-actions:not(:empty)) .nl-ahero__ideas, html.nl .nl-ahero:has(.anim-msg--user) .nl-ahero__ideas { display: none; }
+html.nl .nl-ahero__try { font: 500 12px var(--nl-body); color: var(--nl-fg3); margin-right: 2px; }
+html.nl .nl-aidea { height: 30px; max-width: 100%; padding: 0 12px; border-radius: 999px; border: 1px solid var(--nl-line-strong); background: transparent; color: var(--nl-fg2); font: 400 12.5px var(--nl-body); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.nl .nl-aidea:hover { color: var(--nl-fg); border-color: var(--nl-fg4); background: var(--nl-s2); }
+html.nl .nl-aidea:focus-visible { outline: 2px solid var(--nl-signal); outline-offset: 2px; }
+html.nl .nl-ahero .anim-msg--intro { display: none !important; }
+html.nl .nl-ahero .nl-aask__log #anim-chat-log:not(:has(.anim-msg:not(.anim-msg--intro))) { display: none !important; }
+html.nl .nl-ahero .nl-aask__log #anim-chat-log { max-height: 220px; }
+html.nl .nl-ahero .nl-aask__tokens[hidden] { display: none; }
+html.nl .nl-abrief .nl-abrief__row { align-items: center; }
+html.nl .nl-abrief .nl-acast__h { gap: 12px; }
+@media (max-width: 700px) {
+  html.nl .nl-ahero__t { font-size: 24px; }
+  html.nl .nl-ahero #anim-prompt { min-height: 88px; }
+  html.nl .nl-ahero__bar > .nl-grow { display: none; }
+  html.nl .nl-ahero__bar [data-slot="send"] { flex: 1 1 100%; }
+  html.nl .nl-ahero #anim-send { width: 100% !important; justify-content: center; }
+}
+html.nl .nl-ahero [data-slot="log"]:not(:has(.anim-msg:not(.anim-msg--intro))), html.nl .nl-ahero [data-slot="actions"]:not(:has(#anim-brief-actions:not(:empty))) { display: none; }
+html.nl .nl-ahome .anim-empty { display: none; }
+/* Once there are shots: prompt, then the shots, then cast and settings */
+html.nl .nl-anim--shots .nl-anim__main > .nl-abrief { order: 5; }
+html.nl .nl-ahero--edit .nl-ahero__s { margin-top: 4px; }

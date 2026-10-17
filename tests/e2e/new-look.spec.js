@@ -343,7 +343,23 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   await expect(page.locator('.nl-anim.is-home')).toBeVisible();
   await expect(page.locator('.anim-chat')).toBeHidden();
   await expect(page.locator('.nl-aask #anim-prompt')).toBeVisible();
-  await expect(page.locator('.nl-abrief #anim-entry-mode')).toBeVisible();
+  // The prompt leads: it is the first thing on the board, with mode, look and story right under it.
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Describe your video');
+  const heroY = (await page.locator('.nl-ahero').boundingBox()).y;
+  expect(heroY).toBeLessThan((await page.locator('.nl-abrief').boundingBox()).y);
+  await expect(page.locator('.nl-ahero #anim-entry-mode')).toBeVisible();
+  await expect(page.locator('.nl-ahero #anim-entry-mode [data-entry="prompt"]')).toHaveClass(/active/);
+  await expect(page.locator('.nl-ahero #anim-story-type')).toHaveValue('auto');
+  await expect(page.locator('.nl-ahero #anim-send')).toBeVisible();
+  // A starting idea fills the prompt and steps out of the way.
+  await page.locator('.nl-aidea').first().click();
+  await expect(page.locator('#anim-prompt')).toHaveValue('One tip our customers always ask about');
+  await expect(page.locator('.nl-ahero__ideas')).toBeHidden();
+  await page.locator('#anim-prompt').fill('');
+  await page.locator('#anim-prompt').dispatchEvent('input');
+  await expect(page.locator('.nl-ahero__ideas')).toBeVisible();
+  await page.locator('.nl-ahero #anim-entry-mode [data-entry="vo"]').click();
+  await expect(page.locator('#anim-prompt')).toHaveAttribute('placeholder', /voiceover/i);
   await expect(page.locator('.nl-ahome [data-open-project="proj_nl"]')).toBeVisible();
 
   await page.click('[data-open-project="proj_nl"]');
@@ -351,6 +367,10 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   await expect(steps).toHaveCount(4);
   await expect(steps.nth(2)).toHaveClass(/nl-step--now/);
   await expect(page.locator('.nl-aproj')).toContainText('Walk day');
+  // With shots: the prompt stays on top for a new idea, and the shots come before cast and settings.
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Rework the idea');
+  await expect(page.locator('.nl-ahero__ideas')).toBeHidden();
+  expect((await page.locator('.nl-ashots').boundingBox()).y).toBeLessThan((await page.locator('.nl-abrief').boundingBox()).y);
   await expect(page.locator('.nl-acast__lock')).toContainText('Fiona locked across every shot');
   await expect(page.locator('.nl-acast .anim-ref-name')).toHaveText('Fiona');
 
@@ -405,6 +425,24 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   await expect(page.locator('.anim-canvas-header .nl-steps')).toHaveCount(0);
   await expect(page.locator('.nl-anim.is-home')).toBeVisible();
   expect(calls.length).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('new look Animate: write an idea in the prompt at the top and send it, with no story type to pick first', async ({ page }) => {
+  const errors = watchErrors(page);
+  const calls = await mockApi(page, srv.base, { data: clientData() });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Describe your video');
+  await page.fill('.nl-ahero #anim-prompt', 'A volunteer laces her trainers at dawn and joins the Sunday walk');
+  await page.click('.nl-ahero #anim-send');
+  await expect.poll(() => calls.some((c) => c.path.endsWith('/brief'))).toBeTruthy();
+  const body = JSON.parse(calls.find((c) => c.path.endsWith('/brief')).body);
+  expect(body.prompt).toMatch(/laces her trainers/);
+  expect(body.vo_script).toBeFalsy();
+  expect(body.story_brief.story_type).toBe(''); // "Let AI pick"
   expect(errors).toEqual([]);
 });
 
