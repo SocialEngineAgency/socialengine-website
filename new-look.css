@@ -1425,3 +1425,142 @@ html.nl .nl-p2-bar > .nl-p2-sp { flex: 1 1 0; min-width: 0; }
   html.nl .create-seg:not(.create-seg--studio) { padding: 0 11px !important; }
   html.nl .create-seg--studio { margin-left: auto !important; padding: 0 10px !important; }
 }
+
+/* ── Calendar side panels: the day panel and the post detail panel ─────── */
+html.nl #schedule-date-panel, html.nl #cal-panel { width: 400px !important; max-width: 100vw; background: var(--nl-surface) !important; border-left: 1px solid var(--nl-line-strong) !important; box-shadow: -24px 0 64px rgba(0,0,0,0.35) !important; color: var(--nl-fg); font-family: var(--nl-body); }
+html.nl[data-nl-theme="day"] #schedule-date-panel, html.nl[data-nl-theme="day"] #cal-panel { box-shadow: -18px 0 48px rgba(27,26,23,0.10) !important; }
+html.nl #schedule-date-panel-content { padding: 0 !important; }
+html.nl #cal-panel { padding: 0 !important; }
+html.nl #schedule-date-overlay { background: rgba(0,0,0,0.35) !important; }
+html.nl .nl-dp { padding: 20px 20px 28px; display: flex; flex-direction: column; gap: 14px; }
+html.nl .nl-dp__head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--nl-line); }
+html.nl .nl-dp__headtext { flex: 1 1 auto; min-width: 0; }
+html.nl .nl-dp__eyebrow { font: 500 11px var(--nl-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--nl-fg3); margin-bottom: 4px; }
+html.nl .nl-dp__eyebrow--today { color: var(--nl-signal); }
+html.nl .nl-dp__eyebrow--upcoming { color: var(--nl-ok); }
+html.nl .nl-dp__title { margin: 0; font: 500 22px/1.15 var(--nl-display); letter-spacing: -0.02em; color: var(--nl-fg); }
+html.nl .nl-dp__title--sm { font-size: 17px; }
+html.nl .nl-dp__meta { margin-top: 4px; font-size: 12.5px; color: var(--nl-fg3); }
+html.nl .nl-dp__x, html.nl .nl-dp__back { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--nl-line-strong); border-radius: 9px; background: transparent; color: var(--nl-fg2); cursor: pointer; padding: 0; }
+html.nl .nl-dp__x:hover, html.nl .nl-dp__back:hover { color: var(--nl-fg); border-color: var(--nl-fg4); }
+html.nl .nl-dp__sec { margin: 6px 0 -2px; font: 500 11.5px var(--nl-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--nl-fg3); }
+html.nl .nl-dp__block { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--nl-line); }
+html.nl .nl-dp__dayacts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+html.nl .nl-dp__insight:empty { display: none; }
+html.nl .nl-dp__insight > div { background: var(--nl-s2) !important; border: 1px solid var(--nl-line-strong) !important; border-radius: 10px !important; margin-bottom: 8px; }
+html.nl .nl-dp__insight > div > div:first-child { color: var(--nl-signal) !important; }
+html.nl .nl-dp__insight > div > div:last-child { color: var(--nl-fg2) !important; }
+html.nl .nl-dp__insight button { color: var(--nl-signal) !important; }
+html.nl .nl-dp__empty { text-align: center; padding: 28px 12px; border: 1px dashed var(--nl-line-strong); border-radius: 12px; }
+html.nl .nl-dp__emptyt { font: 500 14px var(--nl-display); color: var(--nl-fg); margin-bottom: 4px; }
+html.nl .nl-dp__emptys { font-size: 12.5px; color: var(--nl-fg3); line-height: 1.5; }
+
+/* Buttons */
+html.nl .nl-dpb { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid var(--nl-line-strong); border-radius: 9px; background: var(--nl-s2); color: var(--nl-fg); font: 500 12.5px var(--nl-body); cursor: pointer; white-space: nowrap; width: auto; text-decoration: none; }
+html.nl .nl-dpb:hover { border-color: var(--nl-fg4); }
+html.nl .nl-dpb:disabled { opacity: 0.5; cursor: progress; }
+html.nl .nl-dpb--primary { background: var(--nl-primary-bg); color: var(--nl-primary-fg); border-color: transparent; font-weight: 600; }
+html.nl .nl-dpb--primary:hover { border-color: transparent; opacity: 0.92; }
+html.nl .nl-dpb--ghost { background: transparent; color: var(--nl-fg2); }
+html.nl .nl-dpb--ghost:hover { color: var(--nl-fg); }
+html.nl .nl-dpb--sm { height: 28px; padding: 0 10px; font-size: 12px; }
+html.nl .nl-dpb--wide { flex: 1 1 auto; width: 100%; height: 40px; font-size: 13.5px; }
+html.nl .nl-dpb__dot, html.nl .nl-dpc__dots i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--nl-fg3); }
+html.nl [data-p="instagram"] { background: var(--nl-ig) !important; }
+html.nl [data-p="facebook"] { background: var(--nl-fb) !important; }
+html.nl [data-p="tiktok"] { background: var(--nl-tt) !important; }
+html.nl .nl-dpl { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--nl-fg3); font: 500 12.5px var(--nl-body); cursor: pointer; text-decoration: none; width: auto; }
+html.nl .nl-dpl:hover { color: var(--nl-fg); }
+html.nl .nl-dpl--bad { color: var(--nl-bad); opacity: 0.85; }
+html.nl .nl-dpl--bad:hover { color: var(--nl-bad); opacity: 1; }
+html.nl :is(.nl-dpb, .nl-dpl, .nl-dp__x, .nl-dp__back, .nl-dpc__thumb):focus-visible { outline: 2px solid var(--nl-signal); outline-offset: 2px; }
+
+/* A post on the day */
+html.nl .nl-dpc { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--nl-line); border-radius: 12px; background: var(--nl-s2); }
+html.nl .nl-dpc--batch { border-style: dashed; border-color: var(--nl-line-strong); background: transparent; }
+html.nl .nl-dpc__top { display: flex; gap: 12px; min-width: 0; }
+html.nl .nl-dpc__thumb { position: relative; flex: none; width: 64px; height: 80px; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: var(--nl-s4); cursor: pointer; }
+html.nl .nl-dpc__thumb img, html.nl .nl-dpc__thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+html.nl .nl-dpc__badge { position: absolute; left: 5px; bottom: 5px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; display: flex; align-items: center; justify-content: center; }
+html.nl .nl-dpc__badge svg { width: 10px; height: 10px; margin-left: 1px; }
+html.nl .nl-dpc__ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--nl-fg3); }
+html.nl .nl-dpc__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+html.nl .nl-dpc__line { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; }
+html.nl .nl-dpc__dots { display: inline-flex; gap: 3px; }
+html.nl .nl-dpc__plat { font-weight: 600; color: var(--nl-fg); white-space: nowrap; }
+html.nl .nl-dpc__sub { color: var(--nl-fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+html.nl .nl-dpc__line .nl-pill { margin-left: auto; }
+html.nl .nl-dpc__file { font-size: 11.5px; color: var(--nl-fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.nl .nl-dpc__cap { margin: 0; font-size: 13px; line-height: 1.5; color: var(--nl-fg2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+html.nl .nl-dpc__cap--none { color: var(--nl-fg4); cursor: default; }
+html.nl .nl-dpc__stats { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--nl-fg3); font-variant-numeric: tabular-nums; }
+html.nl .nl-dpc__stats--none { color: var(--nl-fg4); }
+html.nl .nl-dpc__note { font-size: 12px; line-height: 1.45; color: var(--nl-fg2); padding: 8px 10px; border-radius: 8px; background: var(--nl-s3); }
+html.nl .nl-dpc__note--bad { color: var(--nl-fg); border: 1px solid color-mix(in srgb, var(--nl-bad) 40%, transparent); background: color-mix(in srgb, var(--nl-bad) 8%, transparent); }
+html.nl .nl-dpc__acts { display: flex; flex-wrap: wrap; gap: 6px; }
+html.nl .nl-dpc__acts > .nl-dpb { flex: 1 1 0; min-width: 0; }
+html.nl .nl-dpc__acts--three { display: grid; grid-template-columns: repeat(3, 1fr); }
+html.nl .nl-dpc__links { display: flex; flex-wrap: wrap; gap: 6px 16px; padding-top: 2px; }
+html.nl .nl-dpc__links .nl-dpl--bad { margin-left: auto; }
+
+/* Status pills */
+html.nl .nl-pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; font: 500 11px var(--nl-body); white-space: nowrap; border: 1px solid var(--nl-line-strong); color: var(--nl-fg2); }
+html.nl .nl-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+html.nl .nl-pill--live { color: var(--nl-ok); border-color: color-mix(in srgb, var(--nl-ok) 35%, transparent); }
+html.nl .nl-pill--sched { color: var(--nl-info); border-color: color-mix(in srgb, var(--nl-info) 35%, transparent); }
+html.nl .nl-pill--busy { color: var(--nl-signal); border-color: color-mix(in srgb, var(--nl-signal) 35%, transparent); }
+html.nl .nl-pill--bad { color: var(--nl-bad); border-color: color-mix(in srgb, var(--nl-bad) 40%, transparent); }
+html.nl .nl-pill--muted { color: var(--nl-fg3); }
+
+/* Ready to schedule */
+html.nl .nl-dpr { display: flex; flex-direction: column; gap: 6px; }
+html.nl .nl-dpr__row { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border: 1px solid var(--nl-line); border-radius: 10px; }
+html.nl .nl-dpr__row--on { border-color: var(--nl-signal); background: var(--nl-signal-soft); }
+html.nl .nl-dpr__cap { flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--nl-fg2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Schedule for this day */
+html.nl .nl-dps__tip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--nl-fg3); }
+html.nl .nl-dps__tip b { color: var(--nl-fg); font-weight: 600; }
+html.nl .nl-dps textarea { width: 100%; box-sizing: border-box; min-height: 104px; padding: 12px; border: 1px solid var(--nl-line-strong); border-radius: 10px; background: var(--nl-s2); color: var(--nl-fg); font: 400 13.5px/1.5 var(--nl-body); resize: vertical; outline: none; }
+html.nl .nl-dps textarea:focus { border-color: var(--nl-fg4); }
+html.nl .nl-dps > .mp-ck-btn, html.nl .nl-dps > .mr-attach, html.nl .nl-dps > .dg-attach { align-self: flex-start; margin: -2px 14px 0 0 !important; padding: 0 !important; border: 0 !important; background: none !important; color: var(--nl-fg2) !important; font: 500 12.5px var(--nl-body) !important; height: auto !important; }
+html.nl .nl-dps > .mp-ck-btn + .mr-attach, html.nl .nl-dps > .mr-attach + .dg-attach { margin-top: -8px !important; }
+html.nl .nl-dps:has(> .mp-ck-btn) { display: grid; grid-template-columns: auto auto auto 1fr; column-gap: 16px; row-gap: 10px; }
+html.nl .nl-dps:has(> .mp-ck-btn) > :not(.mp-ck-btn):not(.mr-attach):not(.dg-attach) { grid-column: 1 / -1; }
+html.nl .nl-dps:has(> .mp-ck-btn) > :is(.mp-ck-btn, .mr-attach, .dg-attach) { margin: 0 !important; }
+html.nl .nl-dps__file { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+html.nl .nl-dps__fbtn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px dashed var(--nl-line-strong); border-radius: 9px; color: var(--nl-fg2); font: 500 12.5px var(--nl-body); }
+html.nl .nl-dps__file:hover .nl-dps__fbtn, html.nl .nl-dps__file:focus-within .nl-dps__fbtn { color: var(--nl-fg); border-color: var(--nl-fg4); }
+html.nl .nl-dps__file:focus-within .nl-dps__fbtn { outline: 2px solid var(--nl-signal); outline-offset: 2px; }
+html.nl .nl-dps__file--set .nl-dps__fbtn { border-style: solid; }
+html.nl .nl-dps__fname { min-width: 0; font-size: 12.5px; color: var(--nl-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.nl .nl-dps__hint { font-size: 12px; color: var(--nl-fg3); line-height: 1.45; margin-top: -4px; }
+html.nl .nl-dps__row { display: flex; gap: 8px; }
+html.nl .nl-dps__row input[type="time"] { flex: none; width: 124px; height: 40px; padding: 0 10px; border: 1px solid var(--nl-line-strong); border-radius: 9px; background: var(--nl-s2); color: var(--nl-fg); font: 500 13px var(--nl-mono); color-scheme: dark; }
+html.nl[data-nl-theme="day"] .nl-dps__row input[type="time"] { color-scheme: light; }
+html.nl .nl-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Post detail */
+html.nl .nl-dpd__media { border-radius: 12px; overflow: hidden; background: var(--nl-s4); display: flex; justify-content: center; }
+html.nl .nl-dpd__media img, html.nl .nl-dpd__media video { display: block; width: 100%; max-height: 360px; object-fit: contain; background: #000; }
+html.nl .nl-dpd__media--none { padding: 28px; color: var(--nl-fg3); font-size: 12.5px; }
+html.nl .nl-dpd__tags { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--nl-fg3); }
+html.nl .nl-dpd__plat { display: inline-flex; align-items: center; gap: 6px; }
+html.nl .nl-dpd__fmt { text-transform: capitalize; }
+html.nl .nl-dpd__cap { font-size: 13.5px; line-height: 1.6; color: var(--nl-fg2); white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+html.nl .nl-dpd__none { color: var(--nl-fg4); }
+html.nl .nl-dpd__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)); gap: 8px; }
+html.nl .nl-dpd__stat { padding: 10px; border: 1px solid var(--nl-line); border-radius: 10px; background: var(--nl-s2); }
+html.nl .nl-dpd__stat b { display: block; font: 600 17px var(--nl-display); color: var(--nl-fg); font-variant-numeric: tabular-nums; }
+html.nl .nl-dpd__stat span { font-size: 11.5px; color: var(--nl-fg3); }
+html.nl .nl-dpd__acts { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+html.nl .nl-dpd__acts > .nl-dpl--bad { align-self: center; margin-top: 4px; }
+@media (max-width: 520px) {
+  html.nl #schedule-date-panel, html.nl #cal-panel { width: 100vw !important; }
+  html.nl .nl-dpb { height: 38px; }
+}
+html.nl .nl-dpc__stats b { color: var(--nl-fg); font-weight: 600; }
+html.nl .nl-dpc__acts > .nl-dpb--icon { flex: none; width: 34px; padding: 0; color: var(--nl-fg3); }
+html.nl .nl-dpc__acts > .nl-dpb--icon:hover { color: var(--nl-bad); border-color: color-mix(in srgb, var(--nl-bad) 45%, transparent); }
+html.nl :is(.nl-dpb, .nl-dpl, .nl-dps__tip, .nl-dps__fbtn, .nl-dp__x, .nl-dp__back) svg { flex: none; }
+html.nl .nl-dpr__row > .nl-dpb { flex: none; }

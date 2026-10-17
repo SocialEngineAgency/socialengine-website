@@ -50,6 +50,7 @@ const ALLOWLIST = [
   'live-updates.js', // portal.html — live updates stream (Server-Sent Events)
   'new-look.css', // portal.html — graphite redesign (on with ?look=new)
   'new-look.js', // portal.html — palette mapping, icon rail, jump bar, Day/Dark
+  'nl-cal-panels.js', // portal.html — new look Calendar day panel and post panel
   'animation-studio.js', // portal.html
   'coach-create-session.js', // portal.html
   'carousel-templates.js', // portal.html
