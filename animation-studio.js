@@ -313,8 +313,11 @@
     return 'se_anim_entry:' + (email || 'anon');
   }
   function readAnimEntry() {
-    try { return localStorage.getItem(animEntryKey()) === 'prompt' ? 'prompt' : 'vo'; }
-    catch { return 'vo'; }
+    // The new look leads with the prompt, so a first visit starts on "Describe a video".
+    try {
+      const v = localStorage.getItem(animEntryKey());
+      return v === 'prompt' || v === 'vo' ? v : (nlOn() ? 'prompt' : 'vo');
+    } catch { return nlOn() ? 'prompt' : 'vo'; }
   }
   function writeAnimEntry(mode) {
     try { localStorage.setItem(animEntryKey(), mode === 'prompt' ? 'prompt' : 'vo'); } catch (_) { /* private mode */ }
@@ -1273,6 +1276,7 @@
   let _nlSavedOpen = false;
   let _nlArcOpen = false;
   let _nlMoreOpen = false;
+  let _nlLastPid = null;
   const _nlLaneOpen = new Set();
   const NL_I = {
     mic: 'M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21',
@@ -1306,22 +1310,39 @@
     root.innerHTML = `
       <div class="nl-anim__main">
         <div data-slot="err"></div>
-        <section class="nl-acard nl-abrief" aria-label="Brief">
+        <section class="nl-aask nl-ahero" aria-labelledby="nl-ahero-t">
+          <div class="nl-ahero__h">
+            <h2 class="nl-ahero__t" id="nl-ahero-t">Describe your video</h2>
+            <p class="nl-ahero__s" data-slot="hero-sub">One idea is enough. It becomes a set of shots, and nothing renders until you accept them.</p>
+          </div>
+          <div class="nl-ahero__box">
+            <div data-slot="prompt"></div>
+            <div class="nl-ahero__bar">
+              <div data-slot="entry"></div>
+              <div data-slot="look" class="nl-alook"></div>
+              <div data-slot="story" class="nl-astory"></div>
+              <span class="nl-grow"></span>
+              <span data-slot="packs"></span><span data-slot="send"></span>
+            </div>
+          </div>
+          <div class="nl-ahero__ideas" data-slot="ideas" hidden></div>
+          <div data-slot="log" class="nl-aask__log"></div>
+          <div data-slot="actions"></div>
+          <span data-slot="tokens" class="nl-aask__tokens" hidden></span>
+        </section>
+        <section class="nl-acard nl-abrief" aria-label="Cast, places and settings">
           <div class="nl-abrief__row">
-            <div class="nl-afield"><span class="nl-afield__l">Start from</span><div data-slot="entry"></div></div>
-            <div class="nl-afield"><label class="nl-afield__l" for="anim-story-type">Story</label><div data-slot="story"></div></div>
-            <div class="nl-afield"><span class="nl-afield__l">Look</span><div data-slot="look" class="nl-alook"></div></div>
+            <div class="nl-acast__h"><span class="nl-afield__l">Cast and places</span><span class="nl-acast__lock" data-slot="lock"></span></div>
             <span class="nl-grow"></span>
             <button type="button" class="nl-abtn nl-abtn--dash" data-nl-drive hidden>Driving video</button>
             <button type="button" class="nl-abtn" data-nl-more aria-expanded="false">More settings</button>
           </div>
           <div data-slot="more" class="nl-abrief__more" hidden></div>
           <div data-slot="drive"></div>
-          <div data-slot="why"></div>
           <div class="nl-acast">
-            <div class="nl-acast__h"><span class="nl-afield__l">Cast and places</span><span class="nl-acast__lock" data-slot="lock"></span></div>
             <div data-slot="cast" class="nl-acast__row"></div>
           </div>
+          <div data-slot="why"></div>
           <div data-slot="char"></div>
           <div data-slot="arc"></div>
         </section>
@@ -1333,12 +1354,6 @@
           <div data-slot="saved" class="nl-asaved" hidden></div>
           <div data-slot="shots" class="nl-ashots__grid"></div>
           <div data-slot="shotbar"></div>
-        </section>
-        <section class="nl-aask" aria-label="Write or ask for a change">
-          <div data-slot="log" class="nl-aask__log"></div>
-          <div data-slot="actions"></div>
-          <div data-slot="prompt"></div>
-          <div class="nl-aask__row"><span data-slot="tokens" class="nl-aask__tokens"></span><span class="nl-grow"></span><span data-slot="packs"></span><span data-slot="send"></span></div>
         </section>
         <section class="nl-acard nl-atl" aria-labelledby="nl-tl-title" data-slot="tl" hidden></section>
         <div data-slot="home" class="nl-ahome"></div>
@@ -1358,7 +1373,15 @@
     const slot = (n) => root.querySelector(`[data-slot="${n}"]`);
     const put = (name, node) => { if (node && slot(name)) slot(name).appendChild(node); };
     put('entry', document.getElementById('anim-entry-mode'));
+    const entryEl = document.getElementById('anim-entry-mode');
+    const promptBtn = entryEl && entryEl.querySelector('[data-entry="prompt"]');
+    if (promptBtn && entryEl.firstElementChild !== promptBtn) entryEl.insertBefore(promptBtn, entryEl.firstElementChild);
     put('story', document.getElementById('anim-story-type'));
+    const storySel = document.getElementById('anim-story-type');
+    if (storySel && !(_storyDraft && _storyDraft.story_type)) {
+      _storyDraft = Object.assign({}, _storyDraft, { story_type: 'auto' });
+      storySel.value = 'auto';
+    }
     put('why', document.getElementById('anim-story'));
     const look = document.getElementById('anim-look');
     if (look) {
@@ -1425,6 +1448,22 @@
       });
     }
 
+    const ideas = slot('ideas');
+    ideas.innerHTML = `<span class="nl-ahero__try">Try</span>${NL_IDEAS.map((t, i) => `<button type="button" class="nl-aidea" data-idea="${i}">${esc(t)}</button>`).join('')}`;
+    ideas.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-idea]');
+      const ta = document.getElementById('anim-prompt');
+      if (!b || !ta) return;
+      const toPrompt = document.querySelector('#anim-entry-mode [data-entry="prompt"]');
+      if (toPrompt && !toPrompt.classList.contains('active')) toPrompt.click();
+      ta.value = NL_IDEAS[Number(b.dataset.idea)] || '';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      nlHeroState(root);
+    });
+    document.getElementById('anim-prompt')?.addEventListener('input', () => nlHeroState(root));
+
     const saved = root.querySelector('[data-nl-saved]');
     saved.addEventListener('click', () => {
       _nlSavedOpen = !_nlSavedOpen;
@@ -1453,6 +1492,12 @@
     const slot = (n) => root.querySelector(`[data-slot="${n}"]`);
     const p = _project;
     root.classList.toggle('is-home', !p);
+    const pid = p ? String(p.id || '') : '';
+    if (pid !== _nlLastPid) {
+      _nlLastPid = pid;
+      for (let el = root.parentElement; el; el = el.parentElement) if (el.scrollTop) el.scrollTop = 0;
+      if (window.scrollY) window.scrollTo(0, 0);
+    }
     const body = document.getElementById('anim-canvas-body');
 
     if (fromCanvas && body) {
@@ -1481,12 +1526,36 @@
     nlTimeline(slot('tl'));
     nlHeaderPill();
     nlTokens(slot('tokens'));
+    nlHeroState(root);
     nlLock(slot('lock'));
     const savedBtn = root.querySelector('[data-nl-saved]');
     if (savedBtn) {
       savedBtn.hidden = !slot('saved').childElementCount;
       slot('saved').hidden = savedBtn.hidden || !_nlSavedOpen;
     }
+  }
+
+  const NL_IDEAS = [
+    'One tip our customers always ask about',
+    'Behind the scenes as the team gets ready',
+    'A customer problem, our fix, the happy result',
+  ];
+
+  function nlHeroState(root) {
+    const t = root.querySelector('#nl-ahero-t');
+    const sub = root.querySelector('[data-slot="hero-sub"]');
+    const ideas = root.querySelector('[data-slot="ideas"]');
+    if (!t) return;
+    const hasShots = nlScenes().length > 0;
+    t.textContent = hasShots ? 'Rework the idea' : 'Describe your video';
+    if (sub) sub.textContent = hasShots
+      ? 'Write a new idea or script for a fresh shot plan. To tweak one shot, select it below.'
+      : 'One idea is enough. It becomes a set of shots, and nothing renders until you accept them.';
+    root.querySelector('.nl-ahero')?.classList.toggle('nl-ahero--edit', hasShots);
+    root.classList.toggle('nl-anim--shots', hasShots);
+    const ta = document.getElementById('anim-prompt');
+    const pending = !!document.querySelector('#anim-brief-actions .anim-brief-card, #anim-brief-actions button');
+    if (ideas) ideas.hidden = hasShots || pending || !!(ta && ta.value.trim());
   }
 
   function nlHeaderPill() {
@@ -1905,7 +1974,7 @@
             </div>`).join('')}
         </div>
         <div class="anim-placeholder-row" style="margin-top:10px;">Your references are attached — multi-view sheets generate after you accept the brief.</div>` : `
-        <div class="anim-placeholder-row">Add reference images in the chat panel, then accept the brief to generate multi-view sheets.</div>`}
+        <div class="anim-placeholder-row">${nlOn() ? "Add a photo of your character above, then accept the shot plan to make their reference sheet." : "Add reference images in the chat panel, then accept the brief to generate multi-view sheets."}</div>`}
       </div>
 
       <div class="anim-section" data-nl="shots">
@@ -2473,7 +2542,7 @@
         <div class="anim-msg__role">${esc(m.role === 'agent' ? 'AI · shots' : (m.role === 'user' ? 'Your idea' : m.role))}</div>
         <div class="anim-msg__text">${esc(m.text)}</div>
       </div>`;
-    }).join('') || `<div class="anim-msg anim-msg--agent"><div class="anim-msg__role">AI · shots</div><div class="anim-msg__text">Describe one idea. I’ll turn it into separate shots — not copies of your prompt. Then you accept before anything generates.</div></div>`;
+    }).join('') || `<div class="anim-msg anim-msg--agent anim-msg--intro"><div class="anim-msg__role">AI · shots</div><div class="anim-msg__text">Describe one idea. I’ll turn it into separate shots — not copies of your prompt. Then you accept before anything generates.</div></div>`;
 
     const actions = document.getElementById('anim-brief-actions');
     if (actions) {
