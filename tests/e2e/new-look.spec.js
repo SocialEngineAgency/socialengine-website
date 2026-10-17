@@ -151,27 +151,101 @@ test('new look Calendar: platform tabs and filter, live ring, counts, key dates 
   expect(errors).toEqual([]);
 });
 
-test('new look Post: options out of drawers, size control drives the size, caption has its own card, handlers still work', async ({ page }) => {
+test('new look Post: one canvas and the Coach; start from a line, quick starts, size, style; the post sits beside its caption; platforms, queue, drafts and edit still work', async ({ page }) => {
   const errors = watchErrors(page);
-  await mockApi(page, srv.base, { data: clientData() });
+  const sent = { generate: [], queue: [], upload: 0 };
+  const poster = 'https://store.test/poster.png';
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/studio/design-generate') {
+        sent.generate.push(JSON.parse(entry.body || '{}'));
+        json(200, { ok: true, image_url: poster, spec: { ratio: '1:1', w: 1080, h: 1080 } });
+        return 'handled';
+      }
+      if (entry.path === '/api/studio/design-queue') {
+        sent.queue.push(JSON.parse(entry.body || '{}'));
+        json(200, { ok: true });
+        return 'handled';
+      }
+      if (entry.path === '/api/studio/upload-image') {
+        sent.upload += 1;
+        json(200, { ok: true, url: 'https://store.test/finished.png' });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await page.route('https://store.test/*.png', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex') }));
   await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="create"]');
   await page.click('.create-seg[data-segment="design-studio"]');
-  await expect(page.locator('.nl-post')).toBeVisible();
-  await expect(page.locator('.nl-post__opts #cs-style')).toBeVisible();
-  await expect(page.locator('.nl-post__opts #cs-engine')).toBeVisible();
-  await page.click('.nl-seg--fill button[data-aspect="1:1"]');
+  const shell = page.locator('.nl-p2');
+  await expect(shell).toHaveClass(/nl-p2--compose/);
+  await expect(page.locator('.atelier-essentials')).toBeHidden();
+  await expect(page.locator('.nl-p2-compose h2')).toHaveText('What are we posting?');
+  await expect(page.locator('.nl-p2-compose #cs-brief')).toBeVisible();
+  await expect(page.locator('.nl-p2-result')).toBeHidden();
+
+  // Quick start leads the line; size and style feed the generate request.
+  await page.locator('.nl-p2-quick button', { hasText: 'Quick tip' }).click();
+  await expect(page.locator('#cs-brief')).toHaveValue('A quick tip: ');
+  await page.locator('#cs-brief').fill('A quick tip: wash linen cold');
+  await page.click('.nl-p2-size button[data-aspect="1:1"]');
   await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
-  await expect(page.locator('.nl-seg--fill button[data-aspect="1:1"]')).toHaveAttribute('aria-pressed', 'true');
-  await page.evaluate(() => { document.getElementById('cs-aspect').value = '4:5'; });
-  await expect(page.locator('.nl-seg--fill button[data-aspect="4:5"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.nl-caption #cs-caption')).toHaveText('Get caption');
-  await expect(page.locator('.nl-caption #cs-caption-box')).toBeVisible();
-  await expect(page.locator('.atelier-essentials #cs-generate')).toBeInViewport();
-  // A handler bound before the move still fires.
+  await expect(page.locator('.nl-p2-size button[data-aspect="1:1"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('.nl-p2-stylewrap > .nl-p2-menu > .nl-p2-chip').click();
+  await page.locator('#nl-p2-style button', { hasText: 'Clean editorial' }).click();
+  await expect(page.locator('#cs-style')).toHaveValue('Clean editorial');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.nl-p2-stylewrap .nl-p2-chip > span')).toHaveText('Style: Clean editorial');
+  await page.click('#cs-generate');
+  await expect(shell).toHaveClass(/nl-p2--result/);
+  expect(sent.generate[0]).toMatchObject({ brief: 'A quick tip: wash linen cold', aspect_ratio: '1:1', style_hint: 'Clean editorial' });
+  await expect(page.locator('.nl-p2-title')).toHaveText('A quick tip: wash linen cold');
+  await expect(page.locator('.nl-p2-compose')).toBeHidden();
+
+  // The post beside its caption: counts, platforms, queue.
+  await expect(page.locator('.nl-p2-side #cs-caption-box')).toBeVisible();
+  await page.locator('#cs-caption-box').fill('Cold wash keeps linen soft. #linen #laundry');
+  await expect(page.locator('.nl-p2-count')).toHaveText('43 / 2,200');
+  await expect(page.locator('.nl-p2-tags')).toHaveText('2 hashtags');
+  await expect(page.locator('.nl-p2-plat[data-plat="Instagram"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('.nl-p2-plat[data-plat="Facebook"]');
+  await expect(page.locator('.nl-p2-plat[data-plat="Facebook"]')).toHaveAttribute('aria-pressed', 'false');
+  await page.click('.nl-p2-plat[data-plat="Instagram"]');
+  await expect(page.locator('.nl-p2-plat[data-plat="Instagram"]')).toHaveAttribute('aria-pressed', 'true', { timeout: 2000 });
+  await expect(page.locator('#cs-queue')).toHaveText('Add to Queue');
+  await page.click('#cs-queue');
+  await expect.poll(() => sent.queue.length).toBe(1);
+  expect(sent.queue[0]).toMatchObject({ image_url: poster, caption: 'Cold wash keeps linen soft. #linen #laundry', platform: 'Instagram' });
+  // Queuing opens Review, as before; back in Post, the design is where it was left.
+  await expect(page.locator('.dash-nav-item[data-nav="content"]')).toHaveClass(/active/);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="design-studio"]');
+  await expect(shell).toHaveClass(/nl-p2--result/);
+
+  // Edit the prompt from the menu; Cancel returns to the post.
+  await page.locator('.nl-p2-bar .nl-p2-menu').last().locator('> .nl-p2-chip').click();
+  await page.click('#nl-p2-edit');
+  await expect(shell).toHaveClass(/nl-p2--editing/);
+  await expect(page.locator('#nl-p2-ask')).toHaveText('Change the prompt');
+  await page.click('#nl-p2-cancel');
+  await expect(shell).not.toHaveClass(/nl-p2--editing/);
+
+  // Drafts → New post starts over.
+  await page.locator('.nl-p2-bar .nl-p2-menu').first().locator('> .nl-p2-chip').click();
   await page.click('#cs-new-post');
+  await expect(shell).toHaveClass(/nl-p2--compose/);
   await expect(page.locator('#cs-brief')).toHaveValue('');
+
+  // A finished graphic goes straight to the post view.
+  await page.setInputFiles('#nl-p2-file', { name: 'ready.png', mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a', 'hex') });
+  await expect(shell).toHaveClass(/nl-p2--result/);
+  await expect(page.locator('.nl-p2-title')).toHaveText('Finished graphic');
+  expect(sent.upload).toBe(1);
+  await expect(page.locator('#cs-queue')).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
@@ -280,7 +354,8 @@ test('new look Home: greeting, approvals with Approve/Reject, goes live today, c
   const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const content = [
     { id: 'recR', status: 'Ready for Review', caption: 'Walk on Sunday, bring a friend', platform: 'Instagram', content_type: 'image', scheduled_date: `${ymd}T17:00:00.000Z` },
-    { id: 'recS', status: 'Scheduled', caption: 'Last call for sign-ups', platform: 'Facebook', content_type: 'reel', scheduled_date: `${ymd}T18:00:00.000Z` },
+    // Later today, whatever time the test runs (a fixed hour has already passed in the evening).
+    { id: 'recS', status: 'Scheduled', caption: 'Last call for sign-ups', platform: 'Facebook', content_type: 'reel', scheduled_date: new Date(Math.min(Date.now() + 3600e3, new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 58).getTime())).toISOString() },
   ];
   await mockApi(page, srv.base, {
     data: clientData({ content, posts: content, client: { tier: 'growth', social_connected_platforms: ['instagram'] } }),
