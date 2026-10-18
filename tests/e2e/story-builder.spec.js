@@ -35,15 +35,26 @@ function storyApi() {
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)$/)) && entry.method === 'GET') {
       const k = st.kits.get(m[1]);
       // Looks finish between polls.
-      k.drafts.forEach((d) => { if (d.status === 'working') { d.status = 'ready'; d.options = [1, 2, 3, 4].map((i) => ({ status: 'ready', url: img(`look${i}`) })); } });
+      k.drafts.forEach((d) => { if (d.status === 'working') { d.status = 'ready'; d.options = d.options.map((_, i) => ({ status: 'ready', url: img(`look${i + 1}`) })); } });
       json(200, { kit: kitView(k) });
       return 'handled';
     }
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/options$/))) {
       const k = st.kits.get(m[1]);
-      const d = { id: `draft_${++n}`, type: body.type, name: body.name, description: body.description, source: body.source, status: 'working', options: [0, 1, 2, 3].map(() => ({ status: 'working' })) };
+      const d = { id: `draft_${++n}`, type: body.type, name: body.name, description: body.description, source: body.source, refs: body.refs || [], status: 'working', options: Array.from({ length: body.count || 4 }, () => ({ status: 'working' })) };
       k.drafts.push(d);
       json(200, { kit: kitView(k), draft: d });
+      return 'handled';
+    }
+    if (p === '/api/studio/products') {
+      json(200, { products: [{ id: 'p1', title: 'Know the Signs leaflet', primary_image: img('leaflet'), product_type: 'Print' }] });
+      return 'handled';
+    }
+    if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/elements$/)) && !body.draft_id) {
+      const k = st.kits.get(m[1]);
+      const el = { id: `el_${++n}`, type: body.type, name: body.name, description: body.description, source: body.source, image_url: body.image_url, sheet_status: body.type === 'character' ? 'ready' : null, sheet_url: body.type === 'character' ? img('sheet') : null };
+      k.elements.push(el);
+      json(200, { kit: kitView(k), element: el, reel: null });
       return 'handled';
     }
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/elements$/))) {
@@ -212,5 +223,63 @@ test('a story not made yet, picked from Recent in Reels, opens in the Storyboard
   await expect(page.locator('.create-seg[data-segment="storyboard"]')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.nl-ssteps .nl-step--now')).toContainText('Story');
   await expect(page.locator('[data-line="sc_aaaaaa0001"]')).toHaveValue('Hello there.');
+  expect(errors).toEqual([]);
+});
+
+test('Storyboard: references from the Library and a product, the number of looks, and a product used as it is', async ({ page }) => {
+  const errors = watchErrors(page);
+  const fake = storyApi();
+  fake.st.kits.set('kit_t1', { id: 'kit_t1', kind: 'story_kit', mode: 'kit', title: 'Winter wellbeing', look: 'stylized', elements: [{ id: 'el_0', type: 'place', name: 'Kitchen', image_url: img('kitchen') }], drafts: [], suggestions: [] });
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    assets: [{ id: 'a1', kind: 'character', name: 'Maya photo', url: img('maya') }, { id: 'a2', kind: 'music', name: 'Bed', url: 'https://store.test/bed.mp3' }],
+    onRequest: fake.handle,
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se_story_last', JSON.stringify({ kit: 'kit_t1', view: 'kit' })); localStorage.removeItem('se_story_looks'); } catch (_) {} });
+  await openAnimate(page);
+  await page.click('.create-seg[data-segment="storyboard"]');
+  await page.click('.nl-ssec--character [data-new="character"]');
+  await page.fill('[data-p-name]', '');
+
+  // Library: images only, and picking one names the character.
+  await page.click('[data-pick-from="library"]');
+  await expect(page.locator('.nl-spick [data-pk-item]')).toHaveCount(1);
+  await page.click('[data-pk-item="a:a1"]');
+  await page.click('[data-pk-use]');
+  await expect(page.locator('.nl-sref')).toHaveCount(1);
+  await expect(page.locator('[data-p-name]')).toHaveValue('Maya photo');
+  await page.fill('[data-p-name]', 'Maya');
+
+  // Products: the catalog's product goes in second.
+  await page.click('[data-pick-from="products"]');
+  await page.click('[data-pk-item="p:p1"]');
+  await page.click('[data-pk-use]');
+  await expect(page.locator('.nl-sref')).toHaveCount(2);
+  await expect(page.locator('.nl-sref__k').nth(1)).toHaveText('Product');
+
+  // Two looks instead of four.
+  await expect(page.locator('[data-count-val]')).toHaveText('4');
+  await page.click('[data-count="-1"]');
+  await page.click('[data-count="-1"]');
+  await expect(page.locator('[data-make-looks]')).toHaveText(/Make 2 looks/);
+  await page.click('[data-make-looks]');
+  await expect(page.locator('[data-pick]')).toHaveCount(2, { timeout: 8000 });
+  const opt = fake.st.calls.filter((c) => /\/options$/.test(c.path)).pop();
+  expect(opt.body.count).toBe(2);
+  expect(opt.body.refs.map((r) => [r.kind, r.label])).toEqual([['library', 'Maya photo'], ['product', 'Know the Signs leaflet']]);
+
+  // A product straight into the kit, no looks made.
+  await page.click('[data-panel-close]');
+  await page.click('.nl-ssec--item [data-new="item"]');
+  await expect(page.locator('[data-src="product"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.click('[data-pick-from="products"]');
+  await page.click('[data-pk-item="p:p1"]');
+  await page.click('[data-pk-use]');
+  await page.click('[data-as-is]');
+  await expect(page.locator('.nl-ssec--item .nl-sel')).toContainText('Know the Signs leaflet');
+  const asIs = fake.st.calls.filter((c) => /\/elements$/.test(c.path)).pop();
+  expect(asIs.body).toMatchObject({ type: 'item', source: 'product', kind: 'product', image_url: 'https://store.test/leaflet.jpg' });
+  // The looks preference sticks for next time.
+  expect(await page.evaluate(() => localStorage.getItem('se_story_looks'))).toBe('2');
   expect(errors).toEqual([]);
 });

@@ -38,7 +38,12 @@
     boardPid: null,
     anim: null,
     loading: false,
+    picker: null, // { tab: 'library'|'products', q, items, sel: Map }
+    catalog: null, // { has: bool } once the product catalog was checked
   };
+  const LS_LOOKS = 'se_story_looks';
+  const MAX_REFS = 3;
+  const lookCountPref = () => { const n = Number(ls.get(LS_LOOKS)); return n >= 1 && n <= 6 ? n : 4; };
   const LS_LAST = 'se_story_last';
   const WPS = 2.5;
   const COLORS = ['#f2b84b', '#58b4ff', '#2ee6a6', '#ff7ab6', '#c4a6ff', '#ff8a5c'];
@@ -240,7 +245,8 @@
   function draftPanel() {
     const d = ((S.kit && S.kit.drafts) || []).slice().reverse().find((x) => x.status === 'working' || x.status === 'ready');
     if (!d) return null;
-    return { mode: 'new', type: d.type, source: d.source, name: d.name, description: d.description, photo_url: d.photo_url || '', need_id: d.need_id || null, draft_id: d.id, pick: null };
+    const refs = Array.isArray(d.refs) && d.refs.length ? d.refs : (d.photo_url ? [{ url: d.photo_url, kind: d.source === 'product' ? 'product' : 'photo' }] : []);
+    return { mode: 'new', type: d.type, source: d.source, name: d.name, description: d.description, refs, count: (d.options || []).length || 4, need_id: d.need_id || null, draft_id: d.id, pick: null };
   }
 
   async function openReel(idOrProject) {
@@ -636,7 +642,7 @@
   const SOURCES = {
     character: [['describe', 'Describe'], ['photo', 'From a photo'], ['mascot', 'From a mascot']],
     place: [['describe', 'Describe'], ['photo', 'From a photo']],
-    item: [['describe', 'Describe'], ['product', 'Product photo'], ['photo', 'From a photo']],
+    item: [['describe', 'Describe'], ['product', 'A product'], ['photo', 'From a photo']],
   };
   function panelView() {
     const P = S.panel;
@@ -659,6 +665,9 @@
     const working = draft && draft.status === 'working';
     const locked = !!draft;
     const needsPhoto = P.source !== 'describe';
+    const refs = P.refs || [];
+    const count = P.count || lookCountPref();
+    if (!locked && S.catalog == null) checkCatalog();
     const aboutLabel = P.type === 'character' ? 'Who they are' : P.type === 'place' ? 'What it looks like' : 'What it is';
     const aboutPh = P.type === 'character'
       ? 'Community nurse in her mid 30s. Warm and calm. Short dark wavy hair, oatmeal cable-knit jumper.'
@@ -666,7 +675,7 @@
     const opts = draft ? draft.options : null;
     const pickN = P.pick != null ? P.pick + 1 : null;
     const ready = opts && opts.some((o) => o.status === 'ready');
-    const looks = opts ? `<div class="nl-slooks">
+    const looks = opts ? `<div class="nl-slooks" style="--cols:${opts.length === 1 ? 2 : opts.length <= 4 ? opts.length : 3}">
         ${opts.map((o, i) => o.status === 'ready'
           ? `<button type="button" class="nl-slook${P.pick === i ? ' is-on' : ''}" data-pick="${i}" aria-pressed="${P.pick === i}" aria-label="Look ${i + 1}"><img src="${esc(media(o.url))}" alt=""><span>${i + 1}</span></button>`
           : o.status === 'failed' ? `<div class="nl-slook nl-slook--bad"><span>${i + 1}</span><em>Did not work</em></div>`
@@ -679,25 +688,236 @@
         <div class="nl-sseg nl-sseg--full" role="group" aria-label="Start from">${SOURCES[P.type].map(([v, l]) => `<button type="button" data-src="${v}" aria-pressed="${P.source === v}" ${locked ? 'disabled' : ''}>${l}</button>`).join('')}</div>
         <label class="nl-slabel" for="nl-sp-name">Name</label>
         <input id="nl-sp-name" class="nl-sinput" data-p-name data-fk="pname" maxlength="60" value="${esc(P.name || '')}" placeholder="${P.type === 'character' ? 'Maya' : P.type === 'place' ? 'Kitchen' : 'Know the Signs leaflet'}" ${locked ? 'readonly' : ''}>
-        ${needsPhoto ? `<div class="nl-slabel">${P.source === 'product' ? 'Product photo' : P.source === 'mascot' ? 'Mascot or logo' : 'Photo'}</div>
-          <div class="nl-sdrop${P.photo_url ? ' has-img' : ''}">
-            ${P.photo_url ? `<img src="${esc(media(P.photo_url))}" alt="">` : ''}
-            <input type="file" accept="image/*" data-p-file hidden ${locked ? 'disabled' : ''}>
-            <button type="button" class="nl-sbtn nl-sbtn--sm" data-p-upload ${locked || P.uploading ? 'disabled' : ''}>${svg(I.upload, 13)}${P.uploading ? 'Uploading…' : P.photo_url ? 'Change' : 'Upload'}</button>
-          </div>` : ''}
+        ${refsBlock(P, { locked, needsPhoto, refs })}
         <label class="nl-slabel" for="nl-sp-about">${aboutLabel}${needsPhoto ? ' <em>optional</em>' : ''}</label>
         <textarea id="nl-sp-about" class="nl-sinput nl-sarea" data-p-about data-fk="pabout" rows="3" maxlength="600" placeholder="${esc(aboutPh)}" ${locked ? 'readonly' : ''}>${esc(P.description || '')}</textarea>
-        ${draft ? `<div class="nl-slabel nl-slabel--row"><span>Pick a look</span>${working ? '<span class="nl-snote"><i class="nl-sspin"></i>Making 4 looks, about a minute</span>' : `<button type="button" class="nl-slink" data-more-looks>${svg(I.redo, 12)}4 more</button>`}</div>${looks}` : ''}
-        ${draft && P.photo_url && !working ? '<button type="button" class="nl-slink" data-use-photo>Use my photo as it is</button>' : ''}
+        ${draft ? `<div class="nl-slabel nl-slabel--row"><span>Pick a look</span>${working ? `<span class="nl-snote"><i class="nl-sspin"></i>Making ${plural(opts.length, 'look')}, about a minute</span>` : `<button type="button" class="nl-slink" data-more-looks>${svg(I.redo, 12)}${count} more</button>`}</div>${looks}` : ''}
+        ${draft && refs.length && needsPhoto && !working ? `<button type="button" class="nl-slink" data-use-photo>Use the ${P.source === 'product' ? 'product photo' : 'photo'} as it is</button>` : ''}
       </div>
       <div class="nl-spanel__f">
         ${draft
           ? `<button type="button" class="nl-sbtn nl-sbtn--light nl-sbtn--wide" data-lock ${P.pick == null || !ready ? 'disabled' : ''}>${svg(I.lock, 13)}${pickN ? `${lockLabel} ${pickN}` : 'Pick a look'}</button>
              <div class="nl-snote nl-snote--c">${P.type === 'character' ? 'Makes front, three-quarter and side views · 1 image render' : 'Saved to this kit for every reel'}</div>`
-          : `<button type="button" class="nl-sbtn nl-sbtn--primary nl-sbtn--wide" data-make-looks>${svg(I.spark, 13)}Make 4 looks</button>
-             <div class="nl-snote nl-snote--c">${S.kit.elements.length ? 'Matched to the kit\'s style · 4 image renders' : '4 image renders'}</div>`}
+          : `<div class="nl-scount"><span class="nl-slabel">Looks</span>
+               <div class="nl-sstep" role="group" aria-label="How many looks">
+                 <button type="button" data-count="-1" aria-label="Fewer looks" ${count <= 1 ? 'disabled' : ''}>−</button>
+                 <output data-count-val aria-live="polite">${count}</output>
+                 <button type="button" data-count="1" aria-label="More looks" ${count >= 6 ? 'disabled' : ''}>+</button>
+               </div></div>
+             <button type="button" class="nl-sbtn nl-sbtn--primary nl-sbtn--wide" data-make-looks>${svg(I.spark, 13)}Make ${plural(count, 'look')}</button>
+             <div class="nl-snote nl-snote--c">${S.kit.elements.length ? 'Matched to the kit\'s style · ' : ''}${plural(count, 'image render')}</div>
+             ${needsPhoto && refs.length ? `<button type="button" class="nl-slink nl-slink--c" data-as-is>or use the ${P.source === 'product' ? 'product photo' : 'photo'} as it is, no renders</button>` : ''}`}
       </div>
     </div>`;
+  }
+
+  const REF_KIND_LABEL = { product: 'Product', library: 'Library', logo: 'Logo', photo: 'Upload' };
+
+  /** Starting images: an upload, Library items or products. Up to three. */
+  function refsBlock(P, { locked, needsPhoto, refs }) {
+    const label = P.source === 'product' ? 'Product' : P.source === 'mascot' ? 'Mascot or logo' : P.source === 'photo' ? 'Photo' : 'References';
+    const full = refs.length >= MAX_REFS;
+    const products = S.catalog && S.catalog.has;
+    const thumbs = refs.map((r, i) => `<div class="nl-sref" title="${esc(r.label || REF_KIND_LABEL[r.kind] || '')}">
+        <img src="${esc(media(r.url))}" alt="">
+        <span class="nl-sref__k">${esc(REF_KIND_LABEL[r.kind] || 'Photo')}</span>
+        ${locked ? '' : `<button type="button" class="nl-sref__x" data-ref-rm="${i}" aria-label="Remove">${svg(I.x, 10, 2.4)}</button>`}
+      </div>`).join('');
+    const buttons = locked ? '' : `<div class="nl-srow nl-sref__add">
+        <input type="file" accept="image/*" data-p-file multiple hidden>
+        <button type="button" class="nl-sbtn nl-sbtn--sm" data-p-upload ${full || P.uploading ? 'disabled' : ''}>${svg(I.upload, 13)}${P.uploading ? 'Uploading…' : 'Upload'}</button>
+        <button type="button" class="nl-sbtn nl-sbtn--sm" data-pick-from="library" ${full ? 'disabled' : ''}>${svg(I.image, 13)}Library</button>
+        ${products || P.source === 'product' ? `<button type="button" class="nl-sbtn nl-sbtn--sm" data-pick-from="products" ${full || !products ? 'disabled' : ''} ${products ? '' : 'title="No product catalog connected"'}>${svg(I.grid, 13)}Products</button>` : ''}
+      </div>`;
+    return `<div class="nl-slabel nl-slabel--row"><span>${label}${needsPhoto ? '' : ' <em>optional</em>'}</span>${refs.length ? `<span class="nl-smono">${refs.length}/${MAX_REFS}</span>` : ''}</div>
+      <div class="nl-srefs${refs.length ? '' : ' is-empty'}">
+        ${thumbs}
+        ${refs.length ? '' : `<p class="nl-snote">${needsPhoto ? (P.source === 'product' ? 'Pick the product it starts from.' : 'Add the photo it starts from.') : 'Add a product they hold or wear, or a look to follow.'}</p>`}
+        ${buttons}
+      </div>`;
+  }
+
+  function addRefs(list) {
+    const P = S.panel;
+    if (!P || P.mode !== 'new') return;
+    P.refs = P.refs || [];
+    for (const r of list) {
+      if (!r || !/^https?:\/\//i.test(String(r.url || '')) || P.refs.some((x) => x.url === r.url)) continue;
+      if (P.refs.length >= MAX_REFS) break;
+      P.refs.push({ url: r.url, kind: r.kind || 'photo', label: r.label || '' });
+      // A product or Library item names the new thing when nothing is typed yet.
+      if (!String(P.name || '').trim() && r.label) P.name = String(r.label).slice(0, 60);
+    }
+  }
+
+  async function checkCatalog() {
+    S.catalog = { has: false, checking: true };
+    try {
+      const d = await api('/api/studio/products?limit=1&page=1');
+      S.catalog = { has: Array.isArray(d.products) && d.products.length > 0 };
+    } catch (_) {
+      S.catalog = { has: false };
+    }
+    if (S.catalog.has && S.view === 'kit') render();
+  }
+
+  // ── Library and product picker ─────────────────────────────────────────────
+  const LIB_KINDS = {
+    character: ['character', 'item', 'logo', 'style', 'setting', 'scene'],
+    place: ['setting', 'scene', 'plate', 'style', 'item'],
+    item: ['item', 'logo', 'style'],
+  };
+  const LIB_KIND_LABEL = { character: 'Characters', item: 'Items', logo: 'Logos', style: 'Styles', setting: 'Settings', scene: 'Scenes', plate: 'Plates' };
+
+  function openPicker(tab) {
+    const P = S.panel;
+    if (!P) return;
+    S.picker = { tab, q: '', kind: '', items: null, sel: new Map(), room: MAX_REFS - (P.refs || []).length, loading: true, error: null };
+    paintPicker();
+    loadPicker();
+  }
+  function closePicker() {
+    S.picker = null;
+    document.getElementById('nl-spick')?.remove();
+  }
+  async function loadPicker() {
+    const pk = S.picker;
+    if (!pk) return;
+    pk.loading = true;
+    pk.error = null;
+    paintPicker();
+    try {
+      if (pk.tab === 'library') {
+        if (!S.assets) S.assets = (await api('/api/assets')).assets || [];
+        // Every image in the Library, the kinds that fit this element first.
+        const kinds = LIB_KINDS[(S.panel && S.panel.type) || 'character'];
+        const rank = (k) => { const i = kinds.indexOf(k); return i < 0 ? kinds.length : i; };
+        pk.items = S.assets.filter((a) => a && a.url && !['color', 'music', 'outro', 'video'].includes(a.kind) && !/\.(mp4|mov|webm|mp3|wav|m4a)(\?|$)/i.test(a.url))
+          .sort((a, b) => rank(a.kind) - rank(b.kind))
+          .map((a) => ({ id: `a:${a.id}`, url: a.url, label: a.name || LIB_KIND_LABEL[a.kind] || 'Library', kind: a.kind === 'logo' ? 'logo' : 'library', group: a.kind }));
+      } else {
+        const qs = new URLSearchParams({ limit: '36', page: '1' });
+        if (pk.q) qs.set('search', pk.q);
+        const d = await api(`/api/studio/products?${qs}`);
+        if (S.picker !== pk) return;
+        pk.items = (d.products || []).filter((x) => x.primary_image).map((x) => ({ id: `p:${x.id}`, url: x.primary_image, label: x.title || 'Product', kind: 'product', group: x.product_type || '' }));
+      }
+    } catch (e) {
+      pk.error = e.message || 'Could not load';
+      pk.items = [];
+    }
+    pk.loading = false;
+    if (S.picker === pk) paintPicker();
+  }
+  function paintPicker() {
+    const pk = S.picker;
+    if (!pk) return;
+    let ov = document.getElementById('nl-spick');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'nl-spick';
+      ov.className = 'nl-spick';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', onPickerClick);
+      ov.addEventListener('input', (e) => {
+        if (!e.target.matches('[data-pk-q]') || !S.picker) return;
+        S.picker.q = e.target.value;
+        clearTimeout(S.picker.t);
+        if (S.picker.tab === 'products') S.picker.t = setTimeout(loadPicker, 300);
+        else paintPickerGrid();
+      });
+    }
+    const products = S.catalog && S.catalog.has;
+    ov.innerHTML = `<div class="nl-spick__bg" data-pk-close></div>
+      <div class="nl-spick__p" role="dialog" aria-modal="true" aria-label="Add a reference">
+        <div class="nl-spick__h">
+          <h3>Add a reference</h3>
+          <div class="nl-sseg" role="tablist">
+            <button type="button" role="tab" data-pk-tab="library" aria-pressed="${pk.tab === 'library'}">Library</button>
+            ${products ? `<button type="button" role="tab" data-pk-tab="products" aria-pressed="${pk.tab === 'products'}">Products</button>` : ''}
+          </div>
+          <span class="nl-grow"></span>
+          <button type="button" class="nl-sicon" data-pk-close aria-label="Close">${svg(I.x, 14)}</button>
+        </div>
+        <div class="nl-spick__bar"><input class="nl-sinput" type="search" data-pk-q placeholder="${pk.tab === 'products' ? 'Search products' : 'Search the Library'}" value="${esc(pk.q)}" aria-label="Search"></div>
+        <div class="nl-spick__grid" data-pk-grid></div>
+        <div class="nl-spick__f">
+          <span class="nl-snote" data-pk-count></span>
+          <span class="nl-grow"></span>
+          <button type="button" class="nl-sbtn" data-pk-close>Cancel</button>
+          <button type="button" class="nl-sbtn nl-sbtn--primary" data-pk-use disabled>Add</button>
+        </div>
+      </div>`;
+    paintPickerGrid();
+    const q = ov.querySelector('[data-pk-q]');
+    if (q && document.activeElement !== q) setTimeout(() => q.focus(), 0);
+  }
+  function paintPickerGrid() {
+    const pk = S.picker;
+    const ov = document.getElementById('nl-spick');
+    if (!pk || !ov) return;
+    const grid = ov.querySelector('[data-pk-grid]');
+    const q = pk.q.trim().toLowerCase();
+    const items = (pk.items || []).filter((x) => pk.tab === 'products' || !q || `${x.label} ${x.group}`.toLowerCase().includes(q));
+    if (pk.loading) grid.innerHTML = '<div class="nl-spick__empty"><i class="nl-sspin"></i>Loading</div>';
+    else if (pk.error) grid.innerHTML = `<div class="nl-spick__empty">${esc(pk.error)}</div>`;
+    else if (!items.length) grid.innerHTML = `<div class="nl-spick__empty">${pk.tab === 'products' ? 'No products found.' : 'Nothing here yet. Add characters, items and settings in Library.'}</div>`;
+    else {
+      grid.innerHTML = items.map((x) => {
+        const on = pk.sel.has(x.id);
+        return `<button type="button" class="nl-spick__it${on ? ' is-on' : ''}" data-pk-item="${esc(x.id)}" aria-pressed="${on}">
+          <span class="nl-spick__im"><img src="${esc(media(x.url))}" alt="" loading="lazy"><i>${on ? svg(I.check, 12, 3) : ''}</i></span>
+          <span class="nl-spick__t">${esc(x.label)}</span>${x.group ? `<span class="nl-spick__s">${esc(LIB_KIND_LABEL[x.group] || x.group)}</span>` : ''}
+        </button>`;
+      }).join('');
+    }
+    const n = pk.sel.size;
+    ov.querySelector('[data-pk-count]').textContent = pk.room <= 0 ? 'Already at three references' : `${n} of up to ${pk.room} picked`;
+    const use = ov.querySelector('[data-pk-use]');
+    use.disabled = !n;
+    use.textContent = n > 1 ? `Add ${n}` : 'Add';
+  }
+  function onPickerClick(e) {
+    const pk = S.picker;
+    if (!pk) return;
+    const t = e.target;
+    if (t.closest('[data-pk-close]')) { closePicker(); return; }
+    const tab = t.closest('[data-pk-tab]');
+    if (tab) { if (tab.dataset.pkTab !== pk.tab) { pk.tab = tab.dataset.pkTab; pk.q = ''; pk.sel.clear(); pk.items = null; paintPicker(); loadPicker(); } return; }
+    const it = t.closest('[data-pk-item]');
+    if (it) {
+      const item = (pk.items || []).find((x) => x.id === it.dataset.pkItem);
+      if (!item) return;
+      if (pk.sel.has(item.id)) pk.sel.delete(item.id);
+      else if (pk.sel.size < pk.room) pk.sel.set(item.id, item);
+      else if (pk.room === 1) { pk.sel.clear(); pk.sel.set(item.id, item); }
+      else { toast(`Up to ${MAX_REFS} references in all`, 'info'); return; }
+      paintPickerGrid();
+      return;
+    }
+    if (t.closest('[data-pk-use]')) {
+      addRefs([...pk.sel.values()]);
+      closePicker();
+      render();
+    }
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.picker) closePicker(); });
+
+  async function useAsIs() {
+    const P = S.panel;
+    const ref = P && (P.refs || [])[0];
+    if (!ref) return;
+    const name = String(P.name || '').trim();
+    if (!name) { toast('Give it a name first', 'error'); focusLater('[data-p-name]'); return; }
+    try {
+      const d = await api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/elements`, {
+        method: 'POST',
+        body: JSON.stringify({ type: P.type, name, description: P.description || '', source: P.source, image_url: ref.url, kind: ref.kind, label: ref.label, need_id: P.need_id || undefined }),
+      });
+      afterLock(d, P);
+    } catch (e) {
+      toast(e.message || 'Could not add it to the kit', 'error', e.request_id);
+    }
   }
 
   function elPanel() {
@@ -932,13 +1152,15 @@
     if (!P || !S.kit) return;
     const name = String(P.name || '').trim();
     if (!name) { toast('Give it a name first', 'error'); focusLater('[data-p-name]'); return; }
-    if (P.source === 'describe' && !String(P.description || '').trim()) { toast('Describe it in a sentence or two', 'error'); focusLater('[data-p-about]'); return; }
-    if (P.source !== 'describe' && !P.photo_url) { toast('Add a photo to start from', 'error'); return; }
+    const refs = P.refs || [];
+    if (P.source === 'describe' && !String(P.description || '').trim() && !refs.length) { toast('Describe it in a sentence or two', 'error'); focusLater('[data-p-about]'); return; }
+    if (P.source !== 'describe' && !refs.length) { toast(P.source === 'product' ? 'Pick the product first' : 'Add a photo to start from', 'error'); return; }
+    const count = P.count || lookCountPref();
     if (again && P.draft_id) api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/drafts/${encodeURIComponent(P.draft_id)}`, { method: 'DELETE' }).catch(() => {});
     try {
       const d = await api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/options`, {
         method: 'POST',
-        body: JSON.stringify({ type: P.type, name, description: P.description || '', source: P.source, photo_url: P.photo_url || undefined, need_id: P.need_id || undefined, reel_id: S.reel ? S.reel.id : undefined }),
+        body: JSON.stringify({ type: P.type, name, description: P.description || '', source: P.source, refs, count, need_id: P.need_id || undefined, reel_id: S.reel ? S.reel.id : undefined }),
       });
       S.kit = d.kit;
       P.draft_id = d.draft.id;
@@ -958,33 +1180,44 @@
         method: 'POST',
         body: JSON.stringify(usePhoto ? { draft_id: P.draft_id, use_photo: true } : { draft_id: P.draft_id, option: P.pick }),
       });
-      S.kit = d.kit;
-      if (d.reel && S.reel && d.reel.id === S.reel.id && S.story) {
-        // The new element went into the scene that asked for it.
-        const by = new Map(((d.reel.story && d.reel.story.scenes) || []).map((s) => [s.id, s]));
-        S.story.scenes.forEach((s) => { const r = by.get(s.id); if (r) s.element_ids = r.element_ids.slice(); });
-      }
-      S.panel = { mode: 'el', id: d.element.id };
-      toast(d.element.type === 'character' ? `${d.element.name} is locked. Making the turnaround views.` : `${d.element.name} is in the kit`, 'success');
-      if (P.need_id && S.reel) { S.view = 'story'; S.panel = null; remember(); }
-      render();
-      paintHeader();
-      pollIfWorking();
-      refreshKits();
+      afterLock(d, P);
     } catch (e) {
       toast(e.message || 'Could not add it to the kit', 'error', e.request_id);
     }
   }
 
-  async function uploadPhoto(file) {
+  /** A new element is in the kit: show it, follow the story that asked for it, refresh. */
+  function afterLock(d, P) {
+    S.kit = d.kit;
+    if (d.reel && S.reel && d.reel.id === S.reel.id && S.story) {
+      // The new element went into the scene that asked for it.
+      const by = new Map(((d.reel.story && d.reel.story.scenes) || []).map((s) => [s.id, s]));
+      S.story.scenes.forEach((s) => { const r = by.get(s.id); if (r) s.element_ids = r.element_ids.slice(); });
+    }
+    S.panel = { mode: 'el', id: d.element.id };
+    toast(d.element.type === 'character' && d.element.sheet_status === 'working' ? `${d.element.name} is locked. Making the turnaround views.` : `${d.element.name} is in the kit`, 'success');
+    if (P.need_id && S.reel) { S.view = 'story'; S.panel = null; remember(); }
+    render();
+    paintHeader();
+    pollIfWorking();
+    refreshKits();
+  }
+
+  async function uploadPhoto(files) {
     const P = S.panel;
-    if (!file || !P) return;
-    if (!/^image\//.test(file.type)) { toast('Please pick an image', 'error'); return; }
-    if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10MB', 'error'); return; }
+    const list = [...(files || [])].filter(Boolean);
+    if (!list.length || !P) return;
+    const room = MAX_REFS - (P.refs || []).length;
+    if (room <= 0) { toast(`Up to ${MAX_REFS} references`, 'info'); return; }
+    if (list.length > room) toast(`Only ${room} more can be added`, 'info');
     P.uploading = true;
     render();
     try {
-      P.photo_url = await H.uploadImage(file);
+      for (const file of list.slice(0, room)) {
+        if (!/^image\//.test(file.type)) { toast('Please pick an image', 'error'); continue; }
+        if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10MB', 'error'); continue; }
+        addRefs([{ url: await H.uploadImage(file), kind: 'photo' }]);
+      }
     } catch (e) {
       toast(e.message || 'Upload failed', 'error', e.request_id);
     } finally {
@@ -1266,7 +1499,7 @@
     }
     if (q('[data-next-story]')) { newReel(); return; }
     // Kit panel
-    if ((b = q('[data-new]'))) { S.panel = { mode: 'new', type: b.dataset.new, source: 'describe', name: '', description: '' }; render(); focusLater('[data-p-name]'); return; }
+    if ((b = q('[data-new]'))) { S.panel = { mode: 'new', type: b.dataset.new, source: b.dataset.new === 'item' && S.catalog && S.catalog.has ? 'product' : 'describe', name: '', description: '', refs: [], count: lookCountPref() }; render(); focusLater('[data-p-name]'); return; }
     if ((b = q('[data-need]'))) {
       const n = (S.kit.suggestions || []).find((x) => x.id === b.dataset.need);
       if (n) { S.view = 'kit'; S.panel = { mode: 'new', type: n.type, source: 'describe', name: n.name, description: n.description, need_id: n.id }; remember(); paint(); }
@@ -1277,7 +1510,7 @@
       const P = S.panel;
       if (P && P.draft_id) {
         const d = (S.kit.drafts || []).find((x) => x.id === P.draft_id);
-        if (d && d.status !== 'working') api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/drafts/${encodeURIComponent(P.draft_id)}`, { method: 'DELETE' }).then((r) => { S.kit = r.kit; }).catch(() => {});
+        if (d && d.status !== 'working') api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/drafts/${encodeURIComponent(P.draft_id)}`, { method: 'DELETE' }).then((r) => { if (r && r.kit) S.kit = r.kit; }).catch(() => {});
       }
       S.panel = null;
       render();
@@ -1285,6 +1518,16 @@
     }
     if ((b = q('[data-src]'))) { S.panel.source = b.dataset.src; render(); return; }
     if (q('[data-p-upload]')) { const f = box.querySelector('[data-p-file]'); if (f) f.click(); return; }
+    if ((b = q('[data-pick-from]'))) { openPicker(b.dataset.pickFrom); return; }
+    if ((b = q('[data-ref-rm]'))) { S.panel.refs.splice(Number(b.dataset.refRm), 1); render(); return; }
+    if ((b = q('[data-count]'))) {
+      const n = Math.max(1, Math.min(6, (S.panel.count || lookCountPref()) + Number(b.dataset.count)));
+      S.panel.count = n;
+      ls.set(LS_LOOKS, String(n));
+      render();
+      return;
+    }
+    if (q('[data-as-is]')) { useAsIs(); return; }
     if (q('[data-make-looks]')) { makeLooks(); return; }
     if (q('[data-more-looks]')) { makeLooks({ again: true }); return; }
     if ((b = q('[data-pick]'))) { S.panel.pick = Number(b.dataset.pick); render(); return; }
@@ -1388,7 +1631,7 @@
 
   function onChange(e) {
     const t = e.target;
-    if (t.matches('[data-p-file]')) { uploadPhoto(t.files && t.files[0]); t.value = ''; return; }
+    if (t.matches('[data-p-file]')) { uploadPhoto(t.files); t.value = ''; return; }
     if (t.matches('[data-len]')) { render(); return; }
     if (t.matches('[data-kit-look]') && S.kit) {
       const look = t.value;
