@@ -8,6 +8,7 @@
   let _meta = null;
   let _project = null;
   let _recent = []; // project list for home screen
+  let _kits = []; // story kit summaries (Build a Story)
   let _pollTimer = null;
   let _busy = false;
   let _briefing = false;
@@ -1014,8 +1015,15 @@
       failed: '#F87171',
       pending: '#64748B',
       draft: '#94A3B8',
+      story: '#94A3B8',
     };
     const c = colors[status] || '#94A3B8';
+    if (nlOn()) {
+      // New look: a quiet pill in plain words.
+      const words = { story: 'Draft', draft: 'Draft', brief: 'Draft', brief_ready: 'Plan ready', developing: 'Making', generating: 'Making', assembling: 'Finishing', character_review: 'Check cast', ready: 'Ready', failed: 'Failed', pending: 'Waiting' };
+      const tone = status === 'ready' ? 'ok' : status === 'failed' ? 'bad' : ['developing', 'generating', 'assembling'].includes(status) ? 'gen' : 'todo';
+      return `<span class="nl-spill nl-spill--${tone}">${esc(words[status] || status || 'Draft')}</span>`;
+    }
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:${c}22;border:1px solid ${c}55;color:${c};font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">${esc(status || 'idle')}</span>`;
   }
 
@@ -1069,8 +1077,16 @@
       </div>`;
   }
 
+  /** Second line of a recent project in the new look: how it was made and how long. */
+  function nlRecentSub(p) {
+    const kit = p.workflow === 'story' ? _kits.find((k) => k.id === p.kit_id) : null;
+    const how = p.workflow === 'story' ? (kit ? `Story · ${kit.title}` : 'Story') : 'Prompt';
+    const n = p.workflow === 'story' && !p.scene_count ? p.story_scene_count : p.scene_count;
+    return n ? `${how} · ${n} ${p.workflow === 'story' ? 'scene' : 'shot'}${n === 1 ? '' : 's'}` : how;
+  }
+
   function projectTitle(p) {
-    return p?.agent_brief?.title || p?.user_prompt?.slice(0, 48) || 'Untitled project';
+    return p?.agent_brief?.title || p?.story_title || p?.story?.title || p?.user_prompt?.slice(0, 48) || (p?.workflow === 'story' ? 'Untitled story' : 'Untitled project');
   }
 
   function projectMediaExpired(p) {
@@ -1152,6 +1168,7 @@
     try {
       const list = await animFetch('/api/animation/projects');
       _recent = list.projects || [];
+      _kits = Array.isArray(list.kits) ? list.kits : _kits;
       if (!silent && list.purged > 0) {
         toast(`Removed ${list.purged} expired project${list.purged === 1 ? '' : 's'} (old links from a server restart)`, 'info');
       }
@@ -1190,6 +1207,11 @@
     if (!id || _busy) return;
     try {
       const data = await animFetch(`/api/animation/projects/${id}`);
+      // A story reel that has not been made yet opens in Build a Story, not the board.
+      if (window.SEStory && nlOn() && window.SEStory.claims(data.project)) {
+        window.SEStory.openReel(data.project);
+        return;
+      }
       _project = data.project;
       if (projectMediaExpired(_project)) {
         toast('Some media links expired after a restart — re-upload Char refs. Project was kept.', 'warning');
@@ -1259,7 +1281,8 @@
       bar = document.createElement('ol');
       bar.className = 'nl-steps';
       bar.setAttribute('aria-label', 'Steps');
-      head.insertBefore(bar, head.children[1] || null);
+      const after = head.querySelector('.nl-sbar') || head.querySelector('.nl-wf');
+      head.insertBefore(bar, after ? after.nextSibling : (head.children[1] || null));
     }
     bar.innerHTML = spec.split(',').map((x, i) => {
       const [label, st] = x.split('|');
@@ -1381,6 +1404,7 @@
             <div data-slot="arc"></div>
           </div>
         </section>
+        <section class="nl-skrow" data-slot="kits" aria-label="Story kits" hidden></section>
         <section class="nl-acard nl-ashots" aria-labelledby="nl-shots-title">
           <div class="nl-acard__h">
             <h2 id="nl-shots-title">Shots <span class="nl-acard__meta" data-slot="shots-meta"></span></h2>
@@ -1400,6 +1424,9 @@
     canvas.appendChild(root);
     shell.classList.add('nl-anim-on');
     nlAdoptComposer(root);
+    if (window.SEStory) {
+      try { window.SEStory.attach(root, nlStoryHost()); } catch (e) { console.warn('[animate] story builder', e); }
+    }
     return root;
   }
 
@@ -1620,6 +1647,44 @@
       savedBtn.hidden = !slot('saved').childElementCount;
       slot('saved').hidden = savedBtn.hidden || !_nlSavedOpen;
     }
+    if (window.SEStory) {
+      try { window.SEStory.onLayout(); } catch (e) { console.warn('[animate] story builder', e); }
+    }
+  }
+
+  /** What Build a Story (story-builder.js) needs from the studio. */
+  function nlStoryHost() {
+    return {
+      fetch: animFetch,
+      toast,
+      esc,
+      mediaSrc,
+      title: projectTitle,
+      project: () => _project,
+      recent: () => _recent,
+      kits: () => _kits,
+      goHome,
+      openProject: (id) => openProject(id),
+      showProject: (p) => {
+        _project = p;
+        _refs = (p.references || []).map((r) => ({ url: r.url, title: r.title || 'Ref', role: r.role || 'character' }));
+        rememberOpenProject(p.id);
+        renderCanvas();
+        renderChat();
+        renderRefs();
+        if (['developing', 'generating', 'assembling'].includes(p.status) || projectHasBusyScenes(p)) startPoll();
+        refreshRecent({ silent: true });
+      },
+      uploadImage: async (file) => {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch(`${apiBase()}/api/studio/upload-image`, { method: 'POST', headers: authHeadersMultipart(), body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) throw apiError(data, res, 'Upload failed');
+        if (data.durable === false || /\/api\/media\//i.test(String(data.url))) throw new Error("Upload didn't finish saving. Try again in a moment.");
+        return data.url;
+      },
+    };
   }
 
   /** One line under "Cast and settings": photos, look and story, so it can stay folded. */
@@ -2417,8 +2482,9 @@
             ${listed.slice(0, 12).map((rp) => `
               <div class="anim-recent__row">
                 <button type="button" class="anim-recent__item" data-open-project="${esc(rp.id)}">
-                  <span class="anim-recent__title">${esc(projectTitle(rp))}</span>
-                  <span class="anim-recent__meta">${statusBadge(rp.status)}${rp.recovered_from_content ? ' <span class="anim-recent__mode">recovered</span>' : ''}${projectMediaExpired(rp) ? ' <span class="anim-recent__mode">expired media</span>' : (projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : '')} <span class="anim-recent__mode">${esc(rp.mode || '')}</span></span>
+                  ${nlOn() ? `<span class="anim-recent__th">${rp.thumb_url ? `<img src="${esc(mediaSrc(rp.thumb_url))}" alt="" loading="lazy">` : ''}</span>` : ''}
+                  ${nlOn() ? `<span class="anim-recent__tb"><span class="anim-recent__title">${esc(projectTitle(rp))}</span><span class="anim-recent__sub">${esc(nlRecentSub(rp))}</span></span>` : `<span class="anim-recent__title">${esc(projectTitle(rp))}</span>`}
+                  <span class="anim-recent__meta">${statusBadge(rp.status)}${rp.recovered_from_content ? ' <span class="anim-recent__mode">recovered</span>' : ''}${projectMediaExpired(rp) ? ' <span class="anim-recent__mode">expired media</span>' : (projectNeedsCharReupload(rp) ? ' <span class="anim-recent__mode">re-upload Char</span>' : '')}${nlOn() ? '' : ` <span class="anim-recent__mode">${esc(rp.mode || '')}</span>`}</span>
                 </button>
                 <button type="button" class="anim-btn anim-btn--ghost anim-recent__del" data-del-project="${esc(rp.id)}" title="Delete project">✕</button>
               </div>`).join('')}
@@ -4652,8 +4718,12 @@
       if (resumeId) {
         try {
           const data = await animFetch(`/api/animation/projects/${resumeId}`);
-          _project = data.project;
-          rememberOpenProject(_project.id);
+          if (window.SEStory && nlOn() && window.SEStory.claims(data.project)) {
+            window.SEStory.openReel(data.project);
+          } else {
+            _project = data.project;
+            rememberOpenProject(_project.id);
+          }
         } catch (_) {
           if (lastId && lastId === resumeId) rememberOpenProject('');
           _project = null;

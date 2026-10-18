@@ -52,6 +52,7 @@ const ALLOWLIST = [
   'new-look.js', // portal.html — palette mapping, icon rail, jump bar, Day/Dark
   'nl-cal-panels.js', // portal.html — new look Calendar day panel and post panel
   'animation-studio.js', // portal.html
+  'story-builder.js', // portal.html — Animate: Build a Story (new look)
   'coach-create-session.js', // portal.html
   'carousel-templates.js', // portal.html
   'design-studio-v2.js', // portal.html
