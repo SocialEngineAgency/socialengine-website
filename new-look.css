@@ -2047,11 +2047,11 @@ html.nl .nl-spick__p { position: relative; width: min(760px, 100%); max-height: 
 html.nl .nl-spick__h { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--nl-line); }
 html.nl .nl-spick__h h3 { margin: 0; font: 500 16px var(--nl-display); color: var(--nl-fg); }
 html.nl .nl-spick__bar { padding: 12px 18px 0; }
-html.nl .nl-spick__grid { flex: 1 1 auto; overflow-y: auto; padding: 12px 18px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; align-content: start; }
+html.nl .nl-spick__grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 18px 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); grid-auto-rows: max-content; gap: 10px; align-content: start; }
 html.nl .nl-spick__it { display: flex; flex-direction: column; gap: 2px; padding: 0 0 8px; border: 1px solid var(--nl-line); border-radius: 11px; background: var(--nl-s2); color: var(--nl-fg); cursor: pointer; text-align: left; overflow: hidden; }
 html.nl .nl-spick__it:hover { border-color: var(--nl-line-strong); }
 html.nl .nl-spick__it.is-on { border-color: var(--nl-fg); box-shadow: 0 0 0 1px var(--nl-fg); }
-html.nl .nl-spick__im { position: relative; display: block; aspect-ratio: 1; background: var(--nl-s3); margin-bottom: 6px; overflow: hidden; }
+html.nl .nl-spick__im { position: relative; display: block; flex: 0 0 auto; aspect-ratio: 1; background: var(--nl-s3); margin-bottom: 6px; overflow: hidden; }
 html.nl .nl-spick__im img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 html.nl .nl-spick__im i { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.8); background: rgba(13,14,17,0.45); display: grid; place-items: center; color: var(--nl-bg); }
 html.nl .nl-spick__it.is-on .nl-spick__im i { background: var(--nl-fg); border-color: var(--nl-fg); }

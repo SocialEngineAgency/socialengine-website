@@ -232,7 +232,10 @@ test('Storyboard: references from the Library and a product, the number of looks
   fake.st.kits.set('kit_t1', { id: 'kit_t1', kind: 'story_kit', mode: 'kit', title: 'Winter wellbeing', look: 'stylized', elements: [{ id: 'el_0', type: 'place', name: 'Kitchen', image_url: img('kitchen') }], drafts: [], suggestions: [] });
   await mockApi(page, srv.base, {
     data: clientData(),
-    assets: [{ id: 'a1', kind: 'character', name: 'Maya photo', url: img('maya') }, { id: 'a2', kind: 'music', name: 'Bed', url: 'https://store.test/bed.mp3' }],
+    assets: [
+      { id: 'a1', kind: 'character', name: 'Maya photo', url: img('maya') }, { id: 'a2', kind: 'music', name: 'Bed', url: 'https://store.test/bed.mp3' },
+      ...Array.from({ length: 40 }, (_, i) => ({ id: `x${i}`, kind: 'character', name: `Person ${i + 1}`, url: img(`p${i}`) })),
+    ],
     onRequest: fake.handle,
   });
   await page.addInitScript(() => { try { localStorage.setItem('se_story_last', JSON.stringify({ kit: 'kit_t1', view: 'kit' })); localStorage.removeItem('se_story_looks'); } catch (_) {} });
@@ -243,7 +246,13 @@ test('Storyboard: references from the Library and a product, the number of looks
 
   // Library: images only, and picking one names the character.
   await page.click('[data-pick-from="library"]');
-  await expect(page.locator('.nl-spick [data-pk-item]')).toHaveCount(1);
+  await expect(page.locator('.nl-spick [data-pk-item]')).toHaveCount(41);
+  // A full Library keeps whole square tiles with their names, and the grid scrolls.
+  const tile = await page.locator('.nl-spick__im').first().boundingBox();
+  expect(tile.height).toBeGreaterThan(100);
+  expect(Math.abs(tile.height - tile.width)).toBeLessThan(2);
+  await expect(page.locator('.nl-spick__t').first()).toBeVisible();
+  expect(await page.locator('[data-pk-grid]').evaluate((g) => g.scrollHeight > g.clientHeight)).toBe(true);
   await page.click('[data-pk-item="a:a1"]');
   await page.click('[data-pk-use]');
   await expect(page.locator('.nl-sref')).toHaveCount(1);
