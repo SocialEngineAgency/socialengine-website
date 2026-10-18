@@ -201,7 +201,7 @@
       p.last_burned_caption_style?.burned_at || '', p.last_assemble_summary || '',
       (p.final_history || []).length, _captionStudioOpen ? 1 : 0, scenes,
       (p.chat || []).length, p.editing_started_at || '', p.vo_script || '',
-      p.caption_script || '', p.captions_out_of_date ? 1 : 0,
+      p.caption_script || '', p.captions_out_of_date ? 1 : 0, (p.caption_check && p.caption_check.status) || '',
       JSON.stringify(p.story_brief || p.agent_brief?.story_brief || null),
     ]);
   }
@@ -1814,7 +1814,9 @@
       const kind = m.kind === 'final' || /^Final reel (ready|updated)/i.test(text) ? 'ok'
         : m.kind === 'vo_audit' ? 'vo'
           : m.kind === 'shot_check' ? (/redone and checked/i.test(text) ? 'ok' : 'warn')
-            : 'info';
+            // Listening to the voice: a fix it made is good news; a problem it only reports is a warning.
+            : m.kind === 'words_check' ? (/Recorded it again/i.test(text) ? 'vo' : 'warn')
+              : 'info';
       const icon = kind === 'ok' ? NL_I.check : kind === 'vo' ? NL_I.mic : kind === 'warn' ? NL_I.warn : NL_I.info;
       const shown = text.replace(/^Final reel updated from (\d+) shots?[^.]*\./i, 'Final reel updated from $1 shots.');
       return `<div class="nl-tsys nl-tsys--${kind}">${nlSvg(icon, 12, 2)}<span>${esc(shown)}</span></div>`;
@@ -2393,6 +2395,12 @@
     }
   }
 
+  /** The captions check for the final on screen (an older final's check does not count). */
+  function capCheckOf(p) {
+    const c = p && p.caption_check;
+    return c && c.final_url && c.final_url === p.final_url ? c : null;
+  }
+
   function nlLaneDefs(p) {
     const f = assembleFlags();
     const vo = String(p.vo_script || p.agent_brief?.vo_script || '').trim();
@@ -2402,8 +2410,10 @@
         state: p.vo_script ? 'Ready' : 'Not written',
         sum: vo ? `“${vo.length > 110 ? vo.slice(0, 108).trim() + '…' : vo}”` : 'Write the script, or let AI write one from your shots.' },
       { key: 'captions', title: 'Captions', icon: NL_I.cc, flag: 'anim-flag-captions', on: f.captions, ready: !!p.last_burned_caption_style,
-        state: p.captions_out_of_date ? 'Check words' : (p.last_burned_caption_style ? 'Styled' : 'Style it'),
-        sum: `${p.caption_source === 'client' && p.caption_script ? 'Your own words, timed to the voiceover.' : 'Word by word, timed to the voiceover.'}${cap && cap.preset_id ? ` Style: ${cap.preset_id}.` : ''}` },
+        state: p.captions_out_of_date ? 'Check words' : (capCheckOf(p) && capCheckOf(p).status === 'problem' ? 'Needs a look' : (p.last_burned_caption_style ? 'Styled' : 'Style it')),
+        sum: capCheckOf(p) && capCheckOf(p).status !== 'pass' && capCheckOf(p).problems && capCheckOf(p).problems[0]
+          ? `Checked on the final: ${capCheckOf(p).problems[0].note}`
+          : `${p.caption_source === 'client' && p.caption_script ? 'Your own words, timed to the voiceover.' : 'Word by word, timed to the voiceover.'}${cap && cap.preset_id ? ` Style: ${cap.preset_id}.` : ''}` },
       { key: 'music', title: 'Music', icon: NL_I.music, flag: 'anim-flag-music', on: f.music, ready: !!p.music_bed_url,
         state: p.music_bed_url ? 'Ready' : 'Not added',
         sum: p.music_prompt ? String(p.music_prompt) : (p.music_bed_url ? 'Music bed attached. It sits under the voice.' : 'Make a bed from a prompt, or pick or upload one.') },

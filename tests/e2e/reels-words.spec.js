@@ -140,3 +140,22 @@ test('Captions: their own words in the Captions card, and line by line under the
   expect(sent.timeline.audio.vo).toBeUndefined();
   expect(errors).toEqual([]);
 });
+
+test('Captions checked on the final: the card says what was noticed; an older final\'s check is ignored', async ({ page }) => {
+  const errors = watchErrors(page);
+  const project = makeProject();
+  project.caption_check = { status: 'problem', final_url: project.final_url, problems: [{ kind: 'cut', frame: 2, note: 'The last word runs off the right edge.' }] };
+  project.chat.push({ role: 'system', kind: 'words_check', text: 'Voiceover listened to: "OPA" said as one word. Recorded it again, spelling "OPA" as "O P A" for the voice. The captions still show the written words.' });
+  const sent = { settings: [], tweak: [], timeline: null };
+  await open(page, project, sent);
+  const caps = card(page, 'Captions');
+  await expect(caps.locator('.nl-lane__state')).toHaveText('Needs a look');
+  await expect(caps.locator('.nl-lane__sum')).toHaveText('Checked on the final: The last word runs off the right edge.');
+  await expect(page.locator('.nl-tsys--vo', { hasText: 'Recorded it again' })).toHaveCount(1);
+
+  project.caption_check.final_url = 'https://store.test/older.mp4';
+  await page.click('.nl-aproj');
+  await page.click('[data-open-project="proj_w"]');
+  await expect(card(page, 'Captions').locator('.nl-lane__state')).not.toHaveText('Needs a look');
+  expect(errors).toEqual([]);
+});
