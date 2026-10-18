@@ -37,8 +37,8 @@
   <script src="./design-studio-v2.js?v=20261011j" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
-  <script src="./animation-studio.js?v=20261017st1" defer></script>
-  <script src="./story-builder.js?v=20261017st1" defer></script>
+  <script src="./animation-studio.js?v=20261017sb1" defer></script>
+  <script src="./story-builder.js?v=20261017sb1" defer></script>
   <script src="./analytics-cockpit.js?v=20261016-daily" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
@@ -2127,6 +2127,7 @@
       min-height: 40px;
     }
     .create-segments[hidden] { display: none; }
+    html:not(.nl) .create-seg--nl { display: none !important; }
     .create-seg {
       position: relative;
       padding: 10px 14px;
@@ -3084,7 +3085,7 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261017st1">
+  <link rel="stylesheet" href="./new-look.css?v=20261017sb1">
   <script src="./new-look.js?v=20261016g" defer></script>
   <script src="./nl-cal-panels.js?v=20261017cal1" defer></script>
 </head>
@@ -3321,7 +3322,8 @@
           <button type="button" class="create-seg active" role="tab" data-segment="creation-studio" aria-selected="true">Video</button>
           <button type="button" class="create-seg" role="tab" data-segment="design-studio" aria-selected="false">Post</button>
           <button type="button" class="create-seg" role="tab" data-segment="brand-design" aria-selected="false">Carousels</button>
-          <button type="button" class="create-seg" role="tab" data-segment="animation-studio" aria-selected="false">Animate</button>
+          <button type="button" class="create-seg" role="tab" data-segment="animation-studio" aria-selected="false">Reels</button>
+          <button type="button" class="create-seg create-seg--nl" role="tab" data-segment="storyboard" aria-selected="false">Storyboard</button>
           <button type="button" class="create-seg create-seg--studio" id="create-open-video-studio" onclick="openVideoStudio()" title="Edit videos with your posts, Library and brand. Opens in a new tab.">Video Studio <span aria-hidden="true">↗</span></button>
         </div>
 
@@ -6903,7 +6905,7 @@
         window.__SE_CS_MODE = 'post';
         (window.openClaudeDesignStudio || window.renderClaudeStudio)();
       }
-      else if (activeNav === 'animation-studio' && typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
+      else if ((activeNav === 'animation-studio' || activeNav === 'storyboard') && typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
       else if (activeNav === 'brand-design') renderCarouselsTab();
       else if (activeNav === 'ad-studio') renderAdStudio();
       else if (activeNav === 'ai-studio') renderAIStudio();
@@ -7084,11 +7086,12 @@
         'library': 'Logo, colors, characters, items, and settings for every create',
         'competitor-intel': 'Intelligence on your competition',
         'video-studio': 'AI-powered video creation for your brand',
-        'create': 'Video, Post, or Animate — pick a mode and make something',
+        'create': 'Video, Post, Carousels, Reels or Storyboard. Pick one and make something',
         'creation-studio': 'Upload or generate video — music, caption, queue',
         'design-studio': 'Single posts, stories and diagrams — brand locked, stage first',
         'brand-design': 'Every carousel: your brand template, infographics and finished slides',
-        'animation-studio': 'Multi-shot reels — canvas + agent',
+        'animation-studio': 'Multi-shot reels from one idea',
+        'storyboard': 'Your cast and places, laid out scene by scene',
         'ad-studio': 'Campaign drafts in your brand voice — Meta Draft launch',
         'inbox': 'Comments, DMs and mentions in one place',
         'settings': 'Brand, account, connections and billing',
@@ -7108,6 +7111,7 @@
       'design-studio': 'Create',
       'brand-design': 'Create',
       'animation-studio': 'Create',
+      'storyboard': 'Create',
       'analytics': 'Analytics',
       'brand-voice': 'Settings',
       'ai-coach': 'Coach',
@@ -7231,10 +7235,10 @@
     });
 
     // ━━━ URL hash = Settings tab / Create mode (atelier) ━━━
-    // #settings/<brand|account|connections|billing> · #create/<video|post|carousels|animate> (#create/design still opens Carousels)
+    // #settings/<brand|account|connections|billing> · #create/<video|post|carousels|reels|storyboard> (#create/design still opens Carousels, #create/animate opens Reels)
     const SETTINGS_TABS = ['brand', 'account', 'connections', 'billing'];
-    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', carousels: 'brand-design', design: 'brand-design', animate: 'animation-studio' };
-    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'brand-design': 'carousels', 'animation-studio': 'animate' };
+    const CREATE_SEGMENTS = { video: 'creation-studio', post: 'design-studio', carousels: 'brand-design', design: 'brand-design', reels: 'animation-studio', animate: 'animation-studio', storyboard: 'storyboard' };
+    const CREATE_SEGMENT_SLUG = { 'creation-studio': 'video', 'design-studio': 'post', 'brand-design': 'carousels', 'animation-studio': 'reels', storyboard: 'storyboard' };
     function seReadHash() {
       const m = /^#(settings|create)(?:\/([a-z-]+))?$/.exec(window.location.hash || '');
       return m ? { page: m[1], sub: m[2] || '' } : null;
@@ -7257,7 +7261,7 @@
           else openSettingsTab(h.sub);
         } else if (h.page === 'create') {
           const seg = CREATE_SEGMENTS[h.sub];
-          if (activeNav !== 'creation-studio' && activeNav !== 'design-studio' && activeNav !== 'brand-design' && activeNav !== 'animation-studio') {
+          if (activeNav !== 'creation-studio' && activeNav !== 'design-studio' && activeNav !== 'brand-design' && activeNav !== 'animation-studio' && activeNav !== 'storyboard') {
             document.querySelector('[data-nav="create"]')?.click();
           } else if (seg) setCreateSegment(seg);
         }
@@ -7277,6 +7281,8 @@
       if (h && h.page === 'create' && CREATE_SEGMENTS[h.sub]) return CREATE_SEGMENTS[h.sub];
       try {
         const s = localStorage.getItem(CREATE_SEGMENT_LS);
+        // Storyboard is a new-look tab; the old look opens Reels instead.
+        if (s === 'storyboard' && !document.documentElement.classList.contains('nl')) return 'animation-studio';
         if (CREATE_SEGMENT_SLUG[s]) return s;
         // Migrate legacy "video" bucket that used to bury Post inside Video Studio.
         if (s === 'creation-studio' && localStorage.getItem('se_create_surface') === 'design') {
@@ -7287,6 +7293,7 @@
     }
     function setCreateSegment(segment) {
       if (!CREATE_SEGMENT_SLUG[segment]) segment = 'creation-studio';
+      if (segment === 'storyboard' && !document.documentElement.classList.contains('nl')) segment = 'animation-studio';
       setCreateChrome(true);
       try { localStorage.setItem(CREATE_SEGMENT_LS, segment); } catch (_) {}
       seWriteHash('create/' + CREATE_SEGMENT_SLUG[segment]);
@@ -7298,8 +7305,9 @@
       activeNav = segment;
       _navGeneration++;
       window._studioClientData = clientData;
-      if (segment === 'animation-studio') {
-        window.__SE_CREATE_SURFACE = 'animate';
+      if (segment === 'animation-studio' || segment === 'storyboard') {
+        // Reels and Storyboard share the Animate studio; Storyboard opens it on the story kits.
+        window.__SE_CREATE_SURFACE = segment === 'storyboard' ? 'storyboard' : 'animate';
         if (typeof renderAnimationStudio === 'function') renderAnimationStudio(clientData);
         else document.getElementById('dash-content').innerHTML = '<div style="padding:40px;color:#F87171;">Animation Studio failed to load — hard refresh.</div>';
       } else if (segment === 'brand-design') {
@@ -7361,6 +7369,17 @@
           createBtn.classList.add('active');
         }
         setCreateSegment('design-studio');
+        return;
+      }
+      if (nav === 'storyboard') {
+        seWriteHash('create/storyboard');
+        showIf(true, document.getElementById('create-segments'));
+        const createBtn = document.querySelector('[data-nav="create"]');
+        if (createBtn) {
+          document.querySelectorAll('.dash-nav-item').forEach((n) => n.classList.remove('active'));
+          createBtn.classList.add('active');
+        }
+        setCreateSegment('storyboard');
         return;
       }
       if (nav === 'brand-design') {
@@ -7505,7 +7524,7 @@
             id: r.id,
             name: r.label,
             desc: r.desc,
-            best: r.path === 'animate' ? ((r.best || 'Animate') + ' · Opens Animate') : (r.best || ''),
+            best: r.path === 'animate' ? ((r.best || 'Reels') + ' · Opens Reels') : (r.best || ''),
             color: r.color || '#7C3AED',
             path: r.path || 'clip',
           }))
@@ -8691,7 +8710,7 @@
         referenceUrl: vsUploadedImageUrl || undefined,
       };
       if (typeof switchNav === 'function') switchNav('animation-studio');
-      else if (typeof showToast === 'function') showToast('Open Animate to continue this explainer', 'info');
+      else if (typeof showToast === 'function') showToast('Open Reels to continue this explainer', 'info');
       setTimeout(() => {
         if (typeof window.applyAnimRemixSessionIfAny === 'function') window.applyAnimRemixSessionIfAny();
       }, 160);
@@ -11225,7 +11244,7 @@
         title: name,
         role: (window.SEAssets && window.SEAssets.roleForKind) ? window.SEAssets.roleForKind(kind) : (kind === 'character' ? 'character' : (kind === 'style' || kind === 'logo' ? 'style' : 'scene')),
       };
-      if (typeof showToast === 'function') showToast('Ready — open Design or Animate to use this still', 'success');
+      if (typeof showToast === 'function') showToast('Ready. Open Post or Reels to use this still', 'success');
     }
 
     function safeBrandLibHex(value) {
@@ -11399,7 +11418,7 @@
           <button type="button" id="brand-lib-label-missing" class="settings-tab" style="padding:6px 12px;">Label unlabeled</button>
         </div>
         ${pastPanel}
-        ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Animate or below.</p>'}
+        ${rows || '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0 0 12px;">Nothing saved yet. Upload from Reels or below.</p>'}
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;">
           <select id="brand-lib-kind" class="anim-select" style="width:auto;">
             <option value="scene">Scene</option>
@@ -11807,7 +11826,7 @@
       content.innerHTML = `
         <div style="max-width:960px;">
           <h2 style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h2>
-          <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0 0 20px;">The source of truth for logos, colors, characters, items, settings (family, friends, classroom), and style stills from past posts. Coach and Animate pull from here when you say yes.</p>
+          <p style="font-size:0.875rem;color:var(--color-text-muted);margin:0 0 20px;">The source of truth for logos, colors, characters, items, settings (family, friends, classroom), and style stills from past posts. Coach and Reels pull from here when you say yes.</p>
           <div id="brand-library" class="brand-library"></div>
         </div>`;
       mountBrandLibrary(content.querySelector('#brand-library'));
@@ -12698,7 +12717,7 @@
             <span class="chat-project-strip__name" id="chat-ws-active-label">General · Main chat</span>
             <button type="button" class="chat-workspace-rail__btn" id="chat-ws-edit-brief">Brief</button>
             <button type="button" class="chat-workspace-rail__btn" id="chat-ws-pin-win">Pin win</button>
-            <button type="button" class="chat-workspace-rail__btn" id="chat-ws-open-reel" style="display:none;">Open Animate</button>
+            <button type="button" class="chat-workspace-rail__btn" id="chat-ws-open-reel" style="display:none;">Open in Reels</button>
           </div>
           <textarea class="chat-project-strip__brief" id="chat-ws-brief" placeholder="Sticky notes for this project (tone, format rules, what already worked)…"></textarea>
           <div class="chat-wins" id="chat-ws-wins"></div>
@@ -22436,7 +22455,7 @@
   async function _launchStudioRemix(post, remixedCaption) {
     const referenceUrl = _remixReferenceUrl(post);
     if (!referenceUrl) {
-      if (typeof showToast === 'function') showToast('No reference image for this post — open Animate and upload a still', 'warning');
+      if (typeof showToast === 'function') showToast('No reference image for this post. Open Reels and upload a still', 'warning');
       return false;
     }
     const n = Number(post.duration_sec || post.duration);

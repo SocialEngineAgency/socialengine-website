@@ -84,13 +84,15 @@ for (const vp of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
   });
 }
 
-test('Create: mode strip switches Video · Post · Carousels · Animate and remembers the choice', async ({ page }) => {
+test('Create: mode strip switches Video · Post · Carousels · Reels and remembers the choice', async ({ page }) => {
   await mockApi(page, srv.base);
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="create"]');
   const seg = page.locator('#create-segments');
   await expect(seg).toBeVisible();
-  await expect(seg.locator('[data-segment]')).toHaveText(['Video', 'Post', 'Carousels', 'Animate']);
+  await expect(seg.locator('[data-segment]')).toHaveText(['Video', 'Post', 'Carousels', 'Reels', 'Storyboard']);
+  // Storyboard is a new-look tab; this spec runs the old look.
+  await expect(seg.locator('[data-segment="storyboard"]')).toBeHidden();
   await expect(seg.locator('[data-segment="creation-studio"]')).toHaveClass(/active/);
   await expect(page.locator('#dash-content .atelier-shell')).toBeVisible({ timeout: 15000 });
   await expect(page.locator('#dash-content')).toContainText(/I already have the video/i);
@@ -109,10 +111,10 @@ test('Create: mode strip switches Video · Post · Carousels · Animate and reme
   await seg.locator('[data-segment="animation-studio"]').click();
   await expect(seg.locator('[data-segment="animation-studio"]')).toHaveClass(/active/);
   await expect(page.locator('#dash-content .anim-shell')).toBeVisible({ timeout: 15000 });
-  expect(await page.evaluate(() => location.hash)).toBe('#create/animate');
+  expect(await page.evaluate(() => location.hash)).toBe('#create/reels');
   expect(await page.evaluate(() => localStorage.getItem('se_create_segment'))).toBe('animation-studio');
 
-  // Leaving Create hides the strip and clears the hash; coming back restores Animate.
+  // Leaving Create hides the strip and clears the hash; coming back restores Reels.
   await page.click('.dash-nav-item[data-nav="dashboard"]');
   await expect(seg).toBeHidden();
   expect(await page.evaluate(() => location.hash)).toBe('');

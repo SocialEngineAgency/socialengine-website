@@ -1,15 +1,16 @@
 /**
- * Build a Story: the second Animate workflow (new look only).
+ * Storyboard: the Create tab next to Reels (new look only). It shares the Animate studio
+ * (animation-studio.js), which Reels uses for "one idea becomes a shot plan".
  *
- * Prompt   → one idea becomes a shot plan (animation-studio.js).
- * Story    → 1 Cast and world: a story kit of characters, places and products, made
- *              once (four looks each, matched to the kit) and locked.
- *            2 Story: one voiceover line per scene, what happens, who and where is in it,
- *              camera and length, with previews that match each other.
- *            3 Make: the reel runs through the normal Animate board.
+ *   1 Cast and world: a story kit of characters, places and products, made once (four
+ *     looks each, matched to the kit) and locked.
+ *   2 Story: one voiceover line per scene, what happens, who and where is in it, camera
+ *     and length, with previews that match each other.
+ *   3 Make: the reel runs on the normal board, with these steps above it.
  *
- * animation-studio.js calls SEStory.attach(root, host) once the board exists and
- * SEStory.onLayout() after every board render. Everything else lives here.
+ * animation-studio.js calls SEStory.attach(root, host) once the board exists,
+ * SEStory.onLayout() after every board render, and SEStory.setSurface(on) when the
+ * Storyboard or Reels tab is picked. Everything else lives here.
  */
 (function () {
   'use strict';
@@ -38,7 +39,6 @@
     anim: null,
     loading: false,
   };
-  const LS_WF = 'se_anim_wf';
   const LS_LAST = 'se_story_last';
   const WPS = 2.5;
   const COLORS = ['#f2b84b', '#58b4ff', '#2ee6a6', '#ff7ab6', '#c4a6ff', '#ff8a5c'];
@@ -128,76 +128,66 @@
       });
     }
     ensureHeader();
-    S.on = ls.get(LS_WF) === 'story';
+    S.on = onStoryboardTab();
     if (S.on) restore();
     paint();
   }
 
+  const onStoryboardTab = () => window.__SE_CREATE_SURFACE === 'storyboard';
+
   function ensureHeader() {
     const head = shell.querySelector('.anim-canvas-header');
-    if (!head || head.querySelector('.nl-wf')) return;
-    const wf = document.createElement('div');
-    wf.className = 'nl-wf';
-    wf.setAttribute('role', 'tablist');
-    wf.setAttribute('aria-label', 'How to start');
-    wf.innerHTML = `<button type="button" role="tab" data-wf="prompt">${svg(I.spark, 13)}Prompt</button><button type="button" role="tab" data-wf="story">${svg(I.grid, 13)}Build a story</button>`;
-    wf.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-wf]');
-      if (b) setWorkflow(b.dataset.wf);
-    });
+    if (!head || head.querySelector('.nl-sbar')) return;
     const bar = document.createElement('div');
     bar.className = 'nl-sbar';
     bar.addEventListener('click', onClick);
     bar.addEventListener('change', onChange);
     const h2 = head.querySelector('h2');
-    head.insertBefore(wf, h2 ? h2.nextSibling : head.firstChild);
-    head.insertBefore(bar, wf.nextSibling);
+    head.insertBefore(bar, h2 ? h2.nextSibling : head.firstChild);
   }
 
-  function setWorkflow(mode) {
-    const story = mode === 'story';
-    if (story === S.on) return;
-    S.on = story;
-    ls.set(LS_WF, story ? 'story' : 'prompt');
+  /** The Storyboard tab (on) or the Reels tab (off) was picked. */
+  function setSurface(on) {
+    if (!shell) return;
+    if (!!on === S.on) { paint(); return; }
+    S.on = !!on;
     stopPoll();
-    if (story) {
-      const p = H.project();
-      if (p && p.workflow === 'story') { S.view = 'board'; S.boardPid = p.id; loadKitQuiet(p.kit_id); }
-      else restore();
-    } else {
-      S.panel = null;
-      const p = H.project();
-      if (p && p.workflow === 'story') H.goHome();
-    }
+    S.menu = false;
+    if (S.on) restore();
     paint();
   }
 
   function remember() {
-    ls.set(LS_LAST, JSON.stringify({ kit: S.kit ? S.kit.id : null, reel: S.reel ? S.reel.id : null, view: S.view }));
+    ls.set(LS_LAST, JSON.stringify({ kit: S.kit ? S.kit.id : null, reel: S.view === 'board' ? S.boardPid : (S.reel ? S.reel.id : null), view: S.view }));
   }
   function restore() {
     let last = null;
     try { last = JSON.parse(ls.get(LS_LAST) || 'null'); } catch (_) { last = null; }
     S.view = 'start';
     refreshKits();
+    const p = H.project();
     if (last && last.view === 'story' && last.reel) openReel(last.reel);
     else if (last && last.view === 'kit' && last.kit) openKit(last.kit);
-  }
-
-  // Called by animation-studio.js after each board render.
-  function onLayout() {
-    if (!shell) return;
-    const p = H.project();
-    if (p && p.workflow === 'story' && madeReel(p) && p.id !== S.boardPid) {
-      S.on = true;
-      ls.set(LS_WF, 'story');
+    else if (last && last.view === 'board' && last.reel && p && p.id === last.reel) {
       S.view = 'board';
       S.boardPid = p.id;
       loadKitQuiet(p.kit_id);
-    } else if (S.view === 'board' && (!p || p.workflow !== 'story')) {
-      S.boardPid = null;
-      if (S.on) S.view = p ? 'start' : 'start';
-      if (p && p.workflow !== 'story') { S.on = false; ls.set(LS_WF, 'prompt'); }
+    }
+  }
+
+  // Called by animation-studio.js after each board render. In Storyboard, the board
+  // follows the story reel being made; anything else sends Storyboard back to its start.
+  function onLayout() {
+    if (!shell) return;
+    if (S.on && S.view === 'board') {
+      const p = H.project();
+      if (p && p.workflow === 'story') {
+        if (p.id !== S.boardPid) { S.boardPid = p.id; loadKitQuiet(p.kit_id); remember(); }
+      } else {
+        S.boardPid = null;
+        S.view = 'start';
+        remember();
+      }
     }
     paint();
   }
@@ -216,7 +206,6 @@
       S.kits = (H.kits && H.kits()) || S.kits;
     }
     if (S.on && S.view === 'start') render();
-    renderKitsRow();
   }
 
   async function loadKitQuiet(id) {
@@ -255,6 +244,13 @@
   }
 
   async function openReel(idOrProject) {
+    if (!S.on) {
+      // From Reels: a story that has not been made yet opens in the Storyboard tab.
+      const p = typeof idOrProject === 'object' ? idOrProject : null;
+      ls.set(LS_LAST, JSON.stringify({ kit: p ? p.kit_id : null, reel: p ? p.id : idOrProject, view: 'story' }));
+      H.goStoryboard();
+      return;
+    }
     S.loading = true;
     try {
       const p = typeof idOrProject === 'object' ? idOrProject : (await api(`/api/animation/projects/${encodeURIComponent(idOrProject)}`)).project;
@@ -264,10 +260,8 @@
       S.story = localStory(p.story);
       S.sel = S.story.scenes[0] ? S.story.scenes[0].id : null;
       S.view = 'story';
-      S.on = true;
       S.panel = null;
       S.writer = S.story.scenes.length ? null : { idea: S.story.idea || '', busy: false };
-      ls.set(LS_WF, 'story');
       remember();
       pollIfWorking();
     } catch (e) {
@@ -323,8 +317,6 @@
       S.kit = d.kit;
       S.view = 'kit';
       S.panel = S.kit.elements.length ? null : { mode: 'new', type: 'character', source: 'describe', name: '', description: '' };
-      S.on = true;
-      ls.set(LS_WF, 'story');
       remember();
       refreshKits();
       pollIfWorking();
@@ -437,17 +429,11 @@
     shell.classList.toggle('nl-story-board', S.on && S.view === 'board');
     paintHeader();
     render();
-    renderKitsRow();
   }
 
   function paintHeader() {
     const head = shell && shell.querySelector('.anim-canvas-header');
     if (!head) return;
-    head.querySelectorAll('.nl-wf [data-wf]').forEach((b) => {
-      const on = (b.dataset.wf === 'story') === S.on;
-      b.setAttribute('aria-selected', on ? 'true' : 'false');
-      b.classList.toggle('is-on', on);
-    });
     const bar = head.querySelector('.nl-sbar');
     if (!bar) return;
     if (!S.on || (S.view === 'start' && !S.kit)) { bar.hidden = true; bar.innerHTML = ''; return; }
@@ -565,8 +551,8 @@
     return `<div class="nl-sstart">
       <div class="nl-sstart__main">
         <div class="nl-sstart__h">
-          <h2 class="nl-sh1">Build a story</h2>
-          <p class="nl-ssub">Make your characters, places and products once. Then lay out the scenes with them, one voiceover line each.</p>
+          <h2 class="nl-sh1">Start with your cast</h2>
+          <p class="nl-ssub">Make your characters, places and products once. Then lay out each reel scene by scene, one voiceover line each.</p>
         </div>
         <div class="nl-skits">${S.kits.map((k) => kitCard(k)).join('')}${newKitCard()}</div>
       </div>
@@ -577,32 +563,6 @@
     </div>`;
   }
 
-  /** Story kits under the prompt on the Prompt home. */
-  function renderKitsRow() {
-    if (!shell) return;
-    const slot = shell.querySelector('.nl-anim [data-slot="kits"]');
-    if (!slot) return;
-    const home = !H.project() && !S.on;
-    if (!home) { slot.hidden = true; return; }
-    const kits = S.kits.length ? S.kits : ((H.kits && H.kits()) || []);
-    slot.hidden = false;
-    slot.innerHTML = `<div class="nl-skrow__h"><h3>Story kits</h3><span>Your cast, places and products, ready for every reel in a series</span></div>
-      <div class="nl-skits nl-skits--row">${kits.slice(0, 3).map((k) => kitCard(k, { compact: true })).join('')}
-        <div class="nl-skc nl-skc--new"><button type="button" class="nl-skc__newb" data-row-new><span class="nl-skc__plus">${svg(I.plus, 16)}</span><span class="nl-skc__t">New story kit</span><span class="nl-skc__s">Make your cast and places first, then lay out the scenes.</span></button></div>
-      </div>`;
-    if (!slot.dataset.bound) {
-      slot.dataset.bound = '1';
-      slot.addEventListener('click', (e) => {
-        const open = e.target.closest('[data-kit-open]');
-        if (open) { setWorkflow('story'); openKit(open.dataset.kitOpen); return; }
-        if (e.target.closest('[data-row-new]')) { S.newKit = { title: '', look: currentLook() }; setWorkflow('story'); S.view = 'start'; S.kit = null; paint(); focusLater('[data-kit-name]'); }
-      });
-      slot.addEventListener('keydown', (e) => {
-        const open = e.target.closest('[data-kit-open]');
-        if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open.click(); }
-      });
-    }
-  }
   function currentLook() {
     const sel = document.getElementById('anim-look');
     return sel && LOOKS.some((l) => l[0] === sel.value) ? sel.value : 'stylized';
@@ -1453,6 +1413,7 @@
   window.SEStory = {
     attach,
     onLayout,
+    setSurface,
     claims,
     openReel,
     isOn: () => S.on,

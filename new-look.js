@@ -316,7 +316,7 @@
   // click handlers drive every page); they are relabelled, grouped and given badges. ──
   var LABELS = { content: 'Review', 'ai-studio': 'All tools', 'ad-studio': 'Ads', 'ai-coach': 'Coach', 'competitor-intel': 'Intel' };
   var GROUPS = [['dashboard', 'content', 'schedule', 'create'], ['inbox', 'analytics', 'ai-coach'], ['ad-studio', 'competitor-intel', 'fundraise', 'library', 'ai-studio'], ['nl-brand', 'settings']];
-  var WORK = { create: 1, schedule: 1, content: 1, 'creation-studio': 1, 'design-studio': 1, 'brand-design': 1, 'animation-studio': 1 };
+  var WORK = { create: 1, schedule: 1, content: 1, 'creation-studio': 1, 'design-studio': 1, 'brand-design': 1, 'animation-studio': 1, storyboard: 1 };
   var RAIL_KEY = 'se-nl-rail';
   var ICON = {
     tog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>',
@@ -495,7 +495,8 @@
 
   var EXTRA = [
     { label: 'Schedule a post', hint: 'Calendar', go: function () { clickNav('schedule'); } },
-    { label: 'Make a Reel', hint: 'Create', go: function () { clickNav('create'); } },
+    { label: 'Make a reel', hint: 'Reels', go: function () { if (window.switchNav) window.switchNav('animation-studio'); else clickNav('create'); } },
+    { label: 'Storyboard a series', hint: 'Storyboard', go: function () { if (window.switchNav) window.switchNav('storyboard'); else clickNav('create'); } },
     { label: 'Switch to ' + 'day / dark', hint: 'Theme', go: function () { setTheme(day ? 'dark' : 'day'); } },
     { label: 'Back to the old look', hint: 'Look', go: function () { window.seNewLook.off(); } },
   ];

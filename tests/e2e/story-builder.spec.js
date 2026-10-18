@@ -1,4 +1,4 @@
-// Animate → Build a Story (new look): kits under the prompt, a kit made from four looks,
+// Create → Storyboard (new look): its own tab next to Reels. A kit made from four looks,
 // a story written and edited line by line, a scene preview, and the hand-off to the board.
 // Hermetic: the API is an in-memory fake of the story routes.
 const { test, expect } = require('@playwright/test');
@@ -118,21 +118,24 @@ async function openAnimate(page) {
   await page.click('.create-seg[data-segment="animation-studio"]');
 }
 
-test('Build a Story: a kit from four looks, a written story, a preview, then the reel on the board', async ({ page }) => {
+test('Storyboard: a kit from four looks, a written story, a preview, then the reel on the board', async ({ page }) => {
   const errors = watchErrors(page);
   const fake = storyApi();
   await mockApi(page, srv.base, { data: clientData(), onRequest: fake.handle });
   await openAnimate(page);
 
-  // Prompt stays the default; story kits sit under it.
-  await expect(page.locator('.nl-wf [data-wf="prompt"]')).toHaveAttribute('aria-selected', 'true');
+  // Reels is the old Animate tab; Storyboard sits next to it.
+  await expect(page.locator('.create-seg[data-segment="animation-studio"]')).toHaveText('Reels');
   await expect(page.locator('#nl-ahero-t')).toHaveText('Describe your video');
-  await expect(page.locator('.nl-skrow')).toContainText('Story kits');
-  await page.click('.nl-skrow [data-row-new]');
+  await expect(page.locator('.nl-story')).toBeHidden();
+  await page.click('.create-seg[data-segment="storyboard"]');
+  await expect(page).toHaveURL(/#create\/storyboard$/);
+  await expect(page.locator('.create-seg[data-segment="storyboard"]')).toHaveAttribute('aria-selected', 'true');
 
-  // Build a story: a new kit.
-  await expect(page.locator('.nl-wf [data-wf="story"]')).toHaveAttribute('aria-selected', 'true');
+  // Storyboard: a new kit.
+  await expect(page.locator('.nl-story .nl-sh1')).toHaveText('Start with your cast');
   await expect(page.locator('.nl-anim')).toBeHidden();
+  await page.click('.nl-story [data-kit-new]');
   await page.fill('[data-kit-name]', 'Winter wellbeing');
   await page.click('[data-kit-create]');
   await expect(page.locator('.nl-ssteps .nl-step--now')).toContainText('Cast and world');
@@ -185,9 +188,29 @@ test('Build a Story: a kit from four looks, a written story, a preview, then the
   const lastPut = fake.st.calls.filter((c) => c.method === 'PUT').pop();
   expect(lastPut.body.scenes[1].camera).toBe('orbit');
 
-  // Back to Prompt: the prompt home again.
-  await page.click('.nl-wf [data-wf="prompt"]');
-  await expect(page.locator('#nl-ahero-t')).toHaveText('Describe your video');
+  // Reels shows the same reel on its own board, without the story steps.
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await expect(page).toHaveURL(/#create\/reels$/);
+  await expect(page.locator('.nl-story')).toBeHidden();
+  await expect(page.locator('.nl-anim')).toBeVisible();
   await expect(page.locator('.nl-ssteps')).toBeHidden();
+  // And Storyboard comes back on that reel's board.
+  await page.click('.create-seg[data-segment="storyboard"]');
+  await expect(page.locator('.nl-ssteps .nl-step--now')).toContainText('Make');
+  expect(errors).toEqual([]);
+});
+
+test('a story not made yet, picked from Recent in Reels, opens in the Storyboard tab', async ({ page }) => {
+  const errors = watchErrors(page);
+  const fake = storyApi();
+  fake.st.kits.set('kit_t1', { id: 'kit_t1', kind: 'story_kit', mode: 'kit', title: 'Winter wellbeing', look: 'stylized', elements: [{ id: 'el_1', type: 'character', name: 'Maya', image_url: img('look1') }], drafts: [], suggestions: [] });
+  fake.st.reels.set('proj_story1', { id: 'proj_story1', workflow: 'story', kit_id: 'kit_t1', status: 'story', mode: 'video', story: { title: 'Spot the signs', idea: '', script_source: 'ai', scenes: [{ id: 'sc_aaaaaa0001', line: 'Hello there.', what: 'Maya waves', element_ids: ['el_1'], camera: 'push', seconds: 4 }] }, scenes: [], chat: [] });
+  await mockApi(page, srv.base, { data: clientData(), onRequest: fake.handle });
+  await page.addInitScript(() => { try { localStorage.removeItem('se_story_last'); } catch (_) {} });
+  await openAnimate(page);
+  await page.click('.nl-ahome [data-open-project="proj_story1"]');
+  await expect(page.locator('.create-seg[data-segment="storyboard"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.nl-ssteps .nl-step--now')).toContainText('Story');
+  await expect(page.locator('[data-line="sc_aaaaaa0001"]')).toHaveValue('Hello there.');
   expect(errors).toEqual([]);
 });
