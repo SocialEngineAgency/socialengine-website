@@ -2017,11 +2017,45 @@ html.nl .nl-ssheet--wait span { position: relative; font: 400 12px var(--nl-body
 html.nl .nl-sdrop { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px dashed var(--nl-line-strong); border-radius: 10px; }
 html.nl .nl-sdrop img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; }
 html.nl .nl-slooks { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 6px; }
-html.nl .nl-slook { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: var(--nl-s3); cursor: pointer; }
+html.nl .nl-slook { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: var(--nl-s3); }
+html.nl .nl-slook__pick { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: pointer; }
+html.nl .nl-slook__pick:focus-visible { outline: 2px solid var(--nl-signal); outline-offset: -2px; }
 html.nl .nl-slook img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; display: block; }
-html.nl .nl-slook > span { position: absolute; z-index: 1; top: 5px; left: 5px; width: 20px; height: 20px; border-radius: 50%; background: rgba(13,14,17,0.75); color: #f3f1ec; font: 500 10.5px var(--nl-mono); display: grid; place-items: center; }
+html.nl .nl-slook__n { position: absolute; z-index: 1; top: 5px; left: 5px; width: 20px; height: 20px; border-radius: 50%; background: rgba(13,14,17,0.75); color: #f3f1ec; font: 500 10.5px var(--nl-mono); display: grid; place-items: center; }
 html.nl .nl-slook.is-on { border-color: var(--nl-fg); }
-html.nl .nl-slook.is-on > span { background: var(--nl-fg); color: var(--nl-bg); }
+html.nl .nl-slook.is-on .nl-slook__n { background: var(--nl-fg); color: var(--nl-bg); }
+html.nl .nl-slook__zoom { position: absolute; z-index: 2; right: 5px; bottom: 5px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: rgba(13,14,17,0.72); color: #f3f1ec; display: grid; place-items: center; cursor: zoom-in; opacity: 0; transition: opacity .12s; }
+html.nl .nl-slook:hover .nl-slook__zoom, html.nl .nl-slook:focus-within .nl-slook__zoom { opacity: 1; }
+html.nl .nl-slook__zoom:focus-visible { outline: 2px solid var(--nl-signal); outline-offset: 1px; }
+@media (hover: none) { html.nl .nl-slook__zoom { opacity: 1; } }
+/* Look closer */
+.nl-sview { position: fixed; inset: 0; z-index: 10060; display: grid; place-items: center; padding: 20px; }
+.nl-sview__bg { position: absolute; inset: 0; background: rgba(5,6,8,0.82); backdrop-filter: blur(4px); }
+html.nl .nl-sview__p { position: relative; width: min(980px, 100%); max-height: calc(100vh - 40px); display: flex; flex-direction: column; border: 1px solid var(--nl-line-strong); border-radius: 16px; background: var(--nl-surface); box-shadow: 0 30px 90px rgba(0,0,0,0.55); overflow: hidden; }
+html.nl .nl-sview__h { display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--nl-line); }
+html.nl .nl-sview__h h3 { margin: 0; font: 500 16px var(--nl-display); color: var(--nl-fg); }
+html.nl .nl-sview__h h3 span { color: var(--nl-fg3); font-weight: 400; }
+html.nl .nl-sview__stage { position: relative; flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 14px 64px; background: var(--nl-bg); }
+html.nl .nl-sview__stage img { max-width: 100%; max-height: calc(100vh - 260px); object-fit: contain; border-radius: 10px; display: block; }
+html.nl .nl-sview__nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--nl-line-strong); background: var(--nl-surface); color: var(--nl-fg); display: grid; place-items: center; cursor: pointer; }
+html.nl .nl-sview__nav:hover:not(:disabled) { border-color: var(--nl-fg4); }
+html.nl .nl-sview__nav:disabled { opacity: .3; cursor: default; }
+html.nl .nl-sview__nav--prev { left: 14px; }
+html.nl .nl-sview__nav--next { right: 14px; }
+html.nl .nl-sview__strip { display: flex; gap: 6px; padding: 10px 18px 0; overflow-x: auto; }
+html.nl .nl-sview__th { position: relative; flex: 0 0 52px; height: 65px; padding: 0; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: var(--nl-s3); cursor: pointer; opacity: .65; }
+html.nl .nl-sview__th img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; display: block; }
+html.nl .nl-sview__th span { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: rgba(13,14,17,0.75); color: #f3f1ec; font: 500 9px var(--nl-mono); display: grid; place-items: center; }
+html.nl .nl-sview__th.is-cur { opacity: 1; border-color: var(--nl-fg3); }
+html.nl .nl-sview__th.is-on span { background: var(--nl-fg); color: var(--nl-bg); }
+html.nl .nl-sview__th.is-on { opacity: 1; border-color: var(--nl-fg); }
+html.nl .nl-sview__f { display: flex; align-items: center; gap: 8px; padding: 12px 18px; }
+@media (max-width: 640px) {
+  html.nl .nl-sview__stage { padding: 10px 10px 54px; }
+  html.nl .nl-sview__nav { top: auto; bottom: 8px; transform: none; }
+  html.nl .nl-sview__nav--prev { left: calc(50% - 46px); }
+  html.nl .nl-sview__nav--next { right: calc(50% - 46px); }
+}
 html.nl .nl-slook--wait, html.nl .nl-slook--bad { cursor: default; }
 html.nl .nl-slook--bad { display: grid; place-items: center; }
 html.nl .nl-slook--bad em { font: 400 10.5px var(--nl-body); font-style: normal; color: var(--nl-fg3); text-align: center; padding: 0 4px; }

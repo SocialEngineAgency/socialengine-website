@@ -63,6 +63,9 @@
     image: 'M4 5h16v14H4z M9 10.5a1.5 1.5 0 1 0 0-.01 M20 15l-5-5-9 9',
     check: 'M5 12.5l4.2 4.2L19 7',
     upload: 'M12 16V4 M7 9l5-5 5 5 M4 20h16',
+    expand: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
+    left: 'M15 6l-6 6 6 6',
+    next: 'M9 6l6 6-6 6',
   };
 
   const esc = (s) => (H ? H.esc(s) : String(s == null ? '' : s));
@@ -483,6 +486,8 @@
     box.innerHTML = html;
     box.querySelectorAll('.nl-sline__t').forEach(grow);
     restoreFocus(keep);
+    // An open look viewer follows the set (new looks arrive, the panel closes).
+    if (S.viewer) paintViewer();
   }
   /** Script lines wrap and grow with their text. */
   function grow(ta) {
@@ -676,11 +681,14 @@
     // Any number of looks can be picked; each goes into the kit as its own card.
     const picks = (P.picks || []).filter((i) => opts && opts[i] && opts[i].status === 'ready');
     const ready = opts && opts.some((o) => o.status === 'ready');
-    const looks = opts ? `<div class="nl-slooks" style="--cols:${opts.length === 1 ? 2 : opts.length <= 4 ? opts.length : 3}">
+    const looks = opts ? `<div class="nl-slooks" style="--cols:${opts.length === 1 ? 2 : Math.min(4, opts.length)}">
         ${opts.map((o, i) => o.status === 'ready'
-          ? `<button type="button" class="nl-slook${picks.includes(i) ? ' is-on' : ''}" data-pick="${i}" aria-pressed="${picks.includes(i)}" aria-label="Look ${i + 1}"><img src="${esc(media(o.url))}" alt=""><span>${picks.includes(i) ? svg(I.check, 11, 3) : i + 1}</span></button>`
-          : o.status === 'failed' ? `<div class="nl-slook nl-slook--bad"><span>${i + 1}</span><em>Did not work</em></div>`
-            : `<div class="nl-slook nl-slook--wait" aria-busy="true"><span>${i + 1}</span><i class="nl-sshim"></i></div>`).join('')}
+          ? `<div class="nl-slook${picks.includes(i) ? ' is-on' : ''}">
+              <button type="button" class="nl-slook__pick" data-pick="${i}" aria-pressed="${picks.includes(i)}" aria-label="Look ${i + 1}"><img src="${esc(media(o.url))}" alt=""><span class="nl-slook__n">${picks.includes(i) ? svg(I.check, 11, 3) : i + 1}</span></button>
+              <button type="button" class="nl-slook__zoom" data-zoom="${i}" aria-label="Look closer at look ${i + 1}" title="Look closer">${svg(I.expand, 12, 2.2)}</button>
+            </div>`
+          : o.status === 'failed' ? `<div class="nl-slook nl-slook--bad"><span class="nl-slook__n">${i + 1}</span><em>Did not work</em></div>`
+            : `<div class="nl-slook nl-slook--wait" aria-busy="true"><span class="nl-slook__n">${i + 1}</span><i class="nl-sshim"></i></div>`).join('')}
       </div>` : '';
     const kindPlural = { character: 'characters', place: 'places', item: 'items' }[P.type];
     const lockText = !picks.length ? 'Pick a look'
@@ -1166,15 +1174,18 @@
     if (P.source === 'describe' && !String(P.description || '').trim() && !refs.length) { toast('Describe it in a sentence or two', 'error'); focusLater('[data-p-about]'); return; }
     if (P.source !== 'describe' && !refs.length) { toast(P.source === 'product' ? 'Pick the product first' : 'Add a photo to start from', 'error'); return; }
     const count = P.count || lookCountPref();
-    if (again && P.draft_id) api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/drafts/${encodeURIComponent(P.draft_id)}`, { method: 'DELETE' }).catch(() => {});
     try {
+      // "N more" adds looks to this set, so the ones already made stay to compare and pick.
+      const more = again && P.draft_id;
       const d = await api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/options`, {
         method: 'POST',
-        body: JSON.stringify({ type: P.type, name, description: P.description || '', source: P.source, refs, count, need_id: P.need_id || undefined, reel_id: S.reel ? S.reel.id : undefined }),
+        body: JSON.stringify(more
+          ? { more_of: P.draft_id, count }
+          : { type: P.type, name, description: P.description || '', source: P.source, refs, count, need_id: P.need_id || undefined, reel_id: S.reel ? S.reel.id : undefined }),
       });
       S.kit = d.kit;
       P.draft_id = d.draft.id;
-      P.picks = [];
+      if (!more) P.picks = [];
       render();
       pollIfWorking();
     } catch (e) {
@@ -1182,13 +1193,112 @@
     }
   }
 
+  /** The picked looks by number, plus what they show, so they can be added even if the set's record went missing. */
+  function lockBody(P) {
+    const draft = (S.kit.drafts || []).find((d) => d.id === P.draft_id);
+    const picks = (P.picks || []).slice().sort((a, b) => a - b);
+    const looks = draft ? picks.map((i) => draft.options[i] && draft.options[i].url).filter(Boolean) : [];
+    return { draft_id: P.draft_id, options: picks, looks, type: P.type, name: P.name || (draft && draft.name) || '', description: P.description || '', source: P.source, refs: P.refs || [] };
+  }
+
+  /* ── Look closer: one look large, step through the set, pick from here ── */
+  function viewerDraft() {
+    const P = S.panel;
+    return P && P.draft_id && S.kit ? (S.kit.drafts || []).find((d) => d.id === P.draft_id) : null;
+  }
+  function openViewer(i) {
+    S.viewer = { i, back: document.activeElement };
+    paintViewer();
+    document.querySelector('#nl-sview [data-v-pick]')?.focus();
+  }
+  function closeViewer() {
+    const back = S.viewer && S.viewer.back;
+    S.viewer = null;
+    document.getElementById('nl-sview')?.remove();
+    const z = back && back.dataset && back.dataset.zoom != null ? document.querySelector(`[data-zoom="${back.dataset.zoom}"]`) : null;
+    if (z) z.focus();
+  }
+  function paintViewer() {
+    const P = S.panel;
+    const draft = viewerDraft();
+    const ready = draft ? draft.options.map((o, i) => (o.status === 'ready' && o.url ? i : -1)).filter((i) => i >= 0) : [];
+    if (!S.viewer || !draft || !ready.length) { closeViewer(); return; }
+    if (!ready.includes(S.viewer.i)) S.viewer.i = ready[0];
+    const i = S.viewer.i;
+    const at = ready.indexOf(i);
+    const picks = P.picks || [];
+    const on = picks.includes(i);
+    const kind = { character: 'character', place: 'place', item: 'item' }[P.type] || 'look';
+    let ov = document.getElementById('nl-sview');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'nl-sview';
+      ov.className = 'nl-sview';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', onViewerClick);
+    }
+    ov.innerHTML = `<div class="nl-sview__bg" data-v-close></div>
+      <div class="nl-sview__p" role="dialog" aria-modal="true" aria-label="${esc(P.name || kind)}, look ${i + 1}">
+        <div class="nl-sview__h">
+          <h3>${esc(P.name || kind)} <span>· look ${i + 1}</span></h3>
+          <span class="nl-snote">${at + 1} of ${ready.length}</span>
+          <span class="nl-grow"></span>
+          <button type="button" class="nl-sicon" data-v-close aria-label="Close">${svg(I.x, 14)}</button>
+        </div>
+        <div class="nl-sview__stage">
+          <button type="button" class="nl-sview__nav nl-sview__nav--prev" data-v-step="-1" aria-label="Previous look" ${ready.length < 2 ? 'disabled' : ''}>${svg(I.left, 18, 2)}</button>
+          <img src="${esc(media(draft.options[i].url))}" alt="${esc(P.name || kind)}, look ${i + 1}">
+          <button type="button" class="nl-sview__nav nl-sview__nav--next" data-v-step="1" aria-label="Next look" ${ready.length < 2 ? 'disabled' : ''}>${svg(I.next, 18, 2)}</button>
+        </div>
+        ${ready.length > 1 ? `<div class="nl-sview__strip">${ready.map((k) => `<button type="button" class="nl-sview__th${k === i ? ' is-cur' : ''}${picks.includes(k) ? ' is-on' : ''}" data-v-go="${k}" aria-label="Look ${k + 1}${picks.includes(k) ? ', picked' : ''}" aria-current="${k === i}"><img src="${esc(media(draft.options[k].url))}" alt=""><span>${picks.includes(k) ? svg(I.check, 10, 3) : k + 1}</span></button>`).join('')}</div>` : ''}
+        <div class="nl-sview__f">
+          <span class="nl-snote">${picks.length ? `${picks.length} picked` : 'Nothing picked yet'}</span>
+          <span class="nl-grow"></span>
+          <button type="button" class="nl-sbtn${on ? '' : ' nl-sbtn--primary'}" data-v-pick aria-pressed="${on}">${on ? `${svg(I.check, 13, 2.4)}Picked` : 'Pick this look'}</button>
+          <button type="button" class="nl-sbtn" data-v-close>Done</button>
+        </div>
+      </div>`;
+  }
+  function viewerStep(d) {
+    const draft = viewerDraft();
+    if (!draft || !S.viewer) return;
+    const ready = draft.options.map((o, i) => (o.status === 'ready' && o.url ? i : -1)).filter((i) => i >= 0);
+    const at = ready.indexOf(S.viewer.i);
+    S.viewer.i = ready[(at + d + ready.length) % ready.length];
+    paintViewer();
+  }
+  function viewerPick() {
+    const P = S.panel;
+    if (!P || !S.viewer) return;
+    const i = S.viewer.i;
+    const cur = P.picks || [];
+    P.picks = cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i];
+    render();
+    paintViewer();
+    document.querySelector('#nl-sview [data-v-pick]')?.focus();
+  }
+  function onViewerClick(e) {
+    const q = (sel) => e.target.closest(sel);
+    let b;
+    if (q('[data-v-close]')) { closeViewer(); return; }
+    if ((b = q('[data-v-step]'))) { viewerStep(Number(b.dataset.vStep)); return; }
+    if ((b = q('[data-v-go]'))) { S.viewer.i = Number(b.dataset.vGo); paintViewer(); return; }
+    if (q('[data-v-pick]')) viewerPick();
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!S.viewer) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeViewer(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); viewerStep(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); viewerStep(1); }
+  });
+
   async function lockLook({ usePhoto = false } = {}) {
     const P = S.panel;
     if (!P || !P.draft_id) return;
     try {
       const d = await api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/elements`, {
         method: 'POST',
-        body: JSON.stringify(usePhoto ? { draft_id: P.draft_id, use_photo: true } : { draft_id: P.draft_id, options: (P.picks || []).slice().sort((a, b) => a - b) }),
+        body: JSON.stringify(usePhoto ? { draft_id: P.draft_id, use_photo: true } : lockBody(P)),
       });
       afterLock(d, P);
     } catch (e) {
@@ -1543,6 +1653,7 @@
     if (q('[data-as-is]')) { useAsIs(); return; }
     if (q('[data-make-looks]')) { makeLooks(); return; }
     if (q('[data-more-looks]')) { makeLooks({ again: true }); return; }
+    if ((b = q('[data-zoom]'))) { openViewer(Number(b.dataset.zoom)); return; }
     if ((b = q('[data-pick]'))) {
       const n = Number(b.dataset.pick);
       const cur = S.panel.picks || [];
