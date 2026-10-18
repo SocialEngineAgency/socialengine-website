@@ -35,7 +35,7 @@ function storyApi() {
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)$/)) && entry.method === 'GET') {
       const k = st.kits.get(m[1]);
       // Looks finish between polls.
-      k.drafts.forEach((d) => { if (d.status === 'working') { d.status = 'ready'; d.options = d.options.map((_, i) => ({ status: 'ready', url: img(`look${i + 1}`) })); } });
+      k.drafts.forEach((d) => { if (d.status === 'working') { d.status = 'ready'; d.options = d.options.map((_, i) => ({ status: 'ready', url: img(`look${i + 1}`) })); d.library = { saved: d.options.length, full: false, collection: k.title }; } });
       json(200, { kit: kitView(k) });
       return 'handled';
     }
@@ -60,10 +60,11 @@ function storyApi() {
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/elements$/))) {
       const k = st.kits.get(m[1]);
       const d = k.drafts.find((x) => x.id === body.draft_id);
-      const el = { id: `el_${++n}`, type: d.type, name: d.name, description: d.description, source: d.source, image_url: d.options[body.option].url, sheet_status: 'ready', sheet_url: img('sheet') };
-      k.elements.push(el);
+      const picks = Array.isArray(body.options) ? body.options : [body.option];
+      const els = picks.map((o, j) => ({ id: `el_${++n}`, type: d.type, name: j ? `${d.name} ${j + 1}` : d.name, description: d.description, source: d.source, image_url: d.options[o].url, sheet_status: d.type === 'character' ? 'ready' : null, sheet_url: d.type === 'character' ? img('sheet') : null }));
+      k.elements.push(...els);
       k.drafts = k.drafts.filter((x) => x.id !== d.id);
-      json(200, { kit: kitView(k), element: el, reel: null });
+      json(200, { kit: kitView(k), element: els[0], elements: els, reel: null });
       return 'handled';
     }
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/reels$/))) {
@@ -290,5 +291,38 @@ test('Storyboard: references from the Library and a product, the number of looks
   expect(asIs.body).toMatchObject({ type: 'item', source: 'product', kind: 'product', image_url: 'https://store.test/leaflet.jpg' });
   // The looks preference sticks for next time.
   expect(await page.evaluate(() => localStorage.getItem('se_story_looks'))).toBe('2');
+  expect(errors).toEqual([]);
+});
+
+test('Storyboard: several looks go into the kit at once, and every look is kept in the Library', async ({ page }) => {
+  const errors = watchErrors(page);
+  const fake = storyApi();
+  fake.st.kits.set('kit_t1', { id: 'kit_t1', kind: 'story_kit', mode: 'kit', title: 'Winter wellbeing', look: 'stylized', elements: [], drafts: [], suggestions: [] });
+  await mockApi(page, srv.base, { data: clientData(), onRequest: fake.handle });
+  await page.addInitScript(() => { try { localStorage.setItem('se_story_last', JSON.stringify({ kit: 'kit_t1', view: 'kit' })); localStorage.removeItem('se_story_looks'); } catch (_) {} });
+  await openAnimate(page);
+  await page.click('.create-seg[data-segment="storyboard"]');
+  await page.click('.nl-ssec--place [data-new="place"]');
+  await page.fill('[data-p-name]', 'Hall');
+  await page.fill('[data-p-about]', 'A bright community hall');
+  await page.click('[data-make-looks]');
+  await expect(page.locator('[data-pick]')).toHaveCount(4, { timeout: 8000 });
+  await expect(page.locator('.nl-snote--lib')).toHaveText('All 4 looks are saved in your Library under Winter wellbeing.');
+  await expect(page.locator('.nl-spanel')).toContainText('Pick one or more');
+  await page.click('[data-pick="0"]');
+  await expect(page.locator('[data-lock]')).toHaveText(/Add look 1/);
+  await page.click('[data-pick="3"]');
+  await page.click('[data-pick="2"]');
+  await expect(page.locator('[data-lock]')).toHaveText(/Add 3 places/);
+  await expect(page.locator('.nl-spanel__f .nl-snote--c')).toContainText('Each look becomes its own place: Hall, Hall 2');
+  // Picking one again takes it back out.
+  await page.click('[data-pick="3"]');
+  await expect(page.locator('[data-lock]')).toHaveText(/Add 2 places/);
+  await page.click('[data-pick="3"]');
+  await page.click('[data-lock]');
+  await expect(page.locator('.nl-ssec--place .nl-sel')).toHaveCount(3);
+  const add = fake.st.calls.filter((c) => /\/elements$/.test(c.path)).pop();
+  expect(add.body).toMatchObject({ options: [0, 2, 3] });
+  await expect(page.locator('.nl-ssec--place .nl-sel').nth(1)).toContainText('Hall 2');
   expect(errors).toEqual([]);
 });

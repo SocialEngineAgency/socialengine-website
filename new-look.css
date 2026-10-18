@@ -1877,6 +1877,8 @@ html.nl .nl-scol { display: flex; flex-direction: column; gap: 8px; }
 html.nl .nl-scol .nl-sbtn { justify-content: flex-start; }
 html.nl .nl-snote { display: inline-flex; align-items: center; gap: 7px; font: 400 12px/1.45 var(--nl-body); color: var(--nl-fg3); }
 html.nl .nl-snote--c { justify-content: center; text-align: center; width: 100%; }
+html.nl .nl-snote--lib { align-items: flex-start; }
+html.nl .nl-snote--lib svg { flex: 0 0 auto; margin-top: 3px; }
 html.nl .nl-smono { font: 400 11.5px var(--nl-mono); color: var(--nl-fg3); white-space: nowrap; }
 html.nl .nl-spill { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--nl-line-strong); color: var(--nl-fg2); font: 500 10.5px var(--nl-body); white-space: nowrap; }
 html.nl .nl-spill--ok { color: var(--nl-ok); border-color: color-mix(in srgb, var(--nl-ok) 40%, transparent); }
