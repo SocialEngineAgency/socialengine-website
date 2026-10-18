@@ -246,7 +246,7 @@
     const d = ((S.kit && S.kit.drafts) || []).slice().reverse().find((x) => x.status === 'working' || x.status === 'ready');
     if (!d) return null;
     const refs = Array.isArray(d.refs) && d.refs.length ? d.refs : (d.photo_url ? [{ url: d.photo_url, kind: d.source === 'product' ? 'product' : 'photo' }] : []);
-    return { mode: 'new', type: d.type, source: d.source, name: d.name, description: d.description, refs, count: (d.options || []).length || 4, need_id: d.need_id || null, draft_id: d.id, pick: null };
+    return { mode: 'new', type: d.type, source: d.source, name: d.name, description: d.description, refs, count: (d.options || []).length || 4, need_id: d.need_id || null, draft_id: d.id, picks: [] };
   }
 
   async function openReel(idOrProject) {
@@ -673,15 +673,22 @@
       ? 'Community nurse in her mid 30s. Warm and calm. Short dark wavy hair, oatmeal cable-knit jumper.'
       : P.type === 'place' ? 'A warm family kitchen on a winter morning, wooden table by the window.' : 'A folded purple charity leaflet about symptoms.';
     const opts = draft ? draft.options : null;
-    const pickN = P.pick != null ? P.pick + 1 : null;
+    // Any number of looks can be picked; each goes into the kit as its own card.
+    const picks = (P.picks || []).filter((i) => opts && opts[i] && opts[i].status === 'ready');
     const ready = opts && opts.some((o) => o.status === 'ready');
     const looks = opts ? `<div class="nl-slooks" style="--cols:${opts.length === 1 ? 2 : opts.length <= 4 ? opts.length : 3}">
         ${opts.map((o, i) => o.status === 'ready'
-          ? `<button type="button" class="nl-slook${P.pick === i ? ' is-on' : ''}" data-pick="${i}" aria-pressed="${P.pick === i}" aria-label="Look ${i + 1}"><img src="${esc(media(o.url))}" alt=""><span>${i + 1}</span></button>`
+          ? `<button type="button" class="nl-slook${picks.includes(i) ? ' is-on' : ''}" data-pick="${i}" aria-pressed="${picks.includes(i)}" aria-label="Look ${i + 1}"><img src="${esc(media(o.url))}" alt=""><span>${picks.includes(i) ? svg(I.check, 11, 3) : i + 1}</span></button>`
           : o.status === 'failed' ? `<div class="nl-slook nl-slook--bad"><span>${i + 1}</span><em>Did not work</em></div>`
             : `<div class="nl-slook nl-slook--wait" aria-busy="true"><span>${i + 1}</span><i class="nl-sshim"></i></div>`).join('')}
       </div>` : '';
-    const lockLabel = P.type === 'character' ? 'Lock look' : 'Add to the kit';
+    const kindPlural = { character: 'characters', place: 'places', item: 'items' }[P.type];
+    const lockText = !picks.length ? 'Pick a look'
+      : picks.length === 1 ? `${P.type === 'character' ? 'Lock look' : 'Add look'} ${picks[0] + 1}`
+        : `Add ${picks.length} ${kindPlural}`;
+    const lib = draft && draft.library;
+    const libNote = lib && lib.full ? 'Your Library is full, so these looks were not saved there.'
+      : lib && lib.saved ? `${lib.saved === opts.length ? (opts.length === 1 ? 'This look is' : `All ${opts.length} looks are`) : `${plural(lib.saved, 'look')}`} saved in your Library${lib.collection ? ` under ${lib.collection}` : ''}.` : '';
     return `<div class="nl-scard nl-spanel">
       <div class="nl-spanel__h"><h3>${P.need_id ? 'Needed: ' : 'New '}${esc(P.need_id ? P.name || kindName : kindName)}</h3><button type="button" class="nl-sicon" data-panel-close aria-label="Close">${svg(I.x, 14)}</button></div>
       <div class="nl-spanel__b">
@@ -691,13 +698,16 @@
         ${refsBlock(P, { locked, needsPhoto, refs })}
         <label class="nl-slabel" for="nl-sp-about">${aboutLabel}${needsPhoto ? ' <em>optional</em>' : ''}</label>
         <textarea id="nl-sp-about" class="nl-sinput nl-sarea" data-p-about data-fk="pabout" rows="3" maxlength="600" placeholder="${esc(aboutPh)}" ${locked ? 'readonly' : ''}>${esc(P.description || '')}</textarea>
-        ${draft ? `<div class="nl-slabel nl-slabel--row"><span>Pick a look</span>${working ? `<span class="nl-snote"><i class="nl-sspin"></i>Making ${plural(opts.length, 'look')}, about a minute</span>` : `<button type="button" class="nl-slink" data-more-looks>${svg(I.redo, 12)}${count} more</button>`}</div>${looks}` : ''}
+        ${draft ? `<div class="nl-slabel nl-slabel--row"><span>${opts.length > 1 ? 'Pick one or more' : 'Pick a look'}</span>${working ? `<span class="nl-snote"><i class="nl-sspin"></i>Making ${plural(opts.length, 'look')}, about a minute</span>` : `<button type="button" class="nl-slink" data-more-looks>${svg(I.redo, 12)}${count} more</button>`}</div>${looks}` : ''}
+        ${libNote ? `<div class="nl-snote nl-snote--lib">${svg(I.image, 12)}${esc(libNote)}</div>` : ''}
         ${draft && refs.length && needsPhoto && !working ? `<button type="button" class="nl-slink" data-use-photo>Use the ${P.source === 'product' ? 'product photo' : 'photo'} as it is</button>` : ''}
       </div>
       <div class="nl-spanel__f">
         ${draft
-          ? `<button type="button" class="nl-sbtn nl-sbtn--light nl-sbtn--wide" data-lock ${P.pick == null || !ready ? 'disabled' : ''}>${svg(I.lock, 13)}${pickN ? `${lockLabel} ${pickN}` : 'Pick a look'}</button>
-             <div class="nl-snote nl-snote--c">${P.type === 'character' ? 'Makes front, three-quarter and side views · 1 image render' : 'Saved to this kit for every reel'}</div>`
+          ? `<button type="button" class="nl-sbtn nl-sbtn--light nl-sbtn--wide" data-lock ${!picks.length || !ready ? 'disabled' : ''}>${svg(I.lock, 13)}${lockText}</button>
+             <div class="nl-snote nl-snote--c">${picks.length > 1
+               ? `Each look becomes its own ${kindName}: ${esc(P.name || kindName)}, ${esc(P.name || kindName)} 2…${P.type === 'character' ? ` · ${plural(picks.length, 'image render')}` : ''}`
+               : P.type === 'character' ? 'Makes front, three-quarter and side views · 1 image render' : 'Saved to this kit for every reel'}</div>`
           : `<div class="nl-scount"><span class="nl-slabel">Looks</span>
                <div class="nl-sstep" role="group" aria-label="How many looks">
                  <button type="button" data-count="-1" aria-label="Fewer looks" ${count <= 1 ? 'disabled' : ''}>−</button>
@@ -1164,7 +1174,7 @@
       });
       S.kit = d.kit;
       P.draft_id = d.draft.id;
-      P.pick = null;
+      P.picks = [];
       render();
       pollIfWorking();
     } catch (e) {
@@ -1178,7 +1188,7 @@
     try {
       const d = await api(`/api/animation/kits/${encodeURIComponent(S.kit.id)}/elements`, {
         method: 'POST',
-        body: JSON.stringify(usePhoto ? { draft_id: P.draft_id, use_photo: true } : { draft_id: P.draft_id, option: P.pick }),
+        body: JSON.stringify(usePhoto ? { draft_id: P.draft_id, use_photo: true } : { draft_id: P.draft_id, options: (P.picks || []).slice().sort((a, b) => a - b) }),
       });
       afterLock(d, P);
     } catch (e) {
@@ -1195,7 +1205,10 @@
       S.story.scenes.forEach((s) => { const r = by.get(s.id); if (r) s.element_ids = r.element_ids.slice(); });
     }
     S.panel = { mode: 'el', id: d.element.id };
-    toast(d.element.type === 'character' && d.element.sheet_status === 'working' ? `${d.element.name} is locked. Making the turnaround views.` : `${d.element.name} is in the kit`, 'success');
+    const added = Array.isArray(d.elements) && d.elements.length ? d.elements : [d.element];
+    toast(added.length > 1
+      ? `${added.length} ${{ character: 'characters', place: 'places', item: 'items' }[d.element.type] || 'things'} are in the kit${d.element.type === 'character' ? '. Making their turnaround views.' : ''}`
+      : d.element.type === 'character' && d.element.sheet_status === 'working' ? `${d.element.name} is locked. Making the turnaround views.` : `${d.element.name} is in the kit`, 'success');
     if (P.need_id && S.reel) { S.view = 'story'; S.panel = null; remember(); }
     render();
     paintHeader();
@@ -1530,7 +1543,13 @@
     if (q('[data-as-is]')) { useAsIs(); return; }
     if (q('[data-make-looks]')) { makeLooks(); return; }
     if (q('[data-more-looks]')) { makeLooks({ again: true }); return; }
-    if ((b = q('[data-pick]'))) { S.panel.pick = Number(b.dataset.pick); render(); return; }
+    if ((b = q('[data-pick]'))) {
+      const n = Number(b.dataset.pick);
+      const cur = S.panel.picks || [];
+      S.panel.picks = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n];
+      render();
+      return;
+    }
     if (q('[data-lock]')) { lockLook(); return; }
     if (q('[data-use-photo]')) { lockLook({ usePhoto: true }); return; }
     if (q('[data-e-save]')) { saveElement(); return; }
