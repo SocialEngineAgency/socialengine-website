@@ -2313,6 +2313,27 @@
     sec.remove();
   }
 
+  /** What the shot check looked at and what it found, for the selected shot. */
+  function nlCheckDetails(s) {
+    const c = shotCheck(s);
+    if (!c) return null;
+    const el = document.createElement('div');
+    el.className = `nl-shotchk nl-shotchk--${c.status}`;
+    if (c.status === 'checking') { el.innerHTML = `<i class="nl-shot__dot nl-shot__dot--chk"></i><span>Checking this shot now.</span>`; return el; }
+    if (c.status === 'redoing') { el.innerHTML = `<i class="nl-shot__dot nl-shot__dot--gen"></i><span>Redoing this shot after its check.</span>`; return el; }
+    if (c.status === 'skipped') { el.innerHTML = `<i class="nl-shot__dot"></i><span>This shot could not be checked.</span>`; return el; }
+    // Plain words, no vendor names: what was looked at, not who looked.
+    const who = [`Looked at ${c.frames || 'its'} frames for faces, hands, text and the plan`];
+    if (c.motion_input) who.push(`watched the movement${c.motion_input === 'frames' ? ' frame by frame' : ''}`);
+    const verdict = c.status === 'pass' ? 'Looks right.' : c.status === 'minor' ? 'Small things only.' : 'Needs a look.';
+    const kinds = { face: 'Face', limbs: 'Hands and limbs', text: 'Text', morph: 'Morphing', motion: 'Movement', identity: 'Character', product: 'Product', action: 'Plan', other: 'Glitch' };
+    const probs = (c.problems || []).slice(0, 4).map((p) => `<li><b>${esc(kinds[p.kind] || 'Note')}</b> ${esc(p.note || '')}</li>`).join('');
+    el.innerHTML = `<div class="nl-shotchk__h"><i class="nl-shot__dot nl-shot__dot--${c.status === 'flagged' ? 'warn' : 'pass'}"></i><span><b>${esc(verdict)}</b> ${esc(who.join(', and '))}.</span></div>
+      ${probs ? `<ul class="nl-shotchk__list">${probs}</ul>` : ''}
+      ${c.motion_error ? '<p class="nl-shotchk__err">The movement check did not run this time.</p>' : ''}`;
+    return el;
+  }
+
   function nlSelectShot(id, root) {
     const bar = root.querySelector('[data-slot="shotbar"]');
     const grid = root.querySelector('[data-slot="shots"]');
@@ -2340,6 +2361,8 @@
     h.className = 'nl-shotbar__h';
     h.textContent = `Shot ${card.dataset.nlIndex || ''} · What happens`;
     box.appendChild(h);
+    const chk = nlCheckDetails(nlScenes().find((x) => x.id === id));
+    if (chk) box.appendChild(chk);
     box.appendChild(meta);
     bar.appendChild(box);
     const ta = meta.querySelector('.anim-shot__prompt-edit');

@@ -23,7 +23,7 @@ test('Reels shot check: checking, checked, and a shot to look at; the thread say
     pipeline: { assemble: { vo: true, captions: true, music: false, outro: false } },
     scenes: [
       scene(1, { status: 'pass' }),
-      scene(2, { status: 'flagged', summary: "Maya's face has no eyes in frames 3 and 4" }),
+      scene(2, { status: 'flagged', summary: "Maya's face has no eyes in frames 3 and 4", problems: [{ kind: 'face', frames: [3, 4], note: "Maya's face has no eyes in frames 3 and 4." }, { kind: 'motion', frames: [], note: 'She skips instead of walking.' }], model: 'claude-sonnet-4-6', frames: 6, frames_verdict: 'redo', motion_model: 'qwen/qwen3-vl-235b-a22b-instruct', motion_input: 'frames', motion_verdict: 'redo' }),
       scene(3, { status: 'checking', started_at: new Date().toISOString() }),
     ],
     chat: [
@@ -47,6 +47,15 @@ test('Reels shot check: checking, checked, and a shot to look at; the thread say
   await expect(card(3).locator('.nl-shot__st')).toHaveText('Checking');
   await expect(page.locator('.nl-tsys--warn')).toContainText('Redoing it once');
   await expect(page.locator('.nl-tsys--ok')).toContainText('redone and checked');
+
+  // The selected shot says what looked at it and what it found.
+  await card(2).click();
+  const chk = page.locator('.nl-shotbar .nl-shotchk');
+  await expect(chk).toContainText('Needs a look.');
+  await expect(chk).toContainText('Looked at 6 frames for faces, hands, text and the plan, and watched the movement frame by frame.');
+  await expect(chk).not.toContainText('Claude');
+  await expect(chk.locator('li')).toHaveCount(2);
+  await expect(chk.locator('li').nth(1)).toHaveText('Movement She skips instead of walking.');
 
   // The check lands on the server; the page is still polling and shows it.
   project.scenes[2].check = { status: 'pass', video_url: 'https://store.test/s3.mp4' };
