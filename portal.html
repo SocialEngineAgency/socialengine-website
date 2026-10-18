@@ -3085,7 +3085,7 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261018vw2">
+  <link rel="stylesheet" href="./new-look.css?v=20261018pc1">
   <script src="./new-look.js?v=20261016g" defer></script>
   <script src="./nl-cal-panels.js?v=20261017cal1" defer></script>
 </head>
@@ -4470,6 +4470,145 @@
       }
     }
 
+    // ── A caption for each platform ──
+    // Instagram and Facebook post the main caption. TikTok (and any other platform as it is
+    // set up) gets its own, written for how that platform is read; the client can edit it.
+    const PLATFORM_CAPTION_LABELS = { tiktok: 'TikTok', linkedin: 'LinkedIn', twitter: 'X', threads: 'Threads', pinterest: 'Pinterest', youtube: 'YouTube' };
+    const PLATFORM_CAPTION_HINTS = {
+      tiktok: 'Short and searchable, in the brand\'s voice: what TikTok shows over the video.',
+      linkedin: 'Opens with the point; LinkedIn shows about two lines before "see more".',
+      twitter: 'One idea, under 280 characters.',
+      threads: 'Conversational, under 500 characters.',
+      pinterest: 'Says what it is and why to save it.',
+      youtube: 'The first line is the title.',
+    };
+    const _platformCaptionAsked = new Set();
+    function platformCaptionKeysForPost(post) {
+      const map = { tiktok: 'tiktok', tt: 'tiktok', linkedin: 'linkedin', x: 'twitter', twitter: 'twitter', threads: 'threads', pinterest: 'pinterest', youtube: 'youtube' };
+      const keys = [];
+      for (const raw of String((post && post.platform) || '').split(/[,+/|]/)) {
+        const k = map[String(raw || '').trim().toLowerCase()];
+        if (k && !keys.includes(k)) keys.push(k);
+      }
+      return keys;
+    }
+    function postHasMetaPlatform(post) {
+      return String((post && post.platform) || '').split(/[,+/|]/).some((p) => /^(instagram|ig|insta|facebook|fb)$/i.test(String(p || '').trim()))
+        || !String((post && post.platform) || '').trim();
+    }
+    function platformCaptionsFromPost(post) {
+      let kit = post && post.platform_captions;
+      if (!kit || typeof kit !== 'object') {
+        kit = {};
+        try {
+          const raw = typeof (post && post.platform_captions_json) === 'string' ? JSON.parse(post.platform_captions_json || '{}') : ((post && post.platform_captions_json) || {});
+          for (const k of Object.keys(PLATFORM_CAPTION_LABELS)) if (raw[k] && raw[k].text) kit[k] = { text: String(raw[k].text), source: raw[k].source === 'client' ? 'client' : 'auto', stale: false };
+        } catch (_) { kit = {}; }
+      }
+      return kit;
+    }
+    function platformCaptionState(row, label) {
+      if (!row || !row.text) return { text: `Uses the main caption until one is written for ${label}`, tone: 'muted' };
+      if (row.stale) return { text: 'Main caption changed since this was written', tone: 'warn' };
+      return { text: row.source === 'client' ? 'Your words' : `Written for ${label}`, tone: 'ok' };
+    }
+    function renderPlatformCaptionEditor(post, disabled) {
+      const keys = platformCaptionKeysForPost(post);
+      if (!keys.length) return '';
+      const kit = platformCaptionsFromPost(post);
+      const esc = (window.studioQueueReady && typeof window.studioQueueReady.escapeCaptionForTextarea === 'function')
+        ? window.studioQueueReady.escapeCaptionForTextarea
+        : (t) => String(t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const id = String(post.id || '');
+      return keys.map((k) => {
+        const label = PLATFORM_CAPTION_LABELS[k];
+        const row = kit[k] || null;
+        const st = platformCaptionState(row, label);
+        const tone = st.tone === 'warn' ? '#FBBF24' : st.tone === 'ok' ? 'rgba(167,243,208,0.85)' : 'rgba(255,255,255,0.4)';
+        return `<div class="se-platcap" data-post-id="${id}" data-platform="${k}" style="margin-top:14px;padding:10px 12px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;">`
+          + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+          + `<div class="studio-modal__caption-label">${label} caption</div>`
+          + `<span class="se-platcap__state se-platcap__state--${st.tone}" data-platcap-state style="font-size:0.66rem;color:${tone};">${st.text}</span>`
+          + `<button type="button" class="se-platcap__write${!row || !row.text || row.stale ? ' is-lit' : ''}" data-platcap-write ${disabled ? 'disabled' : ''} style="margin-left:auto;padding:4px 10px;background:rgba(124,58,237,0.14);border:1px solid rgba(124,58,237,0.35);border-radius:6px;color:#C4B5FD;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">${row && row.text ? 'Rewrite' : `Write for ${label}`}</button>`
+          + '</div>'
+          + `<textarea class="studio-modal__caption-area post-platform-caption" data-post-id="${id}" data-platform="${k}" ${disabled ? 'disabled' : ''} rows="4" placeholder="Uses the main caption until one is written for ${label}">${esc(row ? row.text : '')}</textarea>`
+          + `<div class="studio-modal__caption-hint">${PLATFORM_CAPTION_HINTS[k]} Edits save automatically.</div>`
+          + '</div>';
+      }).join('');
+    }
+    function paintPlatformCaption(postId, platform, kit, { text } = {}) {
+      const box = document.querySelector(`.se-platcap[data-post-id="${postId}"][data-platform="${platform}"]`);
+      if (!box) return;
+      const label = PLATFORM_CAPTION_LABELS[platform] || platform;
+      const row = kit ? kit[platform] : null;
+      const st = platformCaptionState(row, label);
+      const stateEl = box.querySelector('[data-platcap-state]');
+      if (stateEl) {
+        stateEl.textContent = st.text;
+        stateEl.className = `se-platcap__state se-platcap__state--${st.tone}`;
+        stateEl.style.color = st.tone === 'warn' ? '#FBBF24' : st.tone === 'ok' ? 'rgba(167,243,208,0.85)' : 'rgba(255,255,255,0.4)';
+      }
+      const btn = box.querySelector('[data-platcap-write]');
+      if (btn && !btn.dataset.busy) {
+        btn.textContent = row && row.text ? 'Rewrite' : `Write for ${label}`;
+        btn.classList.toggle('is-lit', !row || !row.text || !!row.stale);
+      }
+      const area = box.querySelector('textarea');
+      if (area && text != null && document.activeElement !== area) area.value = text;
+    }
+    function rememberPlatformCaptions(postId, kit) {
+      const row = (typeof studioPostsList !== 'undefined' ? studioPostsList : []).find((p) => p.id === postId);
+      if (row) row.platform_captions = kit || {};
+    }
+    async function writePlatformCaption(postId, platform, { auto = false } = {}) {
+      const box = document.querySelector(`.se-platcap[data-post-id="${postId}"][data-platform="${platform}"]`);
+      const btn = box && box.querySelector('[data-platcap-write]');
+      const stateEl = box && box.querySelector('[data-platcap-state]');
+      const label = PLATFORM_CAPTION_LABELS[platform] || platform;
+      if (btn) { btn.dataset.busy = '1'; btn.disabled = true; btn.textContent = 'Writing…'; }
+      if (stateEl) { stateEl.textContent = `Writing for ${label}…`; stateEl.style.color = 'rgba(196,181,253,0.9)'; }
+      try {
+        const res = await apiFetch(`${API}/api/platform-caption`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId, platform, write: true }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || `Could not write the ${label} caption`);
+        rememberPlatformCaptions(postId, d.platform_captions);
+        if (btn) { delete btn.dataset.busy; btn.disabled = false; }
+        paintPlatformCaption(postId, platform, d.platform_captions, { text: (d.platform_captions && d.platform_captions[platform]) ? d.platform_captions[platform].text : '' });
+      } catch (e) {
+        if (btn) { delete btn.dataset.busy; btn.disabled = false; }
+        const row = (typeof studioPostsList !== 'undefined' ? studioPostsList : []).find((p) => p.id === postId);
+        paintPlatformCaption(postId, platform, row ? platformCaptionsFromPost(row) : {});
+        if (!auto && typeof showToast === 'function') showToast(e.message || `Could not write the ${label} caption`, 'error');
+      }
+    }
+    async function savePlatformCaption(postId, platform, text) {
+      const res = await apiFetch(`${API}/api/platform-caption`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, platform, text }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Could not save');
+      rememberPlatformCaptions(postId, d.platform_captions);
+      paintPlatformCaption(postId, platform, d.platform_captions);
+    }
+    // A pending post going to TikTok with no TikTok caption yet gets one written when it opens.
+    function autoWritePlatformCaptions(post) {
+      if (!post || !['Ready for Review', 'Draft', 'Pending'].includes(String(post.status || ''))) return;
+      if (!String(post.full_post_text || post.caption || '').trim()) return;
+      const kit = platformCaptionsFromPost(post);
+      for (const k of platformCaptionKeysForPost(post)) {
+        const key = `${post.id}:${k}`;
+        if ((kit[k] && kit[k].text) || _platformCaptionAsked.has(key)) continue;
+        _platformCaptionAsked.add(key);
+        writePlatformCaption(post.id, k, { auto: true });
+      }
+    }
+
     function renderStudioModalContent() {
       const post = studioPostsList[studioCurrentIndex];
       if (!post) return;
@@ -4621,7 +4760,7 @@
 
           <div>
             <div style="display:flex;align-items:center;justify-content:space-between;">
-              <div class="studio-modal__caption-label">Caption</div>
+              <div class="studio-modal__caption-label">Caption${platformCaptionKeysForPost(post).length && postHasMetaPlatform(post) ? ' · Instagram &amp; Facebook' : ''}</div>
               <div style="display:flex;align-items:center;gap:8px;">
                 <span id="modal-char-count" style="font-size:0.65rem;color:rgba(255,255,255,0.3);">${fullText.length} chars</span>
                 <button onclick="navigator.clipboard.writeText(document.querySelector('.studio-modal__caption-area').value);showToast('Caption copied!')" style="display:flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:rgba(255,255,255,0.4);font-size:0.62rem;cursor:pointer;font-family:var(--font-body);"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy</button>
@@ -4631,6 +4770,7 @@
             <div class="studio-modal__caption-hint">What's in this box is what we post. Edits save automatically.</div>
             ${seRuleOfFiveChecklistHtml(post)}
             ${(() => { const ht = fullText.match(/#[\w]+/g) || []; return ht.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">' + ht.map(h => '<span style="font-size:0.65rem;padding:2px 8px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.12);border-radius:4px;color:rgba(124,58,237,0.7);">' + h + '</span>').join('') + '</div>' : ''; })()}
+            ${renderPlatformCaptionEditor(post, isRegenerating)}
             ${renderPinnedCommentEditor(post, isRegenerating)}
           </div>
 
@@ -4689,6 +4829,7 @@
           </div>
         </div>
       `;
+      if (!isRegenerating) autoWritePlatformCaptions(post);
     }
 
     window.studioNav = function(dir) {
@@ -6296,6 +6437,13 @@
     // Auto-save caption on change (debounced)
     const captionDebounce = {};
     const pinnedDebounce = {};
+    const platformCaptionDebounce = {};
+    document.addEventListener('click', (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest('[data-platcap-write]') : null;
+      if (!btn || btn.disabled) return;
+      const box = btn.closest('.se-platcap');
+      if (box) writePlatformCaption(box.dataset.postId, box.dataset.platform);
+    });
     document.addEventListener('change', (e) => {
       if (!e.target.classList.contains('post-pinned-comment-pin')) return;
       const postId = e.target.dataset.postId;
@@ -6309,6 +6457,17 @@
         if (pinnedDebounce[postId]) clearTimeout(pinnedDebounce[postId]);
         pinnedDebounce[postId] = setTimeout(() => {
           savePinnedComments(postId).catch(() => {});
+        }, 1200);
+        return;
+      }
+      if (e.target.classList.contains('post-platform-caption')) {
+        const postId = e.target.dataset.postId;
+        const platform = e.target.dataset.platform;
+        if (!postId || !platform) return;
+        const key = `${postId}:${platform}`;
+        if (platformCaptionDebounce[key]) clearTimeout(platformCaptionDebounce[key]);
+        platformCaptionDebounce[key] = setTimeout(() => {
+          savePlatformCaption(postId, platform, e.target.value).catch(() => {});
         }, 1200);
         return;
       }
