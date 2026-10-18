@@ -1370,6 +1370,7 @@
               <button type="button" class="nl-abtn nl-abtn--icon nl-aref" data-nl-cast aria-expanded="false" title="Add a character, product or place photo">${nlSvg(NL_I.image, 15)}<span class="nl-aref__l">Reference</span><span class="nl-aref__n" data-slot="ref-count" hidden></span></button>
               <div data-slot="entry"></div>
               <div data-slot="look" class="nl-alook"></div>
+              <label data-slot="length" class="nl-alen" title="How long the reel should be"><span>Length</span><select id="anim-length" aria-label="Reel length"><option value="15">15s</option><option value="30">30s</option><option value="45">45s</option></select></label>
               <div data-slot="story" class="nl-astory"></div>
               <span class="nl-grow"></span>
               <button type="button" class="nl-alink" data-nl-plan hidden>New shot plan</button>
@@ -1444,6 +1445,11 @@
       storySel.value = 'auto';
     }
     put('why', document.getElementById('anim-story'));
+    const len = document.getElementById('anim-length');
+    if (len) {
+      try { const v = localStorage.getItem(NL_LEN_LS); if (['15', '30', '45'].includes(v)) len.value = v; } catch (_) { /* private mode */ }
+      len.addEventListener('change', () => { try { localStorage.setItem(NL_LEN_LS, len.value); } catch (_) { /* private mode */ } });
+    }
     const look = document.getElementById('anim-look');
     if (look) {
       const lookSlot = slot('look');
@@ -1636,6 +1642,9 @@
       if (!slot('lanes').childElementCount) nlLanes(null, root);
     }
     nlTimeline(slot('tl'));
+    // An open project shows the length it was planned at.
+    const lenSel = document.getElementById('anim-length');
+    if (lenSel && p && [15, 30, 45].includes(Number(p.length_seconds))) lenSel.value = String(p.length_seconds);
     nlHeaderPill();
     nlTokens(slot('tokens'));
     nlBriefSummary(root);
@@ -1728,6 +1737,7 @@
     const lastEdit = (() => { for (let i = list.length - 1; i >= 0; i--) if (list[i].role === 'agent' && list[i].kind === 'edit') return i; return -1; })();
     const working = nlEditWorking();
     const seenIdea = { v: false };
+    let planShown = false;
     const rows = list.map((m, i) => {
       const role = String(m.role || '').toLowerCase();
       const text = String(m.text || '').trim();
@@ -1736,6 +1746,10 @@
         const label = m.kind !== 'edit' && !seenIdea.v ? '<div class="nl-tmsg__l">Your idea</div>' : '';
         if (m.kind !== 'edit') seenIdea.v = true;
         return `<div class="nl-tmsg nl-tmsg--me">${label}<div class="nl-tmsg__b">${esc(text)}</div></div>`;
+      }
+      if (role === 'agent' && m.kind !== 'edit' && i === lastPlan && nlPlanEditable()) {
+        planShown = true;
+        return nlPlanCardHtml(brief, { art: text });
       }
       if (role === 'agent' && m.kind !== 'edit') {
         const shots = i === lastPlan && Array.isArray(brief?.shots) ? brief.shots : [];
@@ -1755,6 +1769,8 @@
       const shown = text.replace(/^Final reel updated from (\d+) shots?[^.]*\./i, 'Final reel updated from $1 shots.');
       return `<div class="nl-tsys nl-tsys--${kind}">${nlSvg(icon, 12, 2)}<span>${esc(shown)}</span></div>`;
     }).filter(Boolean);
+    // A plan waiting for Accept is always shown, even when the thread has no plan message.
+    if (!planShown && nlPlanEditable()) rows.push(nlPlanCardHtml(brief || {}));
     if (_nlEditPending) rows.push('<div class="nl-tmsg nl-tmsg--ai is-typing"><span class="nl-tav">' + nlSvg(NL_I.spark, 12) + '</span><div class="nl-tmsg__c"><div class="nl-tmsg__b"><i></i><i></i><i></i></div></div></div>');
     return rows.join('');
   }
@@ -1803,6 +1819,279 @@
     if (root) nlHeroState(root);
   }
 
+  // ── New look: the shot plan, editable before it renders ──
+  // Add a shot written in the same style, remove or reorder, change one by hand, or ask
+  // the AI to change it ("she holds the leaflet in her right hand"). Products tagged in
+  // Cast and settings can be put in a shot so its first frame keeps them exact.
+  const _nlPlan = { open: null, busy: null, adding: false, addText: '', undo: null, note: null, collapsed: false, drafts: Object.create(null) };
+  const NL_PLAN_MAX = 6;
+  const NL_LEN_LS = 'se_anim_length';
+  function nlPlanReset() {
+    _nlPlan.open = null; _nlPlan.busy = null; _nlPlan.adding = false; _nlPlan.addText = ''; _nlPlan.undo = null; _nlPlan.note = null; _nlPlan.collapsed = false;
+    Object.keys(_nlPlan.drafts).forEach((k) => { delete _nlPlan.drafts[k]; });
+  }
+  function nlPlanItems() {
+    return ((_project && _project.references) || []).filter((r) => r && r.role === 'item' && /^https:\/\//i.test(String(r.url || '')))
+      .slice(0, 6).map((r, i) => ({ url: r.url, name: String(r.title || '').trim() || `Product ${i + 1}` }));
+  }
+  function nlPlanSnapshot(shots) {
+    return (shots || []).map((x) => ({ id: x.id, action: customerShotLine(x), vo_line: x.vo_line || '', duration_target: x.duration_target, seconds_manual: !!x.seconds_manual, items: (x.items || []).slice() }));
+  }
+  function nlPlanEditable() {
+    return !!(_project && _project.status === 'brief_ready' && _project.agent_brief && !_briefing);
+  }
+  function nlPlanCardHtml(brief, { art = '' } = {}) {
+    const shots = brief.shots || [];
+    const items = nlPlanItems();
+    const total = shots.reduce((n, x) => n + (Number(x.duration_target) || 5), 0);
+    const target = Number(_project && _project.length_seconds) || 0;
+    const under = target && total < target - 4 ? target - total : 0;
+    const busy = (id) => _nlPlan.busy === id;
+    const rows = shots.map((x, i) => {
+      const id = String(x.id);
+      const open = _nlPlan.open && _nlPlan.open.id === id ? _nlPlan.open.mode : '';
+      const d = _nlPlan.drafts[id] || {};
+      const shotItems = items.filter((it) => (x.items || []).includes(it.url));
+      const note = _nlPlan.note && _nlPlan.note.id === id ? _nlPlan.note : null;
+      const editor = open === 'ai' ? `<div class="nl-plan__ed">
+          <label class="nl-slabel" for="nl-plan-ask-${esc(id)}">What should change in shot ${i + 1}?</label>
+          <div class="nl-plan__ask">
+            <input id="nl-plan-ask-${esc(id)}" class="nl-sinput" data-plan-ask="${esc(id)}" maxlength="600" value="${esc(d.ask || '')}" placeholder="${items.length ? `She holds the ${esc(items[0].name)} in her right hand` : 'Make it a close up of her face, smiling'}" ${busy(id) ? 'disabled' : ''}>
+            <button type="button" class="nl-sbtn nl-sbtn--primary" data-plan-ask-go="${esc(id)}" ${busy(id) ? 'disabled' : ''}>${busy(id) ? '<i class="nl-sspin"></i>Changing' : `${nlSvg(NL_I.spark, 13)}Change`}</button>
+            <button type="button" class="nl-sbtn" data-plan-close ${busy(id) ? 'disabled' : ''}>Cancel</button>
+          </div>
+          <p class="nl-snote">The shot is rewritten in the same style. The spoken line stays unless you ask to change it.${items.length ? '' : ' To show your real product, add its photo in Cast and settings and tag it Item.'}</p>
+        </div>` : open === 'edit' ? `<div class="nl-plan__ed">
+          <label class="nl-slabel" for="nl-plan-what-${esc(id)}">What we see</label>
+          <textarea id="nl-plan-what-${esc(id)}" class="nl-sinput nl-sarea" rows="4" maxlength="1500" data-plan-what="${esc(id)}">${esc(d.action != null ? d.action : customerShotLine(x))}</textarea>
+          <label class="nl-slabel" for="nl-plan-vo-${esc(id)}">What is said</label>
+          <input id="nl-plan-vo-${esc(id)}" class="nl-sinput" maxlength="400" data-plan-vo="${esc(id)}" value="${esc(d.vo_line != null ? d.vo_line : x.vo_line || '')}" placeholder="No voiceover in this shot">
+          <div class="nl-plan__edrow">
+            <div><div class="nl-slabel">Length</div>
+              <div class="nl-sstep" role="group" aria-label="Shot length">
+                <button type="button" data-plan-sec="-1" aria-label="Shorter">−</button>
+                <output>${esc(String(d.duration_target || x.duration_target || 5))}s</output>
+                <button type="button" data-plan-sec="1" aria-label="Longer">+</button>
+              </div>
+              ${(d.seconds_manual != null ? d.seconds_manual : x.seconds_manual) ? '<button type="button" class="nl-slink" data-plan-sec-auto>Fit to the line</button>' : ''}
+            </div>
+            ${items.length ? `<div><div class="nl-slabel">Products in this shot</div><div class="nl-plan__chips">${items.map((it) => {
+              const on = (d.items || x.items || []).includes(it.url);
+              return `<button type="button" class="nl-plan__chip" data-plan-item="${esc(it.url)}" aria-pressed="${on}">${on ? nlSvg(NL_I.check, 11, 2.4) : ''}${esc(it.name)}</button>`;
+            }).join('')}</div></div>` : ''}
+          </div>
+          <div class="nl-srow">
+            <button type="button" class="nl-sbtn nl-sbtn--primary" data-plan-save="${esc(id)}" ${busy(id) ? 'disabled' : ''}>${busy(id) ? '<i class="nl-sspin"></i>Saving' : 'Save'}</button>
+            <button type="button" class="nl-sbtn" data-plan-close>Cancel</button>
+          </div>
+        </div>` : '';
+      return `<li class="nl-plan__row${open ? ' is-open' : ''}${note ? ' is-new' : ''}" data-plan-row="${esc(id)}">
+        <div class="nl-plan__main">
+          <span class="nl-plan__n">${i + 1}</span>
+          <div class="nl-plan__body">
+            <div class="nl-plan__meta"><span class="nl-smono">${esc(String(x.duration_target || 5))}s</span>${shotItems.map((it) => `<span class="nl-plan__tag">${esc(it.name)}</span>`).join('')}</div>
+            <p class="nl-plan__what">${esc(customerShotLine(x) || x.title || `Shot ${i + 1}`)}</p>
+            ${x.vo_line ? `<q class="nl-plan__vo">${esc(x.vo_line)}</q>` : '<span class="nl-plan__novo">No voiceover in this shot</span>'}
+            ${note ? `<div class="nl-plan__note">${nlSvg(NL_I.check, 12, 2.4)}<span>${esc(note.text)}</span></div>` : ''}
+          </div>
+          <div class="nl-plan__acts" role="group" aria-label="Shot ${i + 1}">
+            <button type="button" class="nl-plan__btn" data-plan-ai="${esc(id)}" aria-expanded="${open === 'ai'}">${nlSvg(NL_I.spark, 12)}Change</button>
+            <button type="button" class="nl-plan__btn" data-plan-edit="${esc(id)}" aria-expanded="${open === 'edit'}">Edit</button>
+            <button type="button" class="nl-plan__ico" data-plan-move="-1" data-id="${esc(id)}" ${i === 0 ? 'disabled' : ''} aria-label="Move shot ${i + 1} up">${nlSvg('M12 19V5 M6 11l6-6 6 6', 13)}</button>
+            <button type="button" class="nl-plan__ico" data-plan-move="1" data-id="${esc(id)}" ${i === shots.length - 1 ? 'disabled' : ''} aria-label="Move shot ${i + 1} down">${nlSvg('M12 5v14 M6 13l6 6 6-6', 13)}</button>
+            <button type="button" class="nl-plan__ico" data-plan-rm="${esc(id)}" ${shots.length <= 1 ? 'disabled' : ''} aria-label="Remove shot ${i + 1}">${nlSvg(NL_I.x, 13)}</button>
+          </div>
+        </div>
+        ${editor}
+      </li>`;
+    }).join('');
+    const full = shots.length >= NL_PLAN_MAX;
+    const adding = _nlPlan.adding ? `<div class="nl-plan__add">
+        <label class="nl-slabel" for="nl-plan-add">What should the new shot show? <em>optional</em></label>
+        <div class="nl-plan__ask">
+          <input id="nl-plan-add" class="nl-sinput" data-plan-add-text maxlength="600" value="${esc(_nlPlan.addText)}" placeholder="Leave empty and the AI adds what the story is missing" ${_nlPlan.busy === 'add' ? 'disabled' : ''}>
+          <button type="button" class="nl-sbtn nl-sbtn--primary" data-plan-add-go ${_nlPlan.busy === 'add' ? 'disabled' : ''}>${_nlPlan.busy === 'add' ? '<i class="nl-sspin"></i>Writing' : `${nlSvg(NL_I.spark, 13)}Add shot`}</button>
+          <button type="button" class="nl-sbtn" data-plan-add-cancel ${_nlPlan.busy === 'add' ? 'disabled' : ''}>Cancel</button>
+        </div>
+      </div>` : '';
+    const count = `${shots.length} shot${shots.length === 1 ? '' : 's'}`;
+    return `<details class="nl-tplan nl-tplan--edit" data-nl-plan-details ${_nlPlan.collapsed ? '' : 'open'}>
+      <summary>
+        <span class="nl-tplan__i">${nlSvg(NL_I.film, 14)}</span><span class="nl-tplan__t">Shot plan</span>
+        <span class="nl-tplan__m">${count} · ${nlClock(total)}</span>
+        ${under ? `<span class="nl-schip nl-schip--warn"><i></i>${under}s under your ${target}s</span>` : ''}
+        <span class="nl-grow"></span>
+        <span class="nl-tplan__wait">Nothing renders until you accept</span>
+        <button type="button" class="nl-sbtn nl-sbtn--primary nl-sbtn--sm nl-tplan__go" data-plan-accept>Accept &amp; generate</button>
+        ${nlSvg(NL_I.chev, 12, 2)}
+      </summary>
+      <div class="nl-plan" aria-label="Shot plan">
+        ${_nlPlan.undo ? `<div class="nl-plan__undo">${esc(_nlPlan.undo.label)}<button type="button" class="nl-slink" data-plan-undo>Undo</button></div>` : ''}
+        <ol class="nl-plan__list">${rows}</ol>
+        ${adding}
+        <div class="nl-plan__f">
+          <button type="button" class="nl-sbtn nl-sbtn--primary" id="anim-accept">Accept &amp; generate · ${count}</button>
+          <button type="button" class="nl-sbtn" data-plan-add ${full || _nlPlan.adding ? 'disabled' : ''} ${full ? `title="A reel holds up to ${NL_PLAN_MAX} shots"` : ''}>${nlSvg('M12 5v14 M5 12h14', 13)}Add shot</button>
+          <span class="nl-grow"></span>
+          <button type="button" class="nl-sbtn" id="anim-rebrief">Try again</button>
+        </div>
+        ${art ? `<details class="nl-plan__art"><summary>Art direction</summary><p>${esc(art)}</p></details>` : ''}
+      </div>
+    </details>`;
+  }
+  function nlPlanBind(el) {
+    if (el.dataset.planBound) return;
+    el.dataset.planBound = '1';
+    el.addEventListener('click', nlPlanClick);
+    el.addEventListener('input', nlPlanInput);
+    el.addEventListener('toggle', (e) => {
+      if (e.target && e.target.matches && e.target.matches('[data-nl-plan-details]')) _nlPlan.collapsed = !e.target.open;
+    }, true);
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      const ask = e.target.closest('[data-plan-ask]');
+      if (ask) { e.preventDefault(); nlPlanAsk(ask.dataset.planAsk); return; }
+      if (e.target.closest('[data-plan-add-text]')) { e.preventDefault(); nlPlanAdd(); }
+    });
+  }
+  function nlPlanRepaint(focusSel) {
+    renderChat();
+    if (focusSel) setTimeout(() => { const f = document.querySelector(focusSel); if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (_) {} } }, 0);
+  }
+  async function nlPlanSend(path, method, body, { busy = null, undo = null } = {}) {
+    if (!_project || !_project.id) return null;
+    const before = nlPlanSnapshot(_project.agent_brief && _project.agent_brief.shots);
+    _nlPlan.busy = busy;
+    renderChat();
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/${path}`, { method, body: JSON.stringify(body || {}) });
+      if (data.project) _project = data.project;
+      _nlPlan.undo = undo ? { label: undo, shots: before } : null;
+      return data;
+    } catch (e) {
+      toast(e.message || 'Could not change the plan', 'error', e.request_id);
+      return null;
+    } finally {
+      _nlPlan.busy = null;
+      renderChat();
+    }
+  }
+  async function nlPlanPut(shots, undoLabel) {
+    return nlPlanSend('plan', 'PUT', { shots }, { busy: 'put', undo: undoLabel });
+  }
+  async function nlPlanAsk(id) {
+    const d = _nlPlan.drafts[id] || {};
+    const instruction = String(d.ask || '').trim();
+    if (!instruction) { toast('Say what should change', 'error'); return; }
+    const n = (_project.agent_brief.shots || []).findIndex((x) => String(x.id) === id) + 1;
+    const data = await nlPlanSend('plan/rewrite', 'POST', { shot_id: id, instruction }, { busy: id, undo: `Shot ${n} changed.` });
+    if (!data) return;
+    delete _nlPlan.drafts[id];
+    _nlPlan.open = null;
+    _nlPlan.note = { id, text: data.note || 'Shot changed' };
+    renderChat();
+  }
+  async function nlPlanAdd() {
+    const data = await nlPlanSend('plan/add', 'POST', { instruction: String(_nlPlan.addText || '').trim() }, { busy: 'add', undo: 'Shot added.' });
+    if (!data) return;
+    _nlPlan.adding = false;
+    _nlPlan.addText = '';
+    _nlPlan.note = { id: String(data.shot_id || ''), text: `Added as shot ${data.position || ''}. ${data.note || ''}`.trim() };
+    if (_nlPlan.undo) _nlPlan.undo.label = `Shot ${data.position || ''} added.`;
+    renderChat();
+  }
+  function nlPlanClick(e) {
+    const t = e.target;
+    const q = (sel) => t.closest(sel);
+    if (q('[data-plan-accept], #anim-accept')) { e.preventDefault(); if (nlPlanEditable()) acceptBrief(); return; }
+    if (q('#anim-rebrief')) { e.preventDefault(); if (nlPlanEditable()) rebriefProject(); return; }
+    if (!q('.nl-tplan--edit')) return;
+    const shots = nlPlanSnapshot(_project && _project.agent_brief && _project.agent_brief.shots);
+    let b;
+    if ((b = q('[data-plan-ai]'))) {
+      const id = b.dataset.planAi;
+      _nlPlan.open = _nlPlan.open && _nlPlan.open.id === id && _nlPlan.open.mode === 'ai' ? null : { id, mode: 'ai' };
+      nlPlanRepaint(`[data-plan-ask="${CSS.escape(id)}"]`);
+      return;
+    }
+    if ((b = q('[data-plan-edit]'))) {
+      const id = b.dataset.planEdit;
+      const shot = shots.find((x) => x.id === id);
+      if (_nlPlan.open && _nlPlan.open.id === id && _nlPlan.open.mode === 'edit') { _nlPlan.open = null; delete _nlPlan.drafts[id]; }
+      else { _nlPlan.open = { id, mode: 'edit' }; _nlPlan.drafts[id] = Object.assign({}, shot); }
+      nlPlanRepaint(`[data-plan-what="${CSS.escape(id)}"]`);
+      return;
+    }
+    if (q('[data-plan-close]')) { if (_nlPlan.open) delete _nlPlan.drafts[_nlPlan.open.id]; _nlPlan.open = null; renderChat(); return; }
+    if ((b = q('[data-plan-ask-go]'))) { nlPlanAsk(b.dataset.planAskGo); return; }
+    if ((b = q('[data-plan-sec]')) && _nlPlan.open) {
+      const d = _nlPlan.drafts[_nlPlan.open.id];
+      d.duration_target = Math.max(4, Math.min(8, (Number(d.duration_target) || 5) + Number(b.dataset.planSec)));
+      d.seconds_manual = true;
+      renderChat();
+      return;
+    }
+    if (q('[data-plan-sec-auto]') && _nlPlan.open) { _nlPlan.drafts[_nlPlan.open.id].seconds_manual = false; renderChat(); return; }
+    if ((b = q('[data-plan-item]')) && _nlPlan.open) {
+      const d = _nlPlan.drafts[_nlPlan.open.id];
+      const list = (d.items || []).slice();
+      const at = list.indexOf(b.dataset.planItem);
+      if (at >= 0) list.splice(at, 1); else list.push(b.dataset.planItem);
+      d.items = list.slice(0, 3);
+      renderChat();
+      return;
+    }
+    if ((b = q('[data-plan-save]'))) {
+      const id = b.dataset.planSave;
+      const d = _nlPlan.drafts[id];
+      if (!d || !String(d.action || '').trim()) { toast('Say what we see in this shot', 'error'); return; }
+      const n = shots.findIndex((x) => x.id === id) + 1;
+      const next = shots.map((x) => (x.id === id ? Object.assign({}, x, d) : { id: x.id }));
+      nlPlanPut(next, `Shot ${n} edited.`).then((data) => {
+        if (!data) return;
+        delete _nlPlan.drafts[id];
+        _nlPlan.open = null;
+        _nlPlan.note = null;
+        renderChat();
+      });
+      return;
+    }
+    if ((b = q('[data-plan-move]'))) {
+      const id = b.dataset.id;
+      const i = shots.findIndex((x) => x.id === id);
+      const j = i + Number(b.dataset.planMove);
+      if (i < 0 || j < 0 || j >= shots.length) return;
+      const order = shots.map((x) => ({ id: x.id }));
+      const [m] = order.splice(i, 1);
+      order.splice(j, 0, m);
+      nlPlanPut(order, `Shot ${i + 1} moved.`);
+      return;
+    }
+    if ((b = q('[data-plan-rm]'))) {
+      const id = b.dataset.planRm;
+      const n = shots.findIndex((x) => x.id === id) + 1;
+      if (_nlPlan.open && _nlPlan.open.id === id) _nlPlan.open = null;
+      nlPlanPut(shots.filter((x) => x.id !== id).map((x) => ({ id: x.id })), `Shot ${n} removed.`);
+      return;
+    }
+    if (q('[data-plan-undo]') && _nlPlan.undo) {
+      const prev = _nlPlan.undo.shots;
+      _nlPlan.note = null;
+      nlPlanPut(prev, null);
+      return;
+    }
+    if (q('[data-plan-add]')) { _nlPlan.adding = true; nlPlanRepaint('[data-plan-add-text]'); return; }
+    if (q('[data-plan-add-cancel]')) { _nlPlan.adding = false; _nlPlan.addText = ''; renderChat(); return; }
+    if (q('[data-plan-add-go]')) { nlPlanAdd(); }
+  }
+  function nlPlanInput(e) {
+    const t = e.target;
+    if (t.matches('[data-plan-ask]')) { (_nlPlan.drafts[t.dataset.planAsk] = _nlPlan.drafts[t.dataset.planAsk] || {}).ask = t.value; return; }
+    if (t.matches('[data-plan-what]')) { _nlPlan.drafts[t.dataset.planWhat].action = t.value; return; }
+    if (t.matches('[data-plan-vo]')) { _nlPlan.drafts[t.dataset.planVo].vo_line = t.value; return; }
+    if (t.matches('[data-plan-add-text]')) { _nlPlan.addText = t.value; }
+  }
+
   const NL_IDEAS = [
     'One tip our customers always ask about',
     'Behind the scenes as the team gets ready',
@@ -1827,6 +2116,8 @@
       back.textContent = editing ? 'New shot plan' : 'Back to editing';
     }
     if (editing) {
+      const lenHide = root.querySelector('[data-slot="length"]');
+      if (lenHide) lenHide.hidden = true;
       t.textContent = 'Edit your reel';
       if (sub) sub.textContent = 'Ask for any change to a shot, the voiceover, music, captions or the end card. The final rebuilds by itself.';
       hero?.classList.remove('nl-ahero--edit');
@@ -1847,6 +2138,8 @@
       return;
     }
     if (edits) edits.hidden = true;
+    const lenSlot = root.querySelector('[data-slot="length"]');
+    if (lenSlot) lenSlot.hidden = (document.querySelector('#anim-entry-mode [data-entry].active')?.dataset.entry || readAnimEntry()) !== 'prompt';
     if (send0 && (send0.textContent === 'Send')) send0.textContent = 'Write shots';
     if (ta0 && /^Ask for a change/.test(ta0.placeholder)) {
       ta0.placeholder = readAnimEntry() === 'prompt' ? PROMPT_PLACEHOLDER : VO_PLACEHOLDER;
@@ -3124,9 +3417,14 @@
       else chat.push(m);
     }
     const brief = _project?.agent_brief;
+    // New look: stay where the client is reading unless something new arrived.
+    const chatSig = `${(_project && _project.id) || ''}|${chat.length}|${(_project && _project.status) || ''}`;
+    const keepScroll = nlOn() && logEl.dataset.sig === chatSig ? logEl.scrollTop : null;
     if (nlOn()) {
       logEl.innerHTML = nlThreadHtml(chat, brief);
-      logEl.scrollTop = logEl.scrollHeight;
+      nlPlanBind(logEl);
+      logEl.dataset.sig = chatSig;
+      logEl.scrollTop = keepScroll != null ? keepScroll : logEl.scrollHeight;
     } else logEl.innerHTML = chat.map((m) => {
       const isAgent = m.role === 'agent' || m.role === 'system';
       return `<div class="anim-msg ${isAgent ? 'anim-msg--agent' : 'anim-msg--user'}">
@@ -3149,6 +3447,9 @@
             </div>
           </div>`;
         document.getElementById('anim-retry-generate')?.addEventListener('click', acceptBrief);
+      } else if (_project?.status === 'brief_ready' && brief && nlOn()) {
+        // New look: the plan lives in the thread's Shot plan section, editable there.
+        actions.innerHTML = '';
       } else if (_project?.status === 'brief_ready' && brief) {
         const lines = (brief.shots || []).map((s, i) => {
           const line = customerShotLine(s) || s.title || `Shot ${i + 1}`;
@@ -3185,7 +3486,7 @@
         actions.innerHTML = '';
       }
     }
-    logEl.scrollTop = logEl.scrollHeight;
+    if (!nlOn()) logEl.scrollTop = logEl.scrollHeight;
     if (document.documentElement.classList.contains('nl')) {
       try { nlAnimLayout(false); } catch (e) { console.warn('[animate] new look layout', e); }
     }
@@ -3292,7 +3593,10 @@
         briefBody.prompt = null;
       } else {
         briefBody.prompt = text;
+        const len = document.getElementById('anim-length');
+        if (len && nlOn()) briefBody.length_seconds = Number(len.value) || 15;
       }
+      if (nlOn()) nlPlanReset();
       const data = await animFetch(`/api/animation/projects/${_project.id}/brief`, {
         method: 'POST',
         body: JSON.stringify(briefBody),
