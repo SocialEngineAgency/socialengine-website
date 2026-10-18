@@ -201,6 +201,7 @@
       p.last_burned_caption_style?.burned_at || '', p.last_assemble_summary || '',
       (p.final_history || []).length, _captionStudioOpen ? 1 : 0, scenes,
       (p.chat || []).length, p.editing_started_at || '', p.vo_script || '',
+      p.caption_script || '', p.captions_out_of_date ? 1 : 0,
       JSON.stringify(p.story_brief || p.agent_brief?.story_brief || null),
     ]);
   }
@@ -210,6 +211,20 @@
   const _shotPromptDrafts = Object.create(null);
   /** Caption style draft — survives canvas remounts so Rebuild burns what you picked. */
   let _captionStyleDraft = null;
+  /** Unsaved voiceover words, change request and caption words, per project: they survive
+   *  every redraw (polls, checks landing) until they are saved. */
+  let _voDraft = null;
+  let _voDirDraft = null;
+  let _capDraft = null;
+  const draftFor = (d, p) => (d && p && d.pid === p.id ? d.text : null);
+  /** The voiceover as saved, and as the box shows it (an unsaved edit wins). */
+  function voSaved(p) { return String((p && (p.vo_script || p.agent_brief?.vo_script)) || ''); }
+  function voText(p) { const d = draftFor(_voDraft, p); return d != null ? d : voSaved(p); }
+  function voDirty(p) { const d = draftFor(_voDraft, p); return d != null && d.trim() !== voSaved(p).trim(); }
+  /** The caption words: the client's own when set, else the voice's words. */
+  function capSaved(p) { return String((p && p.caption_source === 'client' && p.caption_script) || ''); }
+  function capText(p) { const d = draftFor(_capDraft, p); return d != null ? d : (capSaved(p) || String((p && p.caption_script) || '') || voText(p)); }
+  function capDirty(p) { const d = draftFor(_capDraft, p); return d != null && d.trim() !== (capSaved(p) || voText(p)).trim(); }
   /** Composer story choice (type + why) — sent with Write shots. */
   let _storyDraft = { story_type: '', motivator: '', barrier: '', benefit: '', message: '' };
   /** Arc edits on the canvas — survive poll remounts until saved. */
@@ -653,6 +668,7 @@
   }
 
   function captionCuesForPreview() {
+    if (Array.isArray(_project?.caption_words) && _project.caption_words.length) return _project.caption_words;
     if (Array.isArray(_project?.caption_cues) && _project.caption_cues.length) return _project.caption_cues;
     // On-video words follow spoken VO only — never the social/post caption.
     const text = document.getElementById('anim-vo-script')?.value
@@ -944,6 +960,8 @@
         body: JSON.stringify(body),
       });
       if (data.project) _project = data.project;
+      // The words in the boxes went with it: they are saved now.
+      if (_voDraft && _voDraft.pid === _project.id && !voDirty(_project)) _voDraft = null;
     } catch (e) {
       toast(e.message || 'Could not save motion settings', 'error', e.request_id);
     }
@@ -2384,8 +2402,8 @@
         state: p.vo_script ? 'Ready' : 'Not written',
         sum: vo ? `“${vo.length > 110 ? vo.slice(0, 108).trim() + '…' : vo}”` : 'Write the script, or let AI write one from your shots.' },
       { key: 'captions', title: 'Captions', icon: NL_I.cc, flag: 'anim-flag-captions', on: f.captions, ready: !!p.last_burned_caption_style,
-        state: p.last_burned_caption_style ? 'Styled' : 'Style it',
-        sum: `Word by word, timed to the voiceover.${cap && cap.preset_id ? ` Style: ${cap.preset_id}.` : ''}` },
+        state: p.captions_out_of_date ? 'Check words' : (p.last_burned_caption_style ? 'Styled' : 'Style it'),
+        sum: `${p.caption_source === 'client' && p.caption_script ? 'Your own words, timed to the voiceover.' : 'Word by word, timed to the voiceover.'}${cap && cap.preset_id ? ` Style: ${cap.preset_id}.` : ''}` },
       { key: 'music', title: 'Music', icon: NL_I.music, flag: 'anim-flag-music', on: f.music, ready: !!p.music_bed_url,
         state: p.music_bed_url ? 'Ready' : 'Not added',
         sum: p.music_prompt ? String(p.music_prompt) : (p.music_bed_url ? 'Music bed attached. It sits under the voice.' : 'Make a bed from a prompt, or pick or upload one.') },
@@ -2507,7 +2525,7 @@
         fade_out: sec(p && p.music_fade_out_sec, NL_TL_MAX.fade),
         loop: !!(p && p.music_loop === true),
       },
-      captions: { on: a.captions !== false },
+      captions: { on: a.captions !== false, text: p && p.caption_source === 'client' ? String(p.caption_script || '') : '' },
     };
   }
 
@@ -2527,10 +2545,11 @@
   }
 
   /** Caption lines, timed from the voice's own start: real word timings when they match. */
-  function nlCapChunks(p, script, voSecs) {
+  function nlCapChunks(p, script, voSecs, { voice = false } = {}) {
     const per = Math.max(1, Math.min(10, Number((p.last_burned_caption_style || p.caption_style || {}).words_per_line) || 4));
     const same = String(script || '').trim() === String(p.vo_script || '').trim();
-    const cues = same && Array.isArray(p.caption_cues) ? p.caption_cues.filter((c) => c && c.text) : [];
+    const timed = !voice && Array.isArray(p.caption_words) && p.caption_words.length ? p.caption_words : p.caption_cues;
+    const cues = same && Array.isArray(timed) ? timed.filter((c) => c && c.text) : [];
     const out = [];
     if (cues.length) {
       for (let i = 0; i < cues.length; i += per) {
@@ -2789,7 +2808,7 @@
       : `<span class="nl-atl__empty">No script yet</span>`;
     // Captions track (follows the voice)
     const capOn = au.captions.on && au.vo.on;
-    const caps = voScript ? nlCapChunks(p, voScript, voSecs) : [];
+    const caps = tl.capLines || (voScript ? nlCapChunks(p, voScript, voSecs, { voice: !!tl.capFromVoice }) : []);
     const capBlocks = caps.length
       ? caps.map((c) => `<span class="nl-tle__cap" data-rel="${c.a.toFixed(3)}" data-relb="${c.b.toFixed(3)}" style="left:${pct(voFrom + c.a)};width:${pct(Math.max(voFrom + c.a + 0.2, Math.min(total, voFrom + c.b)) - (voFrom + c.a))}" title="${esc(c.text)}">${esc(c.text)}</span>`).join('')
       : `<span class="nl-atl__empty">Follow the voiceover</span>`;
@@ -2860,13 +2879,24 @@
       </div>` : `
       <div class="nl-tle__insp" data-insp="music"><span class="nl-tle__it">Music</span><span class="nl-tle__note">No music bed yet.</span><span class="nl-grow"></span><button type="button" class="nl-abtn nl-abtn--sm" data-tl-lane="Music">Add music</button></div>`;
     } else if (tl.track === 'cap') {
+      // Each caption line, editable in place. The lines keep their times while you type;
+      // saving lines the new words up with the voice again.
+      if (!tl.capLines) tl.capLines = caps.map((c) => ({ text: c.text, a: c.a, b: c.b }));
+      const own = !!String(au.captions.text || '').trim();
       inspector = `
-      <div class="nl-tle__insp" data-insp="cap">
-        <span class="nl-tle__it">Captions</span>
-        ${sw('captions.on', au.captions.on, 'On')}
-        <span class="nl-tle__note">${au.vo.on ? 'Word by word, timed to the voice. They move with it.' : 'Captions need the voiceover on.'}</span>
-        <span class="nl-grow"></span>
-        <button type="button" class="nl-abtn nl-abtn--sm" data-tl-lane="Captions">Style captions</button>
+      <div class="nl-tle__insp nl-tle__insp--cap" data-insp="cap">
+        <div class="nl-tle__irow">
+          <span class="nl-tle__it">Captions</span>
+          ${sw('captions.on', au.captions.on, 'On')}
+          <span class="nl-tle__note">${au.vo.on ? (own ? 'Your own words, timed to the voice.' : 'Timed to the voice, word by word.') : 'Captions need the voiceover on.'}</span>
+          <span class="nl-grow"></span>
+          ${own ? '<button type="button" class="nl-abtn nl-abtn--sm" data-tl-cap="match">Match the voiceover</button>' : ''}
+          <button type="button" class="nl-abtn nl-abtn--sm" data-tl-lane="Captions">Style captions</button>
+        </div>
+        ${tl.capLines.length ? `<ol class="nl-tle__caplines">${tl.capLines.map((l, i) => `
+          <li class="nl-tle__capline"><span class="nl-tle__captime">${nlClock(voFrom + l.a)}</span><input type="text" data-cap-line="${i}" value="${esc(l.text)}" aria-label="Caption line ${i + 1}, at ${nlClock(voFrom + l.a)}"></li>`).join('')}
+        </ol>` : '<p class="nl-tle__note">No captions yet. Write the voiceover first.</p>'}
+        <p class="nl-tle__note">Change what a line says without changing the voice, like OPA on screen while the voice says O P A. Saving rebuilds the final.</p>
       </div>`;
     } else {
       const sel = tl.sel ? byId[tl.sel] : null;
@@ -2944,6 +2974,24 @@
     el.querySelectorAll('[data-tl-lane]').forEach((b) => b.addEventListener('click', () => nlOpenLane(b.dataset.tlLane)));
     el.querySelectorAll('[data-tl-play]').forEach((b) => b.addEventListener('click', () => nlTlPlay(b.dataset.tlPlay, el)));
     el.querySelector('.nl-tle__alane--cap')?.addEventListener('click', () => { if (tl.track !== 'cap') { tl.track = 'cap'; rerender(); } });
+    // Caption lines: typing changes the words (the voice is not touched).
+    el.querySelectorAll('[data-cap-line]').forEach((inp) => inp.addEventListener('input', () => {
+      const i = Number(inp.dataset.capLine);
+      if (!tl.capLines || !tl.capLines[i]) return;
+      tl.capLines[i].text = inp.value;
+      const joined = tl.capLines.map((l) => String(l.text || '').trim()).filter(Boolean).join(' ');
+      const voice = String(tl.audio.vo.script || '').trim();
+      tl.audio.captions.text = joined === voice ? '' : joined;
+      const chip = el.querySelectorAll('.nl-tle__cap')[i];
+      if (chip) { chip.textContent = inp.value; chip.title = inp.value; }
+      refreshSave();
+    }));
+    el.querySelector('[data-tl-cap="match"]')?.addEventListener('click', () => {
+      tl.audio.captions.text = '';
+      tl.capLines = null;
+      tl.capFromVoice = true;
+      rerender();
+    });
 
     // Audio settings: switches, numbers, volume sliders and the script.
     const setA = (path, v) => {
@@ -2965,6 +3013,8 @@
       } else if (inp.tagName === 'TEXTAREA') {
         inp.addEventListener('input', () => {
           setA(path, inp.value.trim());
+          // Captions that follow the voice follow its new words too.
+          if (path === 'vo.script' && !String(tl.audio.captions.text || '').trim()) tl.capLines = null;
           refreshSave();
           // The recording only matches the words it was made from.
           const pb = el.querySelector('[data-tl-play="vo"]');
@@ -3506,10 +3556,19 @@
             </div>
 
             <div class="anim-lane" data-lane="vo" ${(_assembleTab || 'vo') === 'vo' ? '' : 'hidden'}>
-              <textarea id="anim-vo-script" class="anim-brief-edit anim-lane__primary" placeholder="Spoken script — plain text only. Edit anytime…">${esc(p.vo_script || p.agent_brief?.vo_script || '')}</textarea>
+              <textarea id="anim-vo-script" class="anim-brief-edit anim-lane__primary" placeholder="What the voice says. Plain text, edit any time.">${esc(voText(p))}</textarea>
+              <div class="anim-vo-save">
+                <span class="anim-vo-save__state" id="anim-vo-state">${voDirty(p) ? 'Not saved' : (voSaved(p).trim() ? 'Saved' : '')}</span>
+                <button type="button" class="anim-btn ${voDirty(p) ? 'is-lit' : 'anim-btn--ghost'}" id="anim-vo-save" ${voDirty(p) ? '' : 'disabled'}>Save</button>
+              </div>
+              <div class="anim-vo-tweak">
+                <textarea id="anim-vo-direction" class="anim-brief-edit" rows="2" placeholder="${voSaved(p).trim() ? 'Describe your changes, like shorter, warmer, or end with a soft ask' : 'Describe the voiceover you want, or leave blank to write one from the shots'}">${esc(draftFor(_voDirDraft, p) != null ? draftFor(_voDirDraft, p) : '')}</textarea>
+                ${voSaved(p).trim()
+                  ? `<button type="button" class="anim-btn ${String(draftFor(_voDirDraft, p) || '').trim() ? 'is-lit' : 'anim-btn--ghost'}" id="anim-vo-generate" ${String(draftFor(_voDirDraft, p) || '').trim() ? '' : 'disabled'}>Tweak</button>`
+                  : '<button type="button" class="anim-btn is-lit" id="anim-vo-generate">Write it</button>'}
+              </div>
               <div class="anim-lane__actions">
-                <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-generate">${p.vo_script ? 'Apply tweak' : 'Generate'}</button>
-                ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" title="New script from shots + direction">Fresh</button>
+                ${p.vo_script ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-regen-fresh" title="Write a new script from the shots and your note">Fresh</button>
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-keep" title="Remember as a winner">Keep</button>
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-vo-reject" title="Avoid this pattern">Skip</button>` : ''}
                 <label class="anim-vol anim-vol--inline">
@@ -3518,14 +3577,19 @@
                   <span id="anim-vo-volume-val">${Math.round((p.vo_volume == null ? 1 : Number(p.vo_volume)) * 100)}%</span>
                 </label>
               </div>
-              <details class="anim-lane__more">
-                <summary>AI direction</summary>
-                <textarea id="anim-vo-direction" class="anim-brief-edit" placeholder="e.g. shorter, faster pace, warm pride — soft CTA">${esc(p.vo_direction || '')}</textarea>
-              </details>
             </div>
 
             <div class="anim-lane" data-lane="captions" ${(_assembleTab || 'vo') === 'captions' ? '' : 'hidden'}>
-              <p class="anim-lane__hint" style="margin:0 0 8px;">On-video words follow the Voiceover script when Captions + VO are on. Style only here — no separate caption box.</p>
+              <label class="anim-cap-words"><span>What the captions say</span>
+                <textarea id="anim-cap-words" class="anim-brief-edit" rows="3" placeholder="The captions show the voiceover's words">${esc(capText(p))}</textarea>
+              </label>
+              <p class="anim-lane__hint" style="margin:6px 0 8px;">Change the words on screen without changing the voice, like OPA on screen while the voice says O P A. They stay timed to the voice.</p>
+              ${p.captions_out_of_date ? '<p class="anim-lane__warn" id="anim-cap-stale">These caption words were written for an earlier voiceover. Check them, or match the voiceover.</p>' : ''}
+              <div class="anim-vo-save">
+                <span class="anim-vo-save__state" id="anim-cap-state">${capDirty(p) ? 'Not saved' : (capSaved(p) ? 'Your own words' : 'Following the voiceover')}</span>
+                ${capSaved(p) || capDirty(p) ? '<button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-match">Match the voiceover</button>' : ''}
+                <button type="button" class="anim-btn ${capDirty(p) ? 'is-lit' : 'anim-btn--ghost'}" id="anim-cap-words-save" ${capDirty(p) ? '' : 'disabled'}>Save</button>
+              </div>
               <div class="anim-lane__actions">
                 <button type="button" class="anim-btn anim-btn--ghost" id="anim-cap-open">${_captionStudioOpen ? 'Style ✓' : 'Style captions'}</button>
               </div>
@@ -3643,6 +3707,7 @@
       });
     });
     document.getElementById('anim-vo-generate')?.addEventListener('click', () => generateVoScript({ revise: true }));
+    bindVoAndCaptionWords();
     document.getElementById('anim-vo-regen-fresh')?.addEventListener('click', () => generateVoScript({ revise: false }));
     document.getElementById('anim-vo-keep')?.addEventListener('click', () => rateVoScript('accept'));
     document.getElementById('anim-vo-reject')?.addEventListener('click', () => rateVoScript('reject'));
@@ -4456,10 +4521,70 @@
     }
   }
 
+  /** The Save buttons and the Tweak button light up when there is something to do. */
+  function paintWordButtons() {
+    const p = _project;
+    if (!p) return;
+    const vs = document.getElementById('anim-vo-save');
+    const vst = document.getElementById('anim-vo-state');
+    if (vs) { const d = voDirty(p); vs.disabled = !d; vs.classList.toggle('is-lit', d); vs.classList.toggle('anim-btn--ghost', !d); }
+    if (vst) vst.textContent = voDirty(p) ? 'Not saved' : (voSaved(p).trim() ? 'Saved' : '');
+    const tw = document.getElementById('anim-vo-generate');
+    if (tw && voSaved(p).trim()) {
+      const has = !!String(document.getElementById('anim-vo-direction')?.value || '').trim();
+      tw.disabled = !has || _busy;
+      tw.classList.toggle('is-lit', has);
+      tw.classList.toggle('anim-btn--ghost', !has);
+    }
+    const cs = document.getElementById('anim-cap-words-save');
+    const cst = document.getElementById('anim-cap-state');
+    if (cs) { const d = capDirty(p); cs.disabled = !d; cs.classList.toggle('is-lit', d); cs.classList.toggle('anim-btn--ghost', !d); }
+    if (cst) cst.textContent = capDirty(p) ? 'Not saved' : (capSaved(p) ? 'Your own words' : 'Following the voiceover');
+  }
+
+  function bindVoAndCaptionWords() {
+    const p = _project;
+    if (!p) return;
+    const vo = document.getElementById('anim-vo-script');
+    vo?.addEventListener('input', () => { _voDraft = { pid: p.id, text: vo.value }; paintWordButtons(); });
+    const dir = document.getElementById('anim-vo-direction');
+    dir?.addEventListener('input', () => { _voDirDraft = { pid: p.id, text: dir.value }; paintWordButtons(); });
+    dir?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && dir.value.trim()) { e.preventDefault(); generateVoScript({ revise: true }); }
+    });
+    document.getElementById('anim-vo-save')?.addEventListener('click', () => saveWords({ vo: true }));
+    const cap = document.getElementById('anim-cap-words');
+    cap?.addEventListener('input', () => { _capDraft = { pid: p.id, text: cap.value }; paintWordButtons(); });
+    document.getElementById('anim-cap-words-save')?.addEventListener('click', () => saveWords({ captions: true }));
+    document.getElementById('anim-cap-match')?.addEventListener('click', () => saveWords({ captions: true, match: true }));
+    paintWordButtons();
+  }
+
+  /** Save the voiceover words and/or the caption words now, without rebuilding. */
+  async function saveWords({ vo = false, captions = false, match = false } = {}) {
+    const p = _project;
+    if (!p?.id) return;
+    const body = {};
+    if (vo) body.vo_script = voText(p);
+    if (captions) body.caption_script = match ? '' : capText(p);
+    try {
+      const data = await animFetch(`/api/animation/projects/${p.id}/settings`, { method: 'POST', body: JSON.stringify(body) });
+      if (data.project) _project = data.project;
+      if (vo) _voDraft = null;
+      if (captions) _capDraft = null;
+      renderCanvas();
+      toast(captions
+        ? (match ? 'Captions follow the voiceover again. Rebuild to see them.' : 'Caption words saved. Rebuild to see them in the video.')
+        : 'Voiceover saved. Rebuild to record it.', 'success');
+    } catch (e) {
+      toast(e.message || 'Could not save', 'error', e.request_id);
+    }
+  }
+
   async function generateVoScript({ revise = true } = {}) {
     if (!_project?.id || _busy) return;
     const direction = String(document.getElementById('anim-vo-direction')?.value || '').trim();
-    const current = String(document.getElementById('anim-vo-script')?.value || _project.vo_script || '').trim();
+    const current = String(document.getElementById('anim-vo-script')?.value || voText(_project) || '').trim();
     const useDraft = revise && !!current;
     _busy = true;
     const btn = document.getElementById('anim-vo-generate');
@@ -4482,6 +4607,9 @@
       if (data.vo_script) _project.vo_script = data.vo_script;
       if (data.vo_direction != null) _project.vo_direction = data.vo_direction;
       else _project.vo_direction = direction;
+      // The new words replace the box; the change request is done.
+      _voDraft = null;
+      _voDirDraft = null;
       renderCanvas();
       const visionHint = data.vision_count ? ` · saw ${data.vision_count} keyframe${data.vision_count === 1 ? '' : 's'}` : '';
       toast(`${data.revised ? 'VO tweaked' : 'VO ready'}${visionHint} — edit more or Rebuild final`, 'success');
@@ -4607,9 +4735,8 @@
           // Only send style when burning — avoids any "style present ⇒ burn" coupling.
           ...(flags.captions ? { caption_style: style } : {}),
           caption_text: '',
-          vo_script: document.getElementById('anim-vo-script')?.value
-            || _project.vo_script
-            || '',
+          vo_script: voText(_project) || '',
+          ...(capDirty(_project) ? { caption_script: capText(_project) } : {}),
           music_volume: document.getElementById('anim-music-volume')
             ? Math.max(0, Math.min(1, Number(document.getElementById('anim-music-volume').value) / 100))
             : (_project.music_volume ?? 0.18),
@@ -4625,6 +4752,8 @@
       }
       // Keep the open project — never bounce to Home while assemble runs.
       _project = data.project || _project;
+      _voDraft = null;
+      _capDraft = null;
       _project.status = _project.status || 'assembling';
       renderCanvas();
       renderChat();
