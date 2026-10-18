@@ -924,6 +924,15 @@ html.nl .studio-modal.nl-inline .studio-modal__meta-row { padding-right: 40px; }
 html.nl .studio-modal__caption-label { font: 500 11.5px var(--nl-body) !important; color: var(--nl-fg3) !important; text-transform: none !important; letter-spacing: 0 !important; }
 html.nl .studio-modal__caption-area { background: var(--nl-s2) !important; border: 1px solid var(--nl-line-strong) !important; border-radius: 9px !important; color: var(--nl-fg) !important; font: 400 13px/1.55 var(--nl-body) !important; max-height: 220px; }
 html.nl .studio-modal__caption-hint { color: var(--nl-fg3) !important; font-size: 11.5px !important; }
+/* A caption for each platform (TikTok, ...) under the main caption */
+html.nl .se-platcap { border: 1px solid var(--nl-line) !important; background: transparent !important; }
+html.nl .se-platcap__state { font: 500 11px var(--nl-body) !important; }
+html.nl .se-platcap__state--ok { color: var(--nl-ok) !important; }
+html.nl .se-platcap__state--warn { color: var(--nl-warn) !important; }
+html.nl .se-platcap__state--muted { color: var(--nl-fg3) !important; }
+html.nl .se-platcap__write { background: var(--nl-s3) !important; border: 1px solid var(--nl-line-strong) !important; color: var(--nl-fg) !important; font: 600 11.5px var(--nl-body) !important; border-radius: 7px !important; padding: 4px 10px !important; }
+html.nl .se-platcap__write.is-lit { background: var(--nl-signal) !important; color: var(--nl-signal-ink) !important; border-color: transparent !important; box-shadow: 0 0 0 3px var(--nl-signal-soft); }
+html.nl .se-platcap__write:disabled { opacity: .6; cursor: default !important; }
 html.nl .studio-modal__actions { border-top: 1px solid var(--nl-line) !important; gap: 6px !important; }
 html.nl .studio-modal__btn { height: 36px; padding: 0 14px !important; border-radius: 9px !important; font: 500 13px var(--nl-body) !important; background: transparent !important; border: 1px solid var(--nl-line-strong) !important; color: var(--nl-fg) !important; transform: none !important; box-shadow: none !important; }
 html.nl .studio-modal__btn--approve { flex: 1 1 auto; justify-content: center; background: var(--nl-primary-bg) !important; color: var(--nl-primary-fg) !important; border-color: transparent !important; font-weight: 600 !important; }
