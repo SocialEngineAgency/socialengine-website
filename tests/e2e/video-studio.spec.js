@@ -72,3 +72,49 @@ test('Library lists a saved Video Studio export as a video', async ({ page }) =>
   await expect(page.locator('#brand-library [data-asset-kind="ast_vid1"]')).toHaveValue('video');
   await expect(page.locator('#brand-library-kind, #brand-lib-kind option[value="video"]')).toHaveCount(1);
 });
+
+// A finished reel goes to the studio with the pass, so it opens as its pieces.
+const reel = {
+  id: 'proj_vs', status: 'ready', mode: 'video', look: 'stylized', agent_brief: { title: 'Autumn run', shots: [{ action: 'Run' }, { action: 'Park' }] },
+  final_url: 'https://store.test/final.mp4', vo_script: 'Stay active this autumn.',
+  pipeline: { assemble: { vo: true, captions: true, music: true, outro: false } },
+  scenes: [1, 2].map((i) => ({ id: `s${i}`, order: i, status: 'ready', duration_target: 5, video_sec: 5, video_url: `https://store.test/s${i}.mp4`, keyframe_url: `https://store.test/k${i}.png`, action: `Shot ${i}` })),
+  chat: [{ role: 'user', text: 'An autumn run' }],
+};
+
+async function openReel(page, calls) {
+  await page.route('https://store.test/**', (r) => r.fulfill({ status: 404, body: '' }));
+  await mockApi(page, srv.base, { animProjects: [reel], onRequest: passMock({ calls }) });
+  await stubStudio(page);
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await page.click('[data-open-project="proj_vs"]');
+}
+
+test('Reels: Edit in Video Studio opens the studio with this reel', async ({ page }) => {
+  const errors = watchErrors(page);
+  const calls = [];
+  await openReel(page, calls);
+  const edit = page.locator('#anim-edit-studio');
+  await expect(edit).toBeVisible();
+  await expect(edit).toHaveText('Edit in Video Studio');
+  const [tab] = await Promise.all([page.waitForEvent('popup'), edit.click()]);
+  await expect.poll(() => tab.url()).toBe(`${STUDIO}/#se_pass=pass-abc&se_reel=proj_vs`);
+  expect(calls).toHaveLength(1);
+  expect(errors).toEqual([]);
+});
+
+test('Create bar: the Video Studio button takes the reel on screen, and nothing from other tabs', async ({ page }) => {
+  const calls = [];
+  await openReel(page, calls);
+  await expect(page.locator('#anim-edit-studio')).toBeVisible();
+  let [tab] = await Promise.all([page.waitForEvent('popup'), page.click('#create-open-video-studio')]);
+  await expect.poll(() => tab.url()).toBe(`${STUDIO}/#se_pass=pass-abc&se_reel=proj_vs`);
+  await tab.close();
+
+  await page.click('.create-seg[data-segment="design-studio"]');
+  [tab] = await Promise.all([page.waitForEvent('popup'), page.click('#create-open-video-studio')]);
+  await expect.poll(() => tab.url()).toBe(`${STUDIO}/#se_pass=pass-abc`);
+});

@@ -3651,6 +3651,7 @@
                   : ''
               }`;
             })() : ''}
+            ${readyShotUrls.length && p.final_url && p.status !== 'assembling' ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-edit-studio" title="Opens in a new tab with each shot, the voiceover, music and captions on their own tracks">Edit in Video Studio</button>` : ''}
             ${p.content_record_id && !p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review">Open in Content Review</button>` : ''}
             ${p.content_record_id && p.persist_warning ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-open-review" title="Final may not be durable">Open in Content Review</button>` : ''}
             ${readyShotUrls.length && p.final_url ? `<button type="button" class="anim-btn anim-btn--ghost" id="anim-send-new-review" title="Mint a new Pending card even if one already exists">Send new to Review</button>` : ''}
@@ -3940,6 +3941,9 @@
     document.getElementById('anim-approve-character')?.addEventListener('click', approveCharacter);
     document.getElementById('anim-rebuild-final')?.addEventListener('click', () => rebuildFinal());
     document.getElementById('anim-send-new-review')?.addEventListener('click', () => rebuildFinal({ forceNewContent: true }));
+    document.getElementById('anim-edit-studio')?.addEventListener('click', () => {
+      if (_project && typeof window.openVideoStudio === 'function') window.openVideoStudio({ reel: _project.id });
+    });
     document.getElementById('anim-open-review')?.addEventListener('click', () => {
       document.querySelector('[data-nav="content"]')?.click();
     });
@@ -5111,6 +5115,14 @@
     return true;
   }
   window.applyAnimCoachCreateSessionIfAny = applyAnimCoachCreateSessionIfAny;
+
+  /** The reel on screen, when it has a final: the Video Studio button opens it as its pieces. */
+  window.animReelForVideoStudio = function animReelForVideoStudio() {
+    const shell = document.querySelector('.anim-shell');
+    const p = _project;
+    if (!shell || !shell.isConnected || !p || !p.id || !p.final_url) return '';
+    return (p.scenes || []).some((s) => s && s.video_url && s.status === 'ready') ? p.id : '';
+  };
 
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
     window.__clientData = data || window.__clientData || window.clientData;

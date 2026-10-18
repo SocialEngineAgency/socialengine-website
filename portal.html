@@ -37,7 +37,7 @@
   <script src="./design-studio-v2.js?v=20261011j" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
-  <script src="./animation-studio.js?v=20261018vw2" defer></script>
+  <script src="./animation-studio.js?v=20261018vs2" defer></script>
   <script src="./story-builder.js?v=20261018vw1" defer></script>
   <script src="./analytics-cockpit.js?v=20261016-daily" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
@@ -3549,14 +3549,20 @@
 
     // The Video Studio is its own site. A one-time pass (60 s) carries the login
     // across in the URL fragment; the tab is opened inside the click (Safari blocks later opens).
+    // With a reel open in Reels or Storyboard, the reel goes too (#se_reel): the studio opens
+    // it as one project with each shot, the voiceover, music and captions on separate tracks.
     const VIDEO_STUDIO_URL = 'https://socialengine-video.netlify.app/';
-    async function openVideoStudio() {
+    async function openVideoStudio(opts) {
       const tab = window.open('about:blank', '_blank');
+      let reel = (opts && opts.reel) || '';
+      if (!reel && !(opts && opts.blank) && typeof window.animReelForVideoStudio === 'function') {
+        try { reel = window.animReelForVideoStudio() || ''; } catch (_) { reel = ''; }
+      }
       try {
         const res = await apiFetch('/api/video-studio/pass', { method: 'POST' });
         const d = await res.json().catch(() => ({}));
         if (!res.ok || !d.code) throw new Error(d.error || 'Could not open the Video Studio');
-        const url = `${VIDEO_STUDIO_URL}#se_pass=${encodeURIComponent(d.code)}`;
+        const url = `${VIDEO_STUDIO_URL}#se_pass=${encodeURIComponent(d.code)}${reel ? `&se_reel=${encodeURIComponent(reel)}` : ''}`;
         if (tab) { tab.opener = null; tab.location.href = url; } else window.location.href = url;
       } catch (e) {
         if (tab) tab.close();
