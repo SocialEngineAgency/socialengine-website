@@ -715,6 +715,15 @@ html.nl .nl-shot__st[data-check="warn"] { color: var(--nl-warn); }
 html.nl .nl-shot__chk { display: flex; align-items: flex-start; gap: 5px; margin: 0; padding: 0 4px; font: 400 11.5px/1.4 var(--nl-body); color: var(--nl-fg3); }
 html.nl .nl-shot__chk svg { flex: 0 0 auto; margin-top: 2px; }
 html.nl .nl-shot__chk--warn { color: var(--nl-warn); }
+html.nl .nl-shotchk { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; padding: 9px 11px; border: 1px solid var(--nl-line); border-radius: 9px; background: var(--nl-s2); font: 400 12px/1.45 var(--nl-body); color: var(--nl-fg3); }
+html.nl .nl-shotchk > i, html.nl .nl-shotchk__h > i { flex: 0 0 auto; margin-top: 5px; }
+html.nl .nl-shotchk--checking, html.nl .nl-shotchk--redoing, html.nl .nl-shotchk--skipped { flex-direction: row; align-items: flex-start; gap: 8px; }
+html.nl .nl-shotchk__h { display: flex; align-items: flex-start; gap: 8px; }
+html.nl .nl-shotchk__h b { color: var(--nl-fg); font-weight: 600; }
+html.nl .nl-shotchk--flagged .nl-shotchk__h b { color: var(--nl-warn); }
+html.nl .nl-shotchk__list { margin: 0; padding: 0 0 0 15px; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+html.nl .nl-shotchk__list b { color: var(--nl-fg2); font-weight: 500; margin-right: 4px; }
+html.nl .nl-shotchk__err { margin: 0; padding-left: 15px; color: var(--nl-fg4); }
 html.nl .nl-shot__takes { font: 400 10.5px var(--nl-mono); color: var(--nl-fg3); }
 html.nl .nl-shot__what { margin: 0; padding: 0 4px; font: 400 12px/1.4 var(--nl-body); color: var(--nl-fg2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 html.nl .nl-ashots__grid .anim-add-scene-wrap { flex: 0 0 120px; margin: 0 !important; display: flex; flex-direction: column; gap: 6px; }
