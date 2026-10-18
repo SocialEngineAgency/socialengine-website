@@ -1325,6 +1325,8 @@
     x: 'M6 6l12 12 M18 6L6 18',
     left: 'M15 6l-6 6 6 6',
     right: 'M9 6l6 6-6 6',
+    play: 'M8 5.5v13l10.5-6.5z',
+    stop: 'M7 7h10v10H7z',
   };
   const nlSvg = (d, size = 13, sw = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
   function nlOn() { return document.documentElement.classList.contains('nl'); }
@@ -2423,38 +2425,116 @@
     sec.remove();
   }
 
+  /* ── Audio on the timeline: where the voice and the bed sit, as the final is mixed ── */
+
+  const NL_TL_MAX = { voStart: 10, musicStart: 30, musicIn: 300, fade: 5 };
+  const nlR1 = (n) => Math.round(Number(n) * 10) / 10;
+
+  /** The audio settings the final is mixed with (same defaults as the server). */
+  function nlAudioOf(p) {
+    const a = (p && p.pipeline && p.pipeline.assemble) || {};
+    const sec = (v, max) => { const x = Number(v); return Number.isFinite(x) && x > 0 ? nlR1(Math.min(max, x)) : 0; };
+    const vol = (v, d) => { const x = Number(v); return v == null || v === '' || !Number.isFinite(x) ? d : Math.round(Math.max(0, Math.min(1, x)) * 100) / 100; };
+    const voOn = a.vo !== false;
+    return {
+      vo: { on: voOn, start: sec(p && p.vo_start_sec, NL_TL_MAX.voStart), volume: vol(p && p.vo_volume, 1), script: String((p && (p.vo_script || p.agent_brief?.vo_script)) || '').trim() },
+      music: {
+        on: a.music !== false,
+        start: sec(p && p.music_start_sec, NL_TL_MAX.musicStart),
+        in: sec(p && p.music_in_sec, NL_TL_MAX.musicIn),
+        volume: vol(p && p.music_volume, voOn ? 0.18 : 0.28),
+        fade_in: sec(p && p.music_fade_in_sec, NL_TL_MAX.fade),
+        fade_out: sec(p && p.music_fade_out_sec, NL_TL_MAX.fade),
+        loop: !!(p && p.music_loop === true),
+      },
+      captions: { on: a.captions !== false },
+    };
+  }
+
+  /** Seconds of speech: the recording when the words match it, else an estimate. */
+  function nlVoSecs(p, script, probed) {
+    const same = String(script || '').trim() === String(p.vo_script || '').trim();
+    if (same) {
+      if (probed > 0) return probed;
+      const cues = Array.isArray(p.caption_cues) ? p.caption_cues : [];
+      const end = cues.reduce((m, c) => Math.max(m, Number(c && c.end) || 0), 0);
+      if (end > 0) return end;
+      if (Number(p.vo_audit && p.vo_audit.spoken_sec) > 0) return Number(p.vo_audit.spoken_sec);
+    }
+    const words = String(script || '').trim().split(/\s+/).filter(Boolean).length;
+    const wps = Number(p.vo_pace_wps) > 1 ? Number(p.vo_pace_wps) : 2.5;
+    return words ? words / wps : 0;
+  }
+
+  /** Caption lines, timed from the voice's own start: real word timings when they match. */
+  function nlCapChunks(p, script, voSecs) {
+    const per = Math.max(1, Math.min(10, Number((p.last_burned_caption_style || p.caption_style || {}).words_per_line) || 4));
+    const same = String(script || '').trim() === String(p.vo_script || '').trim();
+    const cues = same && Array.isArray(p.caption_cues) ? p.caption_cues.filter((c) => c && c.text) : [];
+    const out = [];
+    if (cues.length) {
+      for (let i = 0; i < cues.length; i += per) {
+        const g = cues.slice(i, i + per);
+        out.push({ text: g.map((c) => c.text).join(' '), a: Number(g[0].start) || 0, b: Number(g[g.length - 1].end) || 0 });
+      }
+    } else {
+      const words = String(script || '').split(/\s+/).filter(Boolean);
+      const n = Math.ceil(words.length / per);
+      const span = Math.max(0.6, voSecs) / Math.max(1, n);
+      for (let i = 0; i < n; i++) out.push({ text: words.slice(i * per, (i + 1) * per).join(' '), a: i * span, b: (i + 1) * span - 0.12 });
+    }
+    return out.slice(0, 60);
+  }
+
+  /** Where the music bed plays on a timeline of `total` seconds. */
+  function nlMusicSpan(m, songSecs, total) {
+    const a = Math.min(m.start, Math.max(0, total - 0.5));
+    const left = songSecs > 0 ? Math.max(0.5, songSecs - m.in) : Infinity;
+    const b = m.loop || !Number.isFinite(left) ? total : Math.min(total, a + left);
+    return { a, b, short: !m.loop && Number.isFinite(left) && a + left < total - 0.3 };
+  }
+
+  /** Open one of the Voiceover / Captions / Music panels and bring it into view. */
+  function nlOpenLane(title) {
+    const sec = [...document.querySelectorAll('.nl-lane')].find((s) => s.getAttribute('aria-label') === title);
+    if (!sec) return;
+    const btn = sec.querySelector('.nl-lane__edit');
+    if (btn && !sec.classList.contains('is-open')) btn.click();
+    sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   function nlTimeline(el) {
     if (!el) return;
     const p = _project;
     const scenes = nlScenes();
-    if (!p || !scenes.length) { el.hidden = true; el.textContent = ''; _nlTl = null; return; }
+    if (!p || !scenes.length) { el.hidden = true; el.textContent = ''; _nlTl = null; nlTlStop(); return; }
     el.hidden = false;
     if (_nlTl && _nlTl.pid === p.id) { nlTimelineEditor(el); return; }
     _nlTl = null;
+    nlTlStop();
     const f = assembleFlags();
+    const au = nlAudioOf(p);
     const shotSecs = scenes.reduce((n, s) => n + nlShotSecs(s), 0);
     const endSecs = p.outro_url && f.outro ? 2 : 0;
     const total = shotSecs + endSecs;
-    const pct = (x) => `${((x / total) * 100).toFixed(2)}%`;
-    const blk = (from, to, text, cls, scene) => `<span class="nl-atl__b ${cls || ''}"${scene ? ` data-scene="${esc(scene)}"` : ''} style="left:${pct(from)};width:${pct(to - from)}" title="${esc(text)}">${esc(text)}</span>`;
+    const pct = (x) => `${((Math.max(0, Math.min(total, x)) / total) * 100).toFixed(2)}%`;
+    const blk = (from, to, text, cls, scene) => `<span class="nl-atl__b ${cls || ''}"${scene ? ` data-scene="${esc(scene)}"` : ''} style="left:${pct(from)};width:${pct(Math.min(total, to) - from)}" title="${esc(text)}">${esc(text)}</span>`;
     let t = 0;
     const shotBlocks = scenes.map((s, i) => {
       const a = t; t += nlShotSecs(s);
       const st = nlShotState(s).key;
       return blk(a, t, st === 'gen' ? `${i + 1} · rendering` : String(i + 1), `nl-atl__b--shot nl-atl__b--${st}${s.id === _nlSelShot ? ' is-sel' : ''}`, s.id);
     }).join('') + (endSecs ? blk(shotSecs, total, 'End card', 'nl-atl__b--shot') : '');
-    const vo = String(p.vo_script || '').trim();
-    const voBlocks = f.vo && vo ? blk(0.3, Math.max(0.6, shotSecs - 0.3), vo, 'nl-atl__b--vo') : '';
-    let capBlocks = '';
-    if (f.captions && vo) {
-      const words = vo.split(/\s+/).filter(Boolean);
-      const per = Math.max(2, Math.ceil(words.length / Math.max(1, scenes.length * 2)));
-      const chunks = [];
-      for (let i = 0; i < words.length; i += per) chunks.push(words.slice(i, i + per).join(' '));
-      const span = Math.max(0.6, shotSecs - 0.6) / Math.max(1, chunks.length);
-      capBlocks = chunks.slice(0, 24).map((c, i) => blk(0.3 + i * span, 0.3 + (i + 1) * span - 0.15, c, 'nl-atl__b--cap')).join('');
-    }
-    const music = f.music && (p.music_bed_url || p.music_prompt) ? blk(0, total, p.music_prompt || 'Music bed', 'nl-atl__b--music') : '';
+    const vo = au.vo.script;
+    const voSecs = nlVoSecs(p, vo, 0);
+    const voFrom = Math.min(au.vo.start, Math.max(0, total - 0.5));
+    const voBlocks = f.vo && vo ? blk(voFrom, Math.max(voFrom + 0.6, voFrom + voSecs), vo, 'nl-atl__b--vo') : '';
+    const capBlocks = f.captions && f.vo && vo
+      ? nlCapChunks(p, vo, voSecs).slice(0, 24).map((c) => blk(voFrom + c.a, Math.max(voFrom + c.a + 0.2, voFrom + c.b), c.text, 'nl-atl__b--cap')).join('')
+      : '';
+    const songSecs = Number(p.music_length_ms) > 0 ? Number(p.music_length_ms) / 1000 : 0;
+    const ms = nlMusicSpan(au.music, songSecs, total);
+    const music = f.music && (p.music_bed_url || p.music_prompt) ? blk(ms.a, ms.b, p.music_prompt || 'Music bed', 'nl-atl__b--music') : '';
     const ticks = [];
     const step = total > 40 ? 10 : total > 20 ? 4 : 2;
     for (let s = 0; s < total; s += step) ticks.push(`<span style="left:${pct(s)}">${nlClock(s)}</span>`);
@@ -2464,12 +2544,12 @@
       <div class="nl-atl__ticks">${ticks.join('')}</div>
       ${track('Shots', shotBlocks, '')}
       ${track('Voiceover', voBlocks, f.vo ? 'No script yet' : 'Off')}
-      ${track('Captions', capBlocks, f.captions ? (vo ? '' : 'Follow the voiceover') : 'Off')}
+      ${track('Captions', capBlocks, f.captions ? (vo && f.vo ? '' : 'Follow the voiceover') : 'Off')}
       ${track('Music', music, f.music ? 'Not added' : 'Off')}`;
     el.querySelector('[data-nl-tl-edit]')?.addEventListener('click', () => nlTimelineOpen(el));
   }
 
-  /* ── Timeline editing: reorder, trim, remove; Save rebuilds the final ── */
+  /* ── Timeline editing: shots (reorder, trim, remove) and the audio tracks; Save rebuilds ── */
 
   function nlTimelineEditable() {
     const p = _project;
@@ -2477,31 +2557,55 @@
     return nlScenes().some((x) => x.video_url && x.status === 'ready');
   }
 
+  /** Length of an audio or video file, read from its metadata (null when it can't be read). */
+  function nlMediaSecs(url, kind) {
+    return new Promise((resolve) => {
+      if (!url) { resolve(null); return; }
+      const m = document.createElement(kind);
+      let settled = false;
+      const done = (v) => { if (settled) return; settled = true; clearTimeout(timer); m.removeAttribute('src'); resolve(v); };
+      const timer = setTimeout(() => done(null), 5000);
+      m.preload = 'metadata';
+      m.muted = true;
+      m.onloadedmetadata = () => done(Number.isFinite(m.duration) && m.duration > 0 ? Math.round(m.duration * 100) / 100 : null);
+      m.onerror = () => done(null);
+      m.src = mediaSrc(url);
+    });
+  }
+
   async function nlTimelineOpen(el) {
     if (!nlTimelineEditable()) return;
     const scenes = nlScenes();
+    const p = _project;
+    const audio = nlAudioOf(p);
     _nlTl = {
-      pid: _project.id,
+      pid: p.id,
       order: scenes.map((x) => x.id),
       trims: Object.fromEntries(scenes.map((x) => [x.id, x.trim ? { in: Number(x.trim.in) || 0, out: x.trim.out == null ? null : Number(x.trim.out) } : null])),
       removed: new Set(),
       durs: Object.fromEntries(scenes.map((x) => [x.id, nlClipSecs(x)])),
       sel: _nlSelShot && scenes.some((x) => x.id === _nlSelShot) ? _nlSelShot : scenes[0].id,
+      track: 'shot',
+      audio,
+      audio0: JSON.parse(JSON.stringify(audio)),
+      voSecs: 0,
+      songSecs: Number(p.music_length_ms) > 0 ? Number(p.music_length_ms) / 1000 : 0,
+      songUrl: p.music_bed_url || '',
       saving: false,
     };
     nlTimelineEditor(el);
-    // Read each clip's real length so trims are exact.
+    // Read each clip's real length so trims are exact, and the recordings' lengths so the
+    // voice and the bed are drawn as long as they really are.
     const tl = _nlTl;
-    await Promise.all(scenes.filter((x) => x.video_url).map((x) => new Promise((resolve) => {
-      const v = document.createElement('video');
-      const done = () => { v.removeAttribute('src'); resolve(); };
-      const timer = setTimeout(done, 5000);
-      v.preload = 'metadata';
-      v.muted = true;
-      v.onloadedmetadata = () => { if (v.duration > 0.5 && v.duration < 20) tl.durs[x.id] = Math.round(v.duration * 100) / 100; clearTimeout(timer); done(); };
-      v.onerror = () => { clearTimeout(timer); done(); };
-      v.src = x.video_url;
-    })));
+    await Promise.all([
+      ...scenes.filter((x) => x.video_url).map(async (x) => {
+        const d = await nlMediaSecs(x.video_url, 'video');
+        if (d > 0.5 && d < 20) tl.durs[x.id] = d;
+      }),
+      (async () => { const d = await nlMediaSecs(p.vo_url, 'audio'); if (d > 0.3 && d < 300) tl.voSecs = d; })(),
+      (async () => { const d = await nlMediaSecs(p.music_bed_url, 'audio'); if (d > 0.5) tl.songSecs = d; })(),
+    ]);
+    tl.probed = true;
     if (_nlTl === tl) nlTimelineEditor(el);
   }
 
@@ -2513,39 +2617,203 @@
     return Math.max(0.5, (t.out == null ? dur : Math.min(dur, t.out)) - (t.in || 0));
   }
 
+  /** Only the audio fields the client changed, track by track. */
+  function nlTlAudioDiff(tl) {
+    const out = {};
+    ['vo', 'music', 'captions'].forEach((k) => {
+      const now = tl.audio[k];
+      const was = tl.audio0[k];
+      const d = {};
+      Object.keys(now).forEach((f) => { if (JSON.stringify(now[f]) !== JSON.stringify(was[f])) d[f] = now[f]; });
+      if (Object.keys(d).length) out[k] = d;
+    });
+    return out;
+  }
+
+  function nlTlChanged(tl) {
+    const byId = Object.fromEntries(nlScenes().map((x) => [x.id, x]));
+    const kept = tl.order.filter((id) => !tl.removed.has(id));
+    return JSON.stringify(kept) !== JSON.stringify(nlScenes().map((x) => x.id))
+      || kept.some((id) => JSON.stringify(tl.trims[id] || null) !== JSON.stringify(byId[id].trim ? { in: Number(byId[id].trim.in) || 0, out: byId[id].trim.out == null ? null : Number(byId[id].trim.out) } : null))
+      || Object.keys(nlTlAudioDiff(tl)).length > 0;
+  }
+
+  /* Listening to a track from the timeline (one at a time). */
+  let _nlTlAudio = null;
+  function nlTlStop() {
+    if (!_nlTlAudio) return;
+    try { _nlTlAudio.a.pause(); } catch (_) {}
+    _nlTlAudio = null;
+  }
+
+  function nlTlPlay(kind, el) {
+    const p = _project;
+    const tl = _nlTl;
+    if (!tl) return;
+    if (_nlTlAudio && _nlTlAudio.kind === kind) { nlTlStop(); nlTimelineEditor(el); return; }
+    nlTlStop();
+    const url = kind === 'vo' ? p.vo_url : p.music_bed_url;
+    if (!url) return;
+    const a = new Audio(mediaSrc(url));
+    const from = kind === 'music' ? tl.audio.music.in : 0;
+    const cur = { kind, a, from };
+    _nlTlAudio = cur;
+    const end = () => { if (_nlTlAudio === cur) { _nlTlAudio = null; if (_nlTl === tl) nlTimelineEditor(el); } };
+    a.onended = end;
+    a.onerror = () => { end(); toast('Could not play that track', 'error'); };
+    a.addEventListener('loadedmetadata', () => { if (from > 0 && from < (a.duration || 0)) a.currentTime = from; }, { once: true });
+    a.play().catch(() => { end(); });
+    nlTimelineEditor(el);
+    // Playhead on the track while it plays.
+    const tick = () => {
+      if (_nlTlAudio !== cur) return;
+      const ph = el.querySelector(`.nl-tle__ph[data-ph="${kind}"]`);
+      const laneEl = ph && ph.parentElement;
+      if (ph && laneEl) {
+        const total = Number(laneEl.dataset.total) || 1;
+        const start = kind === 'music' ? tl.audio.music.start : tl.audio.vo.start;
+        const at = start + Math.max(0, a.currentTime - from);
+        ph.hidden = at > total;
+        ph.style.left = `${((Math.min(total, at) / total) * 100).toFixed(3)}%`;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   function nlTimelineEditor(el) {
     const tl = _nlTl;
     const p = _project;
+    // Keep the caret where it was when the editor redraws under the client's typing.
+    const act = document.activeElement;
+    const keep = act && el.contains(act) && act.dataset && act.dataset.a
+      ? { a: act.dataset.a, s: act.selectionStart, e: act.selectionEnd } : null;
     const byId = Object.fromEntries(nlScenes().map((x) => [x.id, x]));
     tl.order = tl.order.filter((id) => byId[id]);
     const kept = tl.order.filter((id) => !tl.removed.has(id));
     if (!kept.includes(tl.sel)) tl.sel = kept[0] || null;
+    if ((p.music_bed_url || '') !== tl.songUrl) {
+      // A new bed was made or picked while editing: read its length.
+      tl.songUrl = p.music_bed_url || '';
+      tl.songSecs = Number(p.music_length_ms) > 0 ? Number(p.music_length_ms) / 1000 : 0;
+      nlMediaSecs(p.music_bed_url, 'audio').then((d) => { if (_nlTl === tl && d > 0.5) { tl.songSecs = d; nlTimelineEditor(el); } });
+    }
     const f = assembleFlags();
+    const au = tl.audio;
     const endSecs = p.outro_url && f.outro ? 2 : 0;
     const shotTotal = kept.reduce((n, id) => n + nlTlLen(id), 0);
     const total = Math.max(1, shotTotal + endSecs);
-    const pct = (x) => `${((x / total) * 100).toFixed(3)}%`;
+    const pct = (x) => `${((Math.max(0, Math.min(total, x)) / total) * 100).toFixed(3)}%`;
     let t = 0;
     const blocks = kept.map((id, i) => {
       const x = byId[id];
       const len = nlTlLen(id);
       const a = t; t += len;
       const thumb = x.keyframe_url ? ` style="--thumb:url('${String(x.keyframe_url).replace(/'/g, '%27')}')"` : '';
-      return `<div class="nl-tle__b${id === tl.sel ? ' is-sel' : ''}${tl.trims[id] ? ' is-trim' : ''}" data-id="${esc(id)}" draggable="true" style="left:${pct(a)};width:${pct(len)}" role="button" tabindex="0" aria-label="Shot ${i + 1}, ${len.toFixed(1)} seconds">
+      return `<div class="nl-tle__b${tl.track === 'shot' && id === tl.sel ? ' is-sel' : ''}${tl.trims[id] ? ' is-trim' : ''}" data-id="${esc(id)}" draggable="true" style="left:${pct(a)};width:${pct(len)}" role="button" tabindex="0" aria-label="Shot ${i + 1}, ${len.toFixed(1)} seconds">
           <span class="nl-tle__thumb"${thumb}></span>
           <span class="nl-tle__h nl-tle__h--in" data-handle="in" aria-hidden="true"></span>
           <span class="nl-tle__lab"><b>${i + 1}</b>${len.toFixed(1)}s</span>
           <span class="nl-tle__h nl-tle__h--out" data-handle="out" aria-hidden="true"></span>
         </div>`;
     }).join('') + (endSecs ? `<div class="nl-tle__b nl-tle__b--end" style="left:${pct(shotTotal)};width:${pct(endSecs)}"><span class="nl-tle__lab">End card</span></div>` : '');
+
+    // Voiceover track
+    const voScript = au.vo.script;
+    const voSecs = nlVoSecs(p, voScript, voScript === String(p.vo_script || '').trim() ? tl.voSecs : 0);
+    const voFrom = Math.min(au.vo.start, Math.max(0, total - 0.5));
+    const voTo = Math.min(total, voFrom + Math.max(0.6, voSecs));
+    const voOver = voScript ? Math.max(0, voFrom + voSecs - total) : 0;
+    const voBlock = voScript
+      ? `<div class="nl-tle__ab nl-tle__ab--vo${au.vo.on ? '' : ' is-off'}${tl.track === 'vo' ? ' is-sel' : ''}${voOver > 0.2 ? ' is-over' : ''}" data-audio="vo" role="button" tabindex="0" aria-label="Voiceover, starts at ${voFrom.toFixed(1)} seconds. Drag or use the arrow keys to move it." style="left:${pct(voFrom)};width:${pct(voTo - voFrom)}"><span class="nl-tle__wave" aria-hidden="true"></span><span class="nl-tle__alab">${esc(voScript)}</span></div>`
+      : `<span class="nl-atl__empty">No script yet</span>`;
+    // Captions track (follows the voice)
+    const capOn = au.captions.on && au.vo.on;
+    const caps = voScript ? nlCapChunks(p, voScript, voSecs) : [];
+    const capBlocks = caps.length
+      ? caps.map((c) => `<span class="nl-tle__cap" data-rel="${c.a.toFixed(3)}" data-relb="${c.b.toFixed(3)}" style="left:${pct(voFrom + c.a)};width:${pct(Math.max(voFrom + c.a + 0.2, Math.min(total, voFrom + c.b)) - (voFrom + c.a))}" title="${esc(c.text)}">${esc(c.text)}</span>`).join('')
+      : `<span class="nl-atl__empty">Follow the voiceover</span>`;
+    // Music track
+    const ms = nlMusicSpan(au.music, tl.songSecs, total);
+    const mLen = Math.max(0.1, ms.b - ms.a);
+    const fadeIn = Math.min(au.music.fade_in, mLen);
+    const fadeOut = ms.b >= total - 0.05 ? Math.min(au.music.fade_out, mLen) : 0;
+    const musicBlock = p.music_bed_url
+      ? `<div class="nl-tle__ab nl-tle__ab--music${au.music.on ? '' : ' is-off'}${tl.track === 'music' ? ' is-sel' : ''}" data-audio="music" role="button" tabindex="0" aria-label="Music, starts at ${ms.a.toFixed(1)} seconds. Drag or use the arrow keys to move it." style="left:${pct(ms.a)};width:${pct(mLen)}">
+          ${fadeIn ? `<span class="nl-tle__fade nl-tle__fade--in" style="width:${((fadeIn / mLen) * 100).toFixed(2)}%"></span>` : ''}
+          ${fadeOut ? `<span class="nl-tle__fade nl-tle__fade--out" style="width:${((fadeOut / mLen) * 100).toFixed(2)}%"></span>` : ''}
+          <span class="nl-tle__wave" aria-hidden="true"></span>
+          <span class="nl-tle__alab">${esc(p.music_prompt || 'Music bed')}${au.music.in ? ` · from ${nlR1(au.music.in).toFixed(1)}s` : ''}${au.music.loop ? ' · loops' : ''}</span>
+        </div>`
+      : `<span class="nl-atl__empty">Not added · <button type="button" class="nl-alink" data-tl-lane="Music">Add music</button></span>`;
+
     const ticks = [];
     const step = total > 40 ? 10 : total > 20 ? 4 : 2;
     for (let sec = 0; sec < total; sec += step) ticks.push(`<span style="left:${pct(sec)}">${nlClock(sec)}</span>`);
-    const sel = tl.sel ? byId[tl.sel] : null;
-    const selIdx = kept.indexOf(tl.sel);
-    const dur = sel ? (tl.durs[sel.id] || 5) : 5;
-    const tr = sel ? (tl.trims[sel.id] || { in: 0, out: null }) : null;
-    const inspector = sel ? `
+    const playing = _nlTlAudio ? _nlTlAudio.kind : null;
+    const row = (key, label, on, laneCls, inner, extra = '') => `
+      <div class="nl-tle__row${on ? '' : ' is-off'}">
+        <button type="button" class="nl-tle__rl${tl.track === key ? ' is-sel' : ''}" data-track="${key}">${label}${on ? '' : '<small>Off</small>'}</button>
+        <div class="${laneCls}" data-total="${total}" ${extra}>${inner}<span class="nl-tle__ph" data-ph="${key}" hidden></span></div>
+      </div>`;
+
+    const sw = (path, on, label) => `<label class="nl-tle__sw"><input type="checkbox" data-a="${path}" ${on ? 'checked' : ''}><span aria-hidden="true"></span>${label}</label>`;
+    const num = (path, v, max, label, unit = 's', stepv = 0.1) => `<label class="nl-tle__f">${label}<input type="number" step="${stepv}" min="0" max="${max}" value="${Number(v).toFixed(1)}" data-a="${path}"><span>${unit}</span></label>`;
+    const slider = (path, v, label) => `<label class="nl-tle__f nl-tle__f--vol">${label}<input type="range" min="0" max="100" step="1" value="${Math.round(v * 100)}" data-a="${path}" aria-valuetext="${Math.round(v * 100)}%"><output>${Math.round(v * 100)}%</output></label>`;
+    const play = (kind, can, why) => `<button type="button" class="nl-abtn nl-abtn--sm" data-tl-play="${kind}" ${can ? '' : `disabled title="${esc(why)}"`}>${nlSvg(playing === kind ? NL_I.stop : NL_I.play, 12, 2)}${playing === kind ? 'Stop' : 'Listen'}</button>`;
+
+    let inspector = '';
+    if (tl.track === 'vo') {
+      const same = voScript === String(p.vo_script || '').trim();
+      inspector = `
+      <div class="nl-tle__insp nl-tle__insp--audio" data-insp="vo">
+        <div class="nl-tle__irow">
+          <span class="nl-tle__it">Voiceover</span>
+          ${sw('vo.on', au.vo.on, 'On')}
+          ${num('vo.start', au.vo.start, NL_TL_MAX.voStart, 'Starts at')}
+          ${slider('vo.volume', au.vo.volume, 'Volume')}
+          <span class="nl-grow"></span>
+          ${play('vo', !!p.vo_url && same, same ? 'No recording yet' : 'Save to hear the new words')}
+        </div>
+        <label class="nl-tle__script"><span>What the voice says</span><textarea rows="3" data-a="vo.script" maxlength="4500" placeholder="Write what the voice says">${esc(voScript)}</textarea></label>
+        <p class="nl-tle__note">${voOver > 0.2 ? `<b>The voice runs ${voOver.toFixed(1)}s past the end.</b> Move it earlier or shorten the words. ` : ''}${same ? `About ${voSecs.toFixed(1)}s of speech.` : 'New words are recorded when you save, and the length is checked against the video.'}</p>
+      </div>`;
+    } else if (tl.track === 'music') {
+      inspector = p.music_bed_url ? `
+      <div class="nl-tle__insp nl-tle__insp--audio" data-insp="music">
+        <div class="nl-tle__irow">
+          <span class="nl-tle__it">Music</span>
+          ${sw('music.on', au.music.on, 'On')}
+          ${num('music.start', au.music.start, NL_TL_MAX.musicStart, 'Starts at')}
+          ${num('music.in', au.music.in, tl.songSecs ? Math.max(0, tl.songSecs - 1).toFixed(1) : NL_TL_MAX.musicIn, 'Song from')}
+          ${slider('music.volume', au.music.volume, 'Volume')}
+        </div>
+        <div class="nl-tle__irow">
+          ${num('music.fade_in', au.music.fade_in, NL_TL_MAX.fade, 'Fade in')}
+          ${num('music.fade_out', au.music.fade_out, NL_TL_MAX.fade, 'Fade out')}
+          ${sw('music.loop', au.music.loop, 'Loop if the song is shorter')}
+          <span class="nl-grow"></span>
+          ${play('music', true, '')}
+          <button type="button" class="nl-abtn nl-abtn--sm" data-tl-lane="Music">Change music</button>
+        </div>
+        <p class="nl-tle__note">${tl.songSecs ? `The song is ${tl.songSecs.toFixed(1)}s long. ` : ''}${ms.short ? 'It ends before the video does: start it from earlier, or turn on Loop. ' : ''}Listen plays the song from the point you chose.</p>
+      </div>` : `
+      <div class="nl-tle__insp" data-insp="music"><span class="nl-tle__it">Music</span><span class="nl-tle__note">No music bed yet.</span><span class="nl-grow"></span><button type="button" class="nl-abtn nl-abtn--sm" data-tl-lane="Music">Add music</button></div>`;
+    } else if (tl.track === 'cap') {
+      inspector = `
+      <div class="nl-tle__insp" data-insp="cap">
+        <span class="nl-tle__it">Captions</span>
+        ${sw('captions.on', au.captions.on, 'On')}
+        <span class="nl-tle__note">${au.vo.on ? 'Word by word, timed to the voice. They move with it.' : 'Captions need the voiceover on.'}</span>
+        <span class="nl-grow"></span>
+        <button type="button" class="nl-abtn nl-abtn--sm" data-tl-lane="Captions">Style captions</button>
+      </div>`;
+    } else {
+      const sel = tl.sel ? byId[tl.sel] : null;
+      const selIdx = kept.indexOf(tl.sel);
+      const dur = sel ? (tl.durs[sel.id] || 5) : 5;
+      const tr = sel ? (tl.trims[sel.id] || { in: 0, out: null }) : null;
+      inspector = sel ? `
       <div class="nl-tle__insp">
         <span class="nl-tle__it">Shot ${selIdx + 1}</span>
         <label class="nl-tle__f">Start<input type="number" step="0.1" min="0" max="${(dur - 0.5).toFixed(1)}" value="${(tr.in || 0).toFixed(1)}" data-trim="in" aria-label="Start, seconds into the clip"><span>s</span></label>
@@ -2557,29 +2825,163 @@
         <button type="button" class="nl-abtn nl-abtn--sm" data-tl="reset" ${tl.trims[sel.id] ? '' : 'disabled'}>Reset trim</button>
         <button type="button" class="nl-abtn nl-abtn--sm nl-abtn--bad" data-tl="remove" ${kept.length <= 1 ? 'disabled' : ''}>Remove</button>
       </div>` : '';
+    }
     const removedList = tl.order.filter((id) => tl.removed.has(id));
-    const changed = JSON.stringify(kept) !== JSON.stringify(nlScenes().map((x) => x.id))
-      || kept.some((id) => JSON.stringify(tl.trims[id] || null) !== JSON.stringify(byId[id].trim ? { in: Number(byId[id].trim.in) || 0, out: byId[id].trim.out == null ? null : Number(byId[id].trim.out) } : null));
+    const changed = nlTlChanged(tl);
     el.innerHTML = `
       <div class="nl-acard__h nl-acard__h--flat"><h2 id="nl-tl-title">Timeline <span class="nl-tle__badge">Editing</span><span class="nl-acard__meta">${nlClock(total)}</span></h2>
         <span class="nl-acard__tools"><button type="button" class="nl-abtn nl-abtn--sm" data-tl="cancel">Cancel</button><button type="button" class="nl-abtn nl-abtn--sm nl-abtn--primary" data-tl="save" ${changed && !tl.saving ? '' : 'disabled'}>${tl.saving ? 'Saving…' : 'Save and rebuild'}</button></span></div>
       <div class="nl-atl__ticks">${ticks.join('')}</div>
-      <div class="nl-tle__lane" data-lane>${blocks}<span class="nl-tle__drop" hidden></span></div>
+      <div class="nl-tle__rows"${tl.probed ? ' data-probed' : ''}>
+        ${row('shot', 'Shots', true, 'nl-tle__lane', `${blocks}<span class="nl-tle__drop" hidden></span>`, 'data-lane')}
+        ${row('vo', 'Voiceover', au.vo.on, 'nl-tle__alane nl-tle__alane--vo', voBlock)}
+        ${row('cap', 'Captions', capOn, 'nl-tle__alane nl-tle__alane--cap', capBlocks)}
+        ${row('music', 'Music', au.music.on, 'nl-tle__alane nl-tle__alane--music', musicBlock)}
+      </div>
       ${inspector}
       ${removedList.length ? `<div class="nl-tle__removed">Removed: ${removedList.map((id) => `<button type="button" class="nl-alink" data-restore="${esc(id)}">Shot ${nlScenes().findIndex((x) => x.id === id) + 1} · Undo</button>`).join(' ')}</div>` : ''}
-      <p class="nl-tle__hint">Drag a shot to move it, or drag its edges to trim. Saving rebuilds the final, and the voiceover is checked against the new length.</p>`;
-    nlTimelineBind(el);
+      <p class="nl-tle__hint">Drag a shot to move it, or drag its edges to trim. Drag the voiceover or the music to change when it starts, and click a track to set its volume, fades and words. Saving rebuilds the final.</p>`;
+    nlTimelineBind(el, total);
+    if (keep) {
+      const back = el.querySelector(`[data-a="${keep.a}"]`);
+      if (back) {
+        back.focus();
+        try { if (keep.s != null && back.setSelectionRange) back.setSelectionRange(keep.s, keep.e); } catch (_) {}
+      }
+    }
   }
 
-  function nlTimelineBind(el) {
+  function nlTimelineBind(el, total) {
     const tl = _nlTl;
     const lane = el.querySelector('[data-lane]');
     const kept = () => tl.order.filter((id) => !tl.removed.has(id));
     const rerender = () => nlTimelineEditor(el);
-    el.querySelector('[data-tl="cancel"]')?.addEventListener('click', () => { _nlTl = null; nlTimeline(el); });
+    const refreshSave = () => {
+      const b = el.querySelector('[data-tl="save"]');
+      if (b) b.disabled = !nlTlChanged(tl) || tl.saving;
+    };
+    // A field that commits on blur must not redraw under a press in progress, or the
+    // button being pressed is replaced and its click is lost. Redraw once it lands.
+    tl.el = el;
+    el.addEventListener('pointerdown', () => { tl.down = true; }, true);
+    if (!window.__nlTlUp) {
+      window.__nlTlUp = true;
+      const land = () => setTimeout(() => {
+        const cur = _nlTl;
+        if (!cur) return;
+        cur.down = false;
+        if (cur.pending) { cur.pending = false; if (cur.el && cur.el.isConnected) nlTimelineEditor(cur.el); }
+      }, 0);
+      window.addEventListener('pointerup', land, true);
+      window.addEventListener('pointercancel', land, true);
+      window.addEventListener('dragend', land, true);
+    }
+    const later = () => { if (tl.down) tl.pending = true; else rerender(); };
+    el.querySelector('[data-tl="cancel"]')?.addEventListener('click', () => { nlTlStop(); _nlTl = null; nlTimeline(el); });
     el.querySelector('[data-tl="save"]')?.addEventListener('click', () => nlTimelineSave(el));
     el.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', () => { tl.removed.delete(b.dataset.restore); rerender(); }));
-    const insp = el.querySelector('.nl-tle__insp');
+    el.querySelectorAll('[data-track]').forEach((b) => b.addEventListener('click', () => { tl.track = b.dataset.track; rerender(); }));
+    el.querySelectorAll('[data-tl-lane]').forEach((b) => b.addEventListener('click', () => nlOpenLane(b.dataset.tlLane)));
+    el.querySelectorAll('[data-tl-play]').forEach((b) => b.addEventListener('click', () => nlTlPlay(b.dataset.tlPlay, el)));
+    el.querySelector('.nl-tle__alane--cap')?.addEventListener('click', () => { if (tl.track !== 'cap') { tl.track = 'cap'; rerender(); } });
+
+    // Audio settings: switches, numbers, volume sliders and the script.
+    const setA = (path, v) => {
+      const [k, f] = path.split('.');
+      tl.audio[k][f] = v;
+    };
+    el.querySelectorAll('[data-a]').forEach((inp) => {
+      const path = inp.dataset.a;
+      if (inp.type === 'checkbox') {
+        inp.addEventListener('change', () => { setA(path, inp.checked); rerender(); });
+      } else if (inp.type === 'range') {
+        const out = inp.parentElement.querySelector('output');
+        inp.addEventListener('input', () => {
+          setA(path, Math.round(Number(inp.value)) / 100);
+          if (out) out.textContent = `${Math.round(Number(inp.value))}%`;
+          inp.setAttribute('aria-valuetext', `${Math.round(Number(inp.value))}%`);
+          refreshSave();
+        });
+      } else if (inp.tagName === 'TEXTAREA') {
+        inp.addEventListener('input', () => {
+          setA(path, inp.value.trim());
+          refreshSave();
+          // The recording only matches the words it was made from.
+          const pb = el.querySelector('[data-tl-play="vo"]');
+          if (pb) {
+            const same = inp.value.trim() === String(_project.vo_script || '').trim();
+            pb.disabled = !same || !_project.vo_url;
+            pb.title = same ? '' : 'Save to hear the new words';
+            if (!same && _nlTlAudio && _nlTlAudio.kind === 'vo') nlTlStop();
+          }
+        });
+        inp.addEventListener('change', later);
+      } else {
+        inp.addEventListener('change', () => {
+          const max = Number(inp.max) || 0;
+          let v = Number(inp.value);
+          if (!Number.isFinite(v) || v < 0) v = 0;
+          if (max) v = Math.min(max, v);
+          setA(path, nlR1(v));
+          later();
+        });
+      }
+    });
+
+    // Move the voice or the bed: drag it, or arrow keys (Shift for a second at a time).
+    el.querySelectorAll('[data-audio]').forEach((blk) => {
+      const kind = blk.dataset.audio;
+      const laneEl = blk.parentElement;
+      const max = Math.max(0, Math.min(kind === 'vo' ? NL_TL_MAX.voStart : NL_TL_MAX.musicStart, total - 0.5));
+      const caps = kind === 'vo' ? [...el.querySelectorAll('.nl-tle__cap')] : [];
+      const width = Number.parseFloat(blk.style.width) / 100 * total;
+      const paint = (s) => {
+        blk.style.left = `${((s / total) * 100).toFixed(3)}%`;
+        if (kind === 'vo') {
+          caps.forEach((c) => { c.style.left = `${(((s + Number(c.dataset.rel)) / total) * 100).toFixed(3)}%`; });
+        } else {
+          blk.style.width = `${((Math.max(0.1, Math.min(total, s + width) - s) / total) * 100).toFixed(3)}%`;
+        }
+      };
+      blk.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const s0 = tl.audio[kind].start;
+        const x0 = e.clientX;
+        const pxPerSec = laneEl.getBoundingClientRect().width / total;
+        try { blk.setPointerCapture(e.pointerId); } catch (_) {}
+        blk.classList.add('is-moving');
+        const move = (ev) => {
+          const d = (ev.clientX - x0) / pxPerSec;
+          const s = Math.max(0, Math.min(max, nlR1(s0 + d)));
+          tl.audio[kind].start = s;
+          paint(s);
+        };
+        const up = () => {
+          blk.removeEventListener('pointermove', move);
+          blk.removeEventListener('pointerup', up);
+          blk.removeEventListener('pointercancel', up);
+          tl.track = kind;
+          rerender();
+          el.querySelector(`[data-audio="${kind}"]`)?.focus({ preventScroll: true });
+        };
+        blk.addEventListener('pointermove', move);
+        blk.addEventListener('pointerup', up);
+        blk.addEventListener('pointercancel', up);
+      });
+      blk.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tl.track = kind; rerender(); el.querySelector(`[data-audio="${kind}"]`)?.focus(); return; }
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        const d = (e.shiftKey ? 1 : 0.1) * (e.key === 'ArrowLeft' ? -1 : 1);
+        tl.audio[kind].start = Math.max(0, Math.min(max, nlR1(tl.audio[kind].start + d)));
+        tl.track = kind;
+        rerender();
+        el.querySelector(`[data-audio="${kind}"]`)?.focus();
+      });
+    });
+
+    const insp = el.querySelector('.nl-tle__insp:not([data-insp])');
     insp?.addEventListener('click', (e) => {
       const b = e.target.closest('[data-tl]');
       if (!b || b.disabled) return;
@@ -2607,7 +3009,7 @@
       a = Math.max(0, Math.min(Number.isFinite(a) ? a : 0, dur - 0.5));
       b = Math.max(a + 0.5, Math.min(Number.isFinite(b) ? b : dur, dur));
       tl.trims[tl.sel] = a <= 0.05 && b >= dur - 0.05 ? null : { in: Math.round(a * 10) / 10, out: b >= dur - 0.05 ? null : Math.round(b * 10) / 10 };
-      rerender();
+      later();
     }));
     if (!lane) return;
     // Select and keyboard nudge
@@ -2615,12 +3017,13 @@
       const b = e.target.closest('.nl-tle__b[data-id]');
       if (!b || e.target.closest('[data-handle]')) return;
       tl.sel = b.dataset.id;
+      tl.track = 'shot';
       rerender();
     });
     lane.addEventListener('keydown', (e) => {
       const b = e.target.closest('.nl-tle__b[data-id]');
       if (!b) return;
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tl.sel = b.dataset.id; rerender(); el.querySelector(`.nl-tle__b[data-id="${CSS.escape(tl.sel)}"]`)?.focus(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tl.sel = b.dataset.id; tl.track = 'shot'; rerender(); el.querySelector(`.nl-tle__b[data-id="${CSS.escape(tl.sel)}"]`)?.focus(); }
     });
     // Trim by dragging an edge
     lane.addEventListener('pointerdown', (e) => {
@@ -2630,6 +3033,7 @@
       e.preventDefault();
       const id = b.dataset.id;
       tl.sel = id;
+      tl.track = 'shot';
       const dur = tl.durs[id] || 5;
       const start = tl.trims[id] || { in: 0, out: null };
       const startIn = start.in || 0;
@@ -2722,7 +3126,9 @@
     const tl = _nlTl;
     if (!tl || tl.saving) return;
     const kept = tl.order.filter((id) => !tl.removed.has(id));
+    const audio = nlTlAudioDiff(tl);
     tl.saving = true;
+    nlTlStop();
     nlTimelineEditor(el);
     try {
       const data = await animFetch(`/api/animation/projects/${_project.id}/timeline`, {
@@ -2732,6 +3138,7 @@
           remove: [...tl.removed],
           trims: Object.fromEntries(kept.map((id) => [id, tl.trims[id] || null])),
           durations: tl.durs,
+          ...(Object.keys(audio).length ? { audio } : {}),
         }),
       });
       _nlTl = null;
@@ -2739,7 +3146,7 @@
       _canvasFp = projectUiFingerprint(_project);
       renderCanvas();
       renderChat();
-      if (data.rebuilding) { toast('Timeline saved. Rebuilding the final.', 'success'); startPoll(); }
+      if (data.rebuilding) { toast(data.revoice ? 'Timeline saved. Recording the new words and rebuilding the final.' : 'Timeline saved. Rebuilding the final.', 'success'); startPoll(); }
     } catch (e) {
       tl.saving = false;
       nlTimelineEditor(el);
