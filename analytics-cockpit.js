@@ -799,14 +799,14 @@
         <div style="font-size:12px;color:rgba(255,255,255,.6)">${esc(idea.angle)}</div>
         ${idea.why ? `<div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px">Why: ${esc(idea.why)}</div>` : ''}
         <div style="margin-top:8px;display:flex;gap:8px">
-          <button type="button" class="grow-ghost-btn" style="width:auto" data-mi-make="animate" data-mi-idea="${i}">Make in Animate</button>
+          <button type="button" class="grow-ghost-btn" style="width:auto" data-mi-make="animate" data-mi-idea="${i}">Make in Reels</button>
           <button type="button" class="grow-ghost-btn" style="width:auto" data-mi-make="design" data-mi-idea="${i}">Make in Design</button>
         </div>
       </div>`).join('');
     return `<div id="mi-brief" style="margin-top:22px;padding:16px;border:1px solid #243049;border-radius:12px;background:#0B1120">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">
         <div><div style="font-weight:650">Next week (${esc(brief.week_start || '')}) · ${brief.goal === 'engage' ? 'Engage' : 'Grow'}</div>
-        <div style="font-size:11px;color:rgba(255,255,255,.4)">Built ${esc(String(brief.generated_at || '').slice(0, 10))} · Coach and Animate use this for 14 days</div></div>
+        <div style="font-size:11px;color:rgba(255,255,255,.4)">Built ${esc(String(brief.generated_at || '').slice(0, 10))} · Coach and Reels use this for 14 days</div></div>
         ${btn}
       </div>
       ${brief.summary ? `<div style="font-size:14px;margin-bottom:12px">${esc(brief.summary)}</div>` : ''}
@@ -889,7 +889,7 @@
       const out = await res.json().catch(() => ({}));
       if (!res.ok || !out.brief) throw new Error(out.error || 'Could not build next week');
       if (_insights) _insights.brief = out.brief;
-      if (typeof _deps.toast === 'function') _deps.toast('Next week is ready — Coach and Animate will use it.', 'success');
+      if (typeof _deps.toast === 'function') _deps.toast('Next week is ready. Coach and Reels will use it.', 'success');
     } catch (e) {
       if (typeof _deps.toast === 'function') _deps.toast(e.message, 'error');
     } finally {

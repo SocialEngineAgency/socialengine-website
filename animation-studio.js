@@ -1281,7 +1281,7 @@
       bar = document.createElement('ol');
       bar.className = 'nl-steps';
       bar.setAttribute('aria-label', 'Steps');
-      const after = head.querySelector('.nl-sbar') || head.querySelector('.nl-wf');
+      const after = head.querySelector('.nl-sbar');
       head.insertBefore(bar, after ? after.nextSibling : (head.children[1] || null));
     }
     bar.innerHTML = spec.split(',').map((x, i) => {
@@ -1404,7 +1404,6 @@
             <div data-slot="arc"></div>
           </div>
         </section>
-        <section class="nl-skrow" data-slot="kits" aria-label="Story kits" hidden></section>
         <section class="nl-acard nl-ashots" aria-labelledby="nl-shots-title">
           <div class="nl-acard__h">
             <h2 id="nl-shots-title">Shots <span class="nl-acard__meta" data-slot="shots-meta"></span></h2>
@@ -1664,6 +1663,7 @@
       recent: () => _recent,
       kits: () => _kits,
       goHome,
+      goStoryboard: () => { if (typeof window.switchNav === 'function') window.switchNav('storyboard'); },
       openProject: (id) => openProject(id),
       showProject: (p) => {
         _project = p;
@@ -4137,7 +4137,7 @@
     if (settings && s.kind === 'charity_recipe') settings.open = true;
     renderPendingPacks();
     const kindLabel = s.kind === 'charity_recipe' ? 'Explainer recipe' : 'Remix';
-    toast(kindLabel + ' loaded in Animate — review the brief, then Accept.', 'success');
+    toast(kindLabel + ' loaded in Reels. Review the brief, then Accept.', 'success');
     // Prompt-only charity handoff: seed the composer; do not auto-brief until they Accept.
     if (s.kind === 'charity_recipe' || (!s.referenceUrl && String(s.prompt || '').trim())) {
       return true;
@@ -4197,7 +4197,7 @@
       if (_project.id && (result.outro_url || result.music_bed_url)) await syncMotionSettings();
     }
     if (result.missing_outro) toast(result.missing_outro, 'error');
-    if (!already) toast('Coach brief loaded in Animate — review, then Write shots.', 'success');
+    if (!already) toast('Coach brief loaded in Reels. Review it, then Write shots.', 'success');
     return true;
   }
   window.applyAnimCoachCreateSessionIfAny = applyAnimCoachCreateSessionIfAny;
@@ -4240,6 +4240,10 @@
       if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project)) {
         startPoll();
       }
+      // Reels and Storyboard share this studio: show the one that was picked.
+      if (window.SEStory) {
+        try { window.SEStory.setSurface(window.__SE_CREATE_SURFACE === 'storyboard'); } catch (e) { console.warn('[animate] story builder', e); }
+      }
       return;
     }
 
@@ -4264,7 +4268,7 @@
       }
       if (!_meta) {
         root.innerHTML = `<div style="padding:40px;max-width:520px;">
-          <div style="color:#F87171;font-weight:700;margin-bottom:8px;">Animate is briefly unavailable</div>
+          <div style="color:#F87171;font-weight:700;margin-bottom:8px;">Reels is briefly unavailable</div>
           <div style="color:rgba(255,255,255,0.65);font-size:0.85rem;line-height:1.45;margin-bottom:14px;">${esc(lastErr?.message || 'Failed to fetch')} — usually a short restart. Wait about 30 seconds and retry.</div>
           <button type="button" class="anim-btn" id="anim-api-retry" style="width:auto;padding:10px 16px;">Retry</button>
         </div>`;
@@ -4524,7 +4528,7 @@
       <div class="anim-shell atelier-shell">
         <section class="anim-canvas atelier-stage">
           <div class="anim-canvas-header">
-            <h2>Animate</h2>
+            <h2>Reels</h2>
             <div style="display:flex;gap:8px;align-items:center;">
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-home" style="padding:7px 12px;font-size:0.72rem;" title="Back to start">Home</button>
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-new" style="padding:7px 12px;font-size:0.72rem;">New project</button>
@@ -4719,7 +4723,7 @@
         try {
           const data = await animFetch(`/api/animation/projects/${resumeId}`);
           if (window.SEStory && nlOn() && window.SEStory.claims(data.project)) {
-            window.SEStory.openReel(data.project);
+            // A story not made yet belongs to the Storyboard tab, which reopens it itself.
           } else {
             _project = data.project;
             rememberOpenProject(_project.id);
