@@ -181,6 +181,7 @@
       p.caption_burn_error || '', p.last_burned_caption_style?.preset_id || '',
       p.last_burned_caption_style?.burned_at || '', p.last_assemble_summary || '',
       (p.final_history || []).length, _captionStudioOpen ? 1 : 0, scenes,
+      (p.chat || []).length, p.editing_started_at || '', p.vo_script || '',
       JSON.stringify(p.story_brief || p.agent_brief?.story_brief || null),
     ]);
   }
@@ -1273,10 +1274,17 @@
   // the ask bar, timeline tracks, and a Sound and finish column. The composer moves once;
   // canvas pieces are re-placed after every renderCanvas.
   let _nlSelShot = null;
+  let _nlTl = null; // timeline being edited: { pid, order: [ids], trims: {id: {in,out}|null}, removed: Set, durs: {id: sec}, sel }
   let _nlSavedOpen = false;
   let _nlArcOpen = false;
   let _nlMoreOpen = false;
   let _nlLastPid = null;
+  /** The client chose "New shot plan" on a finished reel: show the brief writer again. */
+  let _nlPlanMode = false;
+  /** Cast and settings section open (folded by default). */
+  let _nlCastOpen = false;
+  /** An edit message is with the editor (waiting for its reply). */
+  let _nlEditPending = false;
   const _nlLaneOpen = new Set();
   const NL_I = {
     mic: 'M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21',
@@ -1285,10 +1293,28 @@
     flag: 'M5 21V4 M5 4h11l-2 4 2 4H5',
     lock: 'M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3',
     chev: 'M6 9l6 6 6-6',
+    spark: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z',
+    check: 'M5 12.5l4.2 4.2L19 7',
+    film: 'M4 5h16v14H4z M8 5v14 M16 5v14 M4 9.5h4 M4 14.5h4 M16 9.5h4 M16 14.5h4',
+    info: 'M12 8h.01 M11 12h1v5h1 M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z',
+    send: 'M5 12h13 M13 6l6 6-6 6',
+    image: 'M4 5h16v14H4z M9 10.5a1.5 1.5 0 1 0 0-.01 M20 15l-5-5-9 9',
+    x: 'M6 6l12 12 M18 6L6 18',
+    left: 'M15 6l-6 6 6 6',
+    right: 'M9 6l6 6-6 6',
   };
   const nlSvg = (d, size = 13, sw = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
   function nlOn() { return document.documentElement.classList.contains('nl'); }
-  function nlShotSecs(s) { return Math.min(8, Math.max(4, Number(s && s.duration_target) || 5)); }
+  function nlClipSecs(s) { return Number(s && s.video_sec) > 0 ? Number(s.video_sec) : Math.min(8, Math.max(4, Number(s && s.duration_target) || 5)); }
+  /** Seconds a shot plays for, after any timeline trim. */
+  function nlShotSecs(s, trim) {
+    const base = nlClipSecs(s);
+    const t = trim !== undefined ? trim : (s && s.trim);
+    if (!t) return base;
+    const a = Math.max(0, Number(t.in) || 0);
+    const b = t.out == null ? base : Math.min(base, Number(t.out));
+    return Math.max(0.5, b - a);
+  }
   function nlClock(sec) { const t = Math.max(0, Math.round(sec)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
   function nlScenes() { return ((_project && _project.scenes) || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
   function nlShotState(s) {
@@ -1318,33 +1344,42 @@
           <div class="nl-ahero__box">
             <div data-slot="prompt"></div>
             <div class="nl-ahero__bar">
+              <button type="button" class="nl-abtn nl-abtn--icon nl-aref" data-nl-cast aria-expanded="false" title="Add a character, product or place photo">${nlSvg(NL_I.image, 15)}<span class="nl-aref__l">Reference</span><span class="nl-aref__n" data-slot="ref-count" hidden></span></button>
               <div data-slot="entry"></div>
               <div data-slot="look" class="nl-alook"></div>
               <div data-slot="story" class="nl-astory"></div>
               <span class="nl-grow"></span>
+              <button type="button" class="nl-alink" data-nl-plan hidden>New shot plan</button>
               <span data-slot="packs"></span><span data-slot="send"></span>
             </div>
           </div>
           <div class="nl-ahero__ideas" data-slot="ideas" hidden></div>
+          <div class="nl-ahero__ideas nl-ahero__edits" data-slot="edits" hidden></div>
           <div data-slot="log" class="nl-aask__log"></div>
           <div data-slot="actions"></div>
           <span data-slot="tokens" class="nl-aask__tokens" hidden></span>
         </section>
-        <section class="nl-acard nl-abrief" aria-label="Cast, places and settings">
+        <section class="nl-acard nl-abrief" aria-label="Cast and settings">
           <div class="nl-abrief__row">
-            <div class="nl-acast__h"><span class="nl-afield__l">Cast and places</span><span class="nl-acast__lock" data-slot="lock"></span></div>
+            <button type="button" class="nl-abrief__toggle" data-nl-brief aria-expanded="false" aria-controls="nl-abrief-body">
+              ${nlSvg(NL_I.chev, 13, 2)}<span class="nl-abrief__t">Cast and settings</span><span class="nl-abrief__sum" data-slot="brief-sum"></span>
+            </button>
+            <span class="nl-acast__lock" data-slot="lock"></span>
             <span class="nl-grow"></span>
             <button type="button" class="nl-abtn nl-abtn--dash" data-nl-drive hidden>Driving video</button>
             <button type="button" class="nl-abtn" data-nl-more aria-expanded="false">More settings</button>
           </div>
-          <div data-slot="more" class="nl-abrief__more" hidden></div>
-          <div data-slot="drive"></div>
-          <div class="nl-acast">
-            <div data-slot="cast" class="nl-acast__row"></div>
+          <div class="nl-abrief__body" id="nl-abrief-body" hidden>
+            <div data-slot="more" class="nl-abrief__more" hidden></div>
+            <div data-slot="drive"></div>
+            <div class="nl-acast">
+              <div class="nl-afield__l">Cast and places</div>
+              <div data-slot="cast" class="nl-acast__row"></div>
+            </div>
+            <div data-slot="why"></div>
+            <div data-slot="char"></div>
+            <div data-slot="arc"></div>
           </div>
-          <div data-slot="why"></div>
-          <div data-slot="char"></div>
-          <div data-slot="arc"></div>
         </section>
         <section class="nl-acard nl-ashots" aria-labelledby="nl-shots-title">
           <div class="nl-acard__h">
@@ -1426,7 +1461,8 @@
     put('send', document.getElementById('anim-send'));
 
     slot('entry').addEventListener('click', () => setTimeout(() => nlTokens(slot('tokens')), 0));
-    document.getElementById('anim-look')?.addEventListener('change', () => nlTokens(slot('tokens')));
+    document.getElementById('anim-look')?.addEventListener('change', () => { nlTokens(slot('tokens')); nlBriefSummary(root); });
+    document.getElementById('anim-story-type')?.addEventListener('change', () => nlBriefSummary(root));
     const more = root.querySelector('[data-nl-more]');
     const moreSlot = slot('more');
     const paintMore = () => { moreSlot.hidden = !_nlMoreOpen; more.setAttribute('aria-expanded', _nlMoreOpen ? 'true' : 'false'); };
@@ -1447,6 +1483,56 @@
         }
       });
     }
+
+    // Cast and settings fold away; the Reference button in the prompt bar opens them.
+    const briefBtn = root.querySelector('[data-nl-brief]');
+    const briefBody = root.querySelector('.nl-abrief__body');
+    const castBtn = root.querySelector('[data-nl-cast]');
+    const paintBrief = () => {
+      briefBody.hidden = !_nlCastOpen;
+      briefBtn.setAttribute('aria-expanded', _nlCastOpen ? 'true' : 'false');
+      castBtn.setAttribute('aria-expanded', _nlCastOpen ? 'true' : 'false');
+      root.classList.toggle('nl-abrief-open', _nlCastOpen);
+    };
+    briefBtn.addEventListener('click', () => { _nlCastOpen = !_nlCastOpen; paintBrief(); });
+    castBtn.addEventListener('click', () => {
+      _nlCastOpen = true;
+      paintBrief();
+      const card = root.querySelector('.nl-abrief');
+      card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setTimeout(() => card?.querySelector('.anim-ref-tools button, .anim-ref-tools input')?.focus({ preventScroll: true }), 250);
+    });
+    paintBrief();
+
+    // On a finished reel the prompt is a chat with the editor: Send and Enter go to /edit.
+    slot('send').addEventListener('click', (e) => {
+      if (!nlEditorMode() || !e.target.closest('#anim-send')) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      nlSendEdit();
+    }, true);
+    slot('prompt').addEventListener('keydown', (e) => {
+      if (!nlEditorMode() || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      nlSendEdit();
+    }, true);
+    root.querySelector('[data-nl-plan]').addEventListener('click', () => {
+      _nlPlanMode = nlEditorMode();
+      nlHeroState(root);
+      renderChat();
+      document.getElementById('anim-prompt')?.focus();
+    });
+    slot('edits').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-edit-idea]');
+      const ta = document.getElementById('anim-prompt');
+      if (!b || !ta) return;
+      ta.value = b.dataset.editIdea;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      nlHeroState(root);
+    });
 
     const ideas = slot('ideas');
     ideas.innerHTML = `<span class="nl-ahero__try">Try</span>${NL_IDEAS.map((t, i) => `<button type="button" class="nl-aidea" data-idea="${i}">${esc(t)}</button>`).join('')}`;
@@ -1526,6 +1612,7 @@
     nlTimeline(slot('tl'));
     nlHeaderPill();
     nlTokens(slot('tokens'));
+    nlBriefSummary(root);
     nlHeroState(root);
     nlLock(slot('lock'));
     const savedBtn = root.querySelector('[data-nl-saved]');
@@ -1533,6 +1620,122 @@
       savedBtn.hidden = !slot('saved').childElementCount;
       slot('saved').hidden = savedBtn.hidden || !_nlSavedOpen;
     }
+  }
+
+  /** One line under "Cast and settings": photos, look and story, so it can stay folded. */
+  function nlBriefSummary(root) {
+    const sum = root.querySelector('[data-slot="brief-sum"]');
+    const count = root.querySelector('[data-slot="ref-count"]');
+    const refs = Array.isArray(_refs) ? _refs : [];
+    const roleName = { character: 'character', item: 'product', setting: 'group', scene: 'place', style: 'style' };
+    const roles = [...new Set(refs.map((r) => roleName[r.role] || 'photo'))];
+    const look = document.getElementById('anim-look');
+    const lookLabel = look ? String(look.options[look.selectedIndex]?.textContent || '').replace(/ \/ animated$/i, '') : '';
+    const story = document.getElementById('anim-story-type');
+    const storyLabel = story && story.value ? String(story.options[story.selectedIndex]?.textContent || '') : '';
+    const bits = [
+      refs.length ? `${refs.length} photo${refs.length === 1 ? '' : 's'} (${roles.join(', ')})` : 'No reference photos',
+      lookLabel,
+      storyLabel ? `Story: ${storyLabel}` : '',
+    ].filter(Boolean);
+    if (sum) sum.textContent = bits.join(' · ');
+    if (count) { count.hidden = !refs.length; count.textContent = String(refs.length); }
+  }
+
+  /** A finished reel the client can talk to: final built, a shot ready, no plan waiting. */
+  function nlEditorMode() {
+    const p = _project;
+    if (!p || _nlPlanMode || !p.final_url) return false;
+    if (['brief_ready', 'briefing', 'character_review'].includes(String(p.status || ''))) return false;
+    return nlScenes().some((x) => x.video_url && x.status === 'ready');
+  }
+  function nlEditWorking() {
+    const p = _project;
+    if (!p) return false;
+    return !!p.editing_started_at || p.status === 'assembling' || nlScenes().some((x) => x.status === 'generating' || x.status === 'pending');
+  }
+
+  /** The conversation, new look: your messages, the editor's replies with what it changed,
+   *  each shot plan folded into one row, and system events as quiet status lines. */
+  function nlThreadHtml(chat, brief) {
+    const list = Array.isArray(chat) ? chat : [];
+    const lastPlan = (() => { for (let i = list.length - 1; i >= 0; i--) if (list[i].role === 'agent' && list[i].kind !== 'edit') return i; return -1; })();
+    const lastEdit = (() => { for (let i = list.length - 1; i >= 0; i--) if (list[i].role === 'agent' && list[i].kind === 'edit') return i; return -1; })();
+    const working = nlEditWorking();
+    const seenIdea = { v: false };
+    const rows = list.map((m, i) => {
+      const role = String(m.role || '').toLowerCase();
+      const text = String(m.text || '').trim();
+      if (!text && !(m.changes || []).length) return '';
+      if (role === 'user') {
+        const label = m.kind !== 'edit' && !seenIdea.v ? '<div class="nl-tmsg__l">Your idea</div>' : '';
+        if (m.kind !== 'edit') seenIdea.v = true;
+        return `<div class="nl-tmsg nl-tmsg--me">${label}<div class="nl-tmsg__b">${esc(text)}</div></div>`;
+      }
+      if (role === 'agent' && m.kind !== 'edit') {
+        const shots = i === lastPlan && Array.isArray(brief?.shots) ? brief.shots : [];
+        const shotRows = shots.map((x, k) => `<li><span>${k + 1}</span>${esc(customerShotLine(x) || x.title || `Shot ${k + 1}`)}</li>`).join('');
+        return `<details class="nl-tplan">
+            <summary><span class="nl-tplan__i">${nlSvg(NL_I.film, 14)}</span><span class="nl-tplan__t">Shot plan</span>${shots.length ? `<span class="nl-tplan__m">${shots.length} shot${shots.length === 1 ? '' : 's'}</span>` : ''}<span class="nl-grow"></span><span class="nl-tplan__more">Show</span>${nlSvg(NL_I.chev, 12, 2)}</summary>
+            <div class="nl-tplan__body">${shotRows ? `<ol class="nl-tplan__shots">${shotRows}</ol>` : ''}<div class="nl-tplan__h">Art direction</div><p>${esc(text)}</p></div>
+          </details>`;
+      }
+      if (role === 'agent') {
+        const live = i === lastEdit && working;
+        const chips = (m.changes || []).map((c) => `<span class="nl-tchip${live ? ' is-live' : ''}">${live ? '<i class="nl-tspin" aria-hidden="true"></i>' : nlSvg(NL_I.check, 11, 2.4)}${esc(c)}</span>`).join('');
+        return `<div class="nl-tmsg nl-tmsg--ai"><span class="nl-tav">${nlSvg(NL_I.spark, 12)}</span><div class="nl-tmsg__c"><div class="nl-tmsg__b">${esc(text)}</div>${chips ? `<div class="nl-tchips">${chips}</div>` : ''}${live ? '<div class="nl-tmsg__s">Working on it. The final rebuilds by itself.</div>' : ''}</div></div>`;
+      }
+      const kind = m.kind === 'final' || /^Final reel (ready|updated)/i.test(text) ? 'ok' : m.kind === 'vo_audit' ? 'vo' : 'info';
+      const icon = kind === 'ok' ? NL_I.check : kind === 'vo' ? NL_I.mic : NL_I.info;
+      const shown = text.replace(/^Final reel updated from (\d+) shots?[^.]*\./i, 'Final reel updated from $1 shots.');
+      return `<div class="nl-tsys nl-tsys--${kind}">${nlSvg(icon, 12, 2)}<span>${esc(shown)}</span></div>`;
+    }).filter(Boolean);
+    if (_nlEditPending) rows.push('<div class="nl-tmsg nl-tmsg--ai is-typing"><span class="nl-tav">' + nlSvg(NL_I.spark, 12) + '</span><div class="nl-tmsg__c"><div class="nl-tmsg__b"><i></i><i></i><i></i></div></div></div>');
+    return rows.join('');
+  }
+
+  /** Change ideas that fit this reel, shown until the first edit. */
+  function nlEditIdeas() {
+    const p = _project || {};
+    const a = (p.pipeline && p.pipeline.assemble) || {};
+    const out = [];
+    if (nlScenes().length) out.push('Redo shot 1 with a warmer, closer framing');
+    if (a.vo !== false && p.vo_script) out.push('Make the voiceover shorter and warmer');
+    if (a.music !== false) out.push('Swap in more upbeat music');
+    if (a.outro !== false && p.outro_url) out.push('Leave off the end card');
+    else if (a.captions !== false) out.push('Turn the captions off');
+    return out.slice(0, 4);
+  }
+
+  async function nlSendEdit() {
+    const ta = document.getElementById('anim-prompt');
+    const message = String(ta?.value || '').trim();
+    if (!message || !_project?.id || _nlEditPending) return;
+    if (nlEditWorking()) { toast('Still working on the last change. Send this when it finishes.', 'info'); return; }
+    _nlEditPending = true;
+    const before = (_project.chat || []).slice();
+    _project.chat = before.concat([{ role: 'user', kind: 'edit', text: message, ts: new Date().toISOString() }]);
+    ta.value = '';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    renderChat();
+    const root = nlAnimRoot();
+    if (root) nlHeroState(root);
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/edit`, { method: 'POST', body: JSON.stringify({ message }) });
+      _nlEditPending = false;
+      if (data.project) _project = data.project;
+      _canvasFp = projectUiFingerprint(_project);
+      renderCanvas();
+      renderChat();
+      if (nlEditWorking()) startPoll();
+    } catch (e) {
+      _nlEditPending = false;
+      _project.chat = before;
+      if (ta && !ta.value) ta.value = message;
+      renderChat();
+      toast(e.message || 'The editor could not take that change', 'error', e.request_id);
+    }
+    if (root) nlHeroState(root);
   }
 
   const NL_IDEAS = [
@@ -1547,6 +1750,42 @@
     const ideas = root.querySelector('[data-slot="ideas"]');
     if (!t) return;
     const hasShots = nlScenes().length > 0;
+    const editing = nlEditorMode();
+    const hero = root.querySelector('.nl-ahero');
+    hero?.classList.toggle('nl-ahero--chat', editing);
+    const ta0 = document.getElementById('anim-prompt');
+    const send0 = document.getElementById('anim-send');
+    const edits = root.querySelector('[data-slot="edits"]');
+    const back = root.querySelector('[data-nl-plan]');
+    if (back) {
+      back.hidden = !(editing || (_nlPlanMode && _project?.final_url));
+      back.textContent = editing ? 'New shot plan' : 'Back to editing';
+    }
+    if (editing) {
+      t.textContent = 'Edit your reel';
+      if (sub) sub.textContent = 'Ask for any change to a shot, the voiceover, music, captions or the end card. The final rebuilds by itself.';
+      hero?.classList.remove('nl-ahero--edit');
+      root.classList.toggle('nl-anim--shots', hasShots);
+      if (ta0) ta0.placeholder = 'Ask for a change, like "make shot 2 a close up" or "warmer music"';
+      if (send0 && !send0.disabled) send0.textContent = 'Send';
+      if (send0) send0.disabled = _nlEditPending;
+      if (ideas) ideas.hidden = true;
+      if (edits) {
+        const hasEdit = (_project?.chat || []).some((m) => m.kind === 'edit');
+        const list = nlEditIdeas();
+        edits.hidden = hasEdit || _nlEditPending || !list.length || !!(ta0 && ta0.value.trim());
+        if (!edits.hidden && edits.dataset.sig !== list.join('|')) {
+          edits.dataset.sig = list.join('|');
+          edits.innerHTML = list.map((x) => `<button type="button" class="nl-aidea" data-edit-idea="${esc(x)}">${esc(x)}</button>`).join('');
+        }
+      }
+      return;
+    }
+    if (edits) edits.hidden = true;
+    if (send0 && (send0.textContent === 'Send')) send0.textContent = 'Write shots';
+    if (ta0 && /^Ask for a change/.test(ta0.placeholder)) {
+      ta0.placeholder = readAnimEntry() === 'prompt' ? PROMPT_PLACEHOLDER : VO_PLACEHOLDER;
+    }
     t.textContent = hasShots ? 'Rework the idea' : 'Describe your video';
     if (sub) sub.textContent = hasShots
       ? 'Write a new idea or script for a fresh shot plan. To tweak one shot, select it below.'
@@ -1828,8 +2067,10 @@
     if (!el) return;
     const p = _project;
     const scenes = nlScenes();
-    if (!p || !scenes.length) { el.hidden = true; el.textContent = ''; return; }
+    if (!p || !scenes.length) { el.hidden = true; el.textContent = ''; _nlTl = null; return; }
     el.hidden = false;
+    if (_nlTl && _nlTl.pid === p.id) { nlTimelineEditor(el); return; }
+    _nlTl = null;
     const f = assembleFlags();
     const shotSecs = scenes.reduce((n, s) => n + nlShotSecs(s), 0);
     const endSecs = p.outro_url && f.outro ? 2 : 0;
@@ -1859,12 +2100,291 @@
     for (let s = 0; s < total; s += step) ticks.push(`<span style="left:${pct(s)}">${nlClock(s)}</span>`);
     const track = (label, blocks, empty) => `<div class="nl-atl__row"><span class="nl-atl__l">${label}</span><div class="nl-atl__lane">${blocks || `<span class="nl-atl__empty">${empty}</span>`}</div></div>`;
     el.innerHTML = `
-      <div class="nl-acard__h nl-acard__h--flat"><h2 id="nl-tl-title">Timeline</h2><span class="nl-acard__meta">${nlClock(total)}</span></div>
+      <div class="nl-acard__h nl-acard__h--flat"><h2 id="nl-tl-title">Timeline <span class="nl-acard__meta">${nlClock(total)}</span></h2><button type="button" class="nl-abtn nl-abtn--sm" data-nl-tl-edit ${nlTimelineEditable() ? '' : 'disabled title="Wait for the shots to finish"'}>Edit</button></div>
       <div class="nl-atl__ticks">${ticks.join('')}</div>
       ${track('Shots', shotBlocks, '')}
       ${track('Voiceover', voBlocks, f.vo ? 'No script yet' : 'Off')}
       ${track('Captions', capBlocks, f.captions ? (vo ? '' : 'Follow the voiceover') : 'Off')}
       ${track('Music', music, f.music ? 'Not added' : 'Off')}`;
+    el.querySelector('[data-nl-tl-edit]')?.addEventListener('click', () => nlTimelineOpen(el));
+  }
+
+  /* ── Timeline editing: reorder, trim, remove; Save rebuilds the final ── */
+
+  function nlTimelineEditable() {
+    const p = _project;
+    if (!p || nlEditWorking()) return false;
+    return nlScenes().some((x) => x.video_url && x.status === 'ready');
+  }
+
+  async function nlTimelineOpen(el) {
+    if (!nlTimelineEditable()) return;
+    const scenes = nlScenes();
+    _nlTl = {
+      pid: _project.id,
+      order: scenes.map((x) => x.id),
+      trims: Object.fromEntries(scenes.map((x) => [x.id, x.trim ? { in: Number(x.trim.in) || 0, out: x.trim.out == null ? null : Number(x.trim.out) } : null])),
+      removed: new Set(),
+      durs: Object.fromEntries(scenes.map((x) => [x.id, nlClipSecs(x)])),
+      sel: _nlSelShot && scenes.some((x) => x.id === _nlSelShot) ? _nlSelShot : scenes[0].id,
+      saving: false,
+    };
+    nlTimelineEditor(el);
+    // Read each clip's real length so trims are exact.
+    const tl = _nlTl;
+    await Promise.all(scenes.filter((x) => x.video_url).map((x) => new Promise((resolve) => {
+      const v = document.createElement('video');
+      const done = () => { v.removeAttribute('src'); resolve(); };
+      const timer = setTimeout(done, 5000);
+      v.preload = 'metadata';
+      v.muted = true;
+      v.onloadedmetadata = () => { if (v.duration > 0.5 && v.duration < 20) tl.durs[x.id] = Math.round(v.duration * 100) / 100; clearTimeout(timer); done(); };
+      v.onerror = () => { clearTimeout(timer); done(); };
+      v.src = x.video_url;
+    })));
+    if (_nlTl === tl) nlTimelineEditor(el);
+  }
+
+  function nlTlLen(id) {
+    const tl = _nlTl;
+    const dur = tl.durs[id] || 5;
+    const t = tl.trims[id];
+    if (!t) return dur;
+    return Math.max(0.5, (t.out == null ? dur : Math.min(dur, t.out)) - (t.in || 0));
+  }
+
+  function nlTimelineEditor(el) {
+    const tl = _nlTl;
+    const p = _project;
+    const byId = Object.fromEntries(nlScenes().map((x) => [x.id, x]));
+    tl.order = tl.order.filter((id) => byId[id]);
+    const kept = tl.order.filter((id) => !tl.removed.has(id));
+    if (!kept.includes(tl.sel)) tl.sel = kept[0] || null;
+    const f = assembleFlags();
+    const endSecs = p.outro_url && f.outro ? 2 : 0;
+    const shotTotal = kept.reduce((n, id) => n + nlTlLen(id), 0);
+    const total = Math.max(1, shotTotal + endSecs);
+    const pct = (x) => `${((x / total) * 100).toFixed(3)}%`;
+    let t = 0;
+    const blocks = kept.map((id, i) => {
+      const x = byId[id];
+      const len = nlTlLen(id);
+      const a = t; t += len;
+      const thumb = x.keyframe_url ? ` style="--thumb:url('${String(x.keyframe_url).replace(/'/g, '%27')}')"` : '';
+      return `<div class="nl-tle__b${id === tl.sel ? ' is-sel' : ''}${tl.trims[id] ? ' is-trim' : ''}" data-id="${esc(id)}" draggable="true" style="left:${pct(a)};width:${pct(len)}" role="button" tabindex="0" aria-label="Shot ${i + 1}, ${len.toFixed(1)} seconds">
+          <span class="nl-tle__thumb"${thumb}></span>
+          <span class="nl-tle__h nl-tle__h--in" data-handle="in" aria-hidden="true"></span>
+          <span class="nl-tle__lab"><b>${i + 1}</b>${len.toFixed(1)}s</span>
+          <span class="nl-tle__h nl-tle__h--out" data-handle="out" aria-hidden="true"></span>
+        </div>`;
+    }).join('') + (endSecs ? `<div class="nl-tle__b nl-tle__b--end" style="left:${pct(shotTotal)};width:${pct(endSecs)}"><span class="nl-tle__lab">End card</span></div>` : '');
+    const ticks = [];
+    const step = total > 40 ? 10 : total > 20 ? 4 : 2;
+    for (let sec = 0; sec < total; sec += step) ticks.push(`<span style="left:${pct(sec)}">${nlClock(sec)}</span>`);
+    const sel = tl.sel ? byId[tl.sel] : null;
+    const selIdx = kept.indexOf(tl.sel);
+    const dur = sel ? (tl.durs[sel.id] || 5) : 5;
+    const tr = sel ? (tl.trims[sel.id] || { in: 0, out: null }) : null;
+    const inspector = sel ? `
+      <div class="nl-tle__insp">
+        <span class="nl-tle__it">Shot ${selIdx + 1}</span>
+        <label class="nl-tle__f">Start<input type="number" step="0.1" min="0" max="${(dur - 0.5).toFixed(1)}" value="${(tr.in || 0).toFixed(1)}" data-trim="in" aria-label="Start, seconds into the clip"><span>s</span></label>
+        <label class="nl-tle__f">End<input type="number" step="0.1" min="0.5" max="${dur.toFixed(1)}" value="${(tr.out == null ? dur : tr.out).toFixed(1)}" data-trim="out" aria-label="End, seconds into the clip"><span>s</span></label>
+        <span class="nl-tle__len">${nlTlLen(sel.id).toFixed(1)}s of ${dur.toFixed(1)}s</span>
+        <span class="nl-grow"></span>
+        <button type="button" class="nl-abtn nl-abtn--sm nl-abtn--icon" data-tl="left" ${selIdx <= 0 ? 'disabled' : ''} aria-label="Move earlier">${nlSvg(NL_I.left, 13, 2)}</button>
+        <button type="button" class="nl-abtn nl-abtn--sm nl-abtn--icon" data-tl="right" ${selIdx >= kept.length - 1 ? 'disabled' : ''} aria-label="Move later">${nlSvg(NL_I.right, 13, 2)}</button>
+        <button type="button" class="nl-abtn nl-abtn--sm" data-tl="reset" ${tl.trims[sel.id] ? '' : 'disabled'}>Reset trim</button>
+        <button type="button" class="nl-abtn nl-abtn--sm nl-abtn--bad" data-tl="remove" ${kept.length <= 1 ? 'disabled' : ''}>Remove</button>
+      </div>` : '';
+    const removedList = tl.order.filter((id) => tl.removed.has(id));
+    const changed = JSON.stringify(kept) !== JSON.stringify(nlScenes().map((x) => x.id))
+      || kept.some((id) => JSON.stringify(tl.trims[id] || null) !== JSON.stringify(byId[id].trim ? { in: Number(byId[id].trim.in) || 0, out: byId[id].trim.out == null ? null : Number(byId[id].trim.out) } : null));
+    el.innerHTML = `
+      <div class="nl-acard__h nl-acard__h--flat"><h2 id="nl-tl-title">Timeline <span class="nl-tle__badge">Editing</span><span class="nl-acard__meta">${nlClock(total)}</span></h2>
+        <span class="nl-acard__tools"><button type="button" class="nl-abtn nl-abtn--sm" data-tl="cancel">Cancel</button><button type="button" class="nl-abtn nl-abtn--sm nl-abtn--primary" data-tl="save" ${changed && !tl.saving ? '' : 'disabled'}>${tl.saving ? 'Saving…' : 'Save and rebuild'}</button></span></div>
+      <div class="nl-atl__ticks">${ticks.join('')}</div>
+      <div class="nl-tle__lane" data-lane>${blocks}<span class="nl-tle__drop" hidden></span></div>
+      ${inspector}
+      ${removedList.length ? `<div class="nl-tle__removed">Removed: ${removedList.map((id) => `<button type="button" class="nl-alink" data-restore="${esc(id)}">Shot ${nlScenes().findIndex((x) => x.id === id) + 1} · Undo</button>`).join(' ')}</div>` : ''}
+      <p class="nl-tle__hint">Drag a shot to move it, or drag its edges to trim. Saving rebuilds the final, and the voiceover is checked against the new length.</p>`;
+    nlTimelineBind(el);
+  }
+
+  function nlTimelineBind(el) {
+    const tl = _nlTl;
+    const lane = el.querySelector('[data-lane]');
+    const kept = () => tl.order.filter((id) => !tl.removed.has(id));
+    const rerender = () => nlTimelineEditor(el);
+    el.querySelector('[data-tl="cancel"]')?.addEventListener('click', () => { _nlTl = null; nlTimeline(el); });
+    el.querySelector('[data-tl="save"]')?.addEventListener('click', () => nlTimelineSave(el));
+    el.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', () => { tl.removed.delete(b.dataset.restore); rerender(); }));
+    const insp = el.querySelector('.nl-tle__insp');
+    insp?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tl]');
+      if (!b || b.disabled) return;
+      const ids = kept();
+      const i = ids.indexOf(tl.sel);
+      if (b.dataset.tl === 'left' || b.dataset.tl === 'right') {
+        const j = b.dataset.tl === 'left' ? i - 1 : i + 1;
+        if (j < 0 || j >= ids.length) return;
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        tl.order = ids.concat(tl.order.filter((id) => tl.removed.has(id)));
+      } else if (b.dataset.tl === 'reset') {
+        tl.trims[tl.sel] = null;
+      } else if (b.dataset.tl === 'remove') {
+        if (ids.length <= 1) return;
+        tl.removed.add(tl.sel);
+        tl.sel = ids[i + 1] || ids[i - 1] || null;
+      }
+      rerender();
+    });
+    insp?.querySelectorAll('[data-trim]').forEach((inp) => inp.addEventListener('change', () => {
+      const dur = tl.durs[tl.sel] || 5;
+      const cur = tl.trims[tl.sel] || { in: 0, out: null };
+      let a = inp.dataset.trim === 'in' ? Number(inp.value) : cur.in || 0;
+      let b = inp.dataset.trim === 'out' ? Number(inp.value) : (cur.out == null ? dur : cur.out);
+      a = Math.max(0, Math.min(Number.isFinite(a) ? a : 0, dur - 0.5));
+      b = Math.max(a + 0.5, Math.min(Number.isFinite(b) ? b : dur, dur));
+      tl.trims[tl.sel] = a <= 0.05 && b >= dur - 0.05 ? null : { in: Math.round(a * 10) / 10, out: b >= dur - 0.05 ? null : Math.round(b * 10) / 10 };
+      rerender();
+    }));
+    if (!lane) return;
+    // Select and keyboard nudge
+    lane.addEventListener('click', (e) => {
+      const b = e.target.closest('.nl-tle__b[data-id]');
+      if (!b || e.target.closest('[data-handle]')) return;
+      tl.sel = b.dataset.id;
+      rerender();
+    });
+    lane.addEventListener('keydown', (e) => {
+      const b = e.target.closest('.nl-tle__b[data-id]');
+      if (!b) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tl.sel = b.dataset.id; rerender(); el.querySelector(`.nl-tle__b[data-id="${CSS.escape(tl.sel)}"]`)?.focus(); }
+    });
+    // Trim by dragging an edge
+    lane.addEventListener('pointerdown', (e) => {
+      const h = e.target.closest('[data-handle]');
+      const b = e.target.closest('.nl-tle__b[data-id]');
+      if (!h || !b) return;
+      e.preventDefault();
+      const id = b.dataset.id;
+      tl.sel = id;
+      const dur = tl.durs[id] || 5;
+      const start = tl.trims[id] || { in: 0, out: null };
+      const startIn = start.in || 0;
+      const startOut = start.out == null ? dur : start.out;
+      const ids = kept();
+      const end = el.querySelector('.nl-tle__b--end');
+      const totalSec = ids.reduce((n, k) => n + nlTlLen(k), 0) + (end ? 2 : 0);
+      const pxPerSec = lane.getBoundingClientRect().width / Math.max(1, totalSec);
+      const x0 = e.clientX;
+      lane.setPointerCapture(e.pointerId);
+      lane.classList.add('is-trimming');
+      const move = (ev) => {
+        const d = (ev.clientX - x0) / pxPerSec;
+        let a = startIn;
+        let o = startOut;
+        if (h.dataset.handle === 'in') a = Math.max(0, Math.min(startOut - 0.5, startIn + d));
+        else o = Math.max(startIn + 0.5, Math.min(dur, startOut + d));
+        a = Math.round(a * 10) / 10;
+        o = Math.round(o * 10) / 10;
+        tl.trims[id] = a <= 0.05 && o >= dur - 0.05 ? null : { in: a, out: o >= dur - 0.05 ? null : o };
+        // Repaint blocks in place so the drag keeps its pointer.
+        let acc = 0;
+        const tot = ids.reduce((n, k) => n + nlTlLen(k), 0) + (end ? 2 : 0);
+        ids.forEach((k) => {
+          const node = lane.querySelector(`.nl-tle__b[data-id="${CSS.escape(k)}"]`);
+          const len = nlTlLen(k);
+          if (node) {
+            node.style.left = `${((acc / tot) * 100).toFixed(3)}%`;
+            node.style.width = `${((len / tot) * 100).toFixed(3)}%`;
+            const lab = node.querySelector('.nl-tle__lab');
+            if (lab) lab.innerHTML = `<b>${ids.indexOf(k) + 1}</b>${len.toFixed(1)}s`;
+          }
+          acc += len;
+        });
+        if (end) { end.style.left = `${((acc / tot) * 100).toFixed(3)}%`; end.style.width = `${((2 / tot) * 100).toFixed(3)}%`; }
+      };
+      const up = () => {
+        lane.removeEventListener('pointermove', move);
+        lane.removeEventListener('pointerup', up);
+        lane.removeEventListener('pointercancel', up);
+        lane.classList.remove('is-trimming');
+        rerender();
+      };
+      lane.addEventListener('pointermove', move);
+      lane.addEventListener('pointerup', up);
+      lane.addEventListener('pointercancel', up);
+    });
+    // Reorder by dragging a shot
+    let dragId = null;
+    const drop = lane.querySelector('.nl-tle__drop');
+    const slotAt = (clientX) => {
+      const ids = kept().filter((k) => k !== dragId);
+      for (let i = 0; i < ids.length; i++) {
+        const r = lane.querySelector(`.nl-tle__b[data-id="${CSS.escape(ids[i])}"]`).getBoundingClientRect();
+        if (clientX < r.left + r.width / 2) return { index: i, x: r.left };
+      }
+      const last = ids.length ? lane.querySelector(`.nl-tle__b[data-id="${CSS.escape(ids[ids.length - 1])}"]`).getBoundingClientRect() : lane.getBoundingClientRect();
+      return { index: ids.length, x: last.right };
+    };
+    lane.addEventListener('dragstart', (e) => {
+      const b = e.target.closest('.nl-tle__b[data-id]');
+      if (!b || lane.classList.contains('is-trimming')) { e.preventDefault(); return; }
+      dragId = b.dataset.id;
+      b.classList.add('is-drag');
+      try { e.dataTransfer.setData('text/plain', dragId); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+    });
+    lane.addEventListener('dragover', (e) => {
+      if (!dragId) return;
+      e.preventDefault();
+      const at = slotAt(e.clientX);
+      drop.hidden = false;
+      drop.style.left = `${at.x - lane.getBoundingClientRect().left - 1}px`;
+    });
+    lane.addEventListener('dragleave', (e) => { if (!lane.contains(e.relatedTarget)) drop.hidden = true; });
+    lane.addEventListener('drop', (e) => {
+      if (!dragId) return;
+      e.preventDefault();
+      const at = slotAt(e.clientX);
+      const ids = kept().filter((k) => k !== dragId);
+      ids.splice(at.index, 0, dragId);
+      tl.order = ids.concat(tl.order.filter((id) => tl.removed.has(id)));
+      tl.sel = dragId;
+      dragId = null;
+      rerender();
+    });
+    lane.addEventListener('dragend', () => { dragId = null; drop.hidden = true; lane.querySelectorAll('.is-drag').forEach((n) => n.classList.remove('is-drag')); });
+  }
+
+  async function nlTimelineSave(el) {
+    const tl = _nlTl;
+    if (!tl || tl.saving) return;
+    const kept = tl.order.filter((id) => !tl.removed.has(id));
+    tl.saving = true;
+    nlTimelineEditor(el);
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/timeline`, {
+        method: 'POST',
+        body: JSON.stringify({
+          scene_ids: kept,
+          remove: [...tl.removed],
+          trims: Object.fromEntries(kept.map((id) => [id, tl.trims[id] || null])),
+          durations: tl.durs,
+        }),
+      });
+      _nlTl = null;
+      if (data.project) _project = data.project;
+      _canvasFp = projectUiFingerprint(_project);
+      renderCanvas();
+      renderChat();
+      if (data.rebuilding) { toast('Timeline saved. Rebuilding the final.', 'success'); startPoll(); }
+    } catch (e) {
+      tl.saving = false;
+      nlTimelineEditor(el);
+      toast(e.message || 'Could not save the timeline', 'error', e.request_id);
+    }
   }
 
   function renderCanvas() {
@@ -2536,7 +3056,10 @@
       else chat.push(m);
     }
     const brief = _project?.agent_brief;
-    logEl.innerHTML = chat.map((m) => {
+    if (nlOn()) {
+      logEl.innerHTML = nlThreadHtml(chat, brief);
+      logEl.scrollTop = logEl.scrollHeight;
+    } else logEl.innerHTML = chat.map((m) => {
       const isAgent = m.role === 'agent' || m.role === 'system';
       return `<div class="anim-msg ${isAgent ? 'anim-msg--agent' : 'anim-msg--user'}">
         <div class="anim-msg__role">${esc(m.role === 'agent' ? 'AI · shots' : (m.role === 'user' ? 'Your idea' : m.role))}</div>
@@ -3376,6 +3899,10 @@
   }
 
   function renderRefs() {
+    renderRefsInner();
+    if (nlOn()) { const r = document.querySelector('.anim-shell .nl-anim'); if (r) nlBriefSummary(r); }
+  }
+  function renderRefsInner() {
     const box = document.getElementById('anim-refs');
     if (!box) return;
     if (!_refs.length) {

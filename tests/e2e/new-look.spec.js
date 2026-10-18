@@ -354,10 +354,18 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   // A starting idea fills the prompt and steps out of the way.
   await page.locator('.nl-aidea').first().click();
   await expect(page.locator('#anim-prompt')).toHaveValue('One tip our customers always ask about');
-  await expect(page.locator('.nl-ahero__ideas')).toBeHidden();
+  await expect(page.locator('[data-slot="ideas"]')).toBeHidden();
   await page.locator('#anim-prompt').fill('');
   await page.locator('#anim-prompt').dispatchEvent('input');
-  await expect(page.locator('.nl-ahero__ideas')).toBeVisible();
+  await expect(page.locator('[data-slot="ideas"]')).toBeVisible();
+  // Cast and settings stay folded; the Reference button in the prompt bar opens them.
+  await expect(page.locator('.nl-abrief__body')).toBeHidden();
+  await expect(page.locator('[data-slot="brief-sum"]')).toContainText('No reference photos');
+  await page.click('[data-nl-cast]');
+  await expect(page.locator('.nl-abrief__body')).toBeVisible();
+  await expect(page.locator('.nl-abrief .anim-ref-tools')).toBeVisible();
+  await page.click('[data-nl-brief]');
+  await expect(page.locator('.nl-abrief__body')).toBeHidden();
   await page.locator('.nl-ahero #anim-entry-mode [data-entry="vo"]').click();
   await expect(page.locator('#anim-prompt')).toHaveAttribute('placeholder', /voiceover/i);
   await expect(page.locator('.nl-ahome [data-open-project="proj_nl"]')).toBeVisible();
@@ -367,10 +375,21 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   await expect(steps).toHaveCount(4);
   await expect(steps.nth(2)).toHaveClass(/nl-step--now/);
   await expect(page.locator('.nl-aproj')).toContainText('Walk day');
-  // With shots: the prompt stays on top for a new idea, and the shots come before cast and settings.
-  await expect(page.locator('#nl-ahero-t')).toHaveText('Rework the idea');
-  await expect(page.locator('.nl-ahero__ideas')).toBeHidden();
+  // A finished reel: the prompt becomes the editor chat; the shots come before cast and settings.
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Edit your reel');
+  await expect(page.locator('.nl-ahero')).toHaveClass(/nl-ahero--chat/);
+  await expect(page.locator('#anim-send')).toHaveText('Send');
+  await expect(page.locator('.nl-ahero [data-nl-cast]')).toBeHidden();
+  await expect(page.locator('[data-slot="ideas"]')).toBeHidden();
+  await expect(page.locator('[data-slot="edits"] .nl-aidea').first()).toBeVisible();
   expect((await page.locator('.nl-ashots').boundingBox()).y).toBeLessThan((await page.locator('.nl-abrief').boundingBox()).y);
+  // "New shot plan" goes back to the brief writer, and back again.
+  await page.click('[data-nl-plan]');
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Rework the idea');
+  await expect(page.locator('.nl-ahero [data-nl-cast]')).toBeVisible();
+  await expect(page.locator('[data-nl-plan]')).toHaveText('Back to editing');
+  await page.click('[data-nl-plan]');
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Edit your reel');
   await expect(page.locator('.nl-acast__lock')).toContainText('Fiona locked across every shot');
   await expect(page.locator('.nl-acast .anim-ref-name')).toHaveText('Fiona');
 
@@ -430,6 +449,85 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   await expect(page.locator('.anim-canvas-header .nl-steps')).toHaveCount(0);
   await expect(page.locator('.nl-anim.is-home')).toBeVisible();
   expect(calls.length).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('new look Animate: a finished reel is edited by chat, and its timeline by hand (reorder, trim, save)', async ({ page }) => {
+  const errors = watchErrors(page);
+  const scene = (i) => ({ id: 's' + i, order: i, status: 'ready', duration_target: 5, video_url: `https://store.test/s${i}.mp4`, keyframe_url: `https://store.test/k${i}.png`, action: `Shot ${i} action` });
+  const project = {
+    id: 'proj_done', status: 'ready', mode: 'video', look: 'stylized', agent_brief: { title: 'Winter Wellbeing Reel', shots: [1, 2, 3].map((i) => ({ action: `Shot ${i} action` })) },
+    final_url: 'https://store.test/final.mp4', vo_script: 'Winter can take its toll. Look after yourself.',
+    pipeline: { assemble: { vo: true, captions: true, music: false, outro: false } },
+    scenes: [scene(1), scene(2), scene(3)],
+    chat: [
+      { role: 'user', text: 'A reel about staying well in winter' },
+      { role: 'agent', text: 'A three-scene flat vector reel with one consistent character.' },
+      { role: 'system', kind: 'final', text: 'Final reel ready: 3 shots with voiceover and captions.' },
+    ],
+  };
+  const sent = { edit: null, timeline: null };
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    animProjects: [project],
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/animation/projects/proj_done/edit') {
+        sent.edit = JSON.parse(entry.body || '{}');
+        const next = JSON.parse(JSON.stringify(project));
+        next.chat.push({ role: 'user', kind: 'edit', text: sent.edit.message });
+        next.chat.push({ role: 'agent', kind: 'edit', text: 'Redoing shot 1 with a clearly drawn, friendly face.', changes: ['Redo shot 1'] });
+        json(200, { ok: true, project: next });
+        return 'handled';
+      }
+      if (entry.path === '/api/animation/projects/proj_done/timeline') {
+        sent.timeline = JSON.parse(entry.body || '{}');
+        json(200, { ok: true, removed: 0, reordered: true, trimmed: 1, rebuilding: false, project });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await page.click('[data-open-project="proj_done"]');
+  await expect(page.locator('#nl-ahero-t')).toHaveText('Edit your reel');
+
+  // The thread: your idea, the shot plan folded into one row, status lines.
+  await expect(page.locator('.nl-tmsg--me')).toHaveCount(1);
+  await expect(page.locator('.nl-tplan')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.nl-tplan summary')).toContainText('3 shots');
+  await page.click('.nl-tplan summary');
+  await expect(page.locator('.nl-tplan__shots li')).toHaveCount(3);
+  await expect(page.locator('.nl-tsys--ok')).toContainText('Final reel ready');
+
+  // A suggestion fills the box; Enter sends it to the editor, which replies with what it changed.
+  await page.locator('[data-slot="edits"] .nl-aidea').first().click();
+  await expect(page.locator('#anim-prompt')).not.toHaveValue('');
+  await page.fill('#anim-prompt', 'Give the person in shot 1 a clear, friendly face');
+  await page.press('#anim-prompt', 'Enter');
+  await expect.poll(() => sent.edit && sent.edit.message).toBe('Give the person in shot 1 a clear, friendly face');
+  await expect(page.locator('.nl-tmsg--ai')).toContainText('Redoing shot 1');
+  await expect(page.locator('.nl-tchip')).toHaveText('Redo shot 1');
+  await expect(page.locator('#anim-prompt')).toHaveValue('');
+  await expect(page.locator('[data-slot="edits"]')).toBeHidden();
+
+  // Timeline: Edit, trim shot 1, move shot 2 first, save.
+  await page.click('[data-nl-tl-edit]');
+  await expect(page.locator('.nl-tle__b[data-id]')).toHaveCount(3);
+  await page.locator('.nl-tle__b[data-id="s1"]').click();
+  await page.locator('.nl-tle__insp [data-trim="in"]').fill('0.8');
+  await page.locator('.nl-tle__insp [data-trim="in"]').dispatchEvent('change');
+  await expect(page.locator('.nl-tle__b[data-id="s1"] .nl-tle__lab')).toContainText('4.2s');
+  await page.locator('.nl-tle__b[data-id="s2"]').click();
+  await page.click('.nl-tle__insp [data-tl="left"]');
+  await expect(page.locator('.nl-tle__b[data-id="s2"] .nl-tle__lab b')).toHaveText('1');
+  await page.click('[data-tl="save"]');
+  await expect.poll(() => sent.timeline && sent.timeline.scene_ids).toEqual(['s2', 's1', 's3']);
+  expect(sent.timeline.trims.s1).toEqual({ in: 0.8, out: null });
+  expect(sent.timeline.trims.s2).toBeNull();
+  await expect(page.locator('.nl-tle__lane')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
