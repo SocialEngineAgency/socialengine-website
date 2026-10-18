@@ -1460,7 +1460,7 @@
     put('packs', document.getElementById('anim-pending-packs'));
     put('send', document.getElementById('anim-send'));
 
-    slot('entry').addEventListener('click', () => setTimeout(() => nlTokens(slot('tokens')), 0));
+    slot('entry').addEventListener('click', () => setTimeout(() => { nlTokens(slot('tokens')); nlHeroState(root); }, 0));
     document.getElementById('anim-look')?.addEventListener('change', () => { nlTokens(slot('tokens')); nlBriefSummary(root); });
     document.getElementById('anim-story-type')?.addEventListener('change', () => nlBriefSummary(root));
     const more = root.querySelector('[data-nl-more]');
@@ -1674,7 +1674,7 @@
       }
       if (role === 'agent' && m.kind !== 'edit') {
         const shots = i === lastPlan && Array.isArray(brief?.shots) ? brief.shots : [];
-        const shotRows = shots.map((x, k) => `<li><span>${k + 1}</span>${esc(customerShotLine(x) || x.title || `Shot ${k + 1}`)}</li>`).join('');
+        const shotRows = shots.map((x, k) => `<li><span>${k + 1}</span><div>${esc(customerShotLine(x) || x.title || `Shot ${k + 1}`)}${x.vo_line ? `<q class="nl-tplan__vo">${esc(x.vo_line)}</q>` : ''}</div></li>`).join('');
         return `<details class="nl-tplan">
             <summary><span class="nl-tplan__i">${nlSvg(NL_I.film, 14)}</span><span class="nl-tplan__t">Shot plan</span>${shots.length ? `<span class="nl-tplan__m">${shots.length} shot${shots.length === 1 ? '' : 's'}</span>` : ''}<span class="nl-grow"></span><span class="nl-tplan__more">Show</span>${nlSvg(NL_I.chev, 12, 2)}</summary>
             <div class="nl-tplan__body">${shotRows ? `<ol class="nl-tplan__shots">${shotRows}</ol>` : ''}<div class="nl-tplan__h">Art direction</div><p>${esc(text)}</p></div>
@@ -1789,7 +1789,9 @@
     t.textContent = hasShots ? 'Rework the idea' : 'Describe your video';
     if (sub) sub.textContent = hasShots
       ? 'Write a new idea or script for a fresh shot plan. To tweak one shot, select it below.'
-      : 'One idea is enough. It becomes a set of shots, and nothing renders until you accept them.';
+      : ((document.querySelector('#anim-entry-mode [data-entry].active')?.dataset.entry || readAnimEntry()) === 'vo'
+        ? 'Paste your script. Its lines set how many shots there are, how long each runs and what each one shows.'
+        : 'One idea is enough. The voiceover is written first, then a shot for each line. Nothing renders until you accept.');
     root.querySelector('.nl-ahero')?.classList.toggle('nl-ahero--edit', hasShots);
     root.classList.toggle('nl-anim--shots', hasShots);
     const ta = document.getElementById('anim-prompt');
@@ -3084,7 +3086,9 @@
       } else if (_project?.status === 'brief_ready' && brief) {
         const lines = (brief.shots || []).map((s, i) => {
           const line = customerShotLine(s) || s.title || `Shot ${i + 1}`;
-          return `<div class="anim-brief-shot-line"><strong>${i + 1}.</strong> ${esc(line)}</div>`;
+          const said = nlOn() && s.vo_line ? `<q class="nl-tplan__vo">${esc(s.vo_line)}</q>` : '';
+          const secs = nlOn() && s.duration_target ? ` <span class="anim-brief-shot-secs">${esc(String(s.duration_target))}s</span>` : '';
+          return `<div class="anim-brief-shot-line"><strong>${i + 1}.</strong>${secs} ${esc(line)}${said}</div>`;
         }).join('');
         actions.innerHTML = `
           <div class="anim-brief-card">
