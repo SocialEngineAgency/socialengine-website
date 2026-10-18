@@ -1734,3 +1734,6 @@ html.nl .nl-tle__hint { margin: 0; font: 400 12px/1.5 var(--nl-body); color: var
   html.nl .nl-aref__l { display: none; }
 }
 html.nl .nl-ahero--chat #anim-send::before { -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M6 11l6-6 6 6'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5M6 11l6-6 6 6'/%3E%3C/svg%3E") center / contain no-repeat; }
+html.nl .nl-tplan__vo { display: block; margin-top: 3px; quotes: '\201C' '\201D'; font: italic 400 12.5px/1.5 var(--nl-body); color: var(--nl-fg3); }
+html.nl .anim-brief-shot-line .nl-tplan__vo { margin-left: 18px; }
+html.nl .anim-brief-shot-secs { font: 500 11px var(--nl-mono); color: var(--nl-fg3); }
