@@ -1607,3 +1607,6 @@ html.nl .nl-ahome .anim-empty { display: none; }
 /* Once there are shots: prompt, then the shots, then cast and settings */
 html.nl .nl-anim--shots .nl-anim__main > .nl-abrief { order: 5; }
 html.nl .nl-ahero--edit .nl-ahero__s { margin-top: 4px; }
+/* Create → Animate: the board is taller than the screen, so the content area scrolls under the fixed header
+   (.dash-main--create clips overflow for the old full-height studio layout). */
+html.nl .dash-main--create #dash-content.dash-content--animate:has(> .anim-shell.nl-anim-on) { overflow-y: auto !important; overflow-x: hidden !important; overscroll-behavior: contain; }

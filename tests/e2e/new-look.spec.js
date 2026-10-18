@@ -420,6 +420,11 @@ test('new look Animate: the board layout (brief, tall shots with a shot bar, ask
   await expect(page.locator('.nl-afinal .nl-afinal__count')).toHaveText('2 of 3 shots ready');
   await expect(page.locator('.nl-afinal #anim-rebuild-final')).toBeVisible();
 
+  // The board is taller than the screen, and the wheel scrolls it.
+  await page.mouse.move(500, 400);
+  await page.mouse.wheel(0, 700);
+  await expect.poll(() => page.locator('#dash-content').evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
   // The project pill goes back to the project list.
   await page.click('.nl-aproj');
   await expect(page.locator('.anim-canvas-header .nl-steps')).toHaveCount(0);
