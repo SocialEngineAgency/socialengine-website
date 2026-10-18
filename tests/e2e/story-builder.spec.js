@@ -35,8 +35,16 @@ function storyApi() {
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)$/)) && entry.method === 'GET') {
       const k = st.kits.get(m[1]);
       // Looks finish between polls.
-      k.drafts.forEach((d) => { if (d.status === 'working') { d.status = 'ready'; d.options = d.options.map((_, i) => ({ status: 'ready', url: img(`look${i + 1}`) })); d.library = { saved: d.options.length, full: false, collection: k.title }; } });
+      k.drafts.forEach((d) => { if (d.status === 'working') { d.status = 'ready'; d.options = d.options.map((o, i) => (o.status === 'ready' ? o : { status: 'ready', url: img(`look${i + 1}`) })); d.library = { saved: d.options.length, full: false, collection: k.title }; } });
       json(200, { kit: kitView(k) });
+      return 'handled';
+    }
+    if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/options$/)) && body.more_of) {
+      const k = st.kits.get(m[1]);
+      const d = k.drafts.find((x) => x.id === body.more_of);
+      d.options.push(...Array.from({ length: body.count || 4 }, () => ({ status: 'working' })));
+      d.status = 'working';
+      json(200, { kit: kitView(k), draft: d });
       return 'handled';
     }
     if ((m = p.match(/^\/api\/animation\/kits\/([^/]+)\/options$/))) {
@@ -319,10 +327,41 @@ test('Storyboard: several looks go into the kit at once, and every look is kept 
   await page.click('[data-pick="3"]');
   await expect(page.locator('[data-lock]')).toHaveText(/Add 2 places/);
   await page.click('[data-pick="3"]');
+
+  // Look closer: one look large, step through, pick from the viewer.
+  await page.locator('.nl-slook').nth(1).hover();
+  await page.click('[data-zoom="1"]');
+  await expect(page.locator('#nl-sview')).toBeVisible();
+  await expect(page.locator('#nl-sview h3')).toContainText('look 2');
+  await expect(page.locator('#nl-sview .nl-sview__stage img')).toHaveAttribute('src', /look2/);
+  await expect(page.locator('#nl-sview .nl-sview__th')).toHaveCount(4);
+  await expect(page.locator('#nl-sview [data-v-pick]')).toHaveText('Pick this look');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#nl-sview h3')).toContainText('look 3');
+  await expect(page.locator('#nl-sview [data-v-pick]')).toHaveText('Picked');
+  await page.click('[data-v-step="-1"]');
+  await page.click('[data-v-pick]');
+  await expect(page.locator('#nl-sview [data-v-pick]')).toHaveText('Picked');
+  await expect(page.locator('#nl-sview .nl-snote').last()).toHaveText('4 picked');
+  await expect(page.locator('[data-lock]')).toHaveText(/Add 4 places/);
+  await page.click('[data-v-pick]');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#nl-sview')).toHaveCount(0);
+  await expect(page.locator('[data-lock]')).toHaveText(/Add 3 places/);
+
+  // "4 more" adds to the set: the first four stay, and the picks too.
+  await page.click('[data-more-looks]');
+  await expect(page.locator('[data-pick]')).toHaveCount(8, { timeout: 8000 });
+  const moreCall = fake.st.calls.filter((c) => /\/options$/.test(c.path)).pop();
+  expect(moreCall.body).toMatchObject({ more_of: expect.any(String), count: 4 });
+  await expect(page.locator('[data-lock]')).toHaveText(/Add 3 places/);
+
   await page.click('[data-lock]');
   await expect(page.locator('.nl-ssec--place .nl-sel')).toHaveCount(3);
   const add = fake.st.calls.filter((c) => /\/elements$/.test(c.path)).pop();
-  expect(add.body).toMatchObject({ options: [0, 2, 3] });
+  expect(add.body).toMatchObject({ options: [0, 2, 3], type: 'place', name: 'Hall' });
+  expect(add.body.looks).toHaveLength(3);
+  expect(add.body.looks[0]).toMatch(/look1/);
   await expect(page.locator('.nl-ssec--place .nl-sel').nth(1)).toContainText('Hall 2');
   expect(errors).toEqual([]);
 });
