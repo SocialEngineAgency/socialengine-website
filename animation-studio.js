@@ -169,12 +169,30 @@
     return (p?.scenes || []).some((s) => s.status === 'generating' || s.status === 'pending');
   }
 
+  /** A shot check (after each render) is still running: keep polling so its result shows. */
+  function projectChecking(p) {
+    return (p?.scenes || []).some((s) => {
+      const c = s && s.check;
+      if (!c || c.status !== 'checking') return false;
+      const t = Date.parse(c.started_at || '');
+      return Number.isFinite(t) && Date.now() - t < 3 * 60 * 1000;
+    });
+  }
+
+  /** The shot check's result for the clip the shot shows now (older takes' checks don't count). */
+  function shotCheck(s) {
+    const c = s && s.check;
+    if (!c || !s.video_url || (c.video_url && c.video_url !== s.video_url)) return null;
+    return c;
+  }
+
   /** Avoid remounting <video> on every poll tick (causes READY shots to spin). */
   function projectUiFingerprint(p) {
     if (!p) return '';
     const scenes = (p.scenes || []).map((s) => [
       s.id, s.order || 0, s.status, s.video_url || '', s.keyframe_url || '', s.error || '', s.motion || '',
       s.active_take_id || '', (s.takes || []).length, s.prompt || '', s.title || '',
+      (s.check && s.check.status) || '', (s.check && s.check.video_url) || '',
     ]);
     return JSON.stringify([
       p.id, p.status, p.error || '', p.final_url || '', p.final_pre_caption_url || '',
@@ -469,7 +487,7 @@
           }
         }
         const projectBusy = ['developing', 'generating', 'assembling'].includes(_project.status);
-        if (projectBusy || projectHasBusyScenes(_project)) {
+        if (projectBusy || projectHasBusyScenes(_project) || projectChecking(_project)) {
           /* keep polling */
         } else {
           stopPoll();
@@ -1240,7 +1258,7 @@
       renderCanvas();
       renderChat();
       renderRefs();
-      if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project)) {
+      if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project) || projectChecking(_project)) {
         startPoll();
       }
       else stopPoll();
@@ -1326,6 +1344,7 @@
     left: 'M15 6l-6 6 6 6',
     right: 'M9 6l6 6-6 6',
     play: 'M8 5.5v13l10.5-6.5z',
+    warn: 'M12 4.5l8.5 15h-17z M12 10v4 M12 16.8h.01',
     stop: 'M7 7h10v10H7z',
   };
   const nlSvg = (d, size = 13, sw = 1.9) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -1344,9 +1363,17 @@
   function nlScenes() { return ((_project && _project.scenes) || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)); }
   function nlShotState(s) {
     const st = String((s && s.status) || '').toLowerCase();
-    if (st === 'generating') return { key: 'gen', label: 'Rendering' };
+    if (st === 'generating') return { key: 'gen', label: s && s.check && s.check.status === 'redoing' ? 'Redoing' : 'Rendering' };
     if (st === 'failed' || (s && s.error)) return { key: 'bad', label: 'Failed' };
-    if ((s && s.video_url) || st === 'ready' || st === 'done') return { key: 'ok', label: 'Ready' };
+    if ((s && s.video_url) || st === 'ready' || st === 'done') {
+      // Ready shots carry the shot check's result: checking, checked, or one to look at.
+      const c = shotCheck(s);
+      if (c && c.status === 'checking') return { key: 'ok', flag: 'chk', label: 'Checking' };
+      if (c && c.status === 'flagged') return { key: 'ok', flag: 'warn', label: 'Flagged', note: c.summary || '' };
+      if (c && c.status === 'minor') return { key: 'ok', flag: 'minor', label: 'Checked', note: c.summary || '' };
+      if (c && c.status === 'pass') return { key: 'ok', flag: 'pass', label: 'Checked' };
+      return { key: 'ok', label: 'Ready' };
+    }
     return { key: 'todo', label: 'Not made yet' };
   }
 
@@ -1683,7 +1710,7 @@
         renderCanvas();
         renderChat();
         renderRefs();
-        if (['developing', 'generating', 'assembling'].includes(p.status) || projectHasBusyScenes(p)) startPoll();
+        if (['developing', 'generating', 'assembling'].includes(p.status) || projectHasBusyScenes(p) || projectChecking(p)) startPoll();
         refreshRecent({ silent: true });
       },
       uploadImage: async (file) => {
@@ -1766,8 +1793,11 @@
         const chips = (m.changes || []).map((c) => `<span class="nl-tchip${live ? ' is-live' : ''}">${live ? '<i class="nl-tspin" aria-hidden="true"></i>' : nlSvg(NL_I.check, 11, 2.4)}${esc(c)}</span>`).join('');
         return `<div class="nl-tmsg nl-tmsg--ai"><span class="nl-tav">${nlSvg(NL_I.spark, 12)}</span><div class="nl-tmsg__c"><div class="nl-tmsg__b">${esc(text)}</div>${chips ? `<div class="nl-tchips">${chips}</div>` : ''}${live ? '<div class="nl-tmsg__s">Working on it. The final rebuilds by itself.</div>' : ''}</div></div>`;
       }
-      const kind = m.kind === 'final' || /^Final reel (ready|updated)/i.test(text) ? 'ok' : m.kind === 'vo_audit' ? 'vo' : 'info';
-      const icon = kind === 'ok' ? NL_I.check : kind === 'vo' ? NL_I.mic : NL_I.info;
+      const kind = m.kind === 'final' || /^Final reel (ready|updated)/i.test(text) ? 'ok'
+        : m.kind === 'vo_audit' ? 'vo'
+          : m.kind === 'shot_check' ? (/redone and checked/i.test(text) ? 'ok' : 'warn')
+            : 'info';
+      const icon = kind === 'ok' ? NL_I.check : kind === 'vo' ? NL_I.mic : kind === 'warn' ? NL_I.warn : NL_I.info;
       const shown = text.replace(/^Final reel updated from (\d+) shots?[^.]*\./i, 'Final reel updated from $1 shots.');
       return `<div class="nl-tsys nl-tsys--${kind}">${nlSvg(icon, 12, 2)}<span>${esc(shown)}</span></div>`;
     }).filter(Boolean);
@@ -2246,13 +2276,20 @@
       const takes = sceneTakes(s);
       const foot = document.createElement('div');
       foot.className = 'nl-shot__foot';
-      foot.innerHTML = `<span class="nl-shot__st"><i class="nl-shot__dot nl-shot__dot--${st.key}"></i>${esc(st.label)}</span><span class="nl-shot__takes">${takes.length > 1 ? `Take ${Math.max(0, activeTakeIndex(s)) + 1} of ${takes.length}` : (s.video_url ? 'Take 1' : '')}</span>`;
+      foot.innerHTML = `<span class="nl-shot__st"${st.flag ? ` data-check="${st.flag}"` : ''}><i class="nl-shot__dot nl-shot__dot--${st.flag || st.key}"></i>${esc(st.label)}</span><span class="nl-shot__takes">${takes.length > 1 ? `Take ${Math.max(0, activeTakeIndex(s)) + 1} of ${takes.length}` : (s.video_url ? 'Take 1' : '')}</span>`;
       const what = document.createElement('p');
       what.className = 'nl-shot__what';
       what.textContent = _shotPromptDrafts[s.id] != null ? _shotPromptDrafts[s.id] : customerShotLine(s);
       card.appendChild(foot);
+      if (st.note) {
+        // What the shot check saw, in plain words.
+        const note = document.createElement('p');
+        note.className = `nl-shot__chk nl-shot__chk--${st.flag}`;
+        note.innerHTML = `${nlSvg(st.flag === 'warn' ? NL_I.warn : NL_I.info, 11, 2)}<span>${esc(st.note)}</span>`;
+        card.appendChild(note);
+      }
       card.appendChild(what);
-      card.setAttribute('aria-label', `Shot ${i + 1}, ${nlShotSecs(s)} seconds, ${st.label}`);
+      card.setAttribute('aria-label', `Shot ${i + 1}, ${nlShotSecs(s)} seconds, ${st.label}${st.note ? `: ${st.note}` : ''}`);
       card.dataset.nlIndex = String(i + 1);
       card.tabIndex = 0;
       const vid = card.querySelector('video.anim-shot__video');
@@ -4948,7 +4985,7 @@
       if (!_meta) {
         try { _meta = await animFetch('/api/animation/meta'); } catch (_) {}
       }
-      if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project)) {
+      if (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project) || projectChecking(_project)) {
         startPoll();
       }
       // Reels and Storyboard share this studio: show the one that was picked.
@@ -5448,7 +5485,7 @@
     await maybeAttachDefaultOutro();
     renderCanvas();
     renderChat();
-    if (_project && (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project))) {
+    if (_project && (['developing', 'generating', 'assembling'].includes(_project.status) || projectHasBusyScenes(_project) || projectChecking(_project))) {
       startPoll();
     }
     if (remixSession && remixSession.referenceUrl) {
