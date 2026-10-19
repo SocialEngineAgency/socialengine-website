@@ -33,8 +33,8 @@
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
-  <script src="./claude-studio.js?v=20261018posts" defer></script>
-  <script src="./design-studio-v2.js?v=20261011j" defer></script>
+  <script src="./claude-studio.js?v=20261019styles" defer></script>
+  <script src="./design-studio-v2.js?v=20261019styles" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261018posts"></script>
   <script src="./animation-studio.js?v=20261018vs2" defer></script>
@@ -13597,7 +13597,7 @@
                 }
                 btn.dataset.busy = '1';
                 btn.innerHTML = 'Opened Design';
-                window.seDesignStudio.openWith({ brief: payload.brief, slides: payload.slides, source_image_url: payload.source_image_url, medical: payload.medical, autostart: true });
+                window.seDesignStudio.openWith({ brief: payload.brief, slides: payload.slides, source_image_url: payload.source_image_url, medical: payload.medical, style_id: payload.style_id || undefined, autostart: true });
                 return;
               }
               if (btn.dataset.type === 'carousel_redesign') {
@@ -13650,6 +13650,34 @@
               }
             });
           });
+          // A new carousel style: built (and its carousel made) by itself, progress shown in this message.
+          const styleAction = coachActions.find((a) => a && a.type === 'design_style' && a.source_image_url);
+          if (styleAction && window.seDesignStudio && window.seDesignStudio.runStyleAction) {
+            const msgEl = aiRow.querySelector('.chat-msg--ai');
+            const stamp = msgEl && msgEl.lastElementChild;
+            window.seDesignStudio.runStyleAction(styleAction, {
+              say: (text) => {
+                const d = document.createElement('div');
+                d.className = 'coach-progress';
+                d.style.cssText = 'margin-top:10px;font-size:0.82rem;line-height:1.5;';
+                d.textContent = text;
+                if (msgEl) msgEl.insertBefore(d, stamp);
+                scrollToBottom();
+                return { set: (t) => { d.textContent = t; scrollToBottom(); } };
+              },
+              offer: (label, fn) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'coach-action-btn';
+                b.textContent = label;
+                b.style.cssText = 'margin-top:10px;background:linear-gradient(135deg,#7C3AED,#EC4899);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);';
+                b.addEventListener('click', fn);
+                if (msgEl) msgEl.insertBefore(b, stamp);
+                scrollToBottom();
+              },
+              remember: (text) => saveToHistory('assistant', text, {}),
+            });
+          }
           scrollToBottom();
           saveToHistory('assistant', replyHtml, { actions: coachActions });
 
