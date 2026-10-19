@@ -672,20 +672,64 @@
     if (typeof global.lucide !== 'undefined') global.lucide.createIcons();
   }
 
+  // Scorecards already fetched this session, by book and period. The portal warms the default
+  // one in the background after sign-in (seWarmAnalytics), so opening Analytics paints at once;
+  // the page then checks for newer numbers quietly. One request per scorecard at a time.
+  const WARM_FRESH_MS = 10 * 60 * 1000;
+  const _cards = new Map(); // `${book}:${period}` -> { data, at }
+  const _cardJobs = new Map(); // `${book}:${period}` -> in-flight promise
+
+  function fetchCard(book, period, { refresh = false } = {}) {
+    const key = `${book}:${period}`;
+    if (!refresh && _cardJobs.has(key)) return _cardJobs.get(key);
+    const job = fetch(`${apiBase()}/api/analytics/scorecard?book=${encodeURIComponent(book)}&period=${encodeURIComponent(period)}${refresh ? '&refresh=1' : ''}`, {
+      headers: authHeaders(),
+    })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const data = await res.json();
+        _cards.set(key, { data, at: Date.now() });
+        return data;
+      })
+      .catch(() => null)
+      .finally(() => { if (_cardJobs.get(key) === job) _cardJobs.delete(key); });
+    _cardJobs.set(key, job);
+    return job;
+  }
+
+  /** Load the scorecard Analytics opens with, unless a fresh one is already here. */
+  function warmAnalytics() {
+    const hit = _cards.get('organic:30d');
+    if (hit && Date.now() - hit.at < WARM_FRESH_MS) return Promise.resolve(hit.data);
+    return fetchCard('organic', '30d');
+  }
+
   async function loadCard(opts) {
     if (_book === 'insights') return loadInsights(opts);
+    const refresh = !!(opts && opts.refresh);
+    const book = _book;
+    const period = _period;
     const body = document.getElementById('analytics-body');
+    const hit = refresh ? null : _cards.get(`${book}:${period}`);
+    const stillHere = () => book === _book && period === _period && !!document.getElementById('analytics-body');
+    if (hit) {
+      // Paint what is already here, then look for newer numbers without a spinner.
+      _card = hit.data;
+      paintCard(_card);
+      if (Date.now() - hit.at < 60 * 1000) return;
+      const fresh = await fetchCard(book, period);
+      if (fresh && stillHere() && JSON.stringify(fresh) !== JSON.stringify(_card)) {
+        _card = fresh;
+        paintCard(_card);
+      }
+      return;
+    }
     if (body && !_card) {
       body.innerHTML = '<div class="dash-loading" style="flex:1"><div class="dash-loading__spinner"></div></div>';
     }
-    try {
-      const res = await fetch(`${apiBase()}/api/analytics/scorecard?book=${encodeURIComponent(_book)}&period=${encodeURIComponent(_period)}`, {
-        headers: authHeaders(),
-      });
-      _card = res.ok ? await res.json() : { empty: true, sources: [], rows: [], clientType: 'charity' };
-    } catch (e) {
-      _card = { empty: true, sources: [], rows: [], clientType: 'charity' };
-    }
+    const data = await fetchCard(book, period, { refresh });
+    if (!stillHere()) return;
+    _card = data || { empty: true, sources: [], rows: [], clientType: 'charity' };
     paintCard(_card);
   }
 
@@ -948,4 +992,5 @@
   }
 
   global.renderAnalyticsCockpit = renderAnalyticsCockpit;
+  global.seWarmAnalytics = warmAnalytics;
 })(typeof window !== 'undefined' ? window : global);

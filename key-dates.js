@@ -10,6 +10,8 @@
   const TYPE_ICON = { holiday: '🎉', awareness: '💡', shopping: '🛍️' };
   let _data = null;
   let _loading = null;
+  let _loadedAt = 0;
+  let _busy = false;
 
   function api(path, opts = {}) {
     const se = global.seApi || {};
@@ -62,12 +64,19 @@
     document.head.appendChild(st);
   }
 
-  function load(force) {
-    if (_loading && !force) return _loading;
-    _loading = api('/api/marketing/key-dates?days=60')
-      .then((d) => { _data = d; return d; })
-      .catch((e) => { _loading = null; throw e; });
-    return _loading;
+  // force: load again even if dates are here (a load already running is shared, unless hard).
+  function load(force, hard) {
+    if (_loading && (!force || (_busy && !hard))) return _loading;
+    _busy = true;
+    const job = api('/api/marketing/key-dates?days=60')
+      .then((d) => {
+        if (!d || !Array.isArray(d.dates)) throw new Error('Key dates are not available');
+        _data = d; _loadedAt = Date.now(); return d;
+      })
+      .catch((e) => { if (_loading === job) _loading = null; throw e; })
+      .finally(() => { if (_loading === job) _busy = false; });
+    _loading = job;
+    return job;
   }
 
   function byDate() {
@@ -91,7 +100,7 @@
     host.querySelector('#kd-country').addEventListener('change', async (e) => {
       try {
         await api('/api/marketing/key-dates/country', { method: 'PUT', body: JSON.stringify({ country: e.target.value }) });
-        await load(true);
+        await load(true, true);
         renderStrip();
         badgeCalendar();
         toast('Country saved');
@@ -159,10 +168,23 @@
     const nlHost = document.getElementById('nl-kd-host'); // new look: key dates live in the Calendar aside
     if (nlHost) nlHost.appendChild(host);
     else col.parentNode.insertBefore(host, col.parentNode.firstChild);
-    load(true).then(() => { renderStrip(); badgeCalendar(); }).catch(() => { host.remove(); });
+    // Dates loaded in the background after sign-in show at once; they are checked again
+    // when older than five minutes.
+    const fresh = _data && _loadedAt && Date.now() - _loadedAt < 5 * 60 * 1000;
+    if (_data) { renderStrip(); badgeCalendar(); }
+    if (fresh) return;
+    load(true).then(() => { renderStrip(); badgeCalendar(); }).catch(() => { if (!_data) host.remove(); });
   }
 
-  global.seKeyDates = { openIdeas, reload: () => load(true).then(() => { renderStrip(); badgeCalendar(); }) };
+  global.seKeyDates = {
+    openIdeas,
+    reload: () => load(true, true).then(() => { renderStrip(); badgeCalendar(); }),
+    // Load the dates Calendar shows, unless fresh ones are here or a load is running.
+    warm: () => {
+      if (_busy || (_data && _loadedAt && Date.now() - _loadedAt < 5 * 60 * 1000)) return;
+      load(true).catch(() => {});
+    },
+  };
 
   function boot() {
     let pending = null;
