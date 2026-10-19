@@ -2944,11 +2944,38 @@
         slides: action.slides,
         source_image_url: action.source_image_url || masterImageUrl() || '',
         medical: action.medical,
+        style_id: action.style_id || undefined,
         autostart: true,
       });
     });
     log.appendChild(btn);
     log.scrollTop = log.scrollHeight;
+  }
+
+  // ── A new carousel style from the reference they attached (the Coach's design_style action) ──
+  // Builds the style next to the existing ones, then, if the Coach was also asked for a carousel,
+  // makes it in the new style. Runs here, so the chat keeps the page open for the second step.
+  async function runDesignStyle(action) {
+    const log = document.getElementById('cs-coach-log');
+    await window.seDesignStudio.runStyleAction(action, {
+      say: (text) => {
+        const row = appendDesignCoachBubble('assistant', text);
+        scrollCoachLogToBottom();
+        return { set: (t) => { if (row) { row.textContent = t; scrollCoachLogToBottom(); } } };
+      },
+      offer: (label, fn) => {
+        if (!log) return;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cs-coach-act';
+        b.textContent = label;
+        b.style.cssText = 'align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
+        b.addEventListener('click', fn);
+        log.appendChild(b);
+        log.scrollTop = log.scrollHeight;
+      },
+      remember: (text) => persistSharedCoach('assistant', text, {}),
+    });
   }
 
   // The Post tool's sizes. setPostSize moves the picker (and the size chips) to one the Coach
@@ -3069,6 +3096,7 @@
       headers: authHeaders(),
       body: JSON.stringify({
         posts: list.map((p) => ({ title: p.title, brief: p.brief })),
+        style_id: action.style_id || undefined,
         medical: action.medical === true || action.medical === 'ask',
         platform: 'instagram',
       }),
@@ -3804,6 +3832,12 @@
         ? window.resolveDesignCoachApply
         : () => ({ mode: 'none' });
       const actions = Array.isArray(data.coach_actions) ? data.coach_actions : [];
+      const designStyle = actions.find((a) => a && a.type === 'design_style' && a.source_image_url);
+      if (designStyle && window.seDesignStudio && window.seDesignStudio.buildStyle) {
+        setDesignCoachApply(null);
+        runDesignStyle(designStyle);
+        return;
+      }
       const designPosts = actions.find((a) => a && a.type === 'design_posts' && Array.isArray(a.posts) && a.posts.length);
       if (designPosts) {
         setDesignCoachApply(null);

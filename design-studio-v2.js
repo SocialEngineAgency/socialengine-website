@@ -14,7 +14,17 @@
     return Object.assign({}, a && typeof a.headers === 'function' ? a.headers() : {}, extra || {});
   }
   function toast(msg, kind) { if (typeof global.showToast === 'function') global.showToast(msg, kind); }
+  // Requests that are made in one of the brand's styles carry its id (slides being edited use the style they were made in).
+  const STYLED = /^\/api\/design\/(carousel|posts|slide|slides|recipes|system\/previews)/;
+  function styleFor(path) {
+    return /^\/api\/design\/slides?\b/.test(path) ? (state.resultStyle || state.styleId || '') : (state.styleId || '');
+  }
   async function call(method, path, body) {
+    const sid = STYLED.test(path) ? styleFor(path) : '';
+    if (sid) {
+      if (body && typeof body === 'object' && !body.style_id) body = Object.assign({ style_id: sid }, body);
+      else if (!body) path += `${path.includes('?') ? '&' : '?'}style=${encodeURIComponent(sid)}`;
+    }
     const res = await fetch(`${apiBase()}${path}`, {
       method,
       headers: headers(body ? { 'Content-Type': 'application/json' } : {}),
@@ -78,6 +88,9 @@
     examples: [],
     source: '',
     rebuild: false,
+    newStyle: false,
+    styleId: '',
+    resultStyle: '',
     pending: null,
     pollTimer: null,
     clock: null,
@@ -124,6 +137,11 @@
       .dsv2-swatch { width:20px; height:20px; border-radius:6px; border:1px solid rgba(255,255,255,0.18); display:inline-block; }
       .dsv2-chip { font-size:0.7rem; padding:4px 9px; border-radius:999px; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.78); white-space:nowrap; }
       .dsv2-chip--ok { background:rgba(16,185,129,0.14); color:#6EE7B7; }
+      .dsv2-styles { margin:0 0 14px; }
+      .dsv2-stylechip { display:inline-flex; align-items:center; gap:7px; min-height:36px; padding:0 13px; border-radius:999px; border:1px solid rgba(255,255,255,0.16); background:transparent; color:inherit; font:inherit; font-size:0.82rem; font-weight:600; cursor:pointer; }
+      .dsv2-stylechip i { width:11px; height:11px; border-radius:50%; display:inline-block; border:1px solid rgba(255,255,255,0.25); }
+      .dsv2-stylechip em { font-style:normal; font-size:0.68rem; font-weight:700; opacity:0.65; text-transform:uppercase; letter-spacing:0.04em; }
+      .dsv2-stylechip.is-on { border-color:#8B5CF6; background:rgba(139,92,246,0.16); }
       .dsv2-chip--med { background:rgba(56,189,248,0.12); color:#7DD3FC; }
       .dsv2-med-set { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:0.8rem; color:rgba(255,255,255,0.8); flex-wrap:wrap; }
       .dsv2-med-set select { width:auto; min-width:220px; }
@@ -312,7 +330,8 @@
     state.root = container;
     container.innerHTML = '<div class="dsv2-scroll"><div class="dsv2"><div class="dsv2-progress"><div class="dsv2-progress-top"><span class="dsv2-spin"></span>Loading your brand design…</div></div></div></div>';
     try {
-      state.info = await call('GET', '/api/design/system');
+      state.info = await call('GET', `/api/design/system${state.styleId ? `?style=${encodeURIComponent(state.styleId)}` : ''}`);
+      state.styleId = (state.info.style && state.info.style.id) || '';
     } catch (e) {
       if (state.root === container) container.innerHTML = `<div class="dsv2-scroll"><div class="dsv2"><div class="dsv2-error">${esc(e.message)}</div></div></div>`;
       return;
@@ -345,6 +364,7 @@
         <h2>Carousels</h2>
         <p class="dsv2-sub">Carousels designed in your exact brand style: your layouts, fonts, colours and illustration style, with facts checked and every slide reviewed before you see it.</p>
       </div><button type="button" class="dsv2-btn" id="dsv2-open-slides" title="Split a tall infographic into slides, or post finished slides as they are">Infographic or finished slides →</button></div>
+      ${sys ? stylesStrip(info) : ''}
       ${sys ? systemCard(sys, info) : ''}
       ${showSetup ? setupCard(!!sys) : ''}
       ${sys && !state.rebuild ? makeCard() : ''}
@@ -364,7 +384,7 @@
       <summary class="dsv2-card-head">
         <div class="dsv2-row" style="gap:12px;">
           <span class="dsv2-caret" aria-hidden="true">›</span>
-          <h3>${esc(sys.name || 'Your brand')} design system</h3>
+          <h3>${esc((info.style && info.style.name) || sys.name || 'Your brand')}${(info.styles || []).length > 1 ? '' : ' design system'}</h3>
           <span class="dsv2-chip dsv2-chip--ok">Ready</span>
         </div>
         <div class="dsv2-row" style="gap:6px;">
@@ -380,7 +400,7 @@
         </div>
         <div class="dsv2-row" style="gap:16px;">
           ${previews.length && !state.rebuild ? '<button type="button" class="dsv2-link" id="dsv2-refresh">Refresh previews</button>' : ''}
-          <button type="button" class="dsv2-link" id="dsv2-rebuild">${state.rebuild ? 'Cancel rebuild' : 'Rebuild from new examples'}</button>
+          <button type="button" class="dsv2-link" id="dsv2-rebuild">${state.rebuild ? (state.newStyle ? 'Cancel' : 'Cancel rebuild') : 'Rebuild from new examples'}</button>
         </div>
       </div>
       ${info.figurelabs ? `<label class="dsv2-med-set">Medical &amp; scientific accuracy
@@ -395,10 +415,31 @@
     </details>`;
   }
 
+  function stylesStrip(info) {
+    const styles = info.styles || [];
+    const cur = (info.style && info.style.id) || '';
+    const room = styles.length < (info.max_styles || 6);
+    const viewed = styles.find((st) => st.id === cur);
+    return `<div class="dsv2-styles" id="dsv2-styles">
+      <div class="dsv2-row" style="gap:8px;flex-wrap:wrap;">
+        <span class="dsv2-label" style="margin:0;">Style</span>
+        ${styles.map((st) => `<button type="button" class="dsv2-stylechip${st.id === cur ? ' is-on' : ''}" data-style="${esc(st.id)}" aria-pressed="${st.id === cur}">${st.colors.slice(0, 3).map((c) => `<i style="background:${esc(c)}"></i>`).join('')}${esc(st.name)}${st.active ? '<em>default</em>' : ''}</button>`).join('')}
+        ${room ? '<button type="button" class="dsv2-btn" id="dsv2-newstyle">+ New style</button>' : ''}
+      </div>
+      ${viewed && styles.length > 1 ? `<div class="dsv2-row" style="gap:14px;margin-top:8px;">
+        ${viewed.active ? '<span class="dsv2-hint">New carousels use this style unless you pick another.</span>' : '<button type="button" class="dsv2-link" id="dsv2-style-default">Use as my default</button>'}
+        <button type="button" class="dsv2-link" id="dsv2-style-rename">Rename</button>
+        <button type="button" class="dsv2-link" id="dsv2-style-delete">Delete</button>
+      </div>` : (viewed ? '<div class="dsv2-row" style="margin-top:8px;"><button type="button" class="dsv2-link" id="dsv2-style-rename">Rename</button></div>' : '')}
+    </div>`;
+  }
+
   function setupCard(isRebuild) {
+    const adding = state.newStyle;
     return `<div class="dsv2-card" id="dsv2-setup">
-      <h3>${isRebuild ? 'Rebuild your design system' : 'Step 1: teach it your brand'}</h3>
-      <p class="dsv2-sub" style="margin-top:6px;">Add 2–10 finished slides you've already posted and liked. A mix of slide types (cover, big number, list, comparison, call to action) teaches it the most. Takes about 10 minutes.</p>
+      <h3>${adding ? 'Add a new style' : isRebuild ? 'Rebuild this style' : 'Step 1: teach it your brand'}</h3>
+      <p class="dsv2-sub" style="margin-top:6px;">${adding ? 'Your other styles stay exactly as they are. ' : ''}Add 1–10 finished slides, posters or posts in the look you want. One is enough to start; a mix of slide types (cover, big number, list, comparison, call to action) teaches it the most. Takes about 10 minutes.</p>
+      ${adding ? '<label class="dsv2-label" for="dsv2-stylename">Name this style</label><input type="text" id="dsv2-stylename" maxlength="60" placeholder="e.g. Mint and purple">' : ''}
       <div class="dsv2-drop" id="dsv2-drop">
         <div class="dsv2-row">
           <label class="dsv2-btn" style="cursor:pointer;">Upload slides<input type="file" id="dsv2-files" accept="image/*" multiple hidden></label>
@@ -417,7 +458,7 @@
           <input type="text" id="dsv2-handle" placeholder="@yourbrand"></div>
       </div>
       <div class="dsv2-actions">
-        <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-build">Build my design system</button>
+        <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-build">${adding ? 'Build this style' : 'Build my design system'}</button>
         <span class="dsv2-hint">You can leave this page while it builds.</span>
       </div>
       <div id="dsv2-build-status"></div>
@@ -656,13 +697,55 @@
     drawExamples();
   }
 
+  async function loadStyle(id) {
+    state.styleId = id;
+    state.recipeId = null;
+    state.info = await call('GET', `/api/design/system?style=${encodeURIComponent(id)}`);
+    state.styleId = (state.info.style && state.info.style.id) || id;
+  }
+
+  function root_wireStyles() {
+    const info = state.info || {};
+    state.root.querySelectorAll('[data-style]').forEach((b) => b.addEventListener('click', async () => {
+      if (b.dataset.style === state.styleId || store.get('job')) return;
+      try { await loadStyle(b.dataset.style); state.rebuild = false; state.newStyle = false; draw(); } catch (e) { toast(e.message || 'Could not open that style', 'error'); }
+    }));
+    const add = el('dsv2-newstyle');
+    if (add) add.addEventListener('click', () => { state.rebuild = true; state.newStyle = true; state.examples = []; draw(); reveal(el('dsv2-setup')); });
+    const mk = (id, fn) => { const b = el(id); if (b) b.addEventListener('click', async (ev) => { ev.preventDefault(); b.disabled = true; try { await fn(); } catch (e) { toast(e.message || 'Could not do that', 'error'); } b.disabled = false; }); };
+    mk('dsv2-style-default', async () => {
+      const r = await call('PUT', '/api/design/styles/active', { id: state.styleId });
+      state.info = Object.assign({}, state.info, { styles: r.styles, default_style: r.default_style });
+      draw();
+      toast('New carousels will use this style', 'success');
+    });
+    mk('dsv2-style-rename', async () => {
+      const cur = (info.style && info.style.name) || '';
+      const name = global.prompt('Name this style', cur);
+      if (!name || !name.trim() || name.trim() === cur) return;
+      const r = await call('PATCH', `/api/design/styles/${encodeURIComponent(state.styleId)}`, { name: name.trim() });
+      state.info = Object.assign({}, state.info, { styles: r.styles, style: Object.assign({}, info.style, { name: (r.styles.find((st) => st.id === state.styleId) || {}).name || name.trim() }) });
+      draw();
+    });
+    mk('dsv2-style-delete', async () => {
+      const cur = (info.style && info.style.name) || 'this style';
+      if (!global.confirm(`Delete the style “${cur}”? Carousels you already made stay as they are.`)) return;
+      const r = await call('DELETE', `/api/design/styles/${encodeURIComponent(state.styleId)}`);
+      await loadStyle(r.default_style);
+      draw();
+      toast('Style deleted', 'success');
+    });
+  }
+
   function wire() {
     const openSlides = el('dsv2-open-slides');
     if (openSlides) openSlides.addEventListener('click', () => { if (typeof global.seOpenCarousels === 'function') global.seOpenCarousels('slides'); });
+    root_wireStyles();
     const rebuild = el('dsv2-rebuild');
     if (rebuild) rebuild.addEventListener('click', (ev) => {
       ev.preventDefault();
       state.rebuild = !state.rebuild;
+      if (!state.rebuild) state.newStyle = false;
       draw();
       if (state.rebuild) reveal(el('dsv2-setup'));
     });
@@ -787,11 +870,15 @@
   }
 
   async function startBuild() {
-    if (state.examples.length < 2) { toast('Add at least 2 approved slides', 'warning'); return; }
+    if (state.examples.length < 1) { toast('Add at least one slide or poster in the look you want', 'warning'); return; }
     const btn = el('dsv2-build');
     if (btn) btn.disabled = true;
     try {
+      const nameEl = el('dsv2-stylename');
       const r = await call('POST', '/api/design/system/build', {
+        add: state.newStyle || undefined,
+        style_id: state.newStyle ? undefined : (state.styleId || undefined),
+        style_name: state.newStyle && nameEl ? nameEl.value.trim() || undefined : undefined,
         example_urls: state.examples,
         notes: el('dsv2-notes').value.trim(),
         ratio: el('dsv2-ratio').value,
@@ -892,10 +979,13 @@
         store.set('job', null);
         clearInterval(state.clock);
         if (kind === 'build') {
-          toast('Your design system is ready', 'success');
+          toast(state.newStyle ? 'Your new style is ready' : 'Your design system is ready', 'success');
+          const made = job.result && job.result.style && job.result.style.id;
           state.rebuild = false;
+          state.newStyle = false;
           state.examples = [];
-          state.info = await call('GET', '/api/design/system').catch(() => state.info);
+          state.info = await call('GET', `/api/design/system${made ? `?style=${encodeURIComponent(made)}` : ''}`).catch(() => state.info);
+          state.styleId = (state.info.style && state.info.style.id) || state.styleId;
           store.set('last', null);
           draw();
           const sysCard = el('dsv2-system');
@@ -944,6 +1034,7 @@
   }
 
   function showResult(result, scroll) {
+    state.resultStyle = (result && result.style && result.style.id) || '';
     const box = el('dsv2-result');
     if (!box || !result || !Array.isArray(result.slides)) return;
     const slides = result.slides.filter((s) => s && s.url);
@@ -1654,7 +1745,10 @@
     }
   }
 
-  function applyHandoff(p) {
+  async function applyHandoff(p) {
+    if (p.style_id && p.style_id !== state.styleId && (state.info.styles || []).some((st) => st.id === p.style_id)) {
+      try { await loadStyle(p.style_id); state.rebuild = false; state.newStyle = false; draw(); } catch (_) { /* keep the current style */ }
+    }
     const brief = el('dsv2-brief');
     if (!brief) {
       if (!(state.info && state.info.system)) toast('Set up your brand design first, then Coach can design carousels in it', 'info');
@@ -1676,5 +1770,73 @@
     if (typeof global.switchNav === 'function') global.switchNav('brand-design');
   }
 
-  global.seDesignStudio = { render, openWith, stageText };
+  // Run by the Coach, no page needed. buildStyle: a new style from a reference image, saved next to the others.
+  // makeCarousel: a carousel in a named style, saved as the "last" result so the Carousels tab opens on it.
+  async function buildStyle({ name, notes, source_image_url, onProgress }) {
+    const r = await call('POST', '/api/design/system/build', {
+      add: true,
+      style_name: name || undefined,
+      notes: notes || undefined,
+      example_urls: [source_image_url],
+    });
+    const result = await waitJob(r.job_id, onProgress);
+    state.info = null; // the Carousels tab reloads its styles
+    return result && result.style ? result.style : null;
+  }
+
+  async function makeCarousel({ brief, slides, style_id, source_image_url, medical, onProgress }) {
+    const r = await call('POST', '/api/design/carousel', {
+      brief,
+      style_id: style_id || undefined,
+      medical: medical === 'ask' ? true : medical === true,
+      count: Number(slides) >= 3 ? Math.min(10, Math.round(Number(slides))) : undefined,
+      research: true,
+      source_image_url: /^https:\/\//i.test(String(source_image_url || '')) ? source_image_url : undefined,
+    });
+    const result = await waitJob(r.job_id, onProgress);
+    store.set('last', Object.assign({}, result, { brief }));
+    store.set('job', null);
+    return result;
+  }
+
+  // The whole Coach action in one place, for every Coach chat. ui: { say(text) -> { set(text) }, offer(label, fn), remember(text) }.
+  async function runStyleAction(action, ui) {
+    const status = ui.say(`Building your new style "${action.name}" from the reference. This takes about 10 minutes; keep this page open and I will start the carousel straight after.`);
+    let style = null;
+    try {
+      style = await buildStyle({
+        name: action.name,
+        notes: action.notes,
+        source_image_url: action.source_image_url,
+        onProgress: (p) => { status.set(`Building "${action.name}": ${stageText(p)}`); },
+      });
+    } catch (e) {
+      status.set(`The new style could not be built: ${e.message || 'try again in a minute'}. Nothing was changed, your other styles are as they were.`);
+      return;
+    }
+    const label = (style && style.name) || action.name;
+    const ready = `Your new style "${label}" is ready. It is saved next to your other styles in the Carousels tab.`;
+    status.set(ready);
+    if (ui.remember) ui.remember(ready);
+    if (!action.then_carousel) return;
+    const work = ui.say('Now designing the carousel in it. About 5 minutes.');
+    try {
+      const result = await makeCarousel({
+        brief: action.then_carousel.brief,
+        slides: action.then_carousel.slides,
+        style_id: style && style.id,
+        source_image_url: action.source_image_url,
+        medical: action.medical,
+        onProgress: (p) => { work.set(`Designing the carousel: ${stageText(p)}`); },
+      });
+      const done = `The carousel is ready: ${(result.slides || []).length} slides in "${label}".`;
+      work.set(done);
+      ui.offer('Open the carousel', () => { global.__SE_CAROUSEL_VIEW = 'brand'; if (typeof global.switchNav === 'function') global.switchNav('brand-design'); });
+      if (ui.remember) ui.remember(done);
+    } catch (e) {
+      work.set(`The style is ready but the carousel could not be made: ${e.message || 'try again in a minute'}. You can make it in the Carousels tab in the new style.`);
+    }
+  }
+
+  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, runStyleAction };
 })(typeof window !== 'undefined' ? window : globalThis);
