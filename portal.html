@@ -39,12 +39,12 @@
   <script src="./coach-create-session.js?v=20261010-poster-choice"></script>
   <script src="./animation-studio.js?v=20261018vs2" defer></script>
   <script src="./story-builder.js?v=20261018vw1" defer></script>
-  <script src="./analytics-cockpit.js?v=20261016-daily" defer></script>
+  <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
   <script src="./stories-composer.js?v=20261009" defer></script>
   <script src="./marketing-playbook.js?v=20261010" defer></script>
-  <script src="./key-dates.js?v=20261016-nl" defer></script>
+  <script src="./key-dates.js?v=20261018warm" defer></script>
   <script src="./diagram-posts.js?v=20261010" defer></script>
   <script src="./motion-reels.js?v=20261016-music" defer></script>
   <script src="./live-updates.js?v=20261012" defer></script>
@@ -5409,6 +5409,7 @@
           updateCreationStudioNav(data);
           updateFundraiseNav(data);
           if (hasShopify(data)) prefetchStudioCatalogSilently().catch(() => {});
+          seWarmTabsSoon();
           startTierPolling();
           updateSidebarCredits();
           setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
@@ -5634,6 +5635,7 @@
         updateCreationStudioNav(data);
         updateFundraiseNav(data);
         if (hasShopify(data)) prefetchStudioCatalogSilently().catch(() => {});
+        seWarmTabsSoon();
         startTierPolling();
         updateSidebarCredits();
         setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
@@ -16445,6 +16447,26 @@
     window.submitVideoGenerationQA = submitVideoGenerationQA;
 
     /** Load first page of studio catalog after login so Content Studio regen has products without opening Marketing Studio first. */
+    // Analytics and Calendar load their data in the background once the portal is up, so a
+    // click on either shows it at once and then refreshes quietly. Pointing at either tab
+    // loads again what has gone stale (each part checks its own age).
+    let _seWarmStarted = false;
+    function seWarmTabs() {
+      try { if (typeof window.seWarmCalendar === 'function') window.seWarmCalendar(); } catch (_) {}
+      try { if (isPaid() && typeof window.seWarmAnalytics === 'function') window.seWarmAnalytics(); } catch (_) {}
+    }
+    function seWarmTabsSoon() {
+      if (_seWarmStarted) return;
+      _seWarmStarted = true;
+      const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
+      setTimeout(() => idle(seWarmTabs, { timeout: 3000 }), 1200);
+      document.querySelectorAll('.dash-nav-item[data-nav="analytics"], .dash-nav-item[data-nav="schedule"]').forEach((el) => {
+        el.addEventListener('pointerenter', seWarmTabs);
+        el.addEventListener('focus', seWarmTabs);
+      });
+    }
+    window.seWarmTabsSoon = seWarmTabsSoon;
+
     async function prefetchStudioCatalogSilently() {
       if (!clientEmail || !clientToken) return;
       if (_vcProductsLoaded && Array.isArray(_vcShopifyProducts) && _vcShopifyProducts.length) return;
@@ -20706,19 +20728,45 @@
   const MWP_STATUS = { filled: 'Scheduled', in_review: 'In review', open: 'Open', missed: 'Missed' };
 
   window.onStoriesChanged = () => _loadMetaPlanner();
+  // This week's plan, loaded in the background after sign-in (seWarmCalendar) so Calendar
+  // opens with it; one request at a time per week.
+  let _mwpWarm = null; // { data, at } for the current week
+  const _mwpJobs = new Map();
+  function _mwpFetch(week) {
+    const key = week || '';
+    if (_mwpJobs.has(key)) return _mwpJobs.get(key);
+    const q = key ? `?week=${encodeURIComponent(key)}` : '';
+    const job = apiFetch(`${API}/api/meta-planner${q}`, { headers: authHeaders() })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !Array.isArray(data.slots)) throw new Error(data.error || 'Planner unavailable');
+        if (!key) _mwpWarm = { data, at: Date.now() };
+        return data;
+      })
+      .finally(() => _mwpJobs.delete(key));
+    _mwpJobs.set(key, job);
+    return job;
+  }
+
   async function _loadMetaPlanner(week) {
     const el = document.getElementById('meta-week-planner');
     if (!el) return;
     if (week !== undefined) _mwpWeek = week;
+    const want = _mwpWeek;
+    if (!want && _mwpWarm && Date.now() - _mwpWarm.at < 5 * 60 * 1000) {
+      try {
+        _mwpPlan = _mwpWarm.data;
+        _renderMetaPlanner();
+      } catch (_) { _mwpPlan = null; }
+    }
     try {
-      const q = _mwpWeek ? `?week=${encodeURIComponent(_mwpWeek)}` : '';
-      const res = await apiFetch(`${API}/api/meta-planner${q}`, { headers: authHeaders() });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Planner unavailable');
+      const data = await _mwpFetch(want);
+      if (want !== _mwpWeek || !document.getElementById('meta-week-planner')) return;
+      if (_mwpPlan && JSON.stringify(_mwpPlan) === JSON.stringify(data)) return;
       _mwpPlan = data;
       _renderMetaPlanner();
     } catch (e) {
-      el.innerHTML = '';
+      if (!_mwpPlan) el.innerHTML = '';
     }
   }
 
@@ -21802,6 +21850,40 @@
     } catch (_) { /* storage full or blocked — just skip the cache */ }
   }
 
+  // The last published posts loaded this session (also kept in localStorage for the next visit).
+  let _calHistLast = null; // { posts, at }
+  function _calHistAge() {
+    const mem = _calHistLast ? Date.now() - _calHistLast.at : Infinity;
+    try {
+      const k = _calHistKey();
+      const v = k ? JSON.parse(localStorage.getItem(k) || 'null') : null;
+      return Math.min(mem, v && v.ts ? Date.now() - v.ts : Infinity);
+    } catch (_) { return mem; }
+  }
+  function _calHistKnown() {
+    return _calHistRead() || (_calHistLast && _calHistLast.posts) || null;
+  }
+  let _calHistJob = null;
+  function _calFetchHistory(refresh) {
+    if (!refresh && _calHistJob) return _calHistJob;
+    const job = fetch(`${API}/api/calendar-history${refresh ? '?refresh=1' : ''}`, { headers: { ...authHeaders() } })
+      .then((r) => (r.ok ? r.json() : { posts: [] }))
+      .then((h) => { _calHistWrite(h.posts || []); _calHistLast = { posts: h.posts || [], at: Date.now() }; return h; })
+      .finally(() => { if (_calHistJob === job) _calHistJob = null; });
+    if (!refresh) _calHistJob = job;
+    return job;
+  }
+
+  // Calendar's data loads in the background once the portal is up, so opening Calendar
+  // shows the published posts, this week's plan and key dates at once. Each part loads
+  // only when what is here is older than five minutes.
+  window.seWarmCalendar = function seWarmCalendar() {
+    const FRESH = 5 * 60 * 1000;
+    if (_calHistAge() > FRESH) _calFetchHistory(false).catch(() => {});
+    if (!_mwpWarm || Date.now() - _mwpWarm.at > FRESH) _mwpFetch('').catch(() => {});
+    if (window.seKeyDates && typeof window.seKeyDates.warm === 'function') window.seKeyDates.warm();
+  };
+
   function _calApplyContent(cd) {
     const rows = (cd && cd.content) || [];
     _calPosts = rows.filter(r => {
@@ -21855,7 +21937,7 @@
     const cachedCd = window.__clientData;
     if (!opts.silent && cachedCd && Array.isArray(cachedCd.content)) {
       _calApplyContent(cachedCd);
-      _calHistoryPosts = _filterHiddenSocial(_calHistRead() || []);
+      _calHistoryPosts = _filterHiddenSocial(_calHistKnown() || []);
       contentReady = true;
       show();
     } else if (!opts.silent) {
@@ -21872,11 +21954,11 @@
         contentReady = true;
         show();
       });
-    const histTask = fetch(`${API}/api/calendar-history${opts.refresh ? '?refresh=1' : ''}`, { headers: hdrs })
-      .then(r => (r.ok ? r.json() : { posts: [] }))
+    // Published posts warmed in the last two minutes are used as they are.
+    const warmHist = !opts.refresh && _calHistAge() < 2 * 60 * 1000 ? _calHistKnown() : null;
+    const histTask = (warmHist ? Promise.resolve({ posts: warmHist }) : _calFetchHistory(!!opts.refresh))
       .then(h => {
         if (!current()) return;
-        _calHistWrite(h.posts || []);
         _calHistoryPosts = _filterHiddenSocial(h.posts || []);
         show();
       });
