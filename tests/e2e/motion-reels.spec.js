@@ -311,3 +311,47 @@ test('Carousel → Reel sends slides in order with seconds per slide; a failed r
   await page.click('#mr-go');
   await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel.mp4', { timeout: 15000 });
 });
+
+test('End card: shown under a finished Reel, remade by typing or in plain words, the new video replaces the old', async ({ page }) => {
+  const renders = [];
+  const edits = [];
+  let remade = false;
+  const base = motionMock(renders, { pollsBeforeDone: 0 });
+  const data = clientData({ content: [{ id: 'recP1', status: 'Ready for Review', platform: 'instagram', full_post_text: 'Most people wash linen wrong.\n\n#linen' }] });
+  await mockApi(page, srv.base, {
+    data,
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/motion/jobs/mot_1/end-card') {
+        edits.push(JSON.parse(entry.body || '{}'));
+        json(202, { job_id: 'mot_2', status: 'processing', said: 'Shortened the line and used your green.' });
+        return 'handled';
+      }
+      if (entry.path === '/api/motion/jobs/mot_2') {
+        remade = true;
+        json(200, { job_id: 'mot_2', status: 'done', video_url: 'https://cdn.example/reel2.mp4', end_card: { cta: 'Book a check', handle: 'linenco', palette: { bg: '#102030', accent: '#22C55E' } } });
+        return 'handled';
+      }
+      if (entry.path === '/api/motion/jobs/mot_1') {
+        json(200, { job_id: 'mot_1', status: 'done', video_url: 'https://cdn.example/reel.mp4', end_card: { cta: 'Learn the signs, speak to your GP', handle: 'linenco', palette: { bg: '#102030', accent: '#22C55E' } } });
+        return 'handled';
+      }
+      return base(entry, route, json);
+    },
+  });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="content"]');
+  await page.click('.studio-card[data-post-id="recP1"] .studio-card__caption');
+  await page.locator('.mr-attach').first().click();
+  await page.click('#mr-go');
+  await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel.mp4', { timeout: 15000 });
+  await expect(page.locator('#mr-end-cta')).toHaveValue('Learn the signs, speak to your GP');
+  await expect(page.locator('#mr-end-handle')).toHaveValue('linenco');
+  await page.fill('#mr-end-cta', 'Book a check');
+  await page.fill('#mr-end-ask', 'shorter, and use our green');
+  await page.click('#mr-end-go');
+  await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel2.mp4', { timeout: 15000 });
+  await expect(page.locator('#mr-end-said')).toHaveText('Shortened the line and used your green.');
+  await expect(page.locator('#mr-download')).toHaveAttribute('href', 'https://cdn.example/reel2.mp4');
+  expect(remade).toBe(true);
+  expect(edits[0]).toMatchObject({ cta: 'Book a check', handle: 'linenco', instruction: 'shorter, and use our green', palette: { bg: '#102030', accent: '#22c55e' } });
+});

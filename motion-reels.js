@@ -85,6 +85,9 @@
       .mr-peek__cap small { display: block; color: rgba(226,232,240,0.7); font-size: 0.64rem; margin-top: 2px; }
       .mr-done-note { font-size: 0.72rem; color: rgba(148,163,184,0.9); margin-top: 8px; line-height: 1.45; flex-basis: 100%; }
       .mr-scene__del { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: rgba(248,113,113,0.8); cursor: pointer; width: 28px; height: 34px; padding: 0; }
+      .mr-end { margin-top: 14px; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); }
+      .mr-end .mr-label:first-child { margin-top: 0; }
+      .mr-end__said { font-size: 0.72rem; color: #86EFAC; margin-top: 8px; line-height: 1.45; }
       .mr-attach { display: inline-flex; align-items: center; gap: 4px; margin: 6px 0 0 6px; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(34,197,94,0.35); background: rgba(34,197,94,0.08); color: #86EFAC; font-size: 0.7rem; font-weight: 600; cursor: pointer; font-family: inherit; width: auto; }
     `;
     document.head.appendChild(st);
@@ -104,7 +107,7 @@
       ${kind === 'carousel' ? '' : `<div class="mr-tabs" role="tablist"><button type="button" class="mr-tab" data-mode="text">Text on screen</button><button type="button" class="mr-tab" data-mode="faceless">Voiceover + footage</button></div>`}
       <p class="mr-lead" id="mr-lead"></p>
       <div class="mr-grid"><div class="mr-form"><div class="mr-hint">Loading…</div></div>
-      <div><div class="mr-stage" id="mr-stage"><div class="mr-hint" style="padding:20px;text-align:center">Your Reel appears here.</div></div><div class="mr-row" id="mr-out"></div></div></div>
+      <div><div class="mr-stage" id="mr-stage"><div class="mr-hint" style="padding:20px;text-align:center">Your Reel appears here.</div></div><div class="mr-row" id="mr-out"></div><div id="mr-end-wrap"></div></div></div>
     </div>`;
     const close = () => { stopped = true; ov.remove(); };
     let stopped = false;
@@ -537,6 +540,71 @@
       }
     }
 
+    // ── The end card of a finished Reel, made again on its own (same voice, footage and music) ──
+    let endJob = null;
+    function showEndCard(s, said = '') {
+      endJob = s;
+      const wrap = ov.querySelector('#mr-end-wrap');
+      if (!wrap) return;
+      const e = s && s.end_card;
+      if (!e) { wrap.innerHTML = ''; return; }
+      const p = e.palette || {};
+      wrap.innerHTML = `<div class="mr-end" id="mr-end">
+        <span class="mr-label">End card</span>
+        <div class="mr-hint">Change it without making the whole Reel again.</div>
+        <label class="mr-label" for="mr-end-cta">Closing line</label>
+        <input class="mr-input" id="mr-end-cta" maxlength="60" value="${esc(e.cta || '')}" placeholder="Book a free check" />
+        <label class="mr-label" for="mr-end-handle">Handle</label>
+        <input class="mr-input" id="mr-end-handle" maxlength="40" value="${esc(e.handle || '')}" placeholder="yourbrand" />
+        <span class="mr-label">Colours</span>
+        <div class="mr-colors"><label class="mr-hint">Background <input type="color" id="mr-end-bg" value="${esc(p.bg || '#0F172A')}"></label><label class="mr-hint">Accent <input type="color" id="mr-end-accent" value="${esc(p.accent || '#A78BFA')}"></label></div>
+        <label class="mr-label" for="mr-end-ask">Or say what to change</label>
+        <input class="mr-input" id="mr-end-ask" maxlength="300" placeholder="Shorter, and use our green" />
+        <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-end-go">Remake the end card</button><span class="mr-hint" id="mr-end-status">Keeps the voice, footage and music.</span></div>
+        ${said ? `<div class="mr-end__said" id="mr-end-said">${esc(said)}</div>` : ''}
+      </div>`;
+      wrap.querySelector('#mr-end-go').addEventListener('click', remakeEndCard);
+    }
+
+    /** The new Reel plays from its end card, so the change is the first thing seen. */
+    function playFromEnd(url) {
+      stage.innerHTML = `<video id="mr-video" src="${esc(url)}" controls autoplay muted loop playsinline></video>`;
+      const v = stage.querySelector('video');
+      v.addEventListener('loadedmetadata', () => { if (v.duration > 3) v.currentTime = Math.max(0, v.duration - 2.4); }, { once: true });
+      const dl = out.querySelector('#mr-download');
+      if (dl) dl.href = url;
+    }
+
+    async function remakeEndCard(e) {
+      const btn = e.currentTarget;
+      const wrap = ov.querySelector('#mr-end-wrap');
+      const status = wrap.querySelector('#mr-end-status');
+      const body = {
+        cta: wrap.querySelector('#mr-end-cta').value.trim(),
+        handle: wrap.querySelector('#mr-end-handle').value.trim(),
+        palette: { bg: wrap.querySelector('#mr-end-bg').value, accent: wrap.querySelector('#mr-end-accent').value },
+      };
+      const ask = wrap.querySelector('#mr-end-ask').value.trim();
+      if (ask) body.instruction = ask;
+      btn.disabled = true;
+      btn.textContent = 'Remaking…';
+      status.textContent = ask ? 'Working out the change…' : 'Making the new end card…';
+      try {
+        const job = await api(`/api/motion/jobs/${encodeURIComponent(endJob.job_id)}/end-card`, { method: 'POST', body: JSON.stringify(body) });
+        status.textContent = 'Making the new end card…';
+        const s = await poll(job.job_id);
+        if (!s) return;
+        if (s.status !== 'done') throw new Error(s.error || 'The end card did not render. Try again in a minute.');
+        playFromEnd(s.video_url);
+        showEndCard(s, job.said || '');
+        toast('End card updated');
+      } catch (err) {
+        status.textContent = err.message;
+        btn.disabled = false;
+        btn.textContent = 'Remake the end card';
+      }
+    }
+
     async function poll(id) {
       for (let i = 0; i < 120 && !stopped; i += 1) {
         await new Promise((r) => setTimeout(r, i < 3 ? 2000 : 3000));
@@ -584,6 +652,7 @@
       btn.disabled = true; btn.textContent = 'Rendering…';
       busy = true;
       out.innerHTML = '';
+      showEndCard(null);
       stage.innerHTML = '<div style="text-align:center"><div class="mr-spin" style="margin:0 auto 10px"></div><div class="mr-hint">Rendering your Reel…</div></div>';
       try {
         const job = await api(kind === 'faceless' ? '/api/motion/faceless/render' : '/api/motion/render', { method: 'POST', body: JSON.stringify(body) });
@@ -594,6 +663,7 @@
         if (s.status !== 'done') throw Object.assign(new Error(s.error || 'The video did not render.'), { detail: s.detail || '', failedJob: !!s.job_id });
         stage.innerHTML = `<video id="mr-video" src="${esc(s.video_url)}" controls autoplay muted loop playsinline></video>`;
         out.innerHTML = `<a class="mr-btn mr-btn--primary" id="mr-download" href="${esc(s.video_url)}" download="reel.mp4" target="_blank" rel="noopener">Download MP4</a><span class="mr-hint">Saved to Library, Motion reels.</span>${s.note ? `<div class="mr-done-note" id="mr-note">${esc(s.note)}</div>` : ''}`;
+        showEndCard(s);
         toast('Reel ready');
       } catch (err) {
         stage.innerHTML = `<div style="padding:20px;text-align:center"><div class="mr-note" id="mr-error">${esc(err.message)}</div>${err.detail ? `<div class="mr-hint" id="mr-error-detail" style="margin-top:10px;word-break:break-word">Details: ${esc(err.detail)}</div>` : ''}${err.failedJob ? '<div class="mr-hint" style="margin-top:10px">This one did not count toward today.</div>' : ''}</div>`;
