@@ -28,6 +28,8 @@
   let _csCoachPending = null;
   let _csCoachJob = null;
   let _csCoachSending = false;
+  // How often the posts card checks on posts being made (tests shorten it).
+  let _csPostsPollMs = (typeof window !== 'undefined' && Number(window.__SE_POSTS_POLL_MS)) || 2500;
   const CS_MAX_STYLE_REFS = 10;
   const CS_CAROUSEL_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
   let _csCoachStyleUrls = [];
@@ -1154,10 +1156,8 @@
         source: 'coach',
       });
     }
-    const aspectEl = document.getElementById('cs-aspect');
-    if (aspectEl && ['9:16', '1:1', '4:5'].includes(String(s.aspect_ratio || ''))) {
-      aspectEl.value = s.aspect_ratio;
-    }
+    // A size the Coach named; the default it fills in never overrides the size picked here.
+    if (s.aspect_explicit !== false) setPostSize(s.aspect_ratio);
     if (s.finished && result.attached_image_url) {
       toast('Graphic loaded. Write the caption, then Add to Queue.', 'success');
       return;
@@ -2934,8 +2934,10 @@
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.id = 'cs-design-carousel';
-    btn.textContent = 'Design this carousel in my brand style';
-    btn.style.cssText = 'align-self:flex-start;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
+    btn.className = 'cs-coach-act';
+    const n = Number(action && action.slides);
+    btn.textContent = n ? `Design this ${n}-slide carousel in my brand style` : 'Design this carousel in my brand style';
+    btn.style.cssText = 'align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
     btn.addEventListener('click', () => {
       window.seDesignStudio.openWith({
         brief: action.brief,
@@ -2947,6 +2949,298 @@
     });
     log.appendChild(btn);
     log.scrollTop = log.scrollHeight;
+  }
+
+  // The Post tool's sizes. setPostSize moves the picker (and the size chips) to one the Coach
+  // named, so what it says is the size the post is made at; say: tells the chat it switched.
+  // (Function declarations, not consts: setPostSize is also used above this point.)
+  function isPostSize(r) { return r === '9:16' || r === '4:5' || r === '1:1'; }
+  function postSizeCss(r) { return ({ '9:16': '9/16', '4:5': '4/5', '1:1': '1/1' })[r] || '4/5'; }
+  function currentPostSize() {
+    const v = document.getElementById('cs-aspect')?.value || '';
+    return isPostSize(v) ? v : '9:16';
+  }
+  function setPostSize(ratio, { say = false } = {}) {
+    const v = String(ratio || '');
+    const aspect = document.getElementById('cs-aspect');
+    if (!aspect || !isPostSize(v) || aspect.value === v) return false;
+    const was = aspect.value;
+    aspect.value = v;
+    aspect.dispatchEvent(new Event('change', { bubbles: true }));
+    nlP2Sync();
+    if (say) {
+      appendDesignCoachBubble('assistant', `Size switched from ${was} to ${v}.`);
+      scrollCoachLogToBottom();
+    }
+    return true;
+  }
+
+  /** A create action that named a size (CREATE_CONTENT aspect_ratio) switches the picker first. */
+  function applyCoachPostSize(action) {
+    if (action && action.aspect_explicit === true) setPostSize(action.aspect_ratio, { say: true });
+  }
+
+  // ── Several single posts at once (the Coach's design_posts action) ──
+  // Each post is its own image: in the brand's design system when the client has one, else
+  // made by the Stage engine. They are made two at a time and each tile fills in as it lands;
+  // Open puts one on the canvas, Add to Review queues it, Add all queues every finished one.
+  function designPostsCaption(post) {
+    const tags = Array.isArray(post.hashtags) ? post.hashtags.filter(Boolean).join(' ') : '';
+    const body = String(post.caption || '').trim() || String(post.brief || post.title || '').trim();
+    return tags && !body.includes(tags) ? `${body}\n\n${tags}` : body;
+  }
+
+  function designPostsCard(action) {
+    const log = document.getElementById('cs-coach-log');
+    if (!log) return null;
+    // The size they are made at: the brand's format, the size the Coach named, else the picker's.
+    const view = { size: isPostSize(action.aspect_ratio) ? action.aspect_ratio : currentPostSize() };
+    const posts = action.posts.map((p) => ({ ...p, status: 'queued', url: '', queued: false, ratio: view.size }));
+    const card = document.createElement('div');
+    card.className = 'cs-posts';
+    card.setAttribute('data-cs-posts', '');
+    card.style.cssText = 'align-self:stretch;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:9px;';
+    log.appendChild(card);
+    const paint = () => {
+      const done = posts.filter((p) => p.status === 'done').length;
+      const failed = posts.filter((p) => p.status === 'failed').length;
+      const working = posts.length - done - failed;
+      const head = working
+        ? `Making ${posts.length === 1 ? 'your post' : `${posts.length} posts`}${done ? `: ${done} of ${posts.length} done` : ''}. Each one shows here when it is ready.`
+        : failed
+          ? `${done} of ${posts.length} made. ${failed === 1 ? 'One' : failed} could not be made; try ${failed === 1 ? 'it' : 'them'} again.`
+          : `${posts.length === 1 ? 'Your post is' : `All ${posts.length} posts are`} ready. Open one to change it, or add ${posts.length === 1 ? 'it' : 'them'} to Review.`;
+      const ready = posts.filter((p) => p.status === 'done' && !p.queued).length;
+      const sizeNote = action.engine === 'brand' ? `Size ${view.size}, your brand format.` : `Size ${view.size}.`;
+      card.innerHTML = `<div class="cs-posts__head" data-cs-posts-head style="font-size:0.74rem;color:rgba(255,255,255,0.7);line-height:1.45;">${escapeHtml(head)}</div>`
+        + `<div class="cs-posts__size" data-cs-posts-size style="font-size:0.66rem;color:rgba(255,255,255,0.45);margin-top:-5px;">${escapeHtml(sizeNote)}</div>`
+        + `<div class="cs-posts__grid" style="display:grid;grid-template-columns:repeat(${posts.length > 1 ? 2 : 1},minmax(0,1fr));gap:8px;">${posts.map((p, i) => {
+          const img = p.status === 'done' && p.url
+            ? `<img src="${escapeHtml(mediaSrc(p.url))}" alt="${escapeHtml(p.title)}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;">`
+            : p.status === 'failed'
+              ? `<span style="font-size:0.7rem;color:#FCA5A5;padding:8px;text-align:center;">${escapeHtml(p.error || 'Could not be made')}</span>`
+              : `<span class="cs-post__spin" aria-hidden="true" style="width:18px;height:18px;border:2px solid rgba(255,255,255,0.15);border-top-color:#A78BFA;border-radius:50%;animation:spin 0.8s linear infinite;"></span>`;
+          const acts = p.status === 'done'
+            ? `<button type="button" class="cs-post__btn" data-cs-post-open="${i}">Open</button><button type="button" class="cs-post__btn cs-post__btn--main" data-cs-post-queue="${i}" ${p.queued ? 'disabled' : ''}>${p.queued ? 'In Review' : 'Add to Review'}</button>`
+            : p.status === 'failed'
+              ? `<button type="button" class="cs-post__btn" data-cs-post-retry="${i}">Try again</button>`
+              : `<span class="cs-post__note" style="font-size:0.66rem;color:rgba(255,255,255,0.45);">${p.status === 'working' ? 'Designing…' : 'Waiting…'}</span>`;
+          return `<div class="cs-post" data-cs-post="${i}" data-status="${p.status}" style="display:flex;flex-direction:column;gap:5px;min-width:0;">`
+            + `<div class="cs-post__img" style="aspect-ratio:${postSizeCss(p.ratio)};border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;">${img}</div>`
+            + `<div class="cs-post__t" style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.85);line-height:1.3;">${escapeHtml(p.title)}</div>`
+            + `<div class="cs-post__acts" style="display:flex;gap:5px;flex-wrap:wrap;">${acts}</div>`
+            + '</div>';
+        }).join('')}</div>`
+        + (posts.length > 1 && ready > 1
+          ? `<button type="button" class="cs-coach-act" data-cs-posts-queue-all style="align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Add all ${ready} to Review</button>`
+          : '');
+      card.querySelectorAll('.cs-post__btn').forEach((b) => {
+        b.style.cssText = b.classList.contains('cs-post__btn--main')
+          ? 'background:#7C3AED;color:#fff;border:none;border-radius:7px;padding:5px 9px;font-size:0.68rem;font-weight:700;cursor:pointer;font-family:var(--font-body);'
+          : 'background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.18);border-radius:7px;padding:5px 9px;font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);';
+      });
+      scrollCoachLogToBottom();
+    };
+    return Object.assign(view, { card, posts, paint });
+  }
+
+  async function queueDesignPost(post) {
+    const res = await fetch(`${apiBase()}/api/studio/design-queue`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        image_url: post.url,
+        brief: post.brief || post.title,
+        caption: designPostsCaption(post),
+        platform: queuePlatform(),
+        status: queueReady().queueReviewStatus(),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !(data.ok || data.success)) throw new Error(data.error || 'Could not add it to Review');
+    post.queued = true;
+  }
+
+  // Brand design system: one job makes every post; its progress carries each finished url.
+  async function makePostsWithBrand(view, action, only) {
+    const list = only != null ? [view.posts[only]] : view.posts;
+    const res = await fetch(`${apiBase()}/api/design/posts`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        posts: list.map((p) => ({ title: p.title, brief: p.brief })),
+        medical: action.medical === true || action.medical === 'ask',
+        platform: 'instagram',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409 && data.code === 'DESIGN_NO_SYSTEM') return false;
+    if (!res.ok || !data.job_id) throw new Error(data.error || 'Could not start the posts');
+    const index = (k) => (only != null ? only : k);
+    const started = Date.now();
+    while (Date.now() - started < 15 * 60_000) {
+      await new Promise((r) => setTimeout(r, _csPostsPollMs));
+      const jr = await fetch(`${apiBase()}/api/design/jobs/${encodeURIComponent(data.job_id)}`, { headers: authHeaders() });
+      const jd = await jr.json().catch(() => ({}));
+      const job = jd.job || {};
+      const states = (job.progress && Array.isArray(job.progress.posts)) ? job.progress.posts : [];
+      states.forEach((st, k) => {
+        const p = view.posts[index(k)];
+        if (!p || p.status === 'done') return;
+        if (st.status === 'done' && st.url) Object.assign(p, { status: 'done', url: st.url });
+        else if (st.status === 'failed') Object.assign(p, { status: 'failed', error: st.error });
+        else if (st.status === 'working') p.status = 'working';
+      });
+      if (job.status === 'done' && job.result && Array.isArray(job.result.posts)) {
+        if (isPostSize(job.result.ratio)) view.size = job.result.ratio;
+        job.result.posts.forEach((r, k) => {
+          const p = view.posts[index(k)];
+          if (!p || !r) return;
+          if (r.url) Object.assign(p, { status: 'done', url: r.url, caption: r.caption || '', hashtags: r.hashtags || [], ratio: view.size });
+          else Object.assign(p, { status: 'failed', error: r.error || 'Could not be made' });
+        });
+        view.paint();
+        return true;
+      }
+      if (job.status === 'failed' || jr.status === 404) {
+        list.forEach((p) => { if (p.status !== 'done') Object.assign(p, { status: 'failed', error: job.error || 'Could not be made' }); });
+        view.paint();
+        return true;
+      }
+      view.paint();
+    }
+    list.forEach((p) => { if (p.status !== 'done') Object.assign(p, { status: 'failed', error: 'This took too long' }); });
+    view.paint();
+    return true;
+  }
+
+  // No brand design system: each post is a Stage generation of its own, two at a time.
+  async function makeOneWithStage(p) {
+    p.status = 'working';
+    const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
+      method: 'POST',
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(360_000),
+      body: JSON.stringify({
+        brief: p.brief,
+        aspect_ratio: isPostSize(p.ratio) ? p.ratio : currentPostSize(),
+        model: selectedEngineId(),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not be made');
+    let url = data.image_url || '';
+    if (data.async && data.job_id) {
+      const started = Date.now();
+      while (!url && Date.now() - started < 8 * 60_000) {
+        await new Promise((r) => setTimeout(r, _csPostsPollMs));
+        const jr = await fetch(`${apiBase()}/api/studio/design-job/${encodeURIComponent(data.job_id)}`, { headers: authHeaders() });
+        const jd = await jr.json().catch(() => ({}));
+        if (jd.status === 'completed' && jd.image_url) url = jd.image_url;
+        else if (jd.status === 'failed' || jr.status === 404) throw new Error(jd.error || 'Could not be made');
+      }
+    }
+    if (!url) throw new Error(data.html ? 'This engine makes a layout, not an image; open it on the canvas instead' : 'Could not be made');
+    Object.assign(p, { status: 'done', url });
+  }
+
+  async function makePostsWithStage(view, only) {
+    const queue = only != null ? [only] : view.posts.map((_, i) => i);
+    const worker = async () => {
+      while (queue.length) {
+        const p = view.posts[queue.shift()];
+        try { await makeOneWithStage(p); } catch (e) { Object.assign(p, { status: 'failed', error: e.message || 'Could not be made' }); }
+        view.paint();
+      }
+    };
+    view.paint();
+    await Promise.all([worker(), worker()]);
+  }
+
+  async function runDesignPosts(action, { finished = null } = {}) {
+    const view = designPostsCard(action);
+    if (!view) return;
+    if (finished) {
+      // Brought back from the chat history: the posts are already made.
+      view.posts.forEach((p, i) => Object.assign(p, finished[i] || {}, { status: 'done', ratio: (finished[i] && finished[i].ratio) || p.ratio }));
+      view.paint();
+    }
+    const remember = () => {
+      if (view.posts.some((p) => p.status === 'working' || p.status === 'queued')) return;
+      const made = view.posts.filter((p) => p.status === 'done' && p.url);
+      if (!made.length) return;
+      persistSharedCoach('assistant', `Made ${made.length === 1 ? 'a post' : `${made.length} posts`}: ${made.map((p) => p.title).join('; ')}.`, { posts: made });
+    };
+    const run = async (only) => {
+      const list = only != null ? [view.posts[only]] : view.posts;
+      list.forEach((p) => Object.assign(p, { status: 'working', error: '' }));
+      view.paint();
+      try {
+        const brand = action.engine === 'brand' && await makePostsWithBrand(view, action, only);
+        if (!brand) await makePostsWithStage(view, only);
+      } catch (e) {
+        list.forEach((p) => { if (p.status !== 'done') Object.assign(p, { status: 'failed', error: e.message || 'Could not be made' }); });
+        view.paint();
+      }
+    };
+    view.card.addEventListener('click', async (e) => {
+      const open = e.target.closest('[data-cs-post-open]');
+      const queue = e.target.closest('[data-cs-post-queue]');
+      const retry = e.target.closest('[data-cs-post-retry]');
+      const all = e.target.closest('[data-cs-posts-queue-all]');
+      if (open) {
+        const p = view.posts[Number(open.getAttribute('data-cs-post-open'))];
+        // The canvas and any change from here use the size this post was made at.
+        setPostSize(p.ratio);
+        const brief = document.getElementById('cs-brief');
+        if (brief) brief.value = p.brief || p.title;
+        _csBrief = p.brief || p.title;
+        const cap = document.getElementById('cs-caption-box');
+        if (cap && 'value' in cap) { cap.value = designPostsCaption(p); cap.dataset.caption = cap.value; }
+        showGeneratedImage(p.url);
+        toast(`"${p.title}" is on the canvas`, 'success');
+      } else if (queue) {
+        const p = view.posts[Number(queue.getAttribute('data-cs-post-queue'))];
+        queue.disabled = true;
+        queue.textContent = 'Adding…';
+        // Stay here (the other posts are still in this chat); the toast says where it went.
+        try { await queueDesignPost(p); toast(`"${p.title}" added to Review`, 'success'); } catch (err) { toast(err.message, 'error'); }
+        view.paint();
+        rememberQueued();
+      } else if (retry) {
+        await run(Number(retry.getAttribute('data-cs-post-retry')));
+        remember();
+      } else if (all) {
+        all.disabled = true;
+        all.textContent = 'Adding…';
+        let added = 0;
+        for (const p of view.posts) {
+          if (p.status !== 'done' || p.queued) continue;
+          try { await queueDesignPost(p); added += 1; } catch (err) { toast(err.message, 'error'); }
+        }
+        if (added) toast(`${added} post${added === 1 ? '' : 's'} added to Review`, 'success');
+        view.paint();
+        rememberQueued();
+      }
+    });
+    // Which posts went to Review, so a reload does not offer them again.
+    function rememberQueued() {
+      const key = sharedCoachStorageKey();
+      if (!key) return;
+      try {
+        const hist = JSON.parse(localStorage.getItem(key) || '[]');
+        for (let i = hist.length - 1; i >= 0; i -= 1) {
+          const m = hist[i];
+          if (!m || !Array.isArray(m.posts)) continue;
+          m.posts.forEach((hp) => { const p = view.posts.find((x) => x.url === hp.url); if (p && p.queued) hp.queued = true; });
+          break;
+        }
+        localStorage.setItem(key, JSON.stringify(hist));
+      } catch (_) { /* storage is a convenience */ }
+    }
+    if (finished) return;
+    await run(null);
+    remember();
   }
 
   function coachStyleHttpsUrls() {
@@ -3079,6 +3373,9 @@
       if (m && m.role !== 'user' && Array.isArray(m.actions)) {
         const plan = m.actions.find((a) => a && a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2);
         if (plan) window.__SE_CAROUSEL_PLAN = plan;
+      }
+      if (m && m.role !== 'user' && Array.isArray(m.posts) && m.posts.length) {
+        runDesignPosts({ type: 'design_posts', aspect_ratio: (m.posts.find((p) => p.ratio) || {}).ratio || '', posts: m.posts.map((p) => ({ title: p.title, brief: p.brief })) }, { finished: m.posts });
       }
     });
     if (!log.childElementCount) {
@@ -3288,6 +3585,7 @@
           : _csCoachJob;
         setDesignCoachApply(null);
       } else if (pending.mode === 'confirm_generate' || pending.mode === 'apply_generate') {
+        applyCoachPostSize(pending.action);
         const ok = await generateFromCoach(pending.prompt);
         if (ok === true) {
           _csPosterOk = masterImageUrl();
@@ -3506,6 +3804,14 @@
         ? window.resolveDesignCoachApply
         : () => ({ mode: 'none' });
       const actions = Array.isArray(data.coach_actions) ? data.coach_actions : [];
+      const designPosts = actions.find((a) => a && a.type === 'design_posts' && Array.isArray(a.posts) && a.posts.length);
+      if (designPosts) {
+        setDesignCoachApply(null);
+        // The size the Coach said is the size the picker shows and the posts are made at.
+        setPostSize(designPosts.aspect_ratio, { say: true });
+        runDesignPosts(designPosts);
+        return;
+      }
       const designCarousel = actions.find((a) => a && a.type === 'design_carousel' && a.brief);
       if (designCarousel && window.seDesignStudio) {
         setDesignCoachApply(null);
@@ -3537,6 +3843,7 @@
         if (/^https:\/\//i.test(master) && _csPosterOk !== master) askPosterForCarousel(decision);
         else await runCarouselFromPlan(decision);
       } else if (decision.mode === 'apply_generate') {
+        applyCoachPostSize(decision.action);
         const status = appendDesignCoachBubble('assistant', 'Generating the 4K poster…');
         scrollCoachLogToBottom();
         // generateFromCoach owns setBusy — do not set busy before calling it
@@ -3559,6 +3866,7 @@
           setBusy(false);
         }
       } else if (decision.mode === 'refine') {
+        applyCoachPostSize(decision.action);
         const status = appendDesignCoachBubble('assistant', 'Updating the preview…');
         scrollCoachLogToBottom();
         const ok = await generateFromCoach(decision.prompt || message);

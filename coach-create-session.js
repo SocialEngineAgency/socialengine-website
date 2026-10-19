@@ -143,7 +143,9 @@ function normalizeCoachCreateSession(intent = {}) {
     prompt,
     product_name: String(intent.product_name || '').slice(0, 160),
     mode: intent.mode === 'image' ? 'image' : 'video',
-    aspect_ratio: ['9:16', '1:1', '16:9'].includes(intent.aspect_ratio) ? intent.aspect_ratio : '9:16',
+    aspect_ratio: ['9:16', '1:1', '16:9', '4:5'].includes(intent.aspect_ratio) ? intent.aspect_ratio : '9:16',
+    // A size the Coach named (the Post tool switches to it); a default never overrides the picker.
+    aspect_explicit: intent.aspect_explicit === true && ['9:16', '1:1', '16:9', '4:5'].includes(intent.aspect_ratio),
     destination,
     attached_image_url,
     duration: normalizeCoachDuration(intent.duration) || extras.duration,
@@ -563,6 +565,22 @@ function persistCoachHistoryEntry(role, text, extra = {}) {
       || (a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2)
     ));
     if (actions.length) entry.actions = actions;
+  }
+  // Posts the Coach made in one go (the Post tool's posts card), so the card comes back after a reload.
+  if (role === 'assistant' && Array.isArray(extra.posts) && extra.posts.length) {
+    const posts = extra.posts
+      .filter((p) => p && /^https?:\/\//i.test(String(p.url || '')))
+      .slice(0, 6)
+      .map((p) => ({
+        title: String(p.title || '').slice(0, 120),
+        url: String(p.url),
+        brief: String(p.brief || '').slice(0, 1200),
+        caption: String(p.caption || '').slice(0, 2200),
+        hashtags: (Array.isArray(p.hashtags) ? p.hashtags : []).map(String).slice(0, 10),
+        queued: !!p.queued,
+        ratio: ['9:16', '4:5', '1:1'].includes(p.ratio) ? p.ratio : '',
+      }));
+    if (posts.length) entry.posts = posts;
   }
   return entry;
 }

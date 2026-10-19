@@ -606,6 +606,21 @@ test('assistant history keeps create actions so refresh can rebind', () => {
   assert.equal(user.actions, undefined);
 });
 
+test('assistant history keeps the posts the Coach made, so the posts card comes back', () => {
+  const entry = persistCoachHistoryEntry('assistant', 'Made 2 posts.', {
+    posts: [
+      { title: 'Stress', url: 'https://store.test/p1.png', brief: 'b', caption: 'c', hashtags: ['#OPA'], queued: true, ratio: '4:5' },
+      { title: 'Not made', url: '' },
+      { title: 'Sleep', url: 'https://store.test/p2.png', ratio: '16:9' },
+    ],
+  });
+  assert.deepEqual(entry.posts.map((p) => p.title), ['Stress', 'Sleep']);
+  assert.equal(entry.posts[0].queued, true);
+  assert.deepEqual(entry.posts.map((p) => p.ratio), ['4:5', ''], 'the size each was made at (Post tool sizes only)');
+  assert.deepEqual(entry.posts[1].hashtags, []);
+  assert.equal(persistCoachHistoryEntry('user', 'x', { posts: [{ url: 'https://a.test/x.png' }] }).posts, undefined);
+});
+
 test('portal generate does not require a still or product name', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   const submit = src.slice(src.indexOf('async function submitVideoGeneration'), src.indexOf('function addGenerationToRecent'));
@@ -702,4 +717,15 @@ test('Make a new poster first sends the new brief, not an edit of the old poster
   assert.match(src, /briefEl && opts\.fresh\) \{\s*briefEl\.value = next;/);
   assert.match(src, /heroUrlForGenerate\(\) === replacing \? ''/);
   assert.match(src, /Could not generate the poster: \$\{_csGenerateError/);
+});
+
+test('a Coach create can carry 4:5, and only a size the Coach named switches the Post tool', () => {
+  const named = normalizeCoachCreateSession({ prompt: 'A feed post about five sleep habits', mode: 'image', destination: 'design', aspect_ratio: '4:5', aspect_explicit: true });
+  assert.equal(named.aspect_ratio, '4:5');
+  assert.equal(named.aspect_explicit, true);
+  const dflt = normalizeCoachCreateSession({ prompt: 'A feed post about five sleep habits', mode: 'image', destination: 'design' });
+  assert.equal(dflt.aspect_ratio, '9:16');
+  assert.equal(dflt.aspect_explicit, false);
+  const inferred = inferCreateActionFromReply('Create this now: a vertical poster about five small sleep habits for the feed', 'make a poster about sleep habits', []);
+  if (inferred) assert.equal(inferred.aspect_explicit, false, 'a size filled in on our side is not one the Coach named');
 });
