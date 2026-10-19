@@ -47,6 +47,7 @@ const ALLOWLIST = [
   'key-dates.js', // portal.html — Calendar key dates (holidays, awareness days) + post ideas
   'diagram-posts.js', // portal.html — diagram graphics (steps, timeline, compare, cycle, funnel)
   'motion-reels.js', // portal.html — carousel → Reel and text Reels (HyperFrames)
+  'agent-run.js', // portal.html — the Coach agent's live project card
   'live-updates.js', // portal.html — live updates stream (Server-Sent Events)
   'new-look.css', // portal.html — graphite redesign (on with ?look=new)
   'new-look.js', // portal.html — palette mapping, icon rail, jump bar, Day/Dark

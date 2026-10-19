@@ -3401,6 +3401,8 @@
       if (m && m.role !== 'user' && Array.isArray(m.actions)) {
         const plan = m.actions.find((a) => a && a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2);
         if (plan) window.__SE_CAROUSEL_PLAN = plan;
+        const ranAgent = m.actions.find((a) => a && a.type === 'agent_run' && a.run_id);
+        if (ranAgent) mountDesignAgentRun(ranAgent.run_id);
       }
       if (m && m.role !== 'user' && Array.isArray(m.posts) && m.posts.length) {
         runDesignPosts({ type: 'design_posts', aspect_ratio: (m.posts.find((p) => p.ratio) || {}).ratio || '', posts: m.posts.map((p) => ({ title: p.title, brief: p.brief })) }, { finished: m.posts });
@@ -3665,6 +3667,17 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  /** A project the Coach's agent is working on: a live card in the Coach log (plan, steps, finished work). */
+  function mountDesignAgentRun(runId) {
+    const log = document.getElementById('cs-coach-log');
+    if (!log || !runId || !window.seAgentRun) return;
+    const holder = document.createElement('div');
+    holder.className = 'cs-cb cs-cb--ai';
+    holder.style.cssText = 'align-self:stretch;max-width:100%;';
+    log.appendChild(holder);
+    window.seAgentRun.mount(holder, runId, { scroll: scrollCoachLogToBottom, reply: (text) => designCoachAsk(text) });
+  }
+
   function coachStatusPhrases(hasStyleRefs) {
     const base = [
       'Coach is reading…',
@@ -3826,12 +3839,18 @@
       setCoachStatusBusy(false);
       const reply = String(data.reply || 'Got it.');
       appendDesignCoachBubble('assistant', reply);
-      persistSharedCoach('assistant', reply, { actions: data.coach_actions });
+      persistSharedCoach('assistant', reply, { actions: (Array.isArray(data.coach_actions) ? data.coach_actions : []).map((a) => (a && a.type === 'agent_run' ? { type: 'agent_run', run_id: a.run_id } : a)) });
       scrollCoachLogToBottom();
       const decide = typeof window.resolveDesignCoachApply === 'function'
         ? window.resolveDesignCoachApply
         : () => ({ mode: 'none' });
       const actions = Array.isArray(data.coach_actions) ? data.coach_actions : [];
+      const agentRun = actions.find((a) => a && a.type === 'agent_run' && a.run_id);
+      if (agentRun && window.seAgentRun) {
+        setDesignCoachApply(null);
+        mountDesignAgentRun(agentRun.run_id);
+        return;
+      }
       const designStyle = actions.find((a) => a && a.type === 'design_style' && a.source_image_url);
       if (designStyle && window.seDesignStudio && window.seDesignStudio.buildStyle) {
         setDesignCoachApply(null);
