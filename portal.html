@@ -33,7 +33,7 @@
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
-  <script src="./claude-studio.js?v=20261019styles" defer></script>
+  <script src="./claude-studio.js?v=20261019agent" defer></script>
   <script src="./design-studio-v2.js?v=20261019styles" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261018posts"></script>
@@ -47,6 +47,7 @@
   <script src="./key-dates.js?v=20261018warm" defer></script>
   <script src="./diagram-posts.js?v=20261010" defer></script>
   <script src="./motion-reels.js?v=20261019-endcard" defer></script>
+  <script src="./agent-run.js?v=20261019-agent" defer></script>
   <script src="./live-updates.js?v=20261012" defer></script>
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -13209,6 +13210,16 @@
                 : '');
             msgDiv.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai">' + msg.text + actionsHtml + '<div style="font-size:0.6rem;color:rgba(148,163,184,0.3);margin-top:4px;">' + (msg.time || '') + '</div></div>';
             bindRestoredCoachCreateButtons(msgDiv, payloads);
+            // A project the Coach's agent was working on: show where it got to.
+            const ranAgent = Array.isArray(msg.actions) ? msg.actions.find((a) => a && a.type === 'agent_run' && a.run_id) : null;
+            if (ranAgent && window.seAgentRun) {
+              const bubble = msgDiv.querySelector('.chat-msg--ai');
+              window.seAgentRun.mount(bubble, ranAgent.run_id, {
+                before: bubble && bubble.lastElementChild,
+                scroll: scrollToBottom,
+                reply: (text) => { inputEl.value = text; sendMessage(); },
+              });
+            }
           }
           messagesEl.appendChild(msgDiv);
         });
@@ -13338,6 +13349,18 @@
         }
       }
       loadWorkspace();
+
+      // After a reload (or on another device) a project that is still running shows up again.
+      setTimeout(() => {
+        if (!window.seAgentRun) return;
+        window.seAgentRun.resume(() => {
+          const row = document.createElement('div');
+          row.className = 'chat-msg-row';
+          row.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai">Your project is still going.</div>';
+          messagesEl.appendChild(row);
+          return row.querySelector('.chat-msg--ai');
+        }, { scroll: scrollToBottom, reply: (text) => { inputEl.value = text; sendMessage(); } });
+      }, 2500);
 
       document.getElementById('chat-ws-new-project')?.addEventListener('click', async () => {
         const name = window.prompt('Project name', 'Carousels');
@@ -13678,8 +13701,18 @@
               remember: (text) => saveToHistory('assistant', text, {}),
             });
           }
+          // A project handed to the Coach's agent: a live card follows it (plan, steps, finished work).
+          const agentAction = coachActions.find((a) => a && a.type === 'agent_run' && a.run_id);
+          if (agentAction && window.seAgentRun) {
+            const msgEl = aiRow.querySelector('.chat-msg--ai');
+            window.seAgentRun.mount(msgEl, agentAction.run_id, {
+              before: msgEl && msgEl.lastElementChild,
+              scroll: scrollToBottom,
+              reply: (text) => { inputEl.value = text; sendMessage(); },
+            });
+          }
           scrollToBottom();
-          saveToHistory('assistant', replyHtml, { actions: coachActions });
+          saveToHistory('assistant', replyHtml, { actions: coachActions.map((a) => (a && a.type === 'agent_run' ? { type: 'agent_run', run_id: a.run_id } : a)) });
 
           if (data.suggestions) updateSuggestions(data.suggestions);
         } catch (err) {
