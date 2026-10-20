@@ -1365,8 +1365,8 @@
     }
     function aiTab() {
       return `<div class="dsv2-ed-chips">${QUICK_ASKS.map(([label, text]) => `<button type="button" class="dsv2-ed-chip" data-ask="${esc(text)}">${esc(label)}</button>`).join('')}</div>
-        <textarea id="dsv2-ed-ai" rows="3" placeholder="Tell AI what to change, e.g. swap the stat for the NHS figure, or add a line about seeing a GP"></textarea>
-        <div class="dsv2-actions" style="margin-top:10px;"><button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-ai-go">Apply with AI</button><span class="dsv2-hint">Rewrites this slide and saves it (about 10 seconds). Undo is one click.</span></div>`;
+        <textarea id="dsv2-ed-ai" rows="3" placeholder="Tell AI what to change, e.g. make the picture box white and the same blob shape, or swap the stat for the NHS figure"></textarea>
+        <div class="dsv2-actions" style="margin-top:10px;"><button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-ai-go">Apply with AI</button><span class="dsv2-hint">Changes the words, or how the picture sits, and saves this slide (about 10 seconds). Undo is one click.</span></div>`;
     }
 
     function drawPanel() {

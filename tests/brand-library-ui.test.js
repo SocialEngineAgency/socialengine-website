@@ -55,6 +55,9 @@ test('Library page can upload stills, harvest, generate views, and review drafts
   assert.match(src, /Label with AI/);
   assert.match(src, /\/api\/assets\/analyze-missing/);
   assert.match(src, /\/analyze/);
+  assert.match(src, /id="se-lib-picker-grid" class="se-pick-grid"/);
+  assert.match(src, /\.se-pick-grid \{[\s\S]*grid-auto-rows:\s*max-content/);
+  assert.match(src, /\.se-pick-im img \{[\s\S]*object-fit:\s*cover/);
 });
 
 test('Animate applies Coach library refs without auto-Send', () => {
@@ -86,6 +89,8 @@ test('Library style stills map to the style ref role', () => {
 test('Claude Design picker tab is Past posts, not Library', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
   assert.match(src, />Past posts</);
+  assert.match(src, /id="cs-library-grid" class="se-pick-grid"/);
+  assert.match(src, /class="cs-lib-card se-pick-tile"/);
   assert.doesNotMatch(src, /id="cs-tab-library"[^>]*>Library</);
 });
 

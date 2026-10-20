@@ -909,9 +909,9 @@
         const img = p.primary_image || '';
         const title = p.title || 'Product';
         const id = p.id || '';
-        return `<button type="button" class="cs-pick-card" data-url="${escapeHtml(img)}" data-title="${escapeHtml(title)}" data-id="${escapeHtml(String(id))}" data-source="shopify" style="text-align:left;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);cursor:pointer;overflow:hidden;">
-          <div style="aspect-ratio:1;background:#111;"><img src="${escapeHtml(mediaSrc(img))}" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;" loading="lazy"></div>
-          <div style="padding:8px 9px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.8);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</div>
+        return `<button type="button" class="cs-pick-card se-pick-tile" data-url="${escapeHtml(img)}" data-title="${escapeHtml(title)}" data-id="${escapeHtml(String(id))}" data-source="shopify">
+          <div class="se-pick-im"><img src="${escapeHtml(mediaSrc(img))}" alt="" referrerpolicy="no-referrer" loading="lazy"></div>
+          <div class="se-pick-cap"><span>${escapeHtml(title)}</span></div>
         </button>`;
       }).join('');
       grid.querySelectorAll('.cs-pick-card').forEach((el) => {
@@ -950,12 +950,12 @@
         const thumb = it.image_url || '';
         const isVideo = it.type === 'video' || (!!it.video_url && !it.image_url);
         const title = it.title || 'Content';
-        return `<button type="button" class="cs-lib-card" data-url="${escapeHtml(thumb || it.video_url || '')}" data-poster="${escapeHtml(thumb)}" data-video="${escapeHtml(it.video_url || '')}" data-type="${isVideo ? 'video' : 'image'}" data-title="${escapeHtml(title)}" style="text-align:left;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);cursor:pointer;overflow:hidden;position:relative;">
-          <div style="aspect-ratio:1;background:#111;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:0.7rem;">
-            ${thumb ? `<img src="${escapeHtml(mediaSrc(thumb))}" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;" loading="lazy">` : (isVideo ? 'VIDEO' : '—')}
+        return `<button type="button" class="cs-lib-card se-pick-tile" data-url="${escapeHtml(thumb || it.video_url || '')}" data-poster="${escapeHtml(thumb)}" data-video="${escapeHtml(it.video_url || '')}" data-type="${isVideo ? 'video' : 'image'}" data-title="${escapeHtml(title)}" style="position:relative;">
+          <div class="se-pick-im" style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:0.7rem;">
+            ${thumb ? `<img src="${escapeHtml(mediaSrc(thumb))}" alt="" referrerpolicy="no-referrer" loading="lazy">` : (isVideo ? 'VIDEO' : '—')}
           </div>
           ${isVideo ? '<span style="position:absolute;top:6px;left:6px;font-size:0.58rem;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,0.55);color:#fff;">VIDEO</span>' : ''}
-          <div style="padding:8px 9px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.8);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</div>
+          <div class="se-pick-cap"><span>${escapeHtml(title)}</span></div>
         </button>`;
       }).join('');
       grid.querySelectorAll('.cs-lib-card').forEach((el) => {
@@ -1973,10 +1973,10 @@
           <div style="flex:1;overflow:auto;padding:14px;">
             <div id="cs-panel-products">
               <input id="cs-product-search" type="search" placeholder="Search products…" style="width:100%;box-sizing:border-box;margin-bottom:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;">
-              <div id="cs-products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>
+              <div id="cs-products-grid" class="se-pick-grid" style="flex:none;overflow:visible;padding:0;"></div>
             </div>
             <div id="cs-panel-library" style="display:none;">
-              <div id="cs-library-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>
+              <div id="cs-library-grid" class="se-pick-grid" style="flex:none;overflow:visible;padding:0;"></div>
             </div>
             <div id="cs-panel-uploads" style="display:none;">
               <div id="cs-session-upload"></div>
