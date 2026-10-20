@@ -1123,7 +1123,7 @@
           const job = (await call('GET', `/api/design/jobs/${encodeURIComponent(id)}`)).job;
           if (job.status === 'done') return resolve(job.result);
           if (job.status === 'failed') return reject(new Error(job.error || 'Edit failed. Try again.'));
-          if (onProgress) onProgress(job.progress || {});
+          if (onProgress) onProgress(job.progress || {}, id);
         } catch (e) {
           if (/not found/i.test(e.message)) return reject(e);
         }
@@ -1830,7 +1830,7 @@
     });
     const result = await waitJob(r.job_id, onProgress);
     state.info = null; // the Carousels tab reloads its styles
-    return result && result.style ? result.style : null;
+    return result && result.style ? Object.assign({}, result.style, { previews: (result.previews || []).map((p) => p && p.url).filter(Boolean) }) : null;
   }
 
   async function makeCarousel({ brief, slides, style_id, source_image_url, medical, onProgress }) {
@@ -1848,9 +1848,50 @@
     return result;
   }
 
-  // The whole Coach action in one place, for every Coach chat. ui: { say(text) -> { set(text) }, offer(label, fn), remember(text) }.
+  // The steps the work panel shows, by the stage names the server reports.
+  const STYLE_STEPS = [
+    { id: 'draft', label: 'Study the references', stages: ['draft'] },
+    { id: 'review', label: 'Match the layouts', stages: ['review'], rounds: true },
+    { id: 'final', label: 'Save the style', stages: ['final'] },
+  ];
+  const CAROUSEL_STEPS = [
+    { id: 'plan', label: 'Plan the slides', stages: ['research', 'plan'] },
+    { id: 'art', label: 'Draw the artwork', stages: ['art'] },
+    { id: 'layout', label: 'Lay out the slides', stages: ['render'], rounds: true },
+    { id: 'review', label: 'Review and polish', stages: ['critic', 'fix'], rounds: true },
+    { id: 'save', label: 'Save', stages: ['saving'] },
+  ];
+
+  /** Progress from a design job → the work panel, plus its plan and small live pictures when the server has new ones. */
+  function liveFeed(panel, onText) {
+    let since = null;
+    let busy = false;
+    return (p, jobId) => {
+      if (onText) onText(p);
+      if (!panel) return;
+      panel.progress(p);
+      if (!p || !p.pv || p.pv === since || busy || !jobId) return;
+      busy = true;
+      call('GET', `/api/design/jobs/${encodeURIComponent(jobId)}/live${since != null ? `?since=${since}` : ''}`)
+        .then((r) => { since = r.pv; panel.outline(r.outline); if (r.slides && r.slides.length) panel.slides(r.slides); })
+        .catch(() => {})
+        .then(() => { busy = false; });
+    };
+  }
+
+  // The whole Coach action in one place, for every Coach chat. ui: { say(text) -> { set(text) }, offer(label, fn), remember(text, extra) }.
+  // The work panel (coach-work.js) shows the steps, the plan and the slides as they appear, when it is on the page.
   async function runStyleAction(action, ui) {
     const rebuilding = !!action.rebuild_style_id;
+    const wantsCarousel = !!action.then_carousel;
+    const ratio = /^\d+:\d+$/.test(String(action.ratio || '')) ? action.ratio : '9:16';
+    // The style's own name is the title (it fits on one line); what is being done to it goes underneath.
+    const heading = String(action.name || 'New style');
+    const kind = `${rebuilding ? 'Rebuilding the style' : 'New style'}${wantsCarousel ? ', then your carousel' : ''}`;
+    const panel = global.seWork && typeof global.seWork.start === 'function'
+      ? global.seWork.start({ title: heading, sub: kind })
+      : null;
+    if (panel) panel.phase({ title: heading, sub: kind, steps: STYLE_STEPS, ratio, from: 0, span: wantsCarousel ? 0.45 : 1 });
     const status = ui.say(rebuilding
       ? `Rebuilding your style "${action.name}"${action.ratio ? ` at ${action.ratio}` : ''} from the references it already has. This takes about 10 minutes; keep this page open${action.then_carousel ? ' and I will make the carousel straight after' : ''}.`
       : `Building your new style "${action.name}" from the reference. This takes about 10 minutes; keep this page open and I will start the carousel straight after.`);
@@ -1863,10 +1904,12 @@
         example_urls: action.example_urls,
         ratio: action.ratio,
         rebuild_style_id: action.rebuild_style_id,
-        onProgress: (p) => { status.set(`${rebuilding ? 'Rebuilding' : 'Building'} "${action.name}": ${stageText(p)}`); },
+        onProgress: liveFeed(panel, (p) => { status.set(`${rebuilding ? 'Rebuilding' : 'Building'} "${action.name}": ${stageText(p)}`); }),
       });
     } catch (e) {
-      status.set(`The ${rebuilding ? 'style' : 'new style'} could not be ${rebuilding ? 'rebuilt' : 'built'}: ${e.message || 'try again in a minute'}. Nothing was changed, your other styles are as they were.`);
+      const msg = `The ${rebuilding ? 'style' : 'new style'} could not be ${rebuilding ? 'rebuilt' : 'built'}: ${e.message || 'try again in a minute'}. Nothing was changed, your other styles are as they were.`;
+      status.set(msg);
+      if (panel) panel.fail(e.message || 'Try again in a minute. Nothing was changed.');
       return;
     }
     const label = (style && style.name) || action.name;
@@ -1874,8 +1917,16 @@
       ? `Your style "${label}" is rebuilt${action.ratio ? ` at ${action.ratio}` : ''} and ready in the Carousels tab.`
       : `Your new style "${label}" is ready. It is saved next to your other styles in the Carousels tab.`;
     status.set(ready);
-    if (ui.remember) ui.remember(ready);
-    if (!action.then_carousel) return;
+    if (ui.remember) ui.remember(ready, wantsCarousel ? undefined : { open_tab: 'carousels' });
+    if (!wantsCarousel) {
+      if (panel) panel.finish({ title: `Style "${label}" is ready`, urls: (style && style.previews) || [], tab: 'carousels', note: 'Saved next to your other styles.' });
+      if (ui.offer) ui.offer('Open Carousels', openCarouselsTab);
+      return;
+    }
+    if (panel) {
+      panel.endPhase(rebuilding ? `Style rebuilt at ${ratio}` : 'Style built');
+      panel.phase({ title: 'Your carousel', sub: `In "${label}"`, steps: CAROUSEL_STEPS, ratio, from: 0.45, span: 0.55 });
+    }
     const work = ui.say('Now designing the carousel in it. About 5 minutes.');
     try {
       const result = await makeCarousel({
@@ -1884,15 +1935,24 @@
         style_id: style && style.id,
         source_image_url: rebuilding ? undefined : action.source_image_url, // a rebuild's references are the look to copy, not a poster to turn into a carousel
         medical: action.medical,
-        onProgress: (p) => { work.set(`Designing the carousel: ${stageText(p)}`); },
+        onProgress: liveFeed(panel, (p) => { work.set(`Designing the carousel: ${stageText(p)}`); }),
       });
       const done = `The carousel is ready: ${(result.slides || []).length} slides in "${label}".`;
       work.set(done);
-      ui.offer('Open the carousel', () => { global.__SE_CAROUSEL_VIEW = 'brand'; if (typeof global.switchNav === 'function') global.switchNav('brand-design'); });
-      if (ui.remember) ui.remember(done);
+      if (panel) panel.finish({ title: 'Your carousel is ready', urls: (result.slides || []).map((x) => x && x.url).filter(Boolean), tab: 'carousels', note: `${(result.slides || []).length} slides in "${label}".` });
+      if (ui.offer) ui.offer('Open Carousels', openCarouselsTab);
+      if (ui.remember) ui.remember(done, { open_tab: 'carousels' });
     } catch (e) {
-      work.set(`The style is ready but the carousel could not be made: ${e.message || 'try again in a minute'}. You can make it in the Carousels tab in the new style.`);
+      const msg = `The style is ready but the carousel could not be made: ${e.message || 'try again in a minute'}. You can make it in the Carousels tab in the new style.`;
+      work.set(msg);
+      if (panel) panel.fail(`The style is saved, but the carousel could not be made: ${e.message || 'try again in a minute'}.`);
     }
+  }
+
+  function openCarouselsTab() {
+    if (global.seWork && global.seWork.openTab) { global.seWork.openTab('carousels'); return; }
+    global.__SE_CAROUSEL_VIEW = 'brand';
+    if (typeof global.switchNav === 'function') global.switchNav('brand-design');
   }
 
   global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, runStyleAction };

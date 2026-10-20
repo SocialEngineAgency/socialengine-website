@@ -2965,16 +2965,21 @@
       },
       offer: (label, fn) => {
         if (!log) return;
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'cs-coach-act';
-        b.textContent = label;
-        b.style.cssText = 'align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
-        b.addEventListener('click', fn);
+        // The same plain button as the work panel, not the old purple one.
+        let b;
+        if (window.seWork) { b = window.seWork.button(label, fn); b.style.alignSelf = 'flex-start'; b.style.marginTop = '0'; }
+        else {
+          b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'cs-coach-act';
+          b.textContent = label;
+          b.style.cssText = 'align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
+          b.addEventListener('click', fn);
+        }
         log.appendChild(b);
         scrollCoachLogToBottom();
       },
-      remember: (text) => persistSharedCoach('assistant', text, {}),
+      remember: (text, extra) => persistSharedCoach('assistant', text, extra || {}),
     });
   }
 
@@ -3404,6 +3409,10 @@
         const ranAgent = m.actions.find((a) => a && a.type === 'agent_run' && a.run_id);
         if (ranAgent) mountDesignAgentRun(ranAgent.run_id);
       }
+      if (m && m.role !== 'user' && m.open_tab && window.seWork) {
+        const chipBtn = window.seWork.chip(m.open_tab);
+        if (chipBtn) { chipBtn.style.alignSelf = 'flex-start'; chipBtn.style.marginTop = '0'; log.appendChild(chipBtn); }
+      }
       if (m && m.role !== 'user' && Array.isArray(m.posts) && m.posts.length) {
         runDesignPosts({ type: 'design_posts', aspect_ratio: (m.posts.find((p) => p.ratio) || {}).ratio || '', posts: m.posts.map((p) => ({ title: p.title, brief: p.brief })) }, { finished: m.posts });
       }
@@ -3411,6 +3420,7 @@
     if (!log.childElementCount) {
       appendDesignCoachBubble('assistant', 'Tell me what you want to post, or describe it on the canvas. Once it is made, ask me for any change and it updates here.');
     }
+    if (window.seWork && typeof window.seWork.attach === 'function') window.seWork.attach(); // work still going comes back to the top of the log
   }
 
   async function generateFromCoach(prompt, opts = {}) {

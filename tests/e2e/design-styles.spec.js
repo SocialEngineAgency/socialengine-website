@@ -113,7 +113,7 @@ test('Coach chat: a new style is built from the attached reference, then the car
   await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length, { timeout: 20000 }).toBe(1);
   expect(calls.find((c) => c[0] === 'carousel')[1]).toMatchObject({ style_id: 'style_2', count: 8, brief: 'What is gastric cancer, eight slides for the UK public' });
   await expect(page.locator('.coach-progress').last()).toContainText('The carousel is ready: 3 slides in "Mint and purple"', { timeout: 15000 });
-  await page.getByRole('button', { name: 'Open the carousel' }).click();
+  await page.getByRole('button', { name: /^Open Carousels/ }).first().click();
   await expect(page).toHaveURL(/#create\/carousels$/);
   await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
   expect(errors).toEqual([]);
