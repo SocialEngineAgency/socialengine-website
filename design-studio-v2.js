@@ -1155,6 +1155,40 @@
   const clone = (v) => JSON.parse(JSON.stringify(v == null ? null : v));
   const versionOf = (s) => ({ url: s.url, pattern: s.pattern, slots: clone(s.slots || {}), style: clone(s.style || {}), issues: s.issues || [] });
 
+  /** The picture slot on a layout: an image-kind slot, or an <img> whose src is a slot. Logo is not a picture. */
+  function pictureSlotOf(pattern) {
+    const slots = (pattern && pattern.slots) || {};
+    const byKind = Object.entries(slots).find(([, sp]) => sp && sp.kind === 'image');
+    if (byKind) return byKind;
+    const html = String((pattern && pattern.html) || '');
+    const img = /<img\b[^>]*>/gi;
+    let tag;
+    while ((tag = img.exec(html))) {
+      const named = /data-slot=["']([A-Za-z][\w-]{0,40})["']/.exec(tag[0]);
+      const src = /\bsrc=["']\{\{\s*([A-Za-z][\w-]{0,40})\s*\}\}["']/.exec(tag[0]);
+      const name = (named && named[1]) || (src && src[1]) || '';
+      if (!name || name === 'logo') continue;
+      const spec = slots[name];
+      return [name, spec && spec.kind === 'image' ? spec : Object.assign({ kind: 'image' }, spec || {})];
+    }
+    return null;
+  }
+
+  /** Fields the editor can change: the layout's slots, plus any words or pictures already on the slide. */
+  function slotsForEditor(pattern, slideSlots, discovered) {
+    const slots = Object.assign({}, (pattern && pattern.slots) || {});
+    for (const [name, spec] of Object.entries(discovered || {})) {
+      if (!slots[name] && spec && spec.kind) slots[name] = spec;
+    }
+    for (const [name, v] of Object.entries(slideSlots || {})) {
+      if (slots[name]) continue;
+      if (Array.isArray(v)) slots[name] = { kind: 'list', max_chars: 200, max_items: 8 };
+      else if (typeof v === 'string' && /^https:\/\//i.test(v)) slots[name] = { kind: 'image' };
+      else if (typeof v === 'string' && v.trim()) slots[name] = { kind: 'text', max_chars: 400 };
+    }
+    return slots;
+  }
+
   /** Move words and pictures into another layout by slot kind and order, so a layout switch previews instantly. */
   function mapToLayout(patterns, slide, toId) {
     const from = patterns.find((p) => p.id === slide.pattern) || { slots: {} };
@@ -1183,11 +1217,22 @@
     return { pattern: toId, slots, style };
   }
 
-  function editSlide(result, start) {
-    const sys = (state.info && state.info.system) || {};
+  async function editSlide(result, start) {
+    // The preview is drawn in the style the carousel was made in. The tab that is open may be a
+    // different style, whose layouts have no picture slot, so the Picture tab would refuse an upload
+    // while the preview still shows the empty picture box.
+    const want = (result && result.style && result.style.id) || state.resultStyle || state.styleId || '';
+    let info = state.info || {};
+    if (want) {
+      try {
+        const fresh = await call('GET', `/api/design/system?style=${encodeURIComponent(want)}`);
+        if (fresh && fresh.system) info = fresh;
+      } catch (_) { /* the style already open still works */ }
+    }
+    const sys = info.system || {};
     const patterns = sys.patterns || [];
     const colors = Object.entries(sys.colors || {}).filter(([, v]) => /^#[0-9a-f]{3,8}$/i.test(String(v)));
-    const previews = new Map(((state.info && state.info.previews) || []).filter((p) => p && p.url).map((p) => [p.pattern, p.url]));
+    const previews = new Map((info.previews || []).filter((p) => p && p.url).map((p) => [p.pattern, p.url]));
     if (!result.slides[start] || !result.slides[start].slots) { toast('This slide was made before editing existed. Make the carousel again to edit it.', 'info'); return; }
     let i = start;
     let tab = 'text';
@@ -1196,6 +1241,7 @@
     let picUrl = '';
     let busy = false;
     let selected = '';
+    let discovered = {};
     let previewSeq = 0;
     let previewTimer = null;
     const ov = document.createElement('div');
@@ -1211,6 +1257,7 @@
       dirty = false;
       picUrl = '';
       selected = '';
+      discovered = {};
     }
     function markDirty() {
       dirty = true;
@@ -1264,9 +1311,27 @@
       };
       next.srcdoc = r.html;
     }
+    function adoptSlots(doc) {
+      const found = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+      const known = slotsForEditor(found, draft.slots, discovered);
+      let added = false;
+      doc.querySelectorAll('[data-slot]').forEach((el) => {
+        const name = el.getAttribute('data-slot');
+        if (!name || name === 'logo' || known[name]) return;
+        const isImg = el.tagName === 'IMG';
+        discovered[name] = isImg ? { kind: 'image' } : { kind: (el.tagName === 'UL' || el.tagName === 'OL') ? 'list' : 'text', max_chars: 400 };
+        if (!isImg && (draft.slots[name] == null || draft.slots[name] === '')) {
+          const text = (el.innerText || '').trim();
+          if (text) draft.slots[name] = discovered[name].kind === 'list' ? text.split(/\n+/).map((s) => s.trim()).filter(Boolean) : text;
+        }
+        added = true;
+      });
+      if (added) drawPanel();
+    }
     function wireFrame(frame) {
       const doc = frame.contentDocument;
       if (!doc) return;
+      adoptSlots(doc);
       const st = doc.createElement('style');
       st.textContent = '[data-slot]{cursor:pointer;transition:outline-color .15s}[data-slot]:hover{outline:4px dashed rgba(124,58,237,.75);outline-offset:6px}[data-slot].se-sel{outline:5px solid #7C3AED;outline-offset:6px}';
       doc.head.appendChild(st);
@@ -1276,12 +1341,14 @@
         ev.preventDefault();
         if (!hit) return;
         const name = hit.getAttribute('data-slot');
-        const pattern = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+        const found = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+        const pattern = Object.assign({}, found, { slots: slotsForEditor(found, draft.slots, discovered) });
+        const pic = pictureSlotOf(pattern);
         const kind = (pattern.slots[name] || {}).kind;
         selected = name;
         doc.querySelectorAll('.se-sel').forEach((n) => n.classList.remove('se-sel'));
         doc.querySelectorAll(`[data-slot="${name}"]`).forEach((n) => n.classList.add('se-sel'));
-        tab = kind === 'image' ? 'picture' : 'text';
+        tab = (pic && pic[0] === name) || kind === 'image' ? 'picture' : 'text';
         drawPanel();
         const field = q(`[data-field="${name}"]`);
         if (field) {
@@ -1334,12 +1401,21 @@
         ${previews.get(p.id) ? `<img src="${esc(previews.get(p.id))}" alt="" loading="lazy" style="aspect-ratio:${ratioCss()};">` : `<span class="dsv2-ed-lay-blank" style="aspect-ratio:${ratioCss()};"></span>`}
         <span>${esc(p.name || p.id)}</span></button>`).join('')}</div>`;
     }
+    function pictureLayouts() {
+      return patterns.filter((p) => pictureSlotOf(p)).map((p) => `<button type="button" class="dsv2-ed-lay" data-layout="${esc(p.id)}" title="${esc(p.name || p.id)}">
+        ${previews.get(p.id) ? `<img src="${esc(previews.get(p.id))}" alt="" loading="lazy" style="aspect-ratio:${ratioCss()};">` : `<span class="dsv2-ed-lay-blank" style="aspect-ratio:${ratioCss()};"></span>`}
+        <span>${esc(p.name || p.id)}</span></button>`).join('');
+    }
     function pictureTab(pattern) {
-      const slot = Object.entries(pattern.slots || {}).find(([, sp]) => sp && sp.kind === 'image');
-      if (!slot) return '<p class="dsv2-ed-note">This layout has no picture. Pick another layout to add one.</p>';
+      const slot = pictureSlotOf(pattern);
+      if (!slot) {
+        const choices = pictureLayouts();
+        if (!choices) return '<p class="dsv2-ed-note">This style has no layout with a picture, so there is nowhere to put an upload.</p>';
+        return `<p class="dsv2-ed-note">This layout has no picture. Choose one that does. Your words move with it.</p><div class="dsv2-ed-layouts">${choices}</div>`;
+      }
       const url = draft.slots[slot[0]];
       const art = (draft.style || {}).art || { zoom: 1, x: 50, y: 50 };
-      const medicalPic = result.medical && state.info && state.info.figurelabs;
+      const medicalPic = result.medical && info.figurelabs;
       return `<div class="dsv2-ed-field" data-field="${esc(slot[0])}">
         <div class="dsv2-ed-picrow">
           ${url ? `<img class="dsv2-ed-pic-now" src="${esc(url)}" alt="">` : '<span class="dsv2-ed-pic-now"></span>'}
@@ -1370,7 +1446,8 @@
     }
 
     function drawPanel() {
-      const pattern = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+      const found = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+      const pattern = Object.assign({}, found, { slots: slotsForEditor(found, draft.slots, discovered) });
       const panel = q('.dsv2-ed-panel');
       const tabs = [['text', 'Text'], ['layout', 'Layout'], ['picture', 'Picture'], ['background', 'Background'], ['ai', 'Ask AI']];
       panel.innerHTML = `<div class="dsv2-ed-tabs" role="tablist">${tabs.map(([id, label]) => `<button type="button" role="tab" class="dsv2-ed-tab${tab === id ? ' is-on' : ''}" data-tab="${id}">${label}</button>`).join('')}</div>
@@ -1436,7 +1513,7 @@
         markDirty();
       }));
       const setPic = (url) => {
-        const slot = Object.entries(pattern.slots || {}).find(([, sp]) => sp && sp.kind === 'image');
+        const slot = pictureSlotOf(pattern);
         if (!slot || !url) return;
         draft.slots[slot[0]] = url;
         picUrl = url;
@@ -1833,6 +1910,14 @@
     return result && result.style ? Object.assign({}, result.style, { previews: (result.previews || []).map((p) => p && p.url).filter(Boolean) }) : null;
   }
 
+  async function makePost({ title, brief, onProgress }) {
+    const r = await call('POST', '/api/design/posts', {
+      posts: [{ title: title || 'Post', brief }],
+      research: true,
+    });
+    return waitJob(r.job_id, onProgress);
+  }
+
   async function makeCarousel({ brief, slides, style_id, source_image_url, medical, onProgress }) {
     const r = await call('POST', '/api/design/carousel', {
       brief,
@@ -1955,5 +2040,5 @@
     if (typeof global.switchNav === 'function') global.switchNav('brand-design');
   }
 
-  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, runStyleAction };
+  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, makePost, runStyleAction, pictureSlotOf, slotsForEditor };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -33,16 +33,16 @@
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
-  <script src="./claude-studio.js?v=20261020work" defer></script>
-  <script src="./design-studio-v2.js?v=20261020work" defer></script>
+  <script src="./claude-studio.js?v=20261020ship" defer></script>
+  <script src="./design-studio-v2.js?v=20261020pic" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261020work"></script>
-  <script src="./animation-studio.js?v=20261018vs2" defer></script>
+  <script src="./animation-studio.js?v=20261020ship" defer></script>
   <script src="./story-builder.js?v=20261018vw1" defer></script>
   <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
-  <script src="./stories-composer.js?v=20261009" defer></script>
+  <script src="./stories-composer.js?v=20261020ship" defer></script>
   <script src="./marketing-playbook.js?v=20261010" defer></script>
   <script src="./key-dates.js?v=20261018warm" defer></script>
   <script src="./diagram-posts.js?v=20261010" defer></script>
@@ -6084,8 +6084,18 @@
           const fmt = slot.format === 'reel' ? 'Reel' : 'feed post';
           paint('Coach · this week', `Your plan has an open ${fmt} on ${day}${slot.story_type_label ? `: ${slot.story_type_label}` : ''}. Making it now keeps the week on target.`, [
             ['Create this', () => {
-              if (slot.format === 'reel') { window.__SE_ANIM_STORY_PRESET = { story_type: slot.story_type }; window.switchNav('animation-studio'); }
-              else window.switchNav('design-studio');
+              const idx = p.slots.indexOf(slot);
+              window.__SE_SLOT_CONTEXT = { slot, index: idx, week: p.week_start };
+              if (typeof window.switchNav === 'function') window.switchNav('design-studio');
+              apiFetch(`${API}/api/meta-planner/ideas`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ week: p.week_start, slot_index: idx }),
+              }).then((r) => r.json().then((data) => ({ ok: r.ok, data }))).then(({ ok, data }) => {
+                if (!ok) throw new Error(data.error || 'Could not write ideas');
+                if (typeof window.seShowSlotIdeas === 'function') window.seShowSlotIdeas(data);
+                else window.__SE_PENDING_SLOT_IDEAS = data;
+              }).catch((e) => showToast(e.message || 'Could not write ideas'));
             }, true],
             ['Not now', notNow],
           ]);
@@ -20934,19 +20944,28 @@
     }
   }
 
-  function _mwpOpenSlot(i) {
+  async function _mwpOpenSlot(i) {
     const slot = _mwpPlan && _mwpPlan.slots[i];
     if (!slot) return;
     if (slot.post_id) {
       document.querySelector('[data-nav="content"]')?.click();
       return;
     }
-    if (slot.format === 'reel') {
-      window.__SE_ANIM_STORY_PRESET = { story_type: slot.story_type };
-      window.switchNav('animation-studio');
-    } else {
-      window.switchNav('design-studio');
-      showToast(`Feed post · ${slot.story_type_label || 'any story type'} · ${slot.goal === 'grow' ? 'Grow' : 'Engage'}`);
+    window.__SE_SLOT_CONTEXT = { slot, index: i, week: _mwpPlan.week_start };
+    if (typeof window.switchNav === 'function') window.switchNav('design-studio');
+    showToast('Writing a few ideas…');
+    try {
+      const res = await apiFetch(`${API}/api/meta-planner/ideas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week: _mwpPlan.week_start, slot_index: i }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not write ideas');
+      if (typeof window.seShowSlotIdeas === 'function') window.seShowSlotIdeas(data);
+      else window.__SE_PENDING_SLOT_IDEAS = data;
+    } catch (e) {
+      showToast(e.message || 'Could not write ideas');
     }
   }
 
