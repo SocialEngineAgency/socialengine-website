@@ -45,7 +45,7 @@
   }
 
   const STAGES = {
-    queued: 'Waiting for a free designer…',
+    queued: 'In line for a free designer…',
     draft: 'Studying your example slides…',
     review: 'Comparing layouts with your examples',
     final: 'Saving your design system…',
@@ -64,6 +64,11 @@
   const STEP_OF = { render: 'critic', queued: '' };
   function stageText(p) {
     if (!p) return 'Working…';
+    // Only a couple of designs are made at a time. Others wait their turn, and this says where yours is.
+    if (p.stage === 'queued' && Number.isFinite(Number(p.ahead))) {
+      const n = Number(p.ahead);
+      return n > 0 ? `In line: ${n} design${n === 1 ? '' : 's'} ahead of yours, starting when a designer is free…` : 'Next in line, starting as soon as a designer is free…';
+    }
     const base = STAGES[p.stage] || 'Working…';
     const bits = [];
     if (p.round) bits.push(`round ${p.round}`);

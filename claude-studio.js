@@ -2924,7 +2924,7 @@
       }
     }
     log.appendChild(row);
-    log.scrollTop = log.scrollHeight;
+    scrollCoachLogToBottom(!!mine);
     return row;
   }
 
@@ -2949,7 +2949,7 @@
       });
     });
     log.appendChild(btn);
-    log.scrollTop = log.scrollHeight;
+    scrollCoachLogToBottom();
   }
 
   // ── A new carousel style from the reference they attached (the Coach's design_style action) ──
@@ -2972,7 +2972,7 @@
         b.style.cssText = 'align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
         b.addEventListener('click', fn);
         log.appendChild(b);
-        log.scrollTop = log.scrollHeight;
+        scrollCoachLogToBottom();
       },
       remember: (text) => persistSharedCoach('assistant', text, {}),
     });
@@ -3661,9 +3661,19 @@
 
   let _csCoachStatusTimer = null;
 
-  function scrollCoachLogToBottom() {
+  // The log follows new content only while you are at the bottom. Scroll up to read and it stays put, even
+  // while a project card keeps updating. Sending your own message (force) or scrolling back down follows again.
+  function scrollCoachLogToBottom(force) {
     const log = document.getElementById('cs-coach-log');
     if (!log) return;
+    if (!log._csFollow) {
+      log._csFollow = { on: true };
+      log.addEventListener('scroll', () => {
+        log._csFollow.on = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
+      }, { passive: true });
+    }
+    if (force !== true && !log._csFollow.on) return;
+    log._csFollow.on = true;
     log.scrollTop = log.scrollHeight;
   }
 
