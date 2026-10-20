@@ -1242,6 +1242,7 @@
     let busy = false;
     let selected = '';
     let discovered = {};
+    let previewBox = { w: 1080, h: 1350 };
     let previewSeq = 0;
     let previewTimer = null;
     const ov = document.createElement('div');
@@ -1298,6 +1299,7 @@
         return;
       }
       if (seq !== previewSeq || !stage.isConnected) return;
+      previewBox = { w: r.width, h: r.height };
       const frames = stage.querySelectorAll('iframe');
       const next = frames[0].classList.contains('is-on') ? frames[1] : frames[0];
       const scale = stage.clientWidth / r.width;
@@ -1333,9 +1335,48 @@
       if (!doc) return;
       adoptSlots(doc);
       const st = doc.createElement('style');
-      st.textContent = '[data-slot]{cursor:pointer;transition:outline-color .15s}[data-slot]:hover{outline:4px dashed rgba(124,58,237,.75);outline-offset:6px}[data-slot].se-sel{outline:5px solid #7C3AED;outline-offset:6px}';
+      st.textContent = '[data-slot]{cursor:grab;transition:outline-color .15s}[data-slot]:hover{outline:4px dashed rgba(124,58,237,.75);outline-offset:6px}[data-slot].se-sel{outline:5px solid #7C3AED;outline-offset:6px}[data-slot].se-drag{cursor:grabbing}';
       doc.head.appendChild(st);
       if (selected) doc.querySelectorAll(`[data-slot="${selected}"]`).forEach((n) => n.classList.add('se-sel'));
+      doc.addEventListener('pointerdown', (ev) => {
+        const hit = ev.target.closest && ev.target.closest('[data-slot]');
+        if (!hit || ev.button !== 0) return;
+        const name = hit.getAttribute('data-slot');
+        if (!name || name === 'page' || name === 'total' || name === 'handle') return;
+        const parent = hit.parentElement;
+        const siblings = parent ? [...parent.children].filter((n) => n !== hit && n.hasAttribute('data-slot') && n.tagName !== 'IMG') : [];
+        const target = hit.tagName === 'IMG' && parent && !parent.classList.contains('slide') && parent !== doc.body && !siblings.length ? parent : hit;
+        const slide = doc.querySelector('.slide') || doc.body;
+        const st0 = ((draft.style || {}).slots || {})[name] || {};
+        const origin = { x: ev.clientX, y: ev.clientY, moved: false, baseX: Number(st0.x) || 0, baseY: Number(st0.y) || 0 };
+        const move = (e) => {
+          const rect = slide.getBoundingClientRect();
+          const dx = rect.width ? ((e.clientX - origin.x) / rect.width) * 100 : 0;
+          const dy = rect.height ? ((e.clientY - origin.y) / rect.height) * 100 : 0;
+          if (Math.abs(e.clientX - origin.x) + Math.abs(e.clientY - origin.y) < 5) return;
+          origin.moved = true;
+          target.classList.add('se-drag');
+          const x = Math.max(-40, Math.min(40, Math.round(origin.baseX + dx)));
+          const y = Math.max(-40, Math.min(40, Math.round(origin.baseY + dy)));
+          origin.xNow = x;
+          origin.yNow = y;
+          target.style.position = 'relative';
+          target.style.left = `${Math.round(previewBox.w * x / 100)}px`;
+          target.style.top = `${Math.round(previewBox.h * y / 100)}px`;
+        };
+        const up = () => {
+          doc.removeEventListener('pointermove', move);
+          doc.removeEventListener('pointerup', up);
+          target.classList.remove('se-drag');
+          if (!origin.moved) return;
+          const slot = styleOf(name);
+          if (origin.xNow) slot.x = origin.xNow; else delete slot.x;
+          if (origin.yNow) slot.y = origin.yNow; else delete slot.y;
+          markDirty();
+        };
+        doc.addEventListener('pointermove', move);
+        doc.addEventListener('pointerup', up);
+      });
       doc.addEventListener('click', (ev) => {
         const hit = ev.target.closest && ev.target.closest('[data-slot]');
         ev.preventDefault();
@@ -1441,8 +1482,8 @@
     }
     function aiTab() {
       return `<div class="dsv2-ed-chips">${QUICK_ASKS.map(([label, text]) => `<button type="button" class="dsv2-ed-chip" data-ask="${esc(text)}">${esc(label)}</button>`).join('')}</div>
-        <textarea id="dsv2-ed-ai" rows="3" placeholder="Tell AI what to change, e.g. make the picture box white and the same blob shape, or swap the stat for the NHS figure"></textarea>
-        <div class="dsv2-actions" style="margin-top:10px;"><button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-ai-go">Apply with AI</button><span class="dsv2-hint">Changes the words, or how the picture sits, and saves this slide (about 10 seconds). Undo is one click.</span></div>`;
+        <textarea id="dsv2-ed-ai" rows="3" placeholder="Tell AI what to change, e.g. move the text down, or make the picture box white"></textarea>
+        <div class="dsv2-actions" style="margin-top:10px;"><button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-ed-ai-go">Apply with AI</button><span class="dsv2-hint">Moves boxes, changes the words, or restyles the picture, then saves (about 10 seconds). Undo is one click.</span></div>`;
     }
 
     function drawPanel() {
@@ -1578,7 +1619,7 @@
       const n = result.slides.length;
       ov.innerHTML = `<div class="dsv2-ed-box">
         <div class="dsv2-ed-head">
-          <div><h3>Edit carousel <span>· slide ${i + 1} of ${n}</span></h3><p>Changes show live. Save to redraw the final slide.</p></div>
+          <div><h3>Edit carousel <span>· slide ${i + 1} of ${n}</span></h3><p>Drag a box to move it. Save to redraw the final slide.</p></div>
           <button type="button" class="dsv2-ed-close" aria-label="Close">×</button>
         </div>
         <div class="dsv2-ed-body">
