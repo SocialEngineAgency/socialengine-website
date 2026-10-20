@@ -88,3 +88,37 @@ test('Claude Design picker tab is Past posts, not Library', () => {
   assert.match(src, />Past posts</);
   assert.doesNotMatch(src, /id="cs-tab-library"[^>]*>Library</);
 });
+
+test('Library offer says what will really be attached, and is short however big the Library is', () => {
+  const { libraryOffer } = require('../portal-assets.js');
+  const lib = Array.from({ length: 41 }, (_, i) => ({ id: `a${i}`, kind: 'character', name: `Character number ${i}`, url: `https://store.test/${i}.png`, views: i % 2 ? [{ url: `https://store.test/${i}-b.png`, label: 'back' }] : [] }));
+  const offer = libraryOffer(lib);
+  assert.match(offer.question, /^Use 8 pictures from your Library as references \(/);
+  assert.match(offer.question, /You have 41 in all/);
+  assert.doesNotMatch(offer.question, /Character number 40/, 'names beyond what is attached are not listed');
+  assert.ok(offer.question.length < 220, `short enough to read (${offer.question.length})`);
+  assert.equal(offer.images, 8);
+  assert.equal(offer.asset_ids.length, 41, 'the ids passed on are unchanged');
+  assert.match(libraryOffer([lib[0]]).question, /^Use 1 picture from your Library as a reference \(Character number 0\)\?$/);
+  assert.equal(libraryOffer([{ id: 'x', kind: 'logo', name: 'Logo', url: 'https://store.test/l.png' }]), null, 'a logo is not offered as a reference');
+});
+
+test('The Library offer only appears for a Create, and the chats follow new content only from the bottom', () => {
+  const portal = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(portal, /!coachActions\.some\(\(a\) => a && a\.type === 'create'\)/);
+  assert.match(portal, /function scrollToBottom\(force\) \{\s*if \(force !== true && !stickToBottom\) return;/);
+  const studio = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  assert.match(studio, /function scrollCoachLogToBottom\(force\)/);
+  assert.doesNotMatch(studio, /log\.scrollTop = log\.scrollHeight;\s*return row;/, 'bubbles use the following-aware scroll');
+});
+
+test('A design waiting for a free designer says where it is in line', () => {
+  delete require.cache[require.resolve('../design-studio-v2.js')];
+  require('../design-studio-v2.js');
+  const { stageText } = globalThis.seDesignStudio;
+  assert.equal(stageText({ stage: 'queued', ahead: 2 }), 'In line: 2 designs ahead of yours, starting when a designer is free…');
+  assert.equal(stageText({ stage: 'queued', ahead: 1 }), 'In line: 1 design ahead of yours, starting when a designer is free…');
+  assert.equal(stageText({ stage: 'queued', ahead: 0 }), 'Next in line, starting as soon as a designer is free…');
+  assert.equal(stageText({ stage: 'queued' }), 'In line for a free designer…', 'an older server that does not say how many');
+  assert.equal(stageText({ stage: 'draft' }), 'Studying your example slides…');
+});

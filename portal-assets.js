@@ -26,17 +26,28 @@ const KIND_ACCEPT = {
 const STILL_KINDS = ['scene', 'character', 'plate', 'logo', 'item', 'setting', 'style'];
 const SECTION_KINDS = ['logo', 'color', 'character', 'item', 'setting', 'scene', 'style'];
 
+// The Coach's "attach your Library pictures?" offer for a Create. Only the first 8 pictures can go along
+// (see refsFromAssets), so the question says what will really be attached, by name for the first few, instead
+// of listing everything in the Library.
+const OFFER_NAMES_SHOWN = 3;
+
 function libraryOffer(list) {
   const usable = (Array.isArray(list) ? list : []).filter((a) => (
     a && ['character', 'item', 'setting', 'style'].includes(a.kind) && /^https?:\/\//i.test(String(a.url || ''))
   ));
   if (!usable.length) return null;
-  const names = usable.map((a) => String(a.name || a.kind));
-  const last = names.pop();
-  const label = names.length ? `${names.join(', ')} and ${last}` : last;
+  const ids = usable.map((a) => a.id);
+  const sent = new Set(refsFromAssets(usable, ids).map((r) => r.url));
+  const picked = usable.filter((a) => sent.has(String(a.url || '').trim()) || (a.views || []).some((v) => v && sent.has(String(v.url || '').trim())));
+  const names = [...new Set(picked.map((a) => String(a.name || a.kind)))];
+  const shown = names.slice(0, OFFER_NAMES_SHOWN).join(', ');
+  const more = names.length > OFFER_NAMES_SHOWN ? ` and ${names.length - OFFER_NAMES_SHOWN} more` : '';
+  const n = sent.size;
+  const total = usable.length;
   return {
-    question: `Use ${label} from your Library?`,
-    asset_ids: usable.map((a) => a.id),
+    question: `Use ${n} picture${n === 1 ? '' : 's'} from your Library as ${n === 1 ? 'a reference' : 'references'} (${shown}${more})?${total > picked.length ? ` You have ${total} in all; + Library lets you pick.` : ''}`,
+    asset_ids: ids,
+    images: n,
   };
 }
 

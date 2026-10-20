@@ -12940,7 +12940,16 @@
       const sendBtn = document.getElementById('chat-send');
       const suggestionsEl = document.getElementById('chat-suggestions');
 
-      function scrollToBottom() {
+      // The chat follows new content only while you are at the bottom. Scroll up to read and it stays where
+      // you put it, even while a project card keeps updating. Your own message, or reaching the bottom
+      // again, turns following back on.
+      let stickToBottom = true;
+      messagesEl.addEventListener('scroll', () => {
+        stickToBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120;
+      }, { passive: true });
+      function scrollToBottom(force) {
+        if (force !== true && !stickToBottom) return;
+        stickToBottom = true;
         messagesEl.scrollTop = messagesEl.scrollHeight;
         requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
       }
@@ -13003,7 +13012,7 @@
           div.textContent = text;
           row.appendChild(div);
           messagesEl.appendChild(row);
-          scrollToBottom();
+          scrollToBottom(true);
           return div;
         }
       }
@@ -13227,7 +13236,7 @@
         newDivider.style.cssText = 'display:flex;align-items:center;gap:12px;padding:4px 0;margin:4px 0;';
         newDivider.innerHTML = '<div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div><span style="font-size:0.65rem;color:rgba(148,163,184,0.4);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;white-space:nowrap;">Now</span><div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div>';
         messagesEl.appendChild(newDivider);
-        scrollToBottom();
+        scrollToBottom(true);
       }
       async function hydrateThreadFromServer(threadId) {
         if (!threadId) return;
@@ -13487,7 +13496,7 @@
         typingRow.className = 'chat-msg-row';
         typingRow.innerHTML = '<div class="chat-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg></div><div class="chat-msg chat-msg--ai chat-msg--typing"><div style="display:flex;gap:4px;align-items:center;padding:4px 0;"><span style="width:6px;height:6px;border-radius:50%;background:#7C3AED;opacity:0.4;animation:typingDot 1.4s ease-in-out infinite;"></span><span style="width:6px;height:6px;border-radius:50%;background:#7C3AED;opacity:0.4;animation:typingDot 1.4s ease-in-out 0.2s infinite;"></span><span style="width:6px;height:6px;border-radius:50%;background:#7C3AED;opacity:0.4;animation:typingDot 1.4s ease-in-out 0.4s infinite;"></span></div></div>';
         messagesEl.appendChild(typingRow);
-        scrollToBottom();
+        scrollToBottom(true);
 
         try {
           const res = await apiFetch(`${API}/api/chat/v2`, {
@@ -13568,12 +13577,13 @@
               ? window.SEAssets.libraryOffer(assets)
               : null;
             const actions = aiRow.querySelector('.coach-actions');
-            if (!offer || !actions) return;
+            // Only a Create uses library pictures; a design style or carousel build starts without them.
+            if (!offer || !actions || !coachActions.some((a) => a && a.type === 'create')) return;
             const bar = document.createElement('div');
             bar.className = 'coach-library-offer';
             bar.style.cssText = 'margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
             bar.innerHTML = '<span style="font-size:0.75rem;color:#E9D5FF;">' + offer.question.replace(/[<>]/g, '') + '</span>' +
-              '<button type="button" data-lib-yes style="background:rgba(124,58,237,0.2);border:1px solid rgba(167,139,250,0.4);color:#E9D5FF;font-size:0.72rem;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;">Use library refs</button>' +
+              '<button type="button" data-lib-yes style="background:rgba(124,58,237,0.2);border:1px solid rgba(167,139,250,0.4);color:#E9D5FF;font-size:0.72rem;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;">Attach them</button>' +
               '<button type="button" data-lib-no style="background:transparent;border:1px solid rgba(255,255,255,0.12);color:#94A3B8;font-size:0.72rem;padding:5px 10px;border-radius:7px;cursor:pointer;">Skip</button>';
             actions.after(bar);
             bar.querySelector('[data-lib-yes]').addEventListener('click', () => {
@@ -13929,7 +13939,7 @@
             });
           } catch(e) {}
           clearMessagesUi(true);
-          scrollToBottom();
+          scrollToBottom(true);
         });
       }
     }
