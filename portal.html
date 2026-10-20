@@ -102,6 +102,67 @@
     }
     .brand-lib-thumb img,
     .brand-lib-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* Same rule as the Storyboard reference picker: a full Library must scroll,
+       not squash every tile into a thin strip. */
+    .se-pick-grid {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-auto-rows: max-content;
+      align-content: start;
+      gap: 10px;
+    }
+    .se-pick-tile {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+      overflow: hidden;
+      font-family: var(--font-body);
+    }
+    .se-pick-im {
+      position: relative;
+      display: block;
+      flex: 0 0 auto;
+      width: 100%;
+      aspect-ratio: 1;
+      overflow: hidden;
+      background: #0f172a;
+    }
+    .se-pick-im img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .se-pick-cap {
+      flex: 0 0 auto;
+      padding: 8px 10px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 0.72rem;
+      color: #E9D5FF;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .se-pick-cap span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .brand-lib-thumb--empty {
       display: flex;
       align-items: center;
@@ -8990,7 +9051,7 @@
             <button type="button" id="vs-product-close" style="background:none;border:none;color:rgba(255,255,255,0.45);font-size:1.2rem;cursor:pointer;">×</button>
           </div>
           <div style="padding:12px 14px;"><input id="vs-product-search" type="search" placeholder="Search products…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:#fff;font-size:0.8rem;font-family:var(--font-body);outline:none;"></div>
-          <div id="vs-product-grid" style="flex:1;overflow:auto;padding:0 14px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>
+          <div id="vs-product-grid" class="se-pick-grid" style="padding:0 14px 14px;"></div>
         </div>`;
         document.body.appendChild(modal);
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
@@ -9025,9 +9086,9 @@
         grid.innerHTML = products.map(p => {
           const img = p.primary_image || '';
           const title = p.title || 'Product';
-          return `<button type="button" class="vs-pick-card" data-url="${esc(img)}" data-title="${esc(title)}" data-id="${esc(p.id||'')}" style="text-align:left;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);cursor:pointer;overflow:hidden;">
-            <div style="aspect-ratio:1;background:#111;">${img ? `<img src="${esc(img)}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">` : ''}</div>
-            <div style="padding:8px 9px;font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.8);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(title)}</div>
+          return `<button type="button" class="vs-pick-card se-pick-tile" data-url="${esc(img)}" data-title="${esc(title)}" data-id="${esc(p.id||'')}">
+            <div class="se-pick-im">${img ? `<img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</div>
+            <div class="se-pick-cap"><span>${esc(title)}</span></div>
           </button>`;
         }).join('');
         grid.querySelectorAll('.vs-pick-card').forEach(el => {
@@ -11368,7 +11429,7 @@
         panel.innerHTML = '<div style="padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
           '<div style="font-weight:700;font-size:0.95rem;color:#F8FAFC;">' + String(title || 'Library').replace(/[<>]/g, '') + '</div>' +
           '<button type="button" id="se-lib-picker-close" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:1.4rem;line-height:1;">×</button></div>' +
-          '<div id="se-lib-picker-grid" style="padding:16px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>' +
+          '<div id="se-lib-picker-grid" class="se-pick-grid"></div>' +
           '<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:flex-end;gap:8px;">' +
           '<button type="button" id="se-lib-picker-use" class="settings-tab" style="padding:8px 14px;">Use selected</button></div>';
         overlay.appendChild(panel);
@@ -11377,13 +11438,13 @@
         grid.innerHTML = rows.length ? rows.map((a) => {
           const label = (helpers.labelOf ? helpers.labelOf(a) : (a.name || a.kind));
           const img = a.kind === 'color'
-            ? '<div style="width:100%;aspect-ratio:1/1;background:' + String(a.hex || '#333') + ';"></div>'
-            : (a.url ? '<img src="' + String(a.url).replace(/"/g, '&quot;') + '" style="width:100%;aspect-ratio:1/1;object-fit:cover;">' : '');
-          return '<label style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;">' +
-            img + '<div style="padding:8px 10px;display:flex;gap:6px;align-items:center;">' +
+            ? '<div class="se-pick-im" style="background:' + String(a.hex || '#333') + ';"></div>'
+            : '<div class="se-pick-im">' + (a.url ? '<img src="' + String(a.url).replace(/"/g, '&quot;') + '" alt="" referrerpolicy="no-referrer">' : '') + '</div>';
+          return '<label class="se-pick-tile">' +
+            img + '<div class="se-pick-cap">' +
             '<input type="checkbox" data-lib-pick="' + String(a.id).replace(/"/g, '') + '">' +
-            '<span style="font-size:0.72rem;color:#E9D5FF;font-weight:600;">' + String(label).replace(/[<>]/g, '') + '</span></div></label>';
-        }).join('') : '<p style="color:#94A3B8;font-size:0.8rem;">Nothing in the Library yet. Open Library to upload.</p>';
+            '<span>' + String(label).replace(/[<>]/g, '') + '</span></div></label>';
+        }).join('') : '<p class="se-pick-cap" style="grid-column:1 / -1;color:#94A3B8;">Nothing in the Library yet. Open Library to upload.</p>';
         const close = () => overlay.remove();
         panel.querySelector('#se-lib-picker-close').addEventListener('click', close);
         overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -11553,18 +11614,18 @@
         </div>`;
       }).join('');
       const pastCards = (_brandLibPastOpen ? (_brandLibPastItems || []) : []).filter((it) => /^https?:\/\//i.test(String(it.image_url || ''))).map((it) => `
-        <label class="brand-lib-past-card" style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.03);cursor:pointer;display:flex;flex-direction:column;">
-          <img src="${escapeHtml(it.image_url)}" alt="" style="width:100%;aspect-ratio:1/1;object-fit:cover;background:#111;" loading="lazy" referrerpolicy="no-referrer" />
-          <div style="padding:8px 10px;display:flex;gap:6px;align-items:flex-start;">
+        <label class="brand-lib-past-card se-pick-tile">
+          <div class="se-pick-im"><img src="${escapeHtml(it.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></div>
+          <div class="se-pick-cap">
             <input type="checkbox" data-past-pick data-past-url="${escapeHtml(it.image_url)}" data-past-title="${escapeHtml(it.title || 'Past post')}" data-past-id="${escapeHtml(it.id || '')}" />
-            <span style="font-size:0.72rem;color:#E9D5FF;font-weight:600;line-height:1.3;">${escapeHtml(it.title || 'Past post')}</span>
+            <span>${escapeHtml(it.title || 'Past post')}</span>
           </div>
         </label>`).join('');
       const pastPanel = _brandLibPastOpen ? `
         <div id="brand-lib-past" style="margin:0 0 14px;">
           <p style="font-size:0.8rem;color:var(--color-text-muted);margin:0 0 8px;">Pick finished posts to save as Style refs. Coach can match that look when you say yes. Video-only rows without a still are skipped.</p>
           ${pastCards
-            ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:10px;">${pastCards}</div>
+            ? `<div class="se-pick-grid" style="flex:none;overflow:visible;margin-bottom:10px;">${pastCards}</div>
                <button type="button" id="brand-lib-past-add" class="settings-tab" style="padding:6px 12px;">Add selected as Style</button>`
             : '<p style="font-size:0.8125rem;color:rgba(148,163,184,0.7);margin:0;">No past stills yet. Publish or generate a post with an image first.</p>'}
         </div>` : '';
@@ -11620,7 +11681,7 @@
             <button type="button" id="brand-lib-generate" class="settings-tab" style="padding:6px 12px;">Generate</button>
           </div>
         </div>` : ''}
-        ${draftCards ? `<div id="brand-lib-drafts" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px;">${draftCards}</div>` : ''}`;
+        ${draftCards ? `<div id="brand-lib-drafts" class="se-pick-grid" style="flex:none;overflow:visible;margin-top:14px;">${draftCards}</div>` : ''}`;
       const kindSel = root.querySelector('#brand-lib-kind');
       const fileEl = root.querySelector('#brand-lib-file');
       const acceptFor = helpers.acceptFor || (() => '*/*');
@@ -13838,7 +13899,7 @@
             '<input id="_sePickerSearch" placeholder="Search products…" style="flex:1;max-width:260px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#F8FAFC;padding:6px 10px;border-radius:8px;font-size:0.78rem;font-family:var(--font-body);">' +
             '<button id="_sePickerClose" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:1.4rem;line-height:1;">×</button>' +
             '</div>' +
-            '<div id="_sePickerGrid" style="padding:16px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;"></div>';
+            '<div id="_sePickerGrid" class="se-pick-grid"></div>';
           overlay.appendChild(panel);
           document.body.appendChild(overlay);
           function render(filter) {
@@ -13848,9 +13909,9 @@
             grid.innerHTML = list.map(p => {
               const title = String(p.title || '').replace(/"/g, '&quot;');
               const img = String(p.image_url || '').replace(/"/g, '&quot;');
-              return '<button class="_sePickerCard" data-title="' + title + '" data-image="' + img + '" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;cursor:pointer;padding:0;display:flex;flex-direction:column;text-align:left;font-family:var(--font-body);transition:border-color 0.15s, transform 0.1s;">' +
-                (img ? '<img src="' + img + '" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;">' : '<div style="width:100%;aspect-ratio:1/1;background:rgba(124,58,237,0.1);"></div>') +
-                '<div style="padding:8px 10px;font-size:0.7rem;color:#E9D5FF;font-weight:600;line-height:1.3;">' + title.slice(0, 60) + '</div>' +
+              return '<button class="_sePickerCard se-pick-tile" data-title="' + title + '" data-image="' + img + '">' +
+                (img ? '<div class="se-pick-im"><img src="' + img + '" alt="" referrerpolicy="no-referrer"></div>' : '<div class="se-pick-im" style="background:rgba(124,58,237,0.1);"></div>') +
+                '<div class="se-pick-cap"><span>' + title.slice(0, 60) + '</span></div>' +
                 '</button>';
             }).join('');
             grid.querySelectorAll('._sePickerCard').forEach(card => {
@@ -15764,14 +15825,14 @@
         .vc-category-select:focus { border-color:rgba(139,92,246,0.5); }
         .vc-category-select option { background:#1a1a2e; color:#fff; }
         .vc-product-count { font-size:0.68rem; color:rgba(255,255,255,0.3); font-family:var(--font-body,'Satoshi',sans-serif); white-space:nowrap; }
-        #vc-product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; max-height:420px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(139,92,246,0.3) transparent; padding:2px; }
+        #vc-product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); grid-auto-rows:max-content; align-content:start; gap:10px; max-height:420px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(139,92,246,0.3) transparent; padding:2px; }
         #vc-product-grid::-webkit-scrollbar { width:5px; }
         #vc-product-grid::-webkit-scrollbar-track { background:transparent; }
         #vc-product-grid::-webkit-scrollbar-thumb { background:rgba(139,92,246,0.3); border-radius:10px; }
         .vc-product-card { position:relative; cursor:pointer; border-radius:12px; overflow:hidden; border:2px solid transparent; transition:all 0.25s cubic-bezier(.4,0,.2,1); background:rgba(255,255,255,0.03); display:flex; flex-direction:column; }
         .vc-product-card:hover { border-color:rgba(139,92,246,0.4); transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,0.3); }
         .vc-product-card.selected { border-color:#8B5CF6; box-shadow:0 0 0 3px rgba(139,92,246,0.15), 0 8px 24px rgba(139,92,246,0.1); }
-        .vc-product-card__img { width:100%; aspect-ratio:1; object-fit:cover; background:rgba(255,255,255,0.02); }
+        .vc-product-card__img { width:100%; flex:0 0 auto; aspect-ratio:1; object-fit:cover; background:rgba(255,255,255,0.02); }
         .vc-product-card .vc-check { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%; background:#8B5CF6; display:none; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(139,92,246,0.4); }
         .vc-product-card.selected .vc-check { display:flex; }
         .vc-product-card__info { padding:8px 10px 10px; display:flex; flex-direction:column; gap:2px; }
@@ -18151,8 +18212,8 @@
       const title = (p.title || 'Product').replace(/"/g, '&quot;');
       const price = p.price && p.price !== '0.00' ? '$' + parseFloat(p.price).toFixed(2) : '';
       const purl = (p.product_url || '').replace(/"/g, '&quot;');
-      return '<div class="ad-product-pick" data-product-id="' + (p.id||'') + '" data-title="' + title + '" data-image="' + img + '" data-price="' + price + '" data-product-url="' + purl + '" onclick="adSelectProduct(this)" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;cursor:pointer;overflow:hidden;transition:all 0.15s;">' +
-        (img ? '<img src="' + img + '" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;" loading="lazy">' : '<div style="width:100%;aspect-ratio:1;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;"><span style="font-size:1.5rem;opacity:0.15;">📦</span></div>') +
+      return '<div class="ad-product-pick se-pick-tile" data-product-id="' + (p.id||'') + '" data-title="' + title + '" data-image="' + img + '" data-price="' + price + '" data-product-url="' + purl + '" onclick="adSelectProduct(this)">' +
+        (img ? '<div class="se-pick-im"><img src="' + img + '" alt="" loading="lazy" referrerpolicy="no-referrer"></div>' : '<div class="se-pick-im" style="display:flex;align-items:center;justify-content:center;"><span style="font-size:1.5rem;opacity:0.15;">📦</span></div>') +
         '<div style="padding:8px;"><div style="font-size:0.68rem;color:rgba(255,255,255,0.6);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-body);">' + title + '</div>' +
         (price ? '<div style="font-size:0.65rem;color:rgba(139,92,246,0.7);font-weight:600;margin-top:2px;">' + price + '</div>' : '') +
         '</div></div>';
@@ -18736,7 +18797,7 @@
                 </div>
                 <div style="font-size:0.68rem;color:rgba(255,255,255,0.45);font-family:var(--font-body);" id="ad-product-count">${productsToRender.length} shown</div>
               </div>
-              <div id="ad-product-selector" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(139,92,246,0.3) transparent;padding:2px;">
+              <div id="ad-product-selector" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));grid-auto-rows:max-content;align-content:start;gap:10px;max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(139,92,246,0.3) transparent;padding:2px;">
                 ${hasProducts ? productsToRender.map(p => adProductCardHTML(p)).join('') : '<div style="text-align:center;padding:32px;color:rgba(255,255,255,0.3);font-size:0.82rem;font-family:var(--font-body);">' + (_adProductSearchQuery ? 'No products matched that search.' : 'Loading products…') + '</div>'}
               </div>
               `}
@@ -19594,8 +19655,8 @@
         ? (priceRaw.startsWith('$') ? priceRaw : (/^\d+(\.\d+)?$/.test(priceRaw) ? `$${Number.parseFloat(priceRaw).toFixed(2)}` : priceRaw))
         : '';
       return `
-        <button type="button" onclick="hfSelectImageProduct('${id}')" style="text-align:left;background:${selected ? 'rgba(124,58,237,0.14)' : 'rgba(255,255,255,0.03)'};border:1px solid ${selected ? 'rgba(124,58,237,0.38)' : 'rgba(255,255,255,0.07)'};border-radius:10px;overflow:hidden;padding:0;cursor:pointer;transition:all 0.15s;">
-          ${img ? `<img src="${img}" alt="${title}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;">` : `<div style="width:100%;aspect-ratio:1;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:1rem;">📦</div>`}
+        <button type="button" class="se-pick-tile" onclick="hfSelectImageProduct('${id}')" style="background:${selected ? 'rgba(124,58,237,0.14)' : 'rgba(255,255,255,0.03)'};border-color:${selected ? 'rgba(124,58,237,0.38)' : 'rgba(255,255,255,0.07)'};">
+          ${img ? `<div class="se-pick-im"><img src="${img}" alt="${title}" loading="lazy" referrerpolicy="no-referrer"></div>` : `<div class="se-pick-im" style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:1rem;">📦</div>`}
           <div style="padding:8px 9px;">
             <div style="font-size:0.67rem;font-weight:700;color:rgba(255,255,255,0.82);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${title}</div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:2px;">
@@ -20089,7 +20150,7 @@
             </div>
             <div id="hf-image-product-meta" style="font-size:0.66rem;color:rgba(255,255,255,0.35);margin-top:6px;"></div>
             <div id="hf-image-product-selected"></div>
-            <div id="hf-image-product-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;max-height:220px;overflow-y:auto;padding:2px;border-radius:10px;"></div>
+            <div id="hf-image-product-results" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));grid-auto-rows:max-content;align-content:start;gap:8px;max-height:220px;overflow-y:auto;padding:2px;border-radius:10px;"></div>
           </div>` + aspectRatio('hf-ratio');
       } else if (ft === 'face-swap') {
         formHTML = imageUpload('hf-source-img', 'Source (Face to Use)') + imageUpload('hf-target-img', 'Target (Image or Video)');
