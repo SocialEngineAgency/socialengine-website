@@ -13,6 +13,9 @@ test('the slide editor loads the carousel style before deciding the picture slot
   assert.match(fn, /\/api\/design\/system\?style=/);
   assert.match(fn, /pictureSlotOf\(pattern\)/);
   assert.match(fn, /id="dsv2-ed-upload"/);
+  assert.match(fn, /pointerdown/);
+  assert.match(fn, /slot\.x = origin\.xNow/);
+  assert.match(src, /Drag a box to move it/);
   assert.doesNotMatch(fn, /Pick another layout to add one/);
 });
 
