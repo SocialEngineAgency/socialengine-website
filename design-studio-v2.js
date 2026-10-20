@@ -31,7 +31,14 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+    if (!res.ok) {
+      const err = new Error(json.error || `Request failed (${res.status})`);
+      err.status = res.status;
+      err.code = json.code || '';
+      err.fix = json.fix || null;
+      err.canOverride = json.can_override === true;
+      throw err;
+    }
     return json;
   }
   async function uploadFile(file) {
@@ -458,7 +465,8 @@
       <textarea id="dsv2-notes" placeholder="e.g. UK spelling, calm and factual tone, always end with our website"></textarea>
       <div class="dsv2-grid2">
         <div><label class="dsv2-label" for="dsv2-ratio">Slide shape</label>
-          <select id="dsv2-ratio"><option value="4:5">4:5 portrait (Instagram feed)</option><option value="9:16">9:16 tall (Stories, TikTok)</option><option value="1:1">1:1 square</option></select></div>
+          <select id="dsv2-ratio"><option value="9:16">9:16 tall (carousels, Reels, Stories)</option><option value="4:5">4:5 portrait (feed posts only)</option><option value="1:1">1:1 square (feed posts only)</option></select>
+          <p class="dsv2-hint" id="dsv2-ratio-hint"></p></div>
         <div><label class="dsv2-label" for="dsv2-handle">Handle or website on slides</label>
           <input type="text" id="dsv2-handle" placeholder="@yourbrand"></div>
       </div>
@@ -816,9 +824,15 @@
       el('dsv2-build').addEventListener('click', startBuild);
       const sys = state.info && state.info.system;
       if (sys) {
-        el('dsv2-ratio').value = sys.ratio || '4:5';
+        el('dsv2-ratio').value = state.newStyle ? '9:16' : (sys.ratio || '9:16');
         el('dsv2-handle').value = sys.handle || '';
       }
+      const hintRatio = () => {
+        const hint = el('dsv2-ratio-hint');
+        if (hint) hint.textContent = el('dsv2-ratio').value === '9:16' ? '' : 'Carousels are 9:16. Carousels can only be made in a 9:16 style unless you choose to make one anyway.';
+      };
+      el('dsv2-ratio').addEventListener('change', hintRatio);
+      hintRatio();
     }
 
     const go = el('dsv2-go');
@@ -946,14 +960,40 @@
         count: recipe || count === 'auto' ? undefined : Math.max(3, Math.min(10, Number(count))),
         research: !!el('dsv2-research').checked,
         source_image_url: state.source || undefined,
+        format_override: state.formatOverride ? true : undefined,
       });
+      state.formatOverride = false;
       store.set('job', { id: r.job_id, kind: 'carousel', brief });
       setStatus('dsv2-result', '');
       poll(r.job_id, 'carousel');
     } catch (e) {
+      state.formatOverride = false;
       btn.disabled = false;
+      if (e.code === 'DESIGN_FORMAT') { askFormat(e); return; }
       setStatus('dsv2-make-status', `<div class="dsv2-error">${esc(e.message)}</div>`);
     }
+  }
+
+  // The rulebook said no before any work was paid for: this style is the wrong size for a carousel. Offer the way out.
+  function askFormat(e) {
+    const fits = e.fix && e.fix.use_style && (state.info.styles || []).find((st) => st.id === e.fix.use_style);
+    setStatus('dsv2-make-status', `<div class="dsv2-ask dsv2-fade">
+      <p>${esc(e.message)}</p>
+      <div class="dsv2-row">${fits ? `<button type="button" class="dsv2-btn dsv2-btn--primary" data-format="use">Use ${esc(fits.name)}</button>` : ''}${e.canOverride ? `<button type="button" class="dsv2-btn${fits ? '' : ' dsv2-btn--primary'}" data-format="anyway">Make it anyway</button>` : ''}</div>
+    </div>`);
+    const box = el('dsv2-make-status');
+    if (!box) return;
+    box.querySelectorAll('[data-format]').forEach((b) => b.addEventListener('click', async () => {
+      setStatus('dsv2-make-status', '');
+      if (b.dataset.format === 'anyway') { state.formatOverride = true; startCarousel(); return; }
+      const brief = el('dsv2-brief') ? el('dsv2-brief').value : '';
+      const slides = el('dsv2-slides') ? el('dsv2-slides').value : 'auto';
+      try { await loadStyle(e.fix.use_style); state.rebuild = false; state.newStyle = false; draw(); } catch (_) { return; }
+      if (el('dsv2-brief')) el('dsv2-brief').value = brief;
+      if (el('dsv2-slides')) el('dsv2-slides').value = slides;
+      startCarousel();
+    }));
+    reveal(box);
   }
 
   function poll(id, kind) {
@@ -1777,12 +1817,16 @@
 
   // Run by the Coach, no page needed. buildStyle: a new style from a reference image, saved next to the others.
   // makeCarousel: a carousel in a named style, saved as the "last" result so the Carousels tab opens on it.
-  async function buildStyle({ name, notes, source_image_url, onProgress }) {
+  // With rebuild_style_id the style is rebuilt in place at the size asked (its id and name stay), from the references it
+  // already has; without it a new style is added next to the others, at the carousel size unless a size is asked for.
+  async function buildStyle({ name, notes, source_image_url, example_urls, ratio, rebuild_style_id, onProgress }) {
+    const urls = Array.isArray(example_urls) && example_urls.length ? example_urls : [source_image_url];
     const r = await call('POST', '/api/design/system/build', {
-      add: true,
+      ...(rebuild_style_id ? { style_id: rebuild_style_id } : { add: true }),
       style_name: name || undefined,
       notes: notes || undefined,
-      example_urls: [source_image_url],
+      ratio: ratio || undefined,
+      example_urls: urls,
     });
     const result = await waitJob(r.job_id, onProgress);
     state.info = null; // the Carousels tab reloads its styles
@@ -1806,21 +1850,29 @@
 
   // The whole Coach action in one place, for every Coach chat. ui: { say(text) -> { set(text) }, offer(label, fn), remember(text) }.
   async function runStyleAction(action, ui) {
-    const status = ui.say(`Building your new style "${action.name}" from the reference. This takes about 10 minutes; keep this page open and I will start the carousel straight after.`);
+    const rebuilding = !!action.rebuild_style_id;
+    const status = ui.say(rebuilding
+      ? `Rebuilding your style "${action.name}"${action.ratio ? ` at ${action.ratio}` : ''} from the references it already has. This takes about 10 minutes; keep this page open${action.then_carousel ? ' and I will make the carousel straight after' : ''}.`
+      : `Building your new style "${action.name}" from the reference. This takes about 10 minutes; keep this page open and I will start the carousel straight after.`);
     let style = null;
     try {
       style = await buildStyle({
         name: action.name,
         notes: action.notes,
         source_image_url: action.source_image_url,
-        onProgress: (p) => { status.set(`Building "${action.name}": ${stageText(p)}`); },
+        example_urls: action.example_urls,
+        ratio: action.ratio,
+        rebuild_style_id: action.rebuild_style_id,
+        onProgress: (p) => { status.set(`${rebuilding ? 'Rebuilding' : 'Building'} "${action.name}": ${stageText(p)}`); },
       });
     } catch (e) {
-      status.set(`The new style could not be built: ${e.message || 'try again in a minute'}. Nothing was changed, your other styles are as they were.`);
+      status.set(`The ${rebuilding ? 'style' : 'new style'} could not be ${rebuilding ? 'rebuilt' : 'built'}: ${e.message || 'try again in a minute'}. Nothing was changed, your other styles are as they were.`);
       return;
     }
     const label = (style && style.name) || action.name;
-    const ready = `Your new style "${label}" is ready. It is saved next to your other styles in the Carousels tab.`;
+    const ready = rebuilding
+      ? `Your style "${label}" is rebuilt${action.ratio ? ` at ${action.ratio}` : ''} and ready in the Carousels tab.`
+      : `Your new style "${label}" is ready. It is saved next to your other styles in the Carousels tab.`;
     status.set(ready);
     if (ui.remember) ui.remember(ready);
     if (!action.then_carousel) return;
@@ -1830,7 +1882,7 @@
         brief: action.then_carousel.brief,
         slides: action.then_carousel.slides,
         style_id: style && style.id,
-        source_image_url: action.source_image_url,
+        source_image_url: rebuilding ? undefined : action.source_image_url, // a rebuild's references are the look to copy, not a poster to turn into a carousel
         medical: action.medical,
         onProgress: (p) => { work.set(`Designing the carousel: ${stageText(p)}`); },
       });
