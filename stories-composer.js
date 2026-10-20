@@ -500,7 +500,7 @@
       busy: null,
       draft: null,
     };
-    adoptDraft({ story_type: o.story_type || '', goal: o.goal, frames: [] });
+    adoptDraft({ story_type: o.story_type || '', goal: o.goal, topic: o.topic || '', frames: [] });
     const root = document.createElement('div');
     root.id = 'sc-root';
     root.className = 'sc-overlay';

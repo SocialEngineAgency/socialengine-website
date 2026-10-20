@@ -2201,6 +2201,7 @@
     setActionEnabled('cs-caption', carousel || designed || !!_csOriginalPreviewUrl || single);
     refreshRestorePreviousButton();
     nlP2Sync();
+    if (window.__SE_PENDING_SLOT_IDEAS) seShowSlotIdeas(window.__SE_PENDING_SLOT_IDEAS);
   }
 
   function setBusy(busy, msg) {
@@ -3798,6 +3799,24 @@
     const input = document.getElementById('cs-coach-input');
     const message = String(preset || input?.value || '').trim();
     if (!message || _csCoachSending) return;
+    if (window.__SE_SLOT_CONTEXT) {
+      if (input) input.value = '';
+      appendDesignCoachBubble('user', message);
+      try {
+        const ctx = window.__SE_SLOT_CONTEXT;
+        const res = await fetch(`${apiBase()}/api/meta-planner/ideas`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ week: ctx.week, slot_index: ctx.index, note: message }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not change the ideas');
+        seShowSlotIdeas(data);
+      } catch (e) {
+        appendDesignCoachBubble('assistant', e.message || 'Could not change the ideas');
+      }
+      return;
+    }
     if (input) {
       input.value = '';
       input.style.height = 'auto';
@@ -4235,6 +4254,93 @@
     }
   }
 
+  function seShowSlotIdeas(data) {
+    const payload = data || window.__SE_PENDING_SLOT_IDEAS;
+    if (!payload || !Array.isArray(payload.ideas)) return;
+    const log = document.getElementById('cs-coach-log');
+    if (!log) {
+      window.__SE_PENDING_SLOT_IDEAS = payload;
+      return;
+    }
+    window.__SE_PENDING_SLOT_IDEAS = null;
+    if (payload.slot) {
+      window.__SE_SLOT_CONTEXT = Object.assign({}, window.__SE_SLOT_CONTEXT || {}, { slot: payload.slot });
+    }
+    appendDesignCoachBubble('assistant', 'Three ideas for this day. Make one, or tell me what to change.');
+    payload.ideas.forEach((idea) => {
+      const points = Array.isArray(idea.points) && idea.points.length
+        ? `\n${idea.points.map((p) => `• ${p}`).join('\n')}`
+        : '';
+      const row = appendDesignCoachBubble('assistant', `${idea.title}${idea.why ? `\n${idea.why}` : ''}${points}`);
+      if (!row) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Make this';
+      btn.style.cssText = 'display:block;margin-top:8px;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:6px 10px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit;';
+      btn.addEventListener('click', () => { seMakeSlotIdea(idea); });
+      row.appendChild(btn);
+    });
+  }
+
+  async function landSlotPiece(body) {
+    const res = await fetch(`${apiBase()}/api/meta-planner/land`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not put it on that day');
+    const line = data.warning
+      ? `It is in Content Review on that day. ${data.warning}`
+      : 'It is in Content Review on that day, with a caption for each connected platform.';
+    appendDesignCoachBubble('assistant', line);
+    toast('Added to that day', 'success');
+    window.__SE_SLOT_CONTEXT = null;
+  }
+
+  async function seMakeSlotIdea(idea) {
+    const slot = window.__SE_SLOT_CONTEXT && window.__SE_SLOT_CONTEXT.slot;
+    if (!idea || !slot) return;
+    const make = idea.make || {};
+    appendDesignCoachBubble('assistant', `Making “${idea.title}”.`);
+    try {
+      if (make.kind === 'carousel') {
+        if (!window.seDesignStudio || typeof window.seDesignStudio.makeCarousel !== 'function') {
+          throw new Error('Open Carousels once so a brand style is ready, then press Make this again.');
+        }
+        const result = await window.seDesignStudio.makeCarousel({
+          brief: idea.brief,
+          slides: make.slides || (idea.points || []).length,
+        });
+        const urls = (result.slides || []).map((s) => s && s.url).filter(Boolean);
+        await landSlotPiece({ slot, idea, image_urls: urls });
+      } else if (make.kind === 'post') {
+        if (!window.seDesignStudio || typeof window.seDesignStudio.makePost !== 'function') {
+          throw new Error('The post maker is not ready. Reload the page and try again.');
+        }
+        const result = await window.seDesignStudio.makePost({ title: idea.title, brief: idea.brief });
+        const made = (result.posts || []).find((p) => p && p.url);
+        if (!made) throw new Error((result.posts && result.posts[0] && result.posts[0].error) || 'The post was not made.');
+        await landSlotPiece({ slot, idea, image_urls: [made.url] });
+      } else if (make.kind === 'reel') {
+        window.__SE_ANIM_STORY_PRESET = { story_type: slot.story_type, message: idea.brief };
+        if (typeof window.switchNav === 'function') window.switchNav('animation-studio');
+        appendDesignCoachBubble('assistant', 'The idea is in Reels. The video is checked before anything is made.');
+      } else if (make.kind === 'story' && typeof window.openStoriesComposer === 'function') {
+        window.openStoriesComposer({
+          date: slot.date,
+          story_type: slot.story_type,
+          goal: slot.goal,
+          topic: idea.brief,
+        });
+      }
+    } catch (e) {
+      toast(e.message || 'Could not make that', 'error');
+      appendDesignCoachBubble('assistant', e.message || 'Could not make that.');
+    }
+  }
+
+  window.seShowSlotIdeas = seShowSlotIdeas;
   window.renderClaudeStudio = renderClaudeStudio;
   window.applyRedesignedSlides = applyRedesignedSlides;
   window.designCoachAsk = designCoachAsk;
