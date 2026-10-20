@@ -540,13 +540,20 @@ function stripCoachChatEmojis(text) {
   }).join('').trim();
 }
 
+/** Tab names in a reply ("the Carousels tab", "Content Review") become links that open that tab (coach-work.js handles the click). */
+function linkCoachTabs(html) {
+  return String(html || '')
+    .replace(/\b(Carousels|Posts|Reels|Storyboard) tab\b/g, (m, name) => `<a href="#" class="sw-link" data-sw-tab="${name.toLowerCase()}">${m}</a>`)
+    .replace(/\bContent Review\b/g, (m) => `<a href="#" class="sw-link" data-sw-tab="review">${m}</a>`);
+}
+
 function formatCoachReplyHtml(text) {
   const plain = stripCoachChatEmojis(coachReplyToPlain(stripCoachPlanDump(text)));
   if (!plain) return '';
   const blocks = plain.split(/\n\n+/);
   return blocks.map((block, i) => {
     const lines = block.split('\n').map((line) => {
-      let e = escapeCoachHtml(line);
+      let e = linkCoachTabs(escapeCoachHtml(line));
       e = e.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
       e = e.replace(/(^|[\s(])\*(?!\*)([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
       e = e.replace(/^[-•]\s+/, '• ');
@@ -566,6 +573,8 @@ function persistCoachHistoryEntry(role, text, extra = {}) {
     ));
     if (actions.length) entry.actions = actions;
   }
+  // Work that ended in a tab (Carousels, Posts, ...): the way back to it comes back with the message.
+  if (role === 'assistant' && ['carousels', 'posts', 'reels', 'storyboard', 'review'].includes(extra.open_tab)) entry.open_tab = extra.open_tab;
   // Posts the Coach made in one go (the Post tool's posts card), so the card comes back after a reload.
   if (role === 'assistant' && Array.isArray(extra.posts) && extra.posts.length) {
     const posts = extra.posts
@@ -607,6 +616,7 @@ const coachSessionApi = {
   isCoachMetaBrief,
   persistCoachHistoryEntry,
   formatCoachReplyHtml,
+  linkCoachTabs,
   stripCoachChatEmojis,
   coachReplyToPlain,
   studioGenerateMode,

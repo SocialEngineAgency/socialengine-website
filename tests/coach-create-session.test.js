@@ -10,6 +10,7 @@ const {
   normalizeCoachCreateSession,
   persistCoachHistoryEntry,
   formatCoachReplyHtml,
+  linkCoachTabs,
   stripCoachChatEmojis,
   resolveDesignCoachApply,
   isCoachDesignRefineAsk,
@@ -728,4 +729,26 @@ test('a Coach create can carry 4:5, and only a size the Coach named switches the
   assert.equal(dflt.aspect_explicit, false);
   const inferred = inferCreateActionFromReply('Create this now: a vertical poster about five small sleep habits for the feed', 'make a poster about sleep habits', []);
   if (inferred) assert.equal(inferred.aspect_explicit, false, 'a size filled in on our side is not one the Coach named');
+});
+
+test('tab names in a Coach reply are links that open that tab', () => {
+  const html = formatCoachReplyHtml('Your carousel is saved in the Carousels tab. Approve it in Content Review when you are happy.');
+  assert.match(html, /<a href="#" class="sw-link" data-sw-tab="carousels">Carousels tab<\/a>/);
+  assert.match(html, /<a href="#" class="sw-link" data-sw-tab="review">Content Review<\/a>/);
+  assert.equal(linkCoachTabs('Open the Reels tab'), 'Open the <a href="#" class="sw-link" data-sw-tab="reels">Reels tab</a>');
+  assert.equal(linkCoachTabs('Posts tab and Storyboard tab').match(/data-sw-tab/g).length, 2);
+});
+
+test('only tab names are linked, never ordinary words', () => {
+  assert.doesNotMatch(formatCoachReplyHtml('I made three posts and a reel.'), /data-sw-tab/);
+  assert.doesNotMatch(formatCoachReplyHtml('Carousels work well on Instagram.'), /data-sw-tab/);
+  // escaped first: nothing in the reply can add its own markup
+  assert.doesNotMatch(formatCoachReplyHtml('<img src=x onerror=alert(1)> Carousels tab'), /<img/);
+});
+
+test('work that ended in a tab keeps its way back in the saved chat', () => {
+  assert.equal(persistCoachHistoryEntry('assistant', 'Done.', { open_tab: 'carousels' }).open_tab, 'carousels');
+  assert.equal(persistCoachHistoryEntry('assistant', 'Done.', { open_tab: 'review' }).open_tab, 'review');
+  assert.equal(persistCoachHistoryEntry('assistant', 'Done.', { open_tab: 'javascript:alert(1)' }).open_tab, undefined, 'only known tabs');
+  assert.equal(persistCoachHistoryEntry('user', 'hi', { open_tab: 'carousels' }).open_tab, undefined, 'only the Coach\'s messages');
 });
