@@ -5755,7 +5755,7 @@
           ${benefits.map(b => `<li class="upgrade-fullpage__benefit">${CHECK_SVG} ${b}</li>`).join('')}
         </ul>
         <a href="${STRIPE_LINK}" target="_blank" class="upgrade-fullpage__cta">Upgrade to ${UPGRADE_NAME} — ${UPGRADE_PRICE_STR}/mo ${ARROW_SVG}</a>
-        <div class="upgrade-fullpage__note">Cancel anytime. No contracts. Results within 7 days.</div>
+        <div class="upgrade-fullpage__note">Cancel anytime. No contracts.</div>
       </div>`;
     }
 
@@ -7001,9 +7001,46 @@
     function showCancellationModal() {
       const modal = document.getElementById('cancellation-modal');
       if (modal) {
+        const reason = document.getElementById('cancellation-reason'); if (reason) reason.value = '';
+        const btn = document.getElementById('cancellation-confirm'); if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
         modal.style.display = 'flex';
         if (typeof lucide !== 'undefined') lucide.createIcons();
       }
+    }
+    // Settings → Request Cancellation. POST /api/cancel-request with the signed-in session
+    // (same apiFetch as delete-account). Success is { ok: true }; anything else keeps the
+    // modal open so nothing is reported as sent when it was not.
+    async function submitCancellationRequest() {
+      const btn = document.getElementById('cancellation-confirm');
+      const reason = (document.getElementById('cancellation-reason')?.value || '').trim().slice(0, 1000);
+      if (btn && btn.disabled) return;
+      const label = btn ? btn.textContent : 'Confirm';
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending\u2026'; }
+      const fail = (detail) => {
+        showToast((detail ? detail + ' ' : '') + 'Please email support@socialengine.agency and we will cancel it for you.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+      };
+      let res, data = {};
+      try {
+        res = await apiFetch('/api/cancel-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reason ? { reason } : {}),
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (_) {
+        fail('We could not reach the server.');
+        return;
+      }
+      if (!res.ok || data.ok !== true) {
+        const apiMessage = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : 'Your request could not be sent (HTTP ' + res.status + ').';
+        fail(apiMessage.replace(/[.!?]?$/, '.'));
+        return;
+      }
+      const modal = document.getElementById('cancellation-modal');
+      if (modal) modal.style.display = 'none';
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+      showToast('Cancellation request sent. Your plan stays active until the end of the billing period. We will confirm by email.', 'success');
     }
 
     // showToast(msg, type): type is one of success | error | warning | info (default info).
@@ -12281,18 +12318,20 @@
               </button>
 
               <!-- Cancellation Confirmation Modal -->
-              <div id="cancellation-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
+              <div id="cancellation-modal" role="dialog" aria-modal="true" aria-labelledby="cancellation-title" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);align-items:center;justify-content:center;">
                 <div style="background:linear-gradient(135deg,#0f1a2e,#162237);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px;max-width:440px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,0.5);">
                   <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
                     <div style="width:42px;height:42px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                       <i data-lucide="alert-triangle" style="width:20px;height:20px;color:#EF4444;"></i>
                     </div>
-                    <h3 style="font-family:var(--font-display);font-size:1.125rem;font-weight:700;color:#fff;margin:0;">Request Cancellation?</h3>
+                    <h3 id="cancellation-title" style="font-family:var(--font-display);font-size:1.125rem;font-weight:700;color:#fff;margin:0;">Request Cancellation?</h3>
                   </div>
-                  <p style="font-size:0.875rem;color:var(--color-text-muted);line-height:1.65;margin:0 0 24px;">Are you sure you want to request cancellation? Your current billing cycle will continue until the end of the period. A team member will reach out within 24 hours.</p>
+                  <p style="font-size:0.875rem;color:var(--color-text-muted);line-height:1.65;margin:0 0 16px;">This sends a cancellation request. Your plan stays active until the end of the current billing period, and we will confirm by email.</p>
+                  <label for="cancellation-reason" style="display:block;font-size:0.8rem;font-weight:600;color:rgba(255,255,255,0.7);margin:0 0 6px;">Anything we could do better? <span style="font-weight:400;color:rgba(148,163,184,0.7);">(optional)</span></label>
+                  <textarea id="cancellation-reason" rows="3" maxlength="1000" style="width:100%;box-sizing:border-box;margin:0 0 20px;padding:10px 12px;background:rgba(255,255,255,0.04);color:#fff;border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-size:0.875rem;font-family:var(--font-body);resize:vertical;"></textarea>
                   <div style="display:flex;gap:10px;">
                     <button onclick="document.getElementById('cancellation-modal').style.display='none';" style="flex:1;padding:11px;background:transparent;color:rgba(148,163,184,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:10px;font-weight:600;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Keep My Plan</button>
-                    <button onclick="document.getElementById('cancellation-modal').style.display='none';showToast('Cancellation request submitted. We\u2019ll be in touch within 24 hours.');" style="flex:1;padding:11px;background:rgba(239,68,68,0.12);color:#EF4444;border:1px solid rgba(239,68,68,0.25);border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Confirm</button>
+                    <button id="cancellation-confirm" onclick="submitCancellationRequest()" style="flex:1;padding:11px;background:rgba(239,68,68,0.12);color:#EF4444;border:1px solid rgba(239,68,68,0.25);border-radius:10px;font-weight:700;font-size:0.875rem;cursor:pointer;font-family:var(--font-body);">Confirm</button>
                   </div>
                 </div>
               </div>

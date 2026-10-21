@@ -13,6 +13,7 @@
 const ALLOWLIST = [
   // Pages
   'index.html',
+  'audit.html',
   'portal.html',
   'signup.html',
   'admin.html',
@@ -21,6 +22,9 @@ const ALLOWLIST = [
   'deletion-status.html',
   // Styles (shared by index, portal, signup)
   'base.css',
+  'chrome.css', // index.html, audit.html — near-black chrome mark pages
+  'home-mark.js', // index.html — WebGL liquid-chrome mark
+  'audit.js', // audit.html — renders the audit report
   'style.css',
   // Self-hosted fonts (portal.html). Filenames are content-hashed; see fonts.css.
   'fonts.css',
