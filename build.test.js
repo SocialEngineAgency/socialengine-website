@@ -10,7 +10,7 @@ const BUILD_SCRIPT = path.join(ROOT, 'scripts', 'build-site.js');
 
 // Pages a visitor can land on directly. They are not all linked from somewhere
 // (admin.html is reached by URL), so the reference scan below cannot find them.
-const ENTRY_PAGES = ['index.html', 'portal.html', 'signup.html', 'admin.html', 'privacy.html', 'terms.html'];
+const ENTRY_PAGES = ['index.html', 'audit.html', 'portal.html', 'signup.html', 'admin.html', 'privacy.html', 'terms.html'];
 
 // Tracked files that must never reach the publish directory. server.js is a
 // stale copy of the backend and was being served from the live site.
