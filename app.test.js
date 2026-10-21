@@ -358,3 +358,16 @@ test('global error handlers log and show user-friendly toasts', () => {
   assert.equal(latestToastText(app), 'Unable to save your changes right now.');
   assert.equal(app.consoleErrors.length, 2);
 });
+
+test('audit responses route to /audit.html: report, pending, emailed-only, or incomplete', () => {
+  const hooks = loadApp(async () => ({})).window.__SOCIALENGINE_TEST_HOOKS__;
+  const routeAuditResponse = (d) => JSON.parse(JSON.stringify(hooks.routeAuditResponse(d))); // vm objects: compare as plain data
+  const auditPageUrl = hooks.auditPageUrl;
+  const report = { headline: 'Hi' };
+  assert.deepEqual(routeAuditResponse({ success: true, audit: {}, report_id: 'abc123def', report }), { kind: 'report', id: 'abc123def', report });
+  assert.deepEqual(routeAuditResponse({ success: true, pending: true, report_id: 'abc123def' }), { kind: 'pending', id: 'abc123def' });
+  assert.deepEqual(routeAuditResponse({ success: true, audit: { overall_score: 70 } }), { kind: 'emailed' });
+  assert.deepEqual(routeAuditResponse({ success: true }), { kind: 'incomplete' });
+  assert.deepEqual(routeAuditResponse({ success: true, pending: true, report_id: '../etc' }), { kind: 'incomplete' });
+  assert.equal(auditPageUrl('abc123def'), '/audit.html?id=abc123def');
+});
