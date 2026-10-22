@@ -84,8 +84,38 @@ test('coach chat keeps one still per Library item and stops at 6', () => {
 
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   assert.match(src, /coachChatReferences/);
+  assert.match(src, /addCoachReferences/);
   assert.match(src, /reference_images/);
   assert.match(src, /data-ref-remove/);
+  assert.match(src, /id="chat-upload-input" accept="image\/\*,video\/\*" multiple/);
+});
+
+test('adding a Coach reference keeps the ones already attached', () => {
+  const { addCoachReferences, coachChatReferences } = require('../portal-assets');
+  const existing = [
+    { id: 'a1', url: 'https://store.test/1.png', title: 'One', role: 'subject', libraryRole: 'character' },
+    { id: 'a2', url: 'https://store.test/2.png', title: 'Two', role: 'subject', libraryRole: 'character' },
+    { id: 'a3', url: 'https://store.test/3.png', title: 'Three', role: 'look', libraryRole: 'style' },
+    { id: 'a4', url: 'https://store.test/4.png', title: 'Four', role: 'look', libraryRole: 'scene' },
+  ];
+  const fifth = coachChatReferences([
+    { id: 'a5', kind: 'item', name: 'Fifth', url: 'https://store.test/5.png' },
+  ], ['a5']);
+  const merged = addCoachReferences(existing, fifth.refs);
+  assert.deepEqual(merged.refs.map((r) => r.title), ['One', 'Two', 'Three', 'Four', 'Fifth']);
+  assert.equal(merged.refs[4].role, 'subject');
+  assert.equal(merged.omitted, 0);
+
+  const again = addCoachReferences(merged.refs, fifth.refs);
+  assert.equal(again.refs.length, 5);
+
+  const extra = Array.from({ length: 3 }, (_, i) => ({
+    id: `b${i}`, url: `https://store.test/b${i}.png`, title: `B${i}`, role: 'look', libraryRole: 'style',
+  }));
+  const capped = addCoachReferences(merged.refs, extra);
+  assert.deepEqual(capped.refs.map((r) => r.title), ['One', 'Two', 'Three', 'Four', 'Fifth', 'B0']);
+  assert.equal(capped.total, 8);
+  assert.equal(capped.omitted, 2);
 });
 
 test('labelOf falls back to the kind label', () => {

@@ -86,6 +86,32 @@ function coachChatReferences(list, ids) {
   };
 }
 
+// A later Library pick or upload is added onto the chips already showing.
+// The same URL is not added twice. Past 6, the earlier chips stay and the rest are omitted.
+function addCoachReferences(existing, incoming) {
+  const refs = [];
+  const seen = new Set();
+  for (const raw of [...(existing || []), ...(incoming || [])]) {
+    if (!raw || typeof raw !== 'object') continue;
+    const url = String(raw.url || '').trim();
+    if (!/^https:\/\//i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    const role = raw.role === 'look' || raw.role === 'source' || raw.role === 'subject' ? raw.role : 'subject';
+    refs.push({
+      id: raw.id ? String(raw.id) : '',
+      url,
+      title: String(raw.title || 'Reference').slice(0, 80),
+      role,
+      libraryRole: raw.libraryRole ? String(raw.libraryRole) : '',
+    });
+  }
+  return {
+    refs: refs.slice(0, COACH_REF_CAP),
+    total: refs.length,
+    omitted: Math.max(0, refs.length - COACH_REF_CAP),
+  };
+}
+
 function roleForKind(kind) {
   if (kind === 'character') return 'character';
   if (kind === 'logo' || kind === 'style') return 'style';
@@ -179,13 +205,13 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
     filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
-    coachChatReferences, COACH_REF_CAP, persistFamily, retagKinds,
+    coachChatReferences, addCoachReferences, COACH_REF_CAP, persistFamily, retagKinds,
   };
 }
 if (typeof window !== 'undefined') {
   window.SEAssets = {
     ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
     filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
-    coachChatReferences, COACH_REF_CAP, persistFamily, retagKinds,
+    coachChatReferences, addCoachReferences, COACH_REF_CAP, persistFamily, retagKinds,
   };
 }

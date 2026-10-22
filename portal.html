@@ -11509,7 +11509,7 @@
     let _brandLibPastItems = [];
     let _brandLibBusy = {};
 
-    function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo', 'style'], onPick } = {}) {
+    function openLibraryPicker({ title = 'Library', kinds = ['character', 'item', 'setting', 'scene', 'logo', 'style'], onPick, confirmLabel = 'Use selected' } = {}) {
       return fetchAssetLibrary().then((assets) => {
         const helpers = window.SEAssets || {};
         const rows = (assets || []).filter((a) => !kinds.length || kinds.includes(a.kind));
@@ -11523,7 +11523,7 @@
           '<button type="button" id="se-lib-picker-close" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:1.4rem;line-height:1;">×</button></div>' +
           '<div id="se-lib-picker-grid" class="se-pick-grid"></div>' +
           '<div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:flex-end;gap:8px;">' +
-          '<button type="button" id="se-lib-picker-use" class="settings-tab" style="padding:8px 14px;">Use selected</button></div>';
+          '<button type="button" id="se-lib-picker-use" class="settings-tab" style="padding:8px 14px;">' + String(confirmLabel || 'Use selected').replace(/[<>]/g, '') + '</button></div>';
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
         const grid = panel.querySelector('#se-lib-picker-grid');
@@ -13068,12 +13068,12 @@
               </button>
               <button type="button" id="chat-attach-upload" style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.25);color:#A78BFA;font-size:0.72rem;font-weight:600;padding:6px 11px;border-radius:7px;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:5px;">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                + Upload image/video
+                + Upload images
               </button>
               <button type="button" id="chat-attach-library" style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.25);color:#A78BFA;font-size:0.72rem;font-weight:600;padding:6px 11px;border-radius:7px;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:5px;">
                 + Library
               </button>
-              <input type="file" id="chat-upload-input" accept="image/*,video/*" style="display:none;">
+              <input type="file" id="chat-upload-input" accept="image/*,video/*" multiple style="display:none;">
             </div>
             <div class="chat-input-bar">
               <textarea class="chat-input" id="chat-input" placeholder="Ask your coach…" rows="1"></textarea>
@@ -14108,15 +14108,19 @@
       document.getElementById('chat-attach-library')?.addEventListener('click', () => {
         openLibraryPicker({
           title: 'Library references (up to 6)',
+          confirmLabel: 'Add selected',
           kinds: ['character', 'item', 'setting', 'scene', 'logo', 'style'],
           onPick: (picked, ids) => {
             const pack = (window.SEAssets && window.SEAssets.coachChatReferences)
               ? window.SEAssets.coachChatReferences(picked, ids)
               : { refs: [], total: 0, omitted: 0 };
-            if (!pack.refs.length) return;
-            _seSetCoachRefs(pack.refs);
-            if (pack.omitted && typeof showToast === 'function') {
-              showToast('Using 6 of ' + pack.total + '. Remove one to add another.');
+            const merged = (window.SEAssets && window.SEAssets.addCoachReferences)
+              ? window.SEAssets.addCoachReferences(window._seCoachRefs, pack.refs)
+              : { refs: pack.refs, total: pack.total, omitted: pack.omitted };
+            if (!merged.refs.length) return;
+            _seSetCoachRefs(merged.refs);
+            if (merged.omitted && typeof showToast === 'function') {
+              showToast('Using 6 of ' + merged.total + '. Remove one to add another.');
             }
           },
         });
@@ -14126,32 +14130,37 @@
       if (attachUploadBtn && uploadInput) {
         attachUploadBtn.addEventListener('click', () => uploadInput.click());
         uploadInput.addEventListener('change', () => {
-          const file = uploadInput.files?.[0];
-          if (!file) return;
-          if (file.size > 20 * 1024 * 1024) {
-            if (typeof showToast === 'function') showToast('File too large — 20MB max.');
-            return;
-          }
+          const files = [...(uploadInput.files || [])];
+          if (!files.length) return;
           (async () => {
             try {
-              const fd = new FormData();
-              fd.append('file', file, file.name || 'coach-attach.png');
-              const up = await apiFetch(`${API}/api/studio/upload-image`, { method: 'POST', headers: authHeaders(), body: fd });
-              const upData = await up.json().catch(() => ({}));
-              if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
-              const next = (Array.isArray(window._seCoachRefs) && window._seCoachRefs.length)
+              let next = (Array.isArray(window._seCoachRefs) && window._seCoachRefs.length)
                 ? window._seCoachRefs.slice()
                 : [];
               if (!next.length && /^https:\/\//i.test(String(window._seCoachAttachedImage || ''))) {
                 next.push({ url: window._seCoachAttachedImage, title: 'Attached image', role: 'source', libraryRole: 'scene' });
               }
-              if (next.length >= 6) {
-                if (typeof showToast === 'function') showToast('6 references max. Remove one to add another.');
-                return;
+              let tooBig = 0;
+              let stopped = false;
+              for (const file of files) {
+                if (next.length >= 6) { stopped = true; break; }
+                if (file.size > 20 * 1024 * 1024) { tooBig += 1; continue; }
+                const fd = new FormData();
+                fd.append('file', file, file.name || 'coach-attach.png');
+                const up = await apiFetch(`${API}/api/studio/upload-image`, { method: 'POST', headers: authHeaders(), body: fd });
+                const upData = await up.json().catch(() => ({}));
+                if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
+                const incoming = [{ url: upData.url, title: file.name || 'Upload', role: 'subject', libraryRole: 'scene' }];
+                const merged = (window.SEAssets && window.SEAssets.addCoachReferences)
+                  ? window.SEAssets.addCoachReferences(next, incoming)
+                  : { refs: next.concat(incoming).slice(0, 6), omitted: next.length >= 6 ? 1 : 0 };
+                if (merged.omitted && merged.refs.length === next.length) { stopped = true; break; }
+                next = merged.refs;
+                window._seCoachAttachedProduct = '';
+                _seSetCoachRefs(next);
               }
-              next.push({ url: upData.url, title: file.name || 'Upload', role: 'subject', libraryRole: 'scene' });
-              window._seCoachAttachedProduct = '';
-              _seSetCoachRefs(next);
+              if (tooBig && typeof showToast === 'function') showToast(tooBig === 1 ? 'File too large — 20MB max.' : tooBig + ' files were over 20MB.');
+              if (stopped && typeof showToast === 'function') showToast('6 references max. Remove one to add another.');
             } catch (err) {
               if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error');
             } finally {
