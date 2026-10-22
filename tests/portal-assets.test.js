@@ -48,6 +48,46 @@ test('libraryOffer and refsFromAssets tag Char, Item, and Setting', () => {
   assert.equal(refs.find((r) => r.url.includes('classroom')).role, 'setting');
 });
 
+test('coach chat keeps one still per Library item and stops at 6', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { coachChatReferences, COACH_REF_CAP } = require('../portal-assets');
+  assert.equal(COACH_REF_CAP, 6);
+  const maya = {
+    id: 'ast_maya',
+    kind: 'character',
+    name: 'Maya',
+    url: 'https://store.test/maya.png',
+    views: [{ label: 'side', url: 'https://store.test/maya-side.png' }],
+  };
+  const packed = coachChatReferences([
+    maya,
+    { id: 'ast_suit', kind: 'style', name: 'Black suit', url: 'https://store.test/suit.png' },
+    { id: 'ast_item', kind: 'item', name: 'Lantern', url: 'https://store.test/lantern.png' },
+    { id: 'ast_room', kind: 'setting', name: 'Porch', url: 'http://insecure.test/porch.png' },
+    { id: 'ast_dup', kind: 'scene', name: 'Same', url: 'https://store.test/maya.png' },
+  ], ['ast_suit', 'ast_maya', 'ast_room', 'ast_item', 'ast_dup', 'missing']);
+  assert.deepEqual(packed.refs.map((r) => r.role), ['look', 'subject', 'subject']);
+  assert.deepEqual(packed.refs.map((r) => r.title), ['Black suit', 'Maya', 'Lantern']);
+  assert.equal(packed.refs[1].libraryRole, 'character');
+  assert.equal(packed.omitted, 0);
+  assert.ok(!packed.refs.some((r) => r.url.includes('maya-side')));
+
+  const many = Array.from({ length: 8 }, (_, i) => ({
+    id: `a${i}`, kind: 'character', name: `C${i}`, url: `https://store.test/${i}.png`,
+  }));
+  const capped = coachChatReferences(many, many.map((a) => a.id));
+  assert.equal(capped.refs.length, 6);
+  assert.equal(capped.total, 8);
+  assert.equal(capped.omitted, 2);
+  assert.equal(capped.refs[0].title, 'C0');
+
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /coachChatReferences/);
+  assert.match(src, /reference_images/);
+  assert.match(src, /data-ref-remove/);
+});
+
 test('labelOf falls back to the kind label', () => {
   assert.equal(labelOf({ name: 'Silk end', kind: 'outro' }), 'Silk end');
   assert.equal(labelOf({ kind: 'music' }), 'Music');

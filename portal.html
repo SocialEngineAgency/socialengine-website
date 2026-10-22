@@ -13613,7 +13613,7 @@
 
       async function sendMessage() {
         const userText = inputEl.value.trim();
-        if (!userText && !window._seCoachAttachedProduct && !window._seCoachAttachedImage) return;
+        if (!userText && !window._seCoachAttachedProduct && !window._seCoachAttachedImage && !(Array.isArray(window._seCoachRefs) && window._seCoachRefs.length)) return;
         inputEl.value = '';
         inputEl.style.height = 'auto';
         sendBtn.disabled = true;
@@ -13625,7 +13625,15 @@
         if (window._seCoachAttachedProduct) {
           ctxParts.push('Attached product reference: "' + window._seCoachAttachedProduct + '" (use as the hero product in any content you generate).');
         }
-        let attachedImageUrl = String(window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '').trim();
+        const coachRefs = (Array.isArray(window._seCoachRefs) ? window._seCoachRefs : [])
+          .filter((r) => r && /^https:\/\//i.test(String(r.url || '')))
+          .slice(0, 6);
+        let attachedImageUrl = String(
+          (coachRefs[0] && coachRefs[0].url)
+          || window._seCoachAttachedImage
+          || window.__SE_COACH_MASTER_IMAGE
+          || ''
+        ).trim();
         if (attachedImageUrl.startsWith('data:image/')) {
           try {
             const blob = await (await fetch(attachedImageUrl)).blob();
@@ -13644,7 +13652,13 @@
           }
         }
         if (!/^https:\/\//i.test(attachedImageUrl)) attachedImageUrl = '';
-        if (attachedImageUrl) {
+        if (coachRefs.length) {
+          const named = coachRefs.map((r, i) => {
+            const label = r.role === 'look' ? 'look' : (r.role === 'source' ? 'source' : 'subject');
+            return (i + 1) + '. ' + String(r.title || 'Reference') + ' (' + label + ')';
+          }).join('; ');
+          ctxParts.push('Attached references: ' + named + '. Use every one. Subjects stay the same person or item. Looks set the style.');
+        } else if (attachedImageUrl) {
           ctxParts.push('Attached custom image/video asset (user uploaded) — use as reference or image-to-video base.');
         }
         if (ctxParts.length) {
@@ -13669,6 +13683,12 @@
             body: JSON.stringify({
               message,
               attached_image_url: attachedImageUrl,
+              reference_images: coachRefs.map((r) => ({
+                url: r.url,
+                role: r.role === 'look' || r.role === 'style' || r.role === 'source' ? r.role : 'subject',
+                title: String(r.title || '').slice(0, 80),
+              })),
+              style_image_urls: coachRefs.filter((r) => r.role === 'look' || r.role === 'style').map((r) => r.url),
               projectId: activeProjectId || undefined,
               threadId: activeThreadId || undefined,
             })
@@ -13751,21 +13771,25 @@
               '<button type="button" data-lib-no style="background:transparent;border:1px solid rgba(255,255,255,0.12);color:#94A3B8;font-size:0.72rem;padding:5px 10px;border-radius:7px;cursor:pointer;">Skip</button>';
             actions.after(bar);
             bar.querySelector('[data-lib-yes]').addEventListener('click', () => {
-              const refs = window.SEAssets.refsFromAssets(assets, offer.asset_ids);
-              window._seCoachLibraryIds = offer.asset_ids.slice();
-              window._seCoachLibraryRefs = refs;
-              const firstChar = refs.find((r) => r.role === 'character') || refs[0];
-              if (firstChar) window._seCoachAttachedImage = firstChar.url;
+              const pack = (window.SEAssets && window.SEAssets.coachChatReferences)
+                ? window.SEAssets.coachChatReferences(assets, offer.asset_ids)
+                : { refs: window.SEAssets.refsFromAssets(assets, offer.asset_ids).slice(0, 6), omitted: 0, total: 6 };
+              _seSetCoachRefs(pack.refs);
+              const refs = window._seCoachLibraryRefs || [];
               coachActionPayloads.forEach((p, idx) => {
                 if (!p || p.type === 'regenerate') return;
                 coachActionPayloads[idx] = Object.assign({}, p, {
-                  library_asset_ids: offer.asset_ids.slice(),
+                  library_asset_ids: (window._seCoachLibraryIds || []).slice(),
                   references: refs,
                   ref_image_urls: refs.map((r) => r.url),
-                  attached_image_url: (firstChar && firstChar.url) || p.attached_image_url,
+                  attached_image_url: (refs[0] && refs[0].url) || p.attached_image_url,
                 });
               });
-              if (typeof showToast === 'function') showToast('Library refs will follow Create this now', 'success');
+              if (typeof showToast === 'function') {
+                showToast(pack.omitted
+                  ? ('Using 6 of ' + pack.total + '. Remove one to add another.')
+                  : 'Library refs will follow Create this now', pack.omitted ? undefined : 'success');
+              }
               bar.remove();
             });
             bar.querySelector('[data-lib-no]').addEventListener('click', () => {
@@ -13911,6 +13935,26 @@
       // ━━━ Coach attach toolbar: reference product + upload image/video ━━━
       window._seCoachAttachedProduct = window._seCoachAttachedProduct || '';
       window._seCoachAttachedImage = window._seCoachAttachedImage || '';
+      window._seCoachRefs = Array.isArray(window._seCoachRefs) ? window._seCoachRefs : [];
+
+      function _seChipEsc(value) {
+        return String(value || '').replace(/[&<>"']/g, (c) => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        }[c]));
+      }
+
+      function _seSetCoachRefs(refs) {
+        const list = (Array.isArray(refs) ? refs : []).filter((r) => r && r.url).slice(0, 6);
+        window._seCoachRefs = list;
+        window._seCoachLibraryRefs = list.map((r) => ({
+          url: r.url,
+          title: r.title || '',
+          role: r.libraryRole || (r.role === 'subject' ? 'character' : 'style'),
+        }));
+        window._seCoachLibraryIds = list.map((r) => r.id).filter(Boolean);
+        window._seCoachAttachedImage = list[0] ? list[0].url : '';
+        _seRenderAttachChips();
+      }
 
       function _seRenderAttachChips() {
         const bar = document.getElementById('chat-attachment-chips');
@@ -13919,36 +13963,70 @@
         if (window._seCoachAttachedProduct) {
           chips.push('<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#E9D5FF;font-size:0.7rem;font-weight:600;padding:4px 10px;border-radius:20px;">' +
             '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg>' +
-            String(window._seCoachAttachedProduct).replace(/[<>]/g, '').slice(0, 40) +
-            ' <button onclick="window._seCoachAttachedProduct=\'\';_seRenderAttachChips();" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
+            _seChipEsc(String(window._seCoachAttachedProduct).slice(0, 40)) +
+            ' <button type="button" data-clear-product style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
             '</span>');
         }
-        if (window._seCoachAttachedImage) {
-          const safeUrl = String(window._seCoachAttachedImage).replace(/[<>]/g, '');
+        const refs = (Array.isArray(window._seCoachRefs) ? window._seCoachRefs : []).slice(0, 6);
+        if (refs.length) {
+          refs.forEach((r, i) => {
+            const label = r.role === 'look' ? 'Look' : (r.role === 'source' ? 'Source' : 'Subject');
+            const title = _seChipEsc(r.title || label);
+            chips.push('<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#E9D5FF;font-size:0.7rem;font-weight:600;padding:4px 10px;border-radius:20px;">' +
+              '<img src="' + _seChipEsc(r.url) + '" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;">' +
+              title + ' · ' + label +
+              (r.id ? '' : ' <button type="button" data-save-lib="' + i + '" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0 4px;font-size:0.68rem;">Save to Library</button>') +
+              ' <button type="button" data-ref-remove="' + i + '" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
+              '</span>');
+          });
+        } else if (window._seCoachAttachedImage) {
+          const safeUrl = _seChipEsc(window._seCoachAttachedImage);
           chips.push('<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#E9D5FF;font-size:0.7rem;font-weight:600;padding:4px 10px;border-radius:20px;">' +
             '<img src="' + safeUrl + '" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;">' +
             'Uploaded asset' +
-            ' <button type="button" data-save-lib style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0 4px;font-size:0.68rem;">Save to Library</button>' +
-            ' <button onclick="window._seCoachAttachedImage=\'\';_seRenderAttachChips();" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
+            ' <button type="button" data-save-lib="single" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0 4px;font-size:0.68rem;">Save to Library</button>' +
+            ' <button type="button" data-ref-remove="single" style="background:none;border:none;color:#E9D5FF;cursor:pointer;padding:0;font-size:1.1em;line-height:1;">×</button>' +
             '</span>');
         }
         bar.innerHTML = chips.join('');
-        bar.querySelector('[data-save-lib]')?.addEventListener('click', async () => {
-          const url = String(window._seCoachAttachedImage || '').trim();
-          if (!/^https?:\/\//i.test(url)) return;
-          const kind = window.prompt('Save as character, item, setting, scene, logo, or style?', 'style') || 'style';
-          try {
-            const res = await apiFetch('/api/assets/from-url', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url, kind: kind.trim(), name: kind.trim() }),
-            });
-            const d = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(d.error || 'Could not save to Library');
-            if (typeof showToast === 'function') showToast('Saved to Library', 'success');
-          } catch (err) {
-            if (typeof showToast === 'function') showToast(err.message || 'Save failed', 'error');
-          }
+        bar.querySelector('[data-clear-product]')?.addEventListener('click', () => {
+          window._seCoachAttachedProduct = '';
+          _seRenderAttachChips();
+        });
+        bar.querySelectorAll('[data-ref-remove]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            if (btn.getAttribute('data-ref-remove') === 'single') {
+              window._seCoachAttachedImage = '';
+              window.__SE_COACH_MASTER_IMAGE = '';
+              _seRenderAttachChips();
+              return;
+            }
+            const next = (window._seCoachRefs || []).slice();
+            next.splice(Number(btn.getAttribute('data-ref-remove')), 1);
+            _seSetCoachRefs(next);
+          });
+        });
+        bar.querySelectorAll('[data-save-lib]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const key = btn.getAttribute('data-save-lib');
+            const url = key === 'single'
+              ? String(window._seCoachAttachedImage || '').trim()
+              : String((window._seCoachRefs[Number(key)] || {}).url || '').trim();
+            if (!/^https?:\/\//i.test(url)) return;
+            const kind = window.prompt('Save as character, item, setting, scene, logo, or style?', 'style') || 'style';
+            try {
+              const res = await apiFetch('/api/assets/from-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, kind: kind.trim(), name: kind.trim() }),
+              });
+              const d = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(d.error || 'Could not save to Library');
+              if (typeof showToast === 'function') showToast('Saved to Library', 'success');
+            } catch (err) {
+              if (typeof showToast === 'function') showToast(err.message || 'Save failed', 'error');
+            }
+          });
         });
       }
       window._seRenderAttachChips = _seRenderAttachChips;
@@ -14012,6 +14090,9 @@
               card.addEventListener('click', () => {
                 window._seCoachAttachedProduct = card.dataset.title;
                 window._seCoachAttachedImage = '';
+                window._seCoachRefs = [];
+                window._seCoachLibraryRefs = [];
+                window._seCoachLibraryIds = [];
                 _seRenderAttachChips();
                 document.body.removeChild(overlay);
               });
@@ -14026,17 +14107,17 @@
 
       document.getElementById('chat-attach-library')?.addEventListener('click', () => {
         openLibraryPicker({
-          title: 'Use Library refs',
+          title: 'Library references (up to 6)',
           kinds: ['character', 'item', 'setting', 'scene', 'logo', 'style'],
           onPick: (picked, ids) => {
-            const refs = (window.SEAssets && window.SEAssets.refsFromAssets)
-              ? window.SEAssets.refsFromAssets(picked, ids)
-              : picked.map((a) => ({ url: a.url, title: a.name, role: (window.SEAssets && window.SEAssets.roleForKind) ? window.SEAssets.roleForKind(a.kind) : (a.kind === 'character' ? 'character' : (a.kind === 'style' || a.kind === 'logo' ? 'style' : 'scene')) }));
-            window._seCoachLibraryIds = ids.slice();
-            window._seCoachLibraryRefs = refs;
-            const first = refs[0];
-            if (first) window._seCoachAttachedImage = first.url;
-            _seRenderAttachChips();
+            const pack = (window.SEAssets && window.SEAssets.coachChatReferences)
+              ? window.SEAssets.coachChatReferences(picked, ids)
+              : { refs: [], total: 0, omitted: 0 };
+            if (!pack.refs.length) return;
+            _seSetCoachRefs(pack.refs);
+            if (pack.omitted && typeof showToast === 'function') {
+              showToast('Using 6 of ' + pack.total + '. Remove one to add another.');
+            }
           },
         });
       });
@@ -14058,9 +14139,19 @@
               const up = await apiFetch(`${API}/api/studio/upload-image`, { method: 'POST', headers: authHeaders(), body: fd });
               const upData = await up.json().catch(() => ({}));
               if (!up.ok || !upData.url) throw new Error(upData.error || 'Upload failed');
-              window._seCoachAttachedImage = upData.url;
+              const next = (Array.isArray(window._seCoachRefs) && window._seCoachRefs.length)
+                ? window._seCoachRefs.slice()
+                : [];
+              if (!next.length && /^https:\/\//i.test(String(window._seCoachAttachedImage || ''))) {
+                next.push({ url: window._seCoachAttachedImage, title: 'Attached image', role: 'source', libraryRole: 'scene' });
+              }
+              if (next.length >= 6) {
+                if (typeof showToast === 'function') showToast('6 references max. Remove one to add another.');
+                return;
+              }
+              next.push({ url: upData.url, title: file.name || 'Upload', role: 'subject', libraryRole: 'scene' });
               window._seCoachAttachedProduct = '';
-              _seRenderAttachChips();
+              _seSetCoachRefs(next);
             } catch (err) {
               if (typeof showToast === 'function') showToast(err.message || 'Upload failed', 'error');
             } finally {
