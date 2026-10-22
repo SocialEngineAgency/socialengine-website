@@ -131,6 +131,7 @@ function normalizeCoachDestination(value, text) {
   if (coachNeedsStoryboard(text) && !isCoachDesignAsk(text)) return 'storyboard';
   const inferred = inferCoachDestination(text);
   const d = String(value || '').trim().toLowerCase();
+  if (d === 'storyboard' && !isCoachDesignAsk(text)) return 'storyboard';
   let dest = (d === 'animate' || d === 'design' || d === 'studio')
     ? d
     : ((d === 'carousel' || d === 'post') ? 'design' : inferred);
