@@ -1830,6 +1830,7 @@ html.nl .anim-brief-shot-secs { font: 500 11px var(--nl-mono); color: var(--nl-f
 html.nl .anim-shell.nl-anim-on .anim-canvas-header { align-items: center; }
 html.nl .anim-shell.nl-anim-on .anim-canvas-header .nl-sbar { order: -1; }
 html.nl .nl-sbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; flex: 1 1 auto; min-width: 0; }
+html.nl .nl-sbar__new { margin-left: auto; }
 html.nl .nl-sbar[hidden] { display: none; }
 html.nl .anim-shell.nl-story-mode .anim-canvas-header .nl-steps,
 html.nl .anim-shell.nl-story-mode .anim-canvas-header .nl-aproj,

@@ -445,8 +445,10 @@
     if (!head) return;
     const bar = head.querySelector('.nl-sbar');
     if (!bar) return;
-    if (!S.on || (S.view === 'start' && !S.kit)) { bar.hidden = true; bar.innerHTML = ''; return; }
+    if (!S.on) { bar.hidden = true; bar.innerHTML = ''; return; }
     bar.hidden = false;
+    const fresh = `<button type="button" class="nl-sbtn nl-sbtn--primary nl-sbar__new" data-kit-new>${svg(I.plus, 13)}New storyboard</button>`;
+    if (S.view === 'start' && !S.kit) { bar.innerHTML = fresh; return; }
     const k = S.kit;
     const faces = k ? (k.elements || []).filter((e) => e.type === 'character' && e.image_url).slice(0, 2) : [];
     const stepIdx = { kit: 0, story: 1, board: 2, start: -1 }[S.view];
@@ -459,7 +461,7 @@
     const menu = S.menu ? `<div class="nl-skitpick__menu" role="menu">
         ${S.kits.map((x) => `<button type="button" role="menuitem" data-kit-open="${esc(x.id)}" class="${k && x.id === k.id ? 'is-on' : ''}"><span class="nl-skitpick__mt">${esc(x.title)}</span><span class="nl-skitpick__ms">${esc(countLine(x.counts || {}, x.reel_count))}</span></button>`).join('')}
         <hr>
-        <button type="button" role="menuitem" data-kit-new>${svg(I.plus, 13)}New story kit</button>
+        <button type="button" role="menuitem" data-kit-new>${svg(I.plus, 13)}New storyboard</button>
         <button type="button" role="menuitem" data-go-start>All story kits</button>
       </div>` : '';
     bar.innerHTML = `
@@ -470,7 +472,8 @@
         </button>${menu}
       </div>
       <ol class="nl-ssteps" aria-label="Steps">${steps}</ol>
-      ${k && S.view !== 'board' ? `<label class="nl-skitlook"><span>Look</span><select data-kit-look aria-label="Look for this kit">${LOOKS.map(([v, l]) => `<option value="${v}" ${k.look === v ? 'selected' : ''}>${l}</option>`).join('')}</select>${svg(I.chev, 12, 2)}</label>` : ''}`;
+      ${k && S.view !== 'board' ? `<label class="nl-skitlook"><span>Look</span><select data-kit-look aria-label="Look for this kit">${LOOKS.map(([v, l]) => `<option value="${v}" ${k.look === v ? 'selected' : ''}>${l}</option>`).join('')}</select>${svg(I.chev, 12, 2)}</label>` : ''}
+      ${fresh}`;
   }
 
   function render() {
@@ -525,7 +528,7 @@
     const nk = S.newKit;
     if (!nk) {
       return `<div class="nl-skc nl-skc--new">
-        <button type="button" class="nl-skc__newb" data-kit-new><span class="nl-skc__plus">${svg(I.plus, 16)}</span><span class="nl-skc__t">New story kit</span><span class="nl-skc__s">Make your cast and places first, then lay out the scenes.</span></button>
+        <button type="button" class="nl-skc__newb" data-kit-new><span class="nl-skc__plus">${svg(I.plus, 16)}</span><span class="nl-skc__t">New storyboard</span><span class="nl-skc__s">Make your cast and places first, then lay out the scenes.</span></button>
         <button type="button" class="nl-slink" data-kit-from>or start from a past reel</button>
       </div>`;
     }

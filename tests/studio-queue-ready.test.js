@@ -8,6 +8,7 @@ const {
   captionForQueue,
   queueReviewStatus,
   openContentReviewAfterQueue,
+  reviewSlideUrls,
   cardMediaSrc,
   sortPostsForReview,
   postsForContentReview,
@@ -304,6 +305,31 @@ test('Video Studio post link gives up when the user leaves Content', async () =>
   const doc = { querySelector: () => null };
   const ok = await openPostWhenReady('recAbCdEfGh123456', { doc, isContentTab: () => false, intervalMs: 1 });
   assert.equal(ok, false);
+});
+
+test('a carousel review lists every slide and does not repeat the cover thumbnail', () => {
+  const slides = reviewSlideUrls({
+    content_type: 'carousel',
+    image_url: 'https://cdn.example/cover.png',
+    media: [
+      { url: 'https://cdn.example/slide-1.png' },
+      { url: 'https://cdn.example/slide-2.png' },
+      { url: 'https://cdn.example/slide-1.png' },
+    ],
+  });
+  assert.deepEqual(slides, ['https://cdn.example/slide-1.png', 'https://cdn.example/slide-2.png']);
+  assert.deepEqual(reviewSlideUrls({ image_url: 'https://cdn.example/only.png' }), ['https://cdn.example/only.png']);
+  assert.deepEqual(reviewSlideUrls({ media: '[{"url":"https://cdn.example/a.png"},{"url":"https://cdn.example/b.png"}]' }), ['https://cdn.example/a.png', 'https://cdn.example/b.png']);
+  assert.deepEqual(reviewSlideUrls({ image_url: '/portal.html' }), []);
+
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /reviewSlideUrls\(post\)/);
+  assert.match(src, /aria-label="Previous slide"/);
+  assert.match(src, /aria-label="Next slide"/);
+  assert.match(src, /studioSlideStep/);
+  const story = fs.readFileSync(path.join(__dirname, '..', 'story-builder.js'), 'utf8');
+  assert.match(story, /New storyboard/);
+  assert.match(story, /nl-sbar__new/);
 });
 
 test('portal applies ?post= only on the Content tab and strips it from the URL', () => {

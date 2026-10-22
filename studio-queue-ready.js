@@ -26,6 +26,37 @@ function openContentReviewAfterQueue(doc) {
   return true;
 }
 
+/** Every still on a review card, in order. image_url is slide 1's thumbnail, so it is not added again when the slides are already listed. */
+function reviewSlideUrls(post) {
+  const isHttp = (u) => {
+    const s = String(u || '').trim();
+    return /^https?:\/\//i.test(s) && !s.includes('portal.html');
+  };
+  const urls = [];
+  const push = (u) => {
+    const s = String(u || '').trim();
+    if (!isHttp(s) || urls.includes(s)) return;
+    urls.push(s);
+  };
+  const list = (raw) => {
+    let items = raw;
+    if (typeof items === 'string' && items.trim().startsWith('[')) {
+      try { items = JSON.parse(items); } catch { return; }
+    }
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      if (typeof item === 'string') push(item);
+      else if (item && typeof item === 'object') push(item.url || item.download_url);
+    }
+  };
+  if (!post || typeof post !== 'object') return [];
+  list(post.media);
+  if (!urls.length) list(post.slide_urls);
+  if (!urls.length) list(post.image);
+  if (!urls.length) push(post.image_url);
+  return urls.slice(0, 20);
+}
+
 function cardMediaSrc(url, apiBase) {
   const u = String(url || '').trim();
   if (!u) return '';
@@ -239,6 +270,7 @@ if (typeof module !== 'undefined' && module.exports) {
     captionForQueue,
     queueReviewStatus,
     openContentReviewAfterQueue,
+    reviewSlideUrls,
     cardMediaSrc,
     contentReviewWhen,
     sortPostsForReview,
@@ -265,6 +297,7 @@ if (typeof window !== 'undefined') {
     captionForQueue,
     queueReviewStatus,
     openContentReviewAfterQueue,
+    reviewSlideUrls,
     cardMediaSrc,
     contentReviewWhen,
     sortPostsForReview,

@@ -29,7 +29,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@1.41.0/dist/umd/lucide.min.js" defer></script>
   <!-- fabric.js CDN retired with Creation Studio canvas -->
   <!-- creation-studio.js (Fabric) retired from Studio — kept on disk, not loaded -->
-  <script src="./studio-queue-ready.js?v=20261012-post-link"></script>
+  <script src="./studio-queue-ready.js?v=20261022slides"></script>
   <script src="./design-workspace.js?v=20260919-tmpl-direct"></script>
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
@@ -38,7 +38,7 @@
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261020work"></script>
   <script src="./animation-studio.js?v=20261020ship" defer></script>
-  <script src="./story-builder.js?v=20261018vw1" defer></script>
+  <script src="./story-builder.js?v=20261022board" defer></script>
   <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
@@ -1073,6 +1073,12 @@
     .studio-modal__preview video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; border-radius: 0; }
     .studio-modal__preview-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--color-text-muted); gap: 8px; }
     .studio-modal__preview-empty svg { width: 48px; height: 48px; opacity: 0.3; }
+    .studio-slide { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .studio-slide__nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.22); background: rgba(0,0,0,0.55); color: #fff; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .studio-slide__nav--prev { left: 12px; }
+    .studio-slide__nav--next { right: 12px; }
+    .studio-slide__nav:disabled { opacity: 0.28; cursor: default; }
+    .studio-slide__count { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2; padding: 4px 10px; border-radius: 999px; background: rgba(0,0,0,0.55); color: #fff; font-size: 0.72rem; font-weight: 600; }
     .studio-modal__details { padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; }
     .studio-modal__meta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-right: 40px; }
     .studio-modal__meta-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 6px; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -3148,7 +3154,7 @@
   #fc-builder .fc-field input,#fc-builder .fc-field select,#fc-builder .fc-field textarea{padding:9px 10px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:8px;color:var(--color-text);font-size:0.82rem;font-weight:400;font-family:inherit;}
 </style>
 <!-- Adobe Express Embed SDK v4 -->
-  <link rel="stylesheet" href="./new-look.css?v=20261018posts">
+  <link rel="stylesheet" href="./new-look.css?v=20261022board">
   <script src="./new-look.js?v=20261016g" defer></script>
   <script src="./nl-cal-panels.js?v=20261017cal1" defer></script>
 </head>
@@ -4442,9 +4448,32 @@
       if (typeof nlRvMarkSel === 'function') nlRvMarkSel();
     };
 
+    window.studioSlideStep = function(delta) {
+      const show = window.__studioSlides;
+      if (!show || !Array.isArray(show.srcs) || show.srcs.length < 2) return;
+      const next = show.i + delta;
+      if (next < 0 || next >= show.srcs.length) return;
+      show.i = next;
+      const img = document.getElementById('studio-slide-img');
+      const count = document.getElementById('studio-slide-count');
+      if (img) img.src = show.srcs[show.i];
+      if (count) count.textContent = (show.i + 1) + ' / ' + show.srcs.length;
+      document.querySelectorAll('.studio-slide__nav').forEach((btn) => {
+        const dir = Number(btn.getAttribute('data-slide'));
+        btn.disabled = dir < 0 ? show.i === 0 : show.i === show.srcs.length - 1;
+      });
+    };
+
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') closeStudioModal();
       if (!document.getElementById('studio-modal')?.classList.contains('active')) return;
+      const typing = e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.isContentEditable);
+      const slides = window.__studioSlides;
+      if (!typing && slides && slides.srcs && slides.srcs.length > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        studioSlideStep(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
       if (e.key === 'ArrowLeft' && studioCurrentIndex > 0) {
         studioCurrentIndex--;
         renderStudioModalContent();
@@ -4687,10 +4716,16 @@
       const formatKey = contentFormatKey(post);
       const isReel = formatKey === 'reel' || formatKey === 'video';
       const rawImage = resolveImageUrl(post);
-      const imageUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
-        ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
-        : rawImage;
-      const hasImage = !!imageUrl;
+      const mediaBase = (typeof API !== 'undefined' ? API : (window.API || ''));
+      const proxied = (u) => (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
+        ? window.studioQueueReady.cardMediaSrc(u, mediaBase)
+        : u;
+      const slideUrls = (!post.video_url && window.studioQueueReady && typeof window.studioQueueReady.reviewSlideUrls === 'function')
+        ? window.studioQueueReady.reviewSlideUrls(post)
+        : [];
+      window.__studioSlides = slideUrls.length > 1 ? { srcs: slideUrls.map(proxied), i: 0 } : null;
+      const imageUrl = proxied(slideUrls[0] || rawImage);
+      const hasImage = !!(slideUrls.length || rawImage);
       const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
       const hasVideo = !!videoUrl;
       const hasVideoBrief = hookLine.includes('🎬');
@@ -4777,6 +4812,16 @@
               </div>
             </div>
           </div>`;
+      } else if (hasImage && window.__studioSlides) {
+        const show = window.__studioSlides;
+        const alt = String(post.theme || 'Content preview').replace(/"/g, '&quot;');
+        const src = String(show.srcs[0]).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        previewHTML = `<div class="studio-slide">
+          <img id="studio-slide-img" src="${src}" alt="${alt}" style="max-width:100%;max-height:100%;object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'studio-modal__preview-empty',textContent:'Image unavailable'}))">
+          <button type="button" class="studio-slide__nav studio-slide__nav--prev" data-slide="-1" onclick="studioSlideStep(-1)" aria-label="Previous slide" disabled>‹</button>
+          <button type="button" class="studio-slide__nav studio-slide__nav--next" data-slide="1" onclick="studioSlideStep(1)" aria-label="Next slide">›</button>
+          <div class="studio-slide__count" id="studio-slide-count">1 / ${show.srcs.length}</div>
+        </div>`;
       } else if (hasImage) {
         previewHTML = `<img src="${imageUrl}" alt="${(post.theme || 'Content preview').replace(/"/g, '&quot;')}" style="max-width:100%;max-height:100%;object-fit:contain;" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'studio-modal__preview-empty',textContent:'Image unavailable'}))">`;
       } else {
