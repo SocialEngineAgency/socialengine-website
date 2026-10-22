@@ -647,6 +647,15 @@
     </div>`;
   }
 
+  /** One line on a failed look. The full provider error stays on the tile's title. */
+  function lookFailText(error) {
+    const s = String(error || '');
+    if (/timed out/i.test(s)) return 'Took too long';
+    if (/safety|content policy|moderation/i.test(s)) return 'Rejected';
+    if (/403|401|fetch|upstream|not public|hotlink/i.test(s)) return 'Could not read the photo';
+    return 'Did not work';
+  }
+
   const SOURCES = {
     character: [['describe', 'Describe'], ['photo', 'From a photo'], ['mascot', 'From a mascot']],
     place: [['describe', 'Describe'], ['photo', 'From a photo']],
@@ -684,15 +693,21 @@
     // Any number of looks can be picked; each goes into the kit as its own card.
     const picks = (P.picks || []).filter((i) => opts && opts[i] && opts[i].status === 'ready');
     const ready = opts && opts.some((o) => o.status === 'ready');
-    const looks = opts ? `<div class="nl-slooks" style="--cols:${opts.length === 1 ? 2 : Math.min(4, opts.length)}">
-        ${opts.map((o, i) => o.status === 'ready'
-          ? `<div class="nl-slook${picks.includes(i) ? ' is-on' : ''}">
+    const allFailed = !!(opts && opts.length && opts.every((o) => o.status === 'failed'));
+    const failNote = allFailed ? `<div class="nl-snote">${esc(lookFailText((opts.find((o) => o.error) || {}).error))} Try again, or use the photo as it is.</div>` : '';
+    const lookTile = (o, i) => {
+      if (o.status === 'ready') {
+        return `<div class="nl-slook${picks.includes(i) ? ' is-on' : ''}">
               <button type="button" class="nl-slook__pick" data-pick="${i}" aria-pressed="${picks.includes(i)}" aria-label="Look ${i + 1}"><img src="${esc(media(o.url))}" alt=""><span class="nl-slook__n">${picks.includes(i) ? svg(I.check, 11, 3) : i + 1}</span></button>
               <button type="button" class="nl-slook__zoom" data-zoom="${i}" aria-label="Look closer at look ${i + 1}" title="Look closer">${svg(I.expand, 12, 2.2)}</button>
-            </div>`
-          : o.status === 'failed' ? `<div class="nl-slook nl-slook--bad"><span class="nl-slook__n">${i + 1}</span><em>Did not work</em></div>`
-            : `<div class="nl-slook nl-slook--wait" aria-busy="true"><span class="nl-slook__n">${i + 1}</span><i class="nl-sshim"></i></div>`).join('')}
-      </div>` : '';
+            </div>`;
+      }
+      if (o.status === 'failed') {
+        return `<div class="nl-slook nl-slook--bad" title="${esc(o.error || '')}"><span class="nl-slook__n">${i + 1}</span><em>${esc(lookFailText(o.error))}</em></div>`;
+      }
+      return `<div class="nl-slook nl-slook--wait" aria-busy="true"><span class="nl-slook__n">${i + 1}</span><i class="nl-sshim"></i></div>`;
+    };
+    const looks = opts ? `<div class="nl-slooks" style="--cols:${opts.length === 1 ? 2 : Math.min(4, opts.length)}">${opts.map(lookTile).join('')}</div>${failNote}` : '';
     const kindPlural = { character: 'characters', place: 'places', item: 'items' }[P.type];
     const lockText = !picks.length ? 'Pick a look'
       : picks.length === 1 ? `${P.type === 'character' ? 'Lock look' : 'Add look'} ${picks[0] + 1}`
