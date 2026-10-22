@@ -26,9 +26,9 @@ const KIND_ACCEPT = {
 const STILL_KINDS = ['scene', 'character', 'plate', 'logo', 'item', 'setting', 'style'];
 const SECTION_KINDS = ['logo', 'color', 'character', 'item', 'setting', 'scene', 'style'];
 
-// The Coach's "attach your Library pictures?" offer for a Create. Only the first 8 pictures can go along
-// (see refsFromAssets), so the question says what will really be attached, by name for the first few, instead
-// of listing everything in the Library.
+// Coach chat can send 6 Library stills. One still per item: a multiview sheet's extra
+// angles are the same reference, not more pictures. The offer names only what will go.
+const COACH_REF_CAP = 6;
 const OFFER_NAMES_SHOWN = 3;
 
 function libraryOffer(list) {
@@ -37,17 +37,52 @@ function libraryOffer(list) {
   ));
   if (!usable.length) return null;
   const ids = usable.map((a) => a.id);
-  const sent = new Set(refsFromAssets(usable, ids).map((r) => r.url));
-  const picked = usable.filter((a) => sent.has(String(a.url || '').trim()) || (a.views || []).some((v) => v && sent.has(String(v.url || '').trim())));
-  const names = [...new Set(picked.map((a) => String(a.name || a.kind)))];
+  const packed = coachChatReferences(usable, ids);
+  const names = packed.refs.map((r) => r.title);
   const shown = names.slice(0, OFFER_NAMES_SHOWN).join(', ');
   const more = names.length > OFFER_NAMES_SHOWN ? ` and ${names.length - OFFER_NAMES_SHOWN} more` : '';
-  const n = sent.size;
+  const n = packed.refs.length;
   const total = usable.length;
   return {
-    question: `Use ${n} picture${n === 1 ? '' : 's'} from your Library as ${n === 1 ? 'a reference' : 'references'} (${shown}${more})?${total > picked.length ? ` You have ${total} in all; + Library lets you pick.` : ''}`,
+    question: `Use ${n} picture${n === 1 ? '' : 's'} from your Library as ${n === 1 ? 'a reference' : 'references'} (${shown}${more})?${total > n ? ` You have ${total} in all; + Library lets you pick.` : ''}`,
     asset_ids: ids,
     images: n,
+  };
+}
+
+// One https still per selected Library item, in the order the ids were picked.
+// Character and item are subjects. Everything else is a look. Extra angles on
+// asset.views are not added. Past 6, the rest are counted in omitted and dropped.
+function coachChatReferences(list, ids) {
+  const byId = new Map();
+  for (const asset of (list || [])) {
+    if (asset && asset.id != null) byId.set(String(asset.id), asset);
+  }
+  const order = (ids && ids.length)
+    ? ids.map(String)
+    : (list || []).map((asset) => String(asset && asset.id));
+  const refs = [];
+  const seen = new Set();
+  for (const id of order) {
+    const asset = byId.get(id);
+    if (!asset) continue;
+    const url = String(asset.url || '').trim();
+    if (!/^https:\/\//i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    const kind = String(asset.kind || '');
+    const subject = kind === 'character' || kind === 'item';
+    refs.push({
+      id: String(asset.id),
+      url,
+      title: String(asset.name || kind || 'Library').slice(0, 80),
+      role: subject ? 'subject' : 'look',
+      libraryRole: roleForKind(kind),
+    });
+  }
+  return {
+    refs: refs.slice(0, COACH_REF_CAP),
+    total: refs.length,
+    omitted: Math.max(0, refs.length - COACH_REF_CAP),
   };
 }
 
@@ -144,13 +179,13 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
     filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
-    persistFamily, retagKinds,
+    coachChatReferences, COACH_REF_CAP, persistFamily, retagKinds,
   };
 }
 if (typeof window !== 'undefined') {
   window.SEAssets = {
     ASSET_KINDS, STILL_KINDS, SECTION_KINDS, isAssetKind, isStillKind, acceptFor, kindLabel, labelOf,
     filterKind, filterCollection, selectedId, selectedUrl, libraryOffer, roleForKind, refsFromAssets,
-    persistFamily, retagKinds,
+    coachChatReferences, COACH_REF_CAP, persistFamily, retagKinds,
   };
 }

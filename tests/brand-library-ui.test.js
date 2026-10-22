@@ -98,11 +98,11 @@ test('Library offer says what will really be attached, and is short however big 
   const { libraryOffer } = require('../portal-assets.js');
   const lib = Array.from({ length: 41 }, (_, i) => ({ id: `a${i}`, kind: 'character', name: `Character number ${i}`, url: `https://store.test/${i}.png`, views: i % 2 ? [{ url: `https://store.test/${i}-b.png`, label: 'back' }] : [] }));
   const offer = libraryOffer(lib);
-  assert.match(offer.question, /^Use 8 pictures from your Library as references \(/);
+  assert.match(offer.question, /^Use 6 pictures from your Library as references \(/);
   assert.match(offer.question, /You have 41 in all/);
   assert.doesNotMatch(offer.question, /Character number 40/, 'names beyond what is attached are not listed');
   assert.ok(offer.question.length < 220, `short enough to read (${offer.question.length})`);
-  assert.equal(offer.images, 8);
+  assert.equal(offer.images, 6);
   assert.equal(offer.asset_ids.length, 41, 'the ids passed on are unchanged');
   assert.match(libraryOffer([lib[0]]).question, /^Use 1 picture from your Library as a reference \(Character number 0\)\?$/);
   assert.equal(libraryOffer([{ id: 'x', kind: 'logo', name: 'Logo', url: 'https://store.test/l.png' }]), null, 'a logo is not offered as a reference');
