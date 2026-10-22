@@ -155,13 +155,39 @@
   }
 
   /** The Storyboard tab (on) or the Reels tab (off) was picked. */
+  function takeCoachHandoff() {
+    const h = window.__SE_STORY_COACH;
+    if (!h || !h.brief) return false;
+    window.__SE_STORY_COACH = null;
+    const refs = (Array.isArray(h.refs) ? h.refs : [])
+      .filter((r) => r && /^https:\/\//i.test(String(r.url || '')))
+      .slice(0, 6);
+    S.newKit = {
+      title: String(h.title || '').slice(0, 80),
+      look: h.look || 'stylized',
+      brief: String(h.brief).slice(0, 1500),
+      refs,
+    };
+    S.pendingIdea = S.newKit.brief;
+    S.coachRefs = refs;
+    S.view = 'start';
+    S.kit = null;
+    S.panel = null;
+    S.menu = false;
+    return true;
+  }
+
   function setSurface(on) {
     if (!shell) return;
-    if (!!on === S.on) { paint(); return; }
+    if (!!on === S.on) {
+      if (on && takeCoachHandoff()) paint();
+      else paint();
+      return;
+    }
     S.on = !!on;
     stopPoll();
     S.menu = false;
-    if (S.on) restore();
+    if (S.on && !takeCoachHandoff()) restore();
     paint();
   }
 
@@ -270,7 +296,8 @@
       S.sel = S.story.scenes[0] ? S.story.scenes[0].id : null;
       S.view = 'story';
       S.panel = null;
-      S.writer = S.story.scenes.length ? null : { idea: S.story.idea || '', busy: false };
+      S.writer = S.story.scenes.length ? null : { idea: S.story.idea || S.pendingIdea || '', busy: false };
+      if (S.writer && !S.story.idea && S.pendingIdea) S.story.idea = S.pendingIdea;
       remember();
       pollIfWorking();
     } catch (e) {
@@ -325,6 +352,7 @@
       S.newKit = null;
       S.kit = d.kit;
       S.view = 'kit';
+      S.pendingIdea = nk.brief || S.pendingIdea || '';
       S.panel = S.kit.elements.length ? null : { mode: 'new', type: 'character', source: 'describe', name: '', description: '' };
       remember();
       refreshKits();
@@ -541,9 +569,15 @@
         <div class="nl-srow"><button type="button" class="nl-sbtn nl-sbtn--primary" data-kit-from-go ${reels.length ? '' : 'disabled'}>Start the kit</button><button type="button" class="nl-sbtn" data-kit-cancel>Cancel</button></div>
       </div>`;
     }
+    const briefHtml = nk.brief ? `<p class="nl-skc__s">${esc(String(nk.brief).slice(0, 320))}</p>` : '';
+    const refsHtml = (nk.refs || []).length
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">${nk.refs.map((r) => `<img src="${esc(r.url)}" alt="${esc(r.title || '')}" title="${esc(r.title || '')}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;">`).join('')}</div><p class="nl-skc__s">These pictures stay with the kit. New people and new places are made here before the reel. A style photo is not a house.</p>`
+      : '';
     return `<div class="nl-skc nl-skc--new nl-skc--form">
       <label class="nl-slabel" for="nl-sk-name">Kit name</label>
       <input id="nl-sk-name" class="nl-sinput" data-kit-name data-fk="kitname" maxlength="80" placeholder="Winter wellbeing" value="${esc(nk.title || '')}">
+      ${briefHtml}
+      ${refsHtml}
       <div class="nl-slabel">Look</div>
       <div class="nl-sseg" role="group" aria-label="Look">${LOOKS.map(([v, l]) => `<button type="button" data-kit-newlook="${v}" aria-pressed="${(nk.look || 'stylized') === v}">${l}</button>`).join('')}</div>
       <div class="nl-srow"><button type="button" class="nl-sbtn nl-sbtn--primary" data-kit-create>Create kit</button><button type="button" class="nl-sbtn" data-kit-cancel>Cancel</button></div>
@@ -626,8 +660,13 @@
 
   function kitView() {
     const c = counts(S.kit);
+    const brought = (S.coachRefs || []).map((r) => r.title || 'Reference').filter(Boolean);
+    const note = brought.length
+      ? `<p class="nl-ssub">References from Coach: ${esc(brought.join(', '))}. Add each new person and each new place, and attach the picture that matches them.</p>`
+      : '';
     return `<div class="nl-skit">
       <div class="nl-skit__main">
+        ${note}
         ${kitSection('character', 'Characters', 'Locked looks stay the same in every scene and every reel')}
         <div class="nl-skit__pair">
           ${kitSection('place', 'Places')}
