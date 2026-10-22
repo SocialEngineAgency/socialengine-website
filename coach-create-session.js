@@ -89,6 +89,14 @@ function coachUserRestatedSameCreate(userMessage) {
   return /\b(make|create|generate|render|shoot)\b.{0,40}\b(this|that|the)\b.{0,40}\b(reel|video|clip|post|carousel|infographic|slides?)\b/.test(t);
 }
 
+function coachNeedsStoryboard(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\bstoryboards?\b/.test(t)) return true;
+  if (/\b(create|make|need|build)\b.{0,60}\b(characters?|children|kids|cast|houses?|places)\b/.test(t)) return true;
+  if (/\b(new|another)\b.{0,24}\b(characters?|children|kids|houses?|places)\b/.test(t)) return true;
+  return false;
+}
+
 function inferCoachDestinationFromText(text) {
   const t = String(text || '').toLowerCase();
   const design = isCoachDesignAsk(t);
@@ -120,8 +128,10 @@ function isCoachCarouselBrief(text) {
 
 function normalizeCoachDestination(value, text) {
   if (isCoachCarouselBrief(text)) return 'design';
+  if (coachNeedsStoryboard(text) && !isCoachDesignAsk(text)) return 'storyboard';
   const inferred = inferCoachDestination(text);
   const d = String(value || '').trim().toLowerCase();
+  if (d === 'storyboard' && !isCoachDesignAsk(text)) return 'storyboard';
   let dest = (d === 'animate' || d === 'design' || d === 'studio')
     ? d
     : ((d === 'carousel' || d === 'post') ? 'design' : inferred);
@@ -171,6 +181,7 @@ function normalizeCoachCreateSession(intent = {}) {
 
 function coachCreateNav(session) {
   if (!session) return 'creation-studio';
+  if (session.destination === 'storyboard') return 'storyboard';
   if (session.destination === 'animate') return 'animation-studio';
   if (session.destination === 'design') return 'design-studio';
   return 'creation-studio';
@@ -598,6 +609,7 @@ const coachSessionApi = {
   normalizeCoachCreateSession,
   coachCreateNav,
   inferCoachDestination,
+  coachNeedsStoryboard,
   coachUserRestatedSameCreate,
   coachStartsNewDesignTopic,
   applyCoachCreateFields,

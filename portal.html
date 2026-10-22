@@ -8484,13 +8484,23 @@
         }));
       } catch (e) {}
       window.__SE_COACH_CREATE_SESSION = session;
+      if (session.destination === 'storyboard') {
+        const about = String(session.prompt || '').match(/\babout\s+([^.,]{2,48})/i);
+        window.__SE_STORY_COACH = {
+          title: about ? about[1].trim().slice(0, 60) : 'New storyboard',
+          brief: session.prompt,
+          look: /\bcartoon\b/i.test(session.prompt) ? 'cartoon' : (/\brealistic\b/i.test(session.prompt) ? 'realistic' : 'stylized'),
+          refs: (Array.isArray(session.references) ? session.references : []).slice(0, 6),
+        };
+      }
       if (session.destination === 'studio' || session.destination === 'creation-studio' || !session.destination) {
         window.__SE_VS_DOOR = 'make';
       }
       const navName = (typeof window.coachCreateNav === 'function')
         ? window.coachCreateNav(session)
-        : (session.destination === 'animate' ? 'animation-studio'
-          : (session.destination === 'design' ? 'design-studio' : 'creation-studio'));
+        : (session.destination === 'storyboard' ? 'storyboard'
+          : (session.destination === 'animate' ? 'animation-studio'
+          : (session.destination === 'design' ? 'design-studio' : 'creation-studio')));
       if (typeof switchNav === 'function') switchNav(navName);
       else if (navName === 'design-studio' && typeof window.openClaudeDesignStudio === 'function') {
         window.openClaudeDesignStudio();
@@ -13730,13 +13740,23 @@
                   return '<button class="coach-action-btn" data-type="regenerate" data-template-id="' + safeTid + '" data-product-name="' + safeProd + '" data-reason="' + safeReason + '" style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.35);color:#E9D5FF;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> ' + label + '</button>';
                 }
                 if (a.type === 'create') {
+                  const chipRefs = Array.isArray(window._seCoachLibraryRefs) ? window._seCoachLibraryRefs : [];
+                  const chipIds = Array.isArray(window._seCoachLibraryIds) ? window._seCoachLibraryIds : [];
+                  const refs = (Array.isArray(a.references) && a.references.length) ? a.references : chipRefs;
+                  const refUrls = (Array.isArray(a.ref_image_urls) && a.ref_image_urls.length) ? a.ref_image_urls : chipRefs.map((r) => r.url);
+                  const ids = (Array.isArray(a.library_asset_ids) && a.library_asset_ids.length) ? a.library_asset_ids : chipIds;
+                  const story = typeof window.coachNeedsStoryboard === 'function'
+                    && window.coachNeedsStoryboard(String(message || '') + '\n' + String(a.prompt || ''));
                   coachActionPayloads[i] = Object.assign({}, a, {
-                    attached_image_url: a.attached_image_url || window._seCoachAttachedImage || '',
-                    library_asset_ids: a.library_asset_ids || window._seCoachLibraryIds || [],
-                    references: a.references || window._seCoachLibraryRefs || [],
-                    ref_image_urls: a.ref_image_urls || (window._seCoachLibraryRefs || []).map((r) => r.url),
+                    destination: story ? 'storyboard' : a.destination,
+                    attached_image_url: a.attached_image_url || (refs[0] && refs[0].url) || window._seCoachAttachedImage || '',
+                    library_asset_ids: ids,
+                    references: refs,
+                    ref_image_urls: refUrls,
                   });
-                  const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
+                  const label = story
+                    ? 'Open in Storyboard'
+                    : (a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now');
                   return '<button class="coach-action-btn" data-type="create" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
                 }
                 if (a.type === 'carousel_redesign') {

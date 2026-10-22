@@ -29,8 +29,27 @@ test('studio destination opens creation-studio', () => {
   assert.equal(coachCreateNav(s), 'creation-studio');
 });
 
-test('animate destination opens animation-studio', () => {
-  assert.equal(coachCreateNav({ destination: 'animate' }), 'animation-studio');
+test('a reel that needs new children and houses opens Storyboard, not Reels', () => {
+  const prompt = [
+    'create me a reel using the storyboard first.',
+    'you will need to create the two children.',
+    'Create me 2 different typical UK houses.',
+  ].join(' ');
+  const s = normalizeCoachCreateSession({ prompt, destination: 'animate' });
+  assert.equal(s.destination, 'storyboard');
+  assert.equal(coachCreateNav(s), 'storyboard');
+  const plain = normalizeCoachCreateSession({
+    prompt: 'create this reel now. Frame 1: kitchen.',
+    destination: 'animate',
+  });
+  assert.equal(plain.destination, 'animate');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  const story = fs.readFileSync(path.join(__dirname, '..', 'story-builder.js'), 'utf8');
+  assert.match(src, /Open in Storyboard/);
+  assert.match(src, /a\.references\.length/);
+  assert.match(src, /__SE_STORY_COACH/);
+  assert.match(story, /function takeCoachHandoff/);
+  assert.match(story, /New people and new places are made here/);
 });
 
 test('a 25 second VO brief keeps duration 25 and library attachments', () => {
