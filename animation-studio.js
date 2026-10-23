@@ -1415,8 +1415,11 @@
           </div>
           <div class="nl-ahero__box">
             <div data-slot="prompt"></div>
+            <div data-slot="attach" class="nl-attach" hidden></div>
             <div class="nl-ahero__bar">
               <button type="button" class="nl-abtn nl-abtn--icon nl-aref" data-nl-cast aria-expanded="false" title="Add a character, product or place photo">${nlSvg(NL_I.image, 15)}<span class="nl-aref__l">Reference</span><span class="nl-aref__n" data-slot="ref-count" hidden></span></button>
+              <button type="button" class="nl-abtn nl-abtn--icon nl-aref" data-nl-attach hidden title="Attach a photo, a music track, or an end card from your computer">${nlSvg(NL_I.image, 15)}<span class="nl-aref__l">Attach</span></button>
+              <input type="file" id="nl-attach-file" accept="image/*,audio/*,video/*" hidden />
               <div data-slot="entry"></div>
               <div data-slot="look" class="nl-alook"></div>
               <label data-slot="length" class="nl-alen" title="How long the reel should be"><span>Length</span><select id="anim-length" aria-label="Reel length"><option value="15">15s</option><option value="30">30s</option><option value="45">45s</option></select></label>
@@ -1598,6 +1601,17 @@
       e.stopImmediatePropagation();
       nlSendEdit();
     }, true);
+    root.querySelector('[data-nl-attach]')?.addEventListener('click', () => root.querySelector('#nl-attach-file')?.click());
+    root.querySelector('#nl-attach-file')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (file) await nlStageAttach(file);
+    });
+    root.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-nl-attach-clear]')) return;
+      _nlAttach = null;
+      nlPaintAttach(root);
+    });
     root.querySelector('[data-nl-plan]').addEventListener('click', () => {
       _nlPlanMode = nlEditorMode();
       nlHeroState(root);
@@ -1842,22 +1856,76 @@
     return out.slice(0, 4);
   }
 
+  let _nlAttach = null;
+  function nlPaintAttach(root) {
+    const slot = root && root.querySelector('[data-slot="attach"]');
+    const btn = root && root.querySelector('[data-nl-attach]');
+    const editing = nlEditorMode();
+    if (btn) btn.hidden = !editing;
+    if (!slot) return;
+    if (!_nlAttach || !editing) { slot.hidden = true; slot.innerHTML = ''; return; }
+    slot.hidden = false;
+    slot.innerHTML = `<span>Attached: ${esc(_nlAttach.name)}</span><button type="button" data-nl-attach-clear>Remove</button>`;
+  }
+  async function nlStageAttach(file) {
+    if (!file || !_project?.id) return;
+    const image = String(file.type || '').startsWith('image/');
+    const audio = String(file.type || '').startsWith('audio/');
+    const video = String(file.type || '').startsWith('video/');
+    if (!image && !audio && !video) return toast('Attach a photo, a music file, or a video', 'error');
+    if (file.size > (image ? 10 : 40) * 1024 * 1024) return toast(image ? 'Image must be under 10MB' : 'File must be under 40MB', 'error');
+    toast('Uploading…', 'info');
+    try {
+      let asset = null;
+      if (image) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch(`${apiBase()}/api/studio/upload-image`, { method: 'POST', headers: authHeadersMultipart(), body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) throw apiError(data, res, 'Upload failed');
+        asset = { url: data.url, kind: 'plate', name: String(file.name || 'Photo').replace(/\.[^.]+$/, '') };
+      } else {
+        const kind = audio ? 'music' : 'outro';
+        const fd = new FormData();
+        fd.append('kind', kind);
+        fd.append('name', String(file.name || kind).replace(/\.[^.]+$/, ''));
+        fd.append('file', file);
+        const res = await fetch(`${apiBase()}/api/assets`, { method: 'POST', headers: authHeadersMultipart(), body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.asset?.url) throw apiError(data, res, 'Upload failed');
+        if (Array.isArray(data.assets)) _library = data.assets;
+        asset = { id: data.asset.id, url: data.asset.url, kind, name: data.asset.name || fd.get('name') };
+      }
+      _nlAttach = asset;
+      const root = nlAnimRoot();
+      if (root) nlPaintAttach(root);
+      toast('Attached. Say what to do with it, then send.', 'success');
+    } catch (e) {
+      toast(e.message || 'Upload failed', 'error', e.request_id);
+    }
+  }
   async function nlSendEdit() {
     const ta = document.getElementById('anim-prompt');
     const message = String(ta?.value || '').trim();
     if (!message || !_project?.id || _nlEditPending) return;
     if (nlEditWorking()) { toast('Still working on the last change. Send this when it finishes.', 'info'); return; }
+    const attachment = _nlAttach;
+    const shown = attachment ? `${message}\nAttached: ${attachment.name}` : message;
     _nlEditPending = true;
     const before = (_project.chat || []).slice();
-    _project.chat = before.concat([{ role: 'user', kind: 'edit', text: message, ts: new Date().toISOString() }]);
+    _project.chat = before.concat([{ role: 'user', kind: 'edit', text: shown, ts: new Date().toISOString() }]);
     ta.value = '';
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     renderChat();
     const root = nlAnimRoot();
     if (root) nlHeroState(root);
     try {
-      const data = await animFetch(`/api/animation/projects/${_project.id}/edit`, { method: 'POST', body: JSON.stringify({ message }) });
+      const data = await animFetch(`/api/animation/projects/${_project.id}/edit`, {
+        method: 'POST',
+        body: JSON.stringify({ message, ...(attachment ? { attachment } : {}) }),
+      });
       _nlEditPending = false;
+      _nlAttach = null;
       if (data.project) _project = data.project;
       _canvasFp = projectUiFingerprint(_project);
       renderCanvas();
@@ -2159,6 +2227,7 @@
     if (!t) return;
     const hasShots = nlScenes().length > 0;
     const editing = nlEditorMode();
+    nlPaintAttach(root);
     const hero = root.querySelector('.nl-ahero');
     hero?.classList.toggle('nl-ahero--chat', editing);
     const ta0 = document.getElementById('anim-prompt');
@@ -2176,7 +2245,7 @@
       if (sub) sub.textContent = 'Ask for any change to a shot, the voiceover, music, captions or the end card. The final rebuilds by itself.';
       hero?.classList.remove('nl-ahero--edit');
       root.classList.toggle('nl-anim--shots', hasShots);
-      if (ta0) ta0.placeholder = 'Ask for a change, like "make shot 2 a close up" or "warmer music"';
+      if (ta0) ta0.placeholder = 'Ask for a change, like "make shot 2 a close up", "use OPA Fall Outro 2", or "warmer music"';
       if (send0 && !send0.disabled) send0.textContent = 'Send';
       if (send0) send0.disabled = _nlEditPending;
       if (ideas) ideas.hidden = true;
