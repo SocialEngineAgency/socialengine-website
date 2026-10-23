@@ -188,6 +188,12 @@
     return c;
   }
 
+  /** Notes on the clip in the box. Regenerating this shot writes them into the prompt. */
+  function shotNeedsCorrection(s) {
+    const c = shotCheck(s);
+    return !!(c && c.status !== 'pass' && c.status !== 'checking' && c.status !== 'redoing' && c.status !== 'skipped' && (c.problems || []).length);
+  }
+
   /** Avoid remounting <video> on every poll tick (causes READY shots to spin). */
   function projectUiFingerprint(p) {
     if (!p) return '';
@@ -3465,7 +3471,9 @@
             return `${scenes.map((s, idx) => {
               const regenLabel = s.status === 'generating'
                 ? 'Generating…'
-                : (s.video_url || (s.takes || []).length) ? 'Regenerate' : 'Generate';
+                : (s.video_url || (s.takes || []).length)
+                  ? (shotNeedsCorrection(s) ? 'Regenerate with fixes' : 'Regenerate')
+                  : 'Generate';
               const shotI2v = s.i2v_model || currentI2vModel() || 'seedance';
               return `
             <div class="anim-shot" data-scene="${esc(s.id)}">

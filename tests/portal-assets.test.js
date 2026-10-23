@@ -6,7 +6,7 @@ const {
 } = require('../portal-assets');
 
 test('acceptFor and isAssetKind', () => {
-  assert.equal(acceptFor('outro'), 'video/*');
+  assert.equal(acceptFor('outro'), 'image/*,video/*');
   assert.equal(acceptFor('music'), 'audio/*,video/*');
   assert.equal(acceptFor('logo'), 'image/*');
   assert.equal(acceptFor('scene'), 'image/*');
@@ -22,12 +22,22 @@ test('acceptFor and isAssetKind', () => {
   assert.equal(isAssetKind('nope'), false);
 });
 
-test('retagKinds keeps stills together and does not offer outro for a logo', () => {
+test('a picture can be tagged as an outro, and a video end card stays a video', () => {
   const { retagKinds } = require('../portal-assets');
-  assert.deepEqual(retagKinds('scene').sort(), ['character', 'item', 'logo', 'plate', 'scene', 'setting', 'style']);
-  assert.deepEqual(retagKinds('outro').sort(), ['intro', 'outro', 'shot', 'video']);
+  const still = retagKinds('scene', 'https://store.test/look.png');
+  assert.ok(still.includes('outro'));
+  assert.ok(still.includes('intro'));
+  assert.ok(still.includes('scene'));
+  assert.ok(!still.includes('shot'));
+  assert.ok(!still.includes('music'));
+  const back = retagKinds('outro', 'https://store.test/look.png');
+  assert.ok(back.includes('scene'));
+  assert.ok(back.includes('outro'));
+  assert.ok(!back.includes('shot'));
+  assert.deepEqual(retagKinds('outro', 'https://store.test/end.mp4').sort(), ['intro', 'outro', 'shot', 'video']);
   assert.deepEqual(retagKinds('music'), ['music']);
   assert.deepEqual(retagKinds('color'), ['color']);
+  assert.equal(require('../portal-assets').acceptFor('outro'), 'image/*,video/*');
 });
 
 test('libraryOffer and refsFromAssets tag Char, Item, and Setting', () => {
