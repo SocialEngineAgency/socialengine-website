@@ -45,6 +45,7 @@
   <script src="./stories-composer.js?v=20261020ship" defer></script>
   <script src="./marketing-playbook.js?v=20261010" defer></script>
   <script src="./key-dates.js?v=20261018warm" defer></script>
+  <script src="./intel.js?v=20261023intel" defer></script>
   <script src="./diagram-posts.js?v=20261010" defer></script>
   <script src="./motion-reels.js?v=20261019-endcard" defer></script>
   <script src="./agent-run.js?v=20261019-agent" defer></script>
@@ -15554,35 +15555,6 @@
       const clientType = isCharity ? 'charity' : (ciCaps.commerce === 'shopify' ? 'shopify' : 'brand');
       const clientName = ciData?.client?.business_name || 'Your Brand';
 
-      const CI_CONFIG = isCharity ? {
-        placeholder: 'https://similar-charity.org',
-        subtitle: `Analyse similar charities — see how ${clientName} stacks up on awareness, campaigns, and social impact`,
-        analyzeLabel: 'Analyse Charity',
-        urlLabel: 'Enter a similar charity or cause website URL',
-        errorMsg: 'Could not access this website. Please enter a valid charity or organisation URL.',
-        whatYouGet: [
-          { icon: 'bar-chart-2', title: 'Awareness Benchmarks', desc: 'Compare follower counts, reach, and engagement against similar charities' },
-          { icon: 'megaphone', title: 'Campaign Analysis', desc: 'How they structure fundraising drives and awareness campaigns' },
-          { icon: 'message-circle', title: 'Messaging & Tone', desc: 'Emotional appeal strategy, storytelling patterns, and CTA effectiveness' },
-          { icon: 'shield', title: 'SWOT Analysis', desc: 'Strengths, weaknesses, opportunities, and threats vs this charity' },
-          { icon: 'star', title: 'Content Strategy', desc: 'What post types drive the most shares, donations, and community engagement' },
-          { icon: 'target', title: 'Cause Differentiation', desc: 'Where you stand out and where you can increase impact vs similar causes' },
-        ],
-      } : {
-        placeholder: 'https://competitor-store.myshopify.com',
-        subtitle: `Analyze any Shopify store — get pricing, products, SWOT analysis, and AI content ideas to outperform them`,
-        analyzeLabel: 'Analyze',
-        urlLabel: 'Enter a competitor Shopify store URL',
-        errorMsg: 'This URL does not appear to be a Shopify store. Please enter a valid Shopify store URL.',
-        whatYouGet: [
-          { icon: 'bar-chart-2', title: 'Score Comparison', desc: 'Side-by-side score against your store with actionable benchmarks' },
-          { icon: 'dollar-sign', title: 'Pricing Analysis', desc: 'Compare low/avg/high pricing and identify your pricing advantage' },
-          { icon: 'package', title: 'Top Products', desc: 'See their best sellers with images, prices, and product types' },
-          { icon: 'crosshair', title: 'SWOT Analysis', desc: 'Strengths, weaknesses, opportunities, and threats — mapped out' },
-          { icon: 'star', title: 'Content Ideas', desc: 'AI-generated content strategies to outperform their social presence' },
-          { icon: 'trending-up', title: 'Gap Analysis', desc: 'Find what they are missing and where you can win' },
-        ],
-      };
 
       // Preview tier: show teaser with upgrade prompt
       if (isPreview()) {
@@ -15607,382 +15579,43 @@
         return;
       }
 
-      // Recent analyses from localStorage
-      const savedAnalyses = JSON.parse(localStorage.getItem('se_ci_history') || '[]');
-      const historyHTML = savedAnalyses.length ? `
-        <div style="margin-bottom:24px;">
-          <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(148,163,184,0.5);margin-bottom:12px;">Recent Analyses</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            ${savedAnalyses.slice(0,5).map(a => `
-              <button onclick="document.getElementById('ci-url').value='${a.url}';document.getElementById('ci-analyze-btn').click();" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:rgba(255,255,255,0.6);font-size:0.75rem;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                ${escapeHtml(a.name || a.url.replace(/https?:\/\//, '').replace(/\/$/, ''))}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      ` : '';
-
-      content.innerHTML = `
-        <div class="ci-page">
-          <div class="ci-header">
-            <h2 class="ci-header__title">Competitor Intelligence</h2>
-            <p class="ci-header__sub">${CI_CONFIG.subtitle}</p>
-          </div>
-          <div class="ci-input-row">
-            <input type="url" class="ci-url-input" id="ci-url" placeholder="${CI_CONFIG.placeholder}" autocomplete="off">
-            <button class="ci-analyze-btn" id="ci-analyze-btn">
-              <i data-lucide="search" style="width:16px;height:16px;"></i>
-              ${CI_CONFIG.analyzeLabel}
-            </button>
-          </div>
-          <div class="ci-error" id="ci-error"></div>
-          <div class="ci-loading" id="ci-loading">
-            <div class="ci-spinner"></div>
-            <span id="ci-loading-text">Analyzing store...</span>
-          </div>
-          ${historyHTML}
-          <div class="ci-results" id="ci-results"></div>
-
-          <!-- What You Get section -->
-          <div id="ci-info-section" style="margin-top:32px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;">
-            ${CI_CONFIG.whatYouGet.map(item => `
-              <div style="padding:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
-                <div style="width:36px;height:36px;border-radius:10px;background:rgba(124,58,237,0.08);display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:#7C3AED;"><i data-lucide="${item.icon}" style="width:20px;height:20px;stroke:currentColor;fill:none;"></i></div>
-                <div style="font-size:0.8rem;font-weight:600;color:#fff;margin-bottom:4px;">${escapeHtml(item.title)}</div>
-                <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);line-height:1.5;">${item.desc}</div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-
-      setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
-
-      // Free tier gate
+      // Free tier gate (also what the API's own plan check falls back to)
+      const ciUpgradeHTML = `<div class="ci-page">${upgradeFullpageHTML(
+        'search',
+        'Competitor Intelligence',
+        isCharity
+          ? 'Keep a watchlist of similar charities. See what changed on their sites and social, how you compare, and what to do about it.'
+          : 'Keep a watchlist of competitors. See what changed on their sites and social, how you compare, and what to do about it.',
+        [
+          'Watch up to 5 competitors',
+          'See what changed since the last check',
+          'Side-by-side numbers, no guesswork',
+          'Moves for you, with the findings behind them',
+        ]
+      )}</div>`;
+      const ciIcons = () => setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
       if (!isPaid()) {
-        document.getElementById('ci-results').innerHTML = '';
-        const gateDiv = document.createElement('div');
-        gateDiv.innerHTML = upgradeFullpageHTML(
-          'search',
-          'Competitor Intelligence',
-          'Enter any Shopify store URL and get a full breakdown — their pricing strategy, top products, SWOT analysis, and AI-generated content ideas to outperform them.',
-          [
-            'SWOT analysis on any competitor store',
-            'Side-by-side pricing comparison',
-            'AI-generated content ideas that beat them',
-            'Top product identification + gap analysis',
-          ]
-        );
-        document.getElementById('ci-analyze-btn').disabled = true;
-        document.getElementById('ci-url').disabled = true;
-        document.querySelector('.ci-page').appendChild(gateDiv);
-        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
+        content.innerHTML = ciUpgradeHTML;
+        ciIcons();
+        return;
       }
 
-      const urlInput = document.getElementById('ci-url');
-      const analyzeBtn = document.getElementById('ci-analyze-btn');
-      const errorEl = document.getElementById('ci-error');
-      const loadingEl = document.getElementById('ci-loading');
-      const loadingText = document.getElementById('ci-loading-text');
-      const resultsEl = document.getElementById('ci-results');
-
-      function scoreClass(score) {
-        if (score >= 70) return 'ci-score-card__value--high';
-        if (score >= 40) return 'ci-score-card__value--mid';
-        return 'ci-score-card__value--low';
+      // The watchlist page lives in intel.js.
+      if (typeof window.renderIntel !== 'function') {
+        content.innerHTML = '<p style="padding:24px;color:var(--color-text-muted);">Intel could not load. Refresh the page to try again.</p>';
+        return;
       }
-
-      function renderResults(data) {
-        const r = data;
-        const resultIsCharity = r.analysis_type === 'charity' || isCharity;
-        const compScore = r.competitor_score ?? 0;
-        const clientScore = r.client_score ?? 0;
-        const pricing = { competitor: r.competitor_pricing || {}, client: r.client_pricing || {} };
-        const swot = { strengths: r.strengths || [], weaknesses: r.weaknesses || [], opportunities: r.opportunities || [], threats: r.threats || [] };
-        const ideas = r.content_ideas || [];
-        const products = r.top_competitor_products || [];
-
-        const pricingRows = ['low', 'avg', 'high'].map(k => `
-          <tr>
-            <td>${k.charAt(0).toUpperCase() + k.slice(1)}</td>
-            <td>${pricing.competitor?.[k] != null ? '$' + pricing.competitor[k] : '—'}</td>
-            <td>${pricing.client?.[k] != null ? '$' + pricing.client[k] : '—'}</td>
-          </tr>
-        `).join('');
-
-        const productRows = products.map(p => `
-          <tr>
-            <td style="display:flex;align-items:center;gap:12px;">
-              ${p.image || p.images?.[0]?.src ? `<div style="width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);flex-shrink:0;background:#0a0a14;"><img src="${p.image || p.images?.[0]?.src}" alt="${p.title || p.name || ''}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.parentElement.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:rgba(255,255,255,0.15);font-size:1rem;\'>📦</div>'"></div>` : `<div style="width:48px;height:48px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:rgba(255,255,255,0.15);font-size:1rem;">📦</div>`}
-              <span>${escapeHtml(p.title || p.name || '—')}</span>
-            </td>
-            <td style="font-weight:600;color:#fff;">${p.price != null ? '$' + p.price : '—'}</td>
-            <td>${p.product_type || p.type || '—'}</td>
-          </tr>
-        `).join('');
-
-        const swotSections = [
-          { key: 'strengths', label: 'Strengths', cls: 's' },
-          { key: 'weaknesses', label: 'Weaknesses', cls: 'w' },
-          { key: 'opportunities', label: 'Opportunities', cls: 'o' },
-          { key: 'threats', label: 'Threats', cls: 't' },
-        ].map(s => {
-          const items = swot[s.key] || [];
-          return `
-            <div class="ci-swot-card ci-swot-card--${s.cls}">
-              <div class="ci-swot-card__label">${s.label}</div>
-              <ul>${items.map(i => `<li>${i}</li>`).join('') || '<li>No data</li>'}</ul>
-            </div>
-          `;
-        }).join('');
-
-        function scClass(s) { return s >= 70 ? 'high' : s >= 40 ? 'mid' : 'low'; }
-        const compSc = scClass(compScore), clientSc = scClass(clientScore);
-        const compCircum = 2 * Math.PI * 33;
-        const compDash = compCircum - (compScore / 100) * compCircum;
-        const clientDash = compCircum - (clientScore / 100) * compCircum;
-
-        // Save to analysis history
-        try {
-          const hist = JSON.parse(localStorage.getItem('se_ci_history') || '[]');
-          const newEntry = { url: urlInput.value, name: r.competitor_name || urlInput.value.replace(/https?:\/\//, '').replace(/\/$/, ''), date: new Date().toISOString() };
-          const filtered = hist.filter(h => h.url !== newEntry.url);
-          filtered.unshift(newEntry);
-          localStorage.setItem('se_ci_history', JSON.stringify(filtered.slice(0,10)));
-        } catch(e) {}
-        // Hide the info section when results show
-        const infoSection = document.getElementById('ci-info-section');
-        if (infoSection) infoSection.style.display = 'none';
-
-        resultsEl.innerHTML = `
-          <!-- Score cards with rings -->
-          <div class="ci-score-row">
-            <div class="ci-score-card">
-              <div class="ci-score-card__label">Competitor Score</div>
-              <div class="ci-score-ring">
-                <svg width="80" height="80" viewBox="0 0 80 80">
-                  <circle class="ci-score-ring__track" cx="40" cy="40" r="33"/>
-                  <circle class="ci-score-ring__fill ci-score-ring__fill--${compSc}" cx="40" cy="40" r="33"
-                    stroke-dasharray="${compCircum.toFixed(2)}" stroke-dashoffset="${compDash.toFixed(2)}"/>
-                </svg>
-                <div class="ci-score-ring__number ci-score-ring__number--${compSc}">${compScore}</div>
-              </div>
-              <div class="ci-score-card__sub">${escapeHtml(r.competitor_name || 'Competitor')}</div>
-            </div>
-            <div class="ci-score-card ci-score-card--you">
-              <div class="ci-score-card__label">Your Score</div>
-              <div class="ci-score-ring">
-                <svg width="80" height="80" viewBox="0 0 80 80">
-                  <circle class="ci-score-ring__track" cx="40" cy="40" r="33"/>
-                  <circle class="ci-score-ring__fill ci-score-ring__fill--${clientSc}" cx="40" cy="40" r="33"
-                    stroke-dasharray="${compCircum.toFixed(2)}" stroke-dashoffset="${clientDash.toFixed(2)}"/>
-                </svg>
-                <div class="ci-score-ring__number ci-score-ring__number--${clientSc}">${clientScore}</div>
-              </div>
-              <div class="ci-score-card__sub">${escapeHtml(clientData?.client?.business_name || 'Your Store')}</div>
-            </div>
-          </div>
-
-          ${r.overall_summary ? `
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(124,58,237,0.06);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
-              </div>
-              <h3 class="ci-section__title">Executive Summary</h3>
-            </div>
-            <div class="ci-section__body">
-              <p class="ci-summary">${r.overall_summary}</p>
-              ${r.pricing_insight ? `<p class="ci-summary" style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.04);"><strong style="color:#fff;">Pricing insight:</strong> ${r.pricing_insight}</p>` : ''}
-            </div>
-          </div>` : ''}
-
-          ${!resultIsCharity ? `
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(255,255,255,0.06);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              </div>
-              <h3 class="ci-section__title">Pricing Comparison</h3>
-            </div>
-            <table class="ci-table">
-              <thead><tr><th>Metric</th><th>${escapeHtml(r.competitor_name || 'Competitor')}</th><th>${escapeHtml(clientData?.client?.business_name || 'You')}</th></tr></thead>
-              <tbody>
-                ${pricingRows || '<tr><td colspan="3" style="text-align:center;color:var(--color-text-faint);padding:16px">No pricing data available</td></tr>'}
-                <tr>
-                  <td>Product Count</td>
-                  <td>${r.competitor_product_count ?? '—'}</td>
-                  <td>${r.client_product_count ?? '—'}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>` : ''}
-
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(255,255,255,0.06);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              </div>
-              <h3 class="ci-section__title">SWOT Analysis</h3>
-            </div>
-            <div class="ci-swot">${swotSections}</div>
-          </div>
-
-          ${resultIsCharity && r.messaging_analysis ? `
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(124,58,237,0.08);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </div>
-              <h3 class="ci-section__title">Messaging Analysis</h3>
-            </div>
-            <div class="ci-section__body">
-              <p class="ci-summary">${r.messaging_analysis}</p>
-            </div>
-          </div>` : ''}
-
-          ${resultIsCharity && r.cause_differentiation && r.cause_differentiation.length ? `
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(124,58,237,0.08);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              </div>
-              <h3 class="ci-section__title">Cause Differentiation</h3>
-            </div>
-            <div class="ci-section__body">
-              <ul style="margin:0;padding-left:20px;">${r.cause_differentiation.map(d => `<li style="margin-bottom:8px;color:rgba(148,163,184,0.9);font-size:0.875rem;line-height:1.6;">${d}</li>`).join('')}</ul>
-            </div>
-          </div>` : ''}
-
-          ${ideas.length ? `
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(124,58,237,0.1);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-              </div>
-              <h3 class="ci-section__title">Strategic Content Playbook — How to Win</h3>
-            </div>
-            <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
-              ${ideas.map((idea, idx) => {
-                if (typeof idea === 'string') {
-                  return `<div class="ci-idea-card">
-                    <div style="font-size:0.875rem;color:rgba(148,163,184,0.9);line-height:1.65;">${idea}</div>
-                  </div>`;
-                }
-                return `<div class="ci-idea-card">
-                  <div class="ci-idea-card__top">
-                    <span class="ci-idea-card__format">${idea.format || 'Post'}</span>
-                    <span class="ci-idea-card__platform">${idea.platform || ''}</span>
-                    <span class="ci-idea-card__num">#${idx + 1}</span>
-                  </div>
-                  <div class="ci-idea-card__concept">${idea.concept || ''}</div>
-                  ${idea.hook ? `<div class="ci-idea-card__hook">"${idea.hook}"</div>` : ''}
-                  <div class="ci-idea-card__desc">${escapeHtml(idea.description || '')}</div>
-                  ${idea.why_it_works ? `<div class="ci-idea-card__why"><strong>Why it works:</strong> ${idea.why_it_works}</div>` : ''}
-                  ${idea.niche_reference ? `<div class="ci-idea-card__ref">Ref: ${idea.niche_reference}</div>` : ''}
-                </div>`;
-              }).join('')}
-            </div>
-          </div>` : ''}
-
-          ${!resultIsCharity && products.length ? `
-          <div class="ci-section">
-            <div class="ci-section__header">
-              <div class="ci-section__header-icon" style="background:rgba(255,255,255,0.06);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
-              </div>
-              <h3 class="ci-section__title">Top Competitor Products</h3>
-            </div>
-            <table class="ci-table">
-              <thead><tr><th>Product</th><th>Price</th><th>Type</th></tr></thead>
-              <tbody>${productRows}</tbody>
-            </table>
-          </div>` : ''}
-        `;
-        resultsEl.classList.add('visible');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      }
-
-      async function runAnalysis() {
-        const url = urlInput.value.trim();
-        if (!url) return;
-
-        errorEl.classList.remove('visible');
-        resultsEl.classList.remove('visible');
-        resultsEl.innerHTML = '';
-
-        let domain = url;
-        try { domain = new URL(url.startsWith('http') ? url : 'https://' + url).hostname; } catch(e) {}
-
-        // Check localStorage cache first (24hr TTL) for instant results
-        const cached = getCachedCompetitorData();
-        const cacheKey = domain.toLowerCase().replace(/^www\./, '');
-        if (cached[cacheKey] && (Date.now() - cached[cacheKey].ts) < 86400000) {
-          renderResults(cached[cacheKey].data);
-          showToast('Loaded cached analysis — re-analyze to refresh');
-          return;
-        }
-
-        loadingText.textContent = `Analyzing ${domain}...`;
-        loadingEl.classList.add('visible');
-        analyzeBtn.disabled = true;
-
-        try {
-          // Competitor intel can take 90+ seconds
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
-          
-          // Progress updates
-          const phases = ['Scraping website...', 'Finding social profiles...', 'Analyzing product catalog...', 'Running AI competitive analysis...', 'Almost done...'];
-          let phase = 0;
-          const phaseTimer = setInterval(() => {
-            phase++;
-            if (phase < phases.length) loadingText.textContent = phases[phase];
-          }, 12000);
-
-          const _seToken = localStorage.getItem('se_token') || '';
-          const res = await apiFetch(`${API}/api/competitor-intel`, {
-            method: 'POST',
-            headers: authHeaders({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${_seToken}` }),
-            body: JSON.stringify({ competitor_url: url, client_type: clientType }),
-            signal: controller.signal
-          });
-
-          clearTimeout(timeout);
-          clearInterval(phaseTimer);
-          loadingEl.classList.remove('visible');
-
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw new Error(err.error || err.message || `Error ${res.status}`);
-          }
-
-          const data = await res.json();
-          // Cache results for instant reload
-          try {
-            const cacheStore = getCachedCompetitorData();
-            const ck = domain.toLowerCase().replace(/^www\./, '');
-            cacheStore[ck] = { data, ts: Date.now() };
-            setCachedCompetitorData(cacheStore);
-          } catch(e) {}
-          renderResults(data);
-        } catch (err) {
-          loadingEl.classList.remove('visible');
-          const msg = err.name === 'AbortError'
-            ? 'Analysis timed out — the store may be very large. Try again or try a different URL.'
-            : err.message.includes('not a Shopify') || err.message.includes('not_shopify')
-              ? CI_CONFIG.errorMsg
-              : (err.message || 'Analysis failed. Make sure the URL is valid.');
-          errorEl.textContent = msg;
-          errorEl.classList.add('visible');
-        } finally {
-          analyzeBtn.disabled = false;
-        }
-      }
-
-      analyzeBtn.addEventListener('click', runAnalysis);
-      urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runAnalysis(); });
+      window.renderIntel(content, {
+        api: API,
+        apiFetch,
+        variant: isCharity ? 'charity' : (ciCaps.commerce === 'shopify' ? 'store' : 'brand'),
+        clientType,
+        clientName,
+        toast: showToast,
+        switchNav: window.switchNav,
+        upgradeHTML: ciUpgradeHTML,
+        afterUpgrade: ciIcons,
+      });
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
