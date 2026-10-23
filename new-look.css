@@ -1666,6 +1666,10 @@ html.nl :is(.nl-abtn, .nl-alink, .nl-abrief__toggle, .nl-tle__b, .nl-tplan > sum
 html.nl .nl-aref { height: 36px; background: var(--nl-surface); color: var(--nl-fg2); }
 html.nl .nl-aref__n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--nl-signal); color: var(--nl-signal-ink, #0b0b0c); font: 600 11px/18px var(--nl-body); text-align: center; box-sizing: border-box; }
 html.nl .nl-aref__n[hidden] { display: none; }
+html.nl [data-nl-attach][hidden] { display: none; }
+html.nl .nl-attach { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; color: var(--nl-fg2); font: 500 12.5px/1.4 var(--nl-body); }
+html.nl .nl-attach[hidden] { display: none; }
+html.nl .nl-attach button { border: 0; background: none; padding: 0; color: var(--nl-fg3); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 
 /* Chat mode: thread first, then the box */
 html.nl .nl-ahero--chat > .nl-ahero__h { order: 0; }
