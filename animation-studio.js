@@ -155,6 +155,8 @@
   function apiError(data, resp, fallback) {
     const err = new Error((data && data.error) || fallback || (resp && resp.statusText) || 'Request failed');
     err.code = data && data.code;
+    err.fix = data && data.fix;
+    err.project = data && data.project;
     err.request_id = data && data.request_id;
     err.status = resp && resp.status;
     return err;
@@ -3417,6 +3419,7 @@
                 ${s.motion_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.motion_warning)}</div>` : ''}
                 ${s.persist_warning ? `<div style="font-size:0.62rem;color:#FCD34D;margin:2px 0 6px;line-height:1.35;">${esc(s.persist_warning)}</div>` : ''}
                 ${s.error ? `<div style="font-size:0.62rem;color:#FCA5A5;margin:2px 0 6px;line-height:1.35;">${esc(s.error)}</div>` : ''}
+                ${s.fix && (s.fix.prompt || (s.fix.prompts || []).length > 1) ? `<div style="font-size:0.62rem;color:rgba(255,255,255,0.62);margin:0 0 6px;line-height:1.35;">${esc(s.fix.note || '')}</div><button type="button" class="anim-btn anim-btn--ghost anim-shot-fix" data-scene="${esc(s.id)}" ${s.status === 'generating' || timelineBusy ? 'disabled' : ''}>${s.fix.kind === 'split' ? 'Split into two shots' : 'Fix this shot'}</button>` : ''}
                 <div class="anim-shot__overrides">
                   <select class="anim-select anim-shot-i2v" data-scene="${esc(s.id)}" title="I2V model" style="font-size:0.65rem;padding:4px 6px;">
                     <option value="">Motion: default</option>
@@ -3689,6 +3692,9 @@
     });
     el.querySelectorAll('.anim-regen').forEach((btn) => {
       btn.addEventListener('click', () => regenScene(btn.dataset.scene));
+    });
+    el.querySelectorAll('.anim-shot-fix').forEach((btn) => {
+      btn.addEventListener('click', () => applyShotFix(btn.dataset.scene));
     });
     el.querySelectorAll('.anim-shot-suggest').forEach((btn) => {
       btn.addEventListener('click', () => suggestScene(btn.dataset.scene));
@@ -4452,6 +4458,28 @@
     }
   }
 
+  async function applyShotFix(sceneId) {
+    if (!_project?.id || !sceneId || _busy) return;
+    _busy = true;
+    try {
+      const data = await animFetch(`/api/animation/projects/${_project.id}/scenes/${sceneId}/apply-fix`, {
+        method: 'POST',
+        body: '{}',
+      });
+      _project = data.project;
+      (_project.scenes || []).forEach((s) => { _shotPromptDrafts[s.id] = customerShotLine(s); });
+      _canvasFp = '';
+      renderCanvas();
+      toast(data.note || 'Shot updated', 'success');
+      const focusId = data.added && data.added.id ? data.added.id : sceneId;
+      document.querySelector(`.anim-shot__prompt-edit[data-scene="${focusId}"]`)?.focus();
+    } catch (e) {
+      toast(e.message || 'Could not apply that fix', 'error', e.request_id);
+    } finally {
+      _busy = false;
+    }
+  }
+
   async function regenScene(sceneId) {
     if (!_project?.id || !sceneId || _busy) return;
     const scene = (_project.scenes || []).find((s) => s.id === sceneId);
@@ -4489,12 +4517,16 @@
       toast(data.started ? 'Shot regenerating — canvas will update when ready' : 'Shot updated', 'success');
     } catch (e) {
       toast(e.message || 'Regen failed', 'error', e.request_id);
-      // Refresh so a stuck GENERATING can clear / show the real error
-      try {
-        const data = await animFetch(`/api/animation/projects/${_project.id}`);
-        _project = data.project;
+      if (e.project) {
+        _project = e.project;
         renderCanvas();
-      } catch (_) {}
+      } else {
+        try {
+          const data = await animFetch(`/api/animation/projects/${_project.id}`);
+          _project = data.project;
+          renderCanvas();
+        } catch (_) {}
+      }
     } finally {
       _busy = false;
     }
