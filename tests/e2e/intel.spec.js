@@ -57,7 +57,7 @@ function intelApi(st) {
   st.page_checks = st.page_checks !== false;
   return async (entry, route, json) => {
     const p = entry.path;
-    if (!p.startsWith('/api/intel') && p !== '/api/competitor-intel') return undefined;
+    if (!p.startsWith('/api/intel')) return undefined;
     st.calls.push(`${entry.method} ${p}`);
     const body = entry.body ? JSON.parse(entry.body) : {};
     if (p === '/api/intel' && entry.method === 'GET') { json(200, { limit: st.limit, page_checks: st.page_checks, competitors: st.competitors }); return 'handled'; }
@@ -69,10 +69,16 @@ function intelApi(st) {
       json(201, { competitor: c });
       return 'handled';
     }
-    const m = p.match(/^\/api\/intel\/competitors\/([^/]+)(\/check)?$/);
+    const m = p.match(/^\/api\/intel\/competitors\/([^/]+)(\/check|\/report)?$/);
     if (m) {
       const id = m[1]; const c = st.competitors.find((x) => x.id === id);
       if (!c) { json(404, { error: 'Not found' }); return 'handled'; }
+      if (m[2] === '/report' && entry.method === 'POST') {
+        st.report = { id, body };
+        if (st.reportError) { json(st.reportError.status, st.reportError.body); return 'handled'; }
+        json(200, { competitor_name: 'Rival 1', analysis_type: 'charity', overall_summary: 'They lead with stories about people.', strengths: [{ text: 'Strong storytelling', sources: [{ n: 1, label: 'Giving page', url: 'https://rival-1.example/donate' }] }], weaknesses: [{ text: 'Few ways to give', sources: [] }], opportunities: [{ text: 'Monthly giving', sources: [] }], threats: [{ text: '<b>Bigger</b> reach', sources: [{ n: 2, label: 'Bad', url: 'javascript:alert(1)' }] }], messaging_analysis: 'Warm and direct.', messaging_sources: [], cause_differentiation: [{ text: 'Local focus', sources: [] }], content_ideas: [{ format: 'Reel', platform: 'Instagram', concept: 'A day with a nurse', hook: 'Meet Sam', description: 'Short film.', sources: [] }], based_on: { checked_at: '2026-10-20T18:00:00Z', observations: 14 } });
+        return 'handled';
+      }
       if (m[2] && entry.method === 'POST') {
         st.checks = (st.checks || 0) + 1;
         if (st.tooSoon) { json(429, { error: 'That was checked a moment ago.', retry_at: st.tooSoon }); return 'handled'; }
@@ -87,11 +93,6 @@ function intelApi(st) {
         json(200, st.detail ? st.detail(c) : detailFor(c, { findings: c.status === 'checking' && !c.finding_count ? [] : FINDINGS }));
         return 'handled';
       }
-    }
-    if (p === '/api/competitor-intel' && entry.method === 'POST') {
-      st.report = body;
-      json(200, { competitor_name: 'Rival 1', analysis_type: 'charity', competitor_score: 61, client_score: 48, overall_summary: 'They lead with stories about people.', strengths: ['Strong storytelling'], weaknesses: ['Few ways to give'], opportunities: ['Monthly giving'], threats: ['<b>Bigger</b> reach'], messaging_analysis: 'Warm and direct.', cause_differentiation: ['Local focus'], content_ideas: [{ format: 'Reel', platform: 'Instagram', concept: 'A day with a nurse', hook: 'Meet Sam', description: 'Short film.' }] });
-      return 'handled';
     }
     return undefined;
   };
@@ -383,19 +384,21 @@ test('moves: actions go where they say, Dismiss hides and is remembered', async 
   await expect(page.locator('.dash-nav-item[data-nav="fundraise"]')).toHaveClass(/active/);
 });
 
-test('the full report uses the existing endpoint and shows no scores', async ({ page }) => {
+test('the full report is written from the checks, links its sources and shows no scores', async ({ page }) => {
   const st = { competitors: [comp(1, { finding_count: 4 })] };
   await open(page, st);
   await page.getByRole('button', { name: 'Write the full report' }).click();
   await expect(page.locator('#in-report')).toContainText('They lead with stories about people.');
-  expect(st.report).toEqual({ competitor_url: 'https://rival-1.example/', client_type: 'charity' });
+  expect(st.report.id).toBe('1');
   await expect(page.locator('.in-swot')).toContainText('Strong storytelling');
+  await expect(page.locator('.in-swot a[href="https://rival-1.example/donate"]')).toHaveText('Giving page');
+  await expect(page.locator('.in-swot a[href^="javascript"]')).toHaveCount(0); // unsafe links are not made clickable
   await expect(page.locator('.in-swot b')).toHaveCount(0); // text from the API is escaped
-  await expect(page.locator('#in-report')).not.toContainText(/61|48/);
+  await expect(page.locator('#in-report')).toContainText('14 observations');
   await expect(page.locator('#in-report')).not.toContainText(/score/i);
 });
 
-test('a store sees "stores", and the report asks for a shopify analysis', async ({ page }) => {
+test('a store sees "stores" and its own labels', async ({ page }) => {
   const st = { competitors: [comp(1, { finding_count: 4 })] };
   await open(page, st, { caps: COMMERCE_CAPS });
   await expect(page.locator('.in-sub')).toContainText('Stores you watch');
@@ -403,7 +406,14 @@ test('a store sees "stores", and the report asks for a shopify analysis', async 
   await expect(page.getByRole('tab')).toHaveText(['All', 'Pages', 'Prices', 'Social', 'Website']);
   await page.getByRole('button', { name: 'Write the full report' }).click();
   await expect(page.locator('#in-report')).toBeVisible();
-  expect(st.report.client_type).toBe('shopify');
+});
+
+test('if the report cannot be written the person sees the reason, not a dead button', async ({ page }) => {
+  const st = { competitors: [comp(1, { finding_count: 4 })], reportError: { status: 409, body: { error: 'Check this competitor first. The report is written from what the check finds.' } } };
+  await open(page, st);
+  await page.getByRole('button', { name: 'Write the full report' }).click();
+  await expect(page.locator('.in-banner--warn')).toContainText('Check this competitor first');
+  await expect(page.getByRole('button', { name: 'Write the full report' })).toBeEnabled();
 });
 
 test('the unpaid and preview tiers still see the upgrade prompt, not the tool', async ({ page }) => {

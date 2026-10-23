@@ -13,7 +13,7 @@
  *   DELETE /api/intel/competitors/:id
  *   POST   /api/intel/competitors/:id/check    -> 202 { competitor } | 429 { error, retry_at }
  *   GET    /api/intel/competitors/:id          findings, compare, rhythm, moves
- *   POST   /api/competitor-intel               the written SWOT report (existing endpoint)
+ *   POST   /api/intel/competitors/:id/report    the written report, built from what the checks found
  *
  * The pure helpers at the top are exported for node tests (intel.test.js).
  */
@@ -623,7 +623,7 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
       if (!r || (!Array.isArray(r.you) && !Array.isArray(r.them))) return '';
       return `<section class="in-card" aria-labelledby="in-rh-h">
         <h2 class="in-h2" id="in-rh-h">Posting, last 4 weeks</h2>
-        ${r.source === 'instagram' ? '<p class="in-fine">Instagram posts, last 4 weeks</p>' : ''}
+        ${r.source === 'instagram' ? '<p class="in-fine">Instagram posts, last 4 weeks</p>' : r.source === 'tiktok' ? '<p class="in-fine">TikToks, last 4 weeks</p>' : ''}
         <div class="in-rhy">${gridHTML(cmp.you_label || 'You', r.you)}${gridHTML(cmp.them_label || 'Them', r.them)}</div>
         <p class="in-fine">Each square is a day, oldest first, under its weekday. Brighter means more posts that day. Hatched squares are days we could not see. Counted from public posts.</p>
       </section>`;
@@ -661,16 +661,26 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
       const busy = r.state === 'loading';
       const panel = r.state === 'done' ? reportBody(r.data, c) : '';
       return `<section class="in-rep" aria-label="Full report">
-          <span class="in-rep__t"><b>Want the full picture of ${esc(c.name || c.domain)}?</b><span>A written report with strengths, weaknesses, opportunities and threats. It reads their public site and profiles again, so it can take a minute or two.</span></span>
+          <span class="in-rep__t"><b>Want the full picture of ${esc(c.name || c.domain)}?</b><span>A written report with strengths, weaknesses, opportunities and threats, built from what the checks found. Every point links to the page behind it. It takes under a minute and uses no extra checks.</span></span>
           <button type="button" class="in-btn in-btn--rep" data-a="report" data-fk="report" ${busy ? 'disabled' : ''}>${busy ? '<span class="in-spin" aria-hidden="true"></span>Writing the report' : r.state === 'done' ? 'Write it again' : 'Write the full report'}</button>
         </section>
         ${r.state === 'error' ? `<div class="in-banner in-banner--warn" role="alert"><span class="in-banner__t">${esc(r.error)}</span></div>` : ''}
         ${panel}`;
     }
 
+    function sourcesHTML(sources) {
+      const arr = Array.isArray(sources) ? sources : [];
+      if (!arr.length) return '';
+      return ` <span class="in-fine">${arr.map((s) => {
+        const url = safeUrl(s && s.url);
+        const label = esc((s && s.label) || 'Source');
+        return url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label;
+      }).join(', ')}</span>`;
+    }
+
     function listHTML(items) {
       const arr = Array.isArray(items) ? items.filter((x) => x != null && x !== '') : [];
-      return arr.length ? `<ul>${arr.map((i) => `<li>${esc(typeof i === 'string' ? i : (i.text || i.title || i.point || JSON.stringify(i)))}</li>`).join('')}</ul>` : '<p class="in-fine">Nothing to report.</p>';
+      return arr.length ? `<ul>${arr.map((i) => `<li>${esc(typeof i === 'string' ? i : (i.text || i.title || i.point || JSON.stringify(i)))}${typeof i === 'object' ? sourcesHTML(i.sources) : ''}</li>`).join('')}</ul>` : '<p class="in-fine">Nothing to report.</p>';
     }
 
     function reportBody(r, c) {
@@ -688,12 +698,13 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
         ${r.overall_summary ? `<p>${esc(r.overall_summary)}</p>` : ''}
         ${r.pricing_insight ? `<p><b>Pricing:</b> ${esc(r.pricing_insight)}</p>` : ''}
         <div class="in-swot">${swot.map(([t, items]) => `<div><h4>${t}</h4>${listHTML(items)}</div>`).join('')}</div>
-        ${isCharity && r.messaging_analysis ? `<div><h4>Messaging</h4><p>${esc(r.messaging_analysis)}</p></div>` : ''}
+        ${isCharity && r.messaging_analysis ? `<div><h4>Messaging</h4><p>${esc(r.messaging_analysis)}${sourcesHTML(r.messaging_sources)}</p></div>` : ''}
         ${isCharity && Array.isArray(r.cause_differentiation) && r.cause_differentiation.length ? `<div><h4>Where you stand out</h4>${listHTML(r.cause_differentiation)}</div>` : ''}
         ${!isCharity && priceRows ? `<table class="in-tbl"><thead><tr><th>Price</th><th>${esc(r.competitor_name || 'Them')}</th><th>${esc(deps.clientName || 'You')}</th></tr></thead><tbody>${priceRows}</tbody></table>` : ''}
+        ${r.based_on && r.based_on.checked_at ? `<p class="in-fine">Written from the check on ${esc(formatDateTime(r.based_on.checked_at))}, using ${esc(String(r.based_on.observations || 0))} observations from public pages and profiles.</p>` : ''}
         ${ideas.length ? `<div><h4>Content ideas</h4><div class="in-moves__list" style="gap:10px">${ideas.map((i) => (typeof i === 'string'
           ? `<div class="in-idea" style="flex:1 1 280px">${esc(i)}</div>`
-          : `<div class="in-idea" style="flex:1 1 280px">${i.concept || i.format ? `<b>${esc(i.concept || i.format)}</b>` : ''}${i.platform ? `<span class="in-fine">${esc(i.platform)}</span>` : ''}${i.hook ? `<span>“${esc(i.hook)}”</span>` : ''}${i.description ? `<span>${esc(i.description)}</span>` : ''}${i.why_it_works ? `<span class="in-fine">Why it works: ${esc(i.why_it_works)}</span>` : ''}</div>`)).join('')}</div></div>` : ''}
+          : `<div class="in-idea" style="flex:1 1 280px">${i.concept || i.format ? `<b>${esc(i.concept || i.format)}</b>` : ''}${i.platform ? `<span class="in-fine">${esc(i.platform)}</span>` : ''}${i.hook ? `<span>“${esc(i.hook)}”</span>` : ''}${i.description ? `<span>${esc(i.description)}</span>` : ''}${i.why_it_works ? `<span class="in-fine">Why it works: ${esc(i.why_it_works)}</span>` : ''}${i.sources ? `<span>${sourcesHTML(i.sources)}</span>` : ''}</div>`)).join('')}</div></div>` : ''}
         ${!isCharity && products.length ? `<div><h4>Top products</h4><table class="in-tbl"><thead><tr><th>Product</th><th>Price</th><th>Type</th></tr></thead><tbody>${products.map((p) => `<tr><td>${esc(p.title || p.name || '—')}</td><td>${p.price != null ? '$' + esc(p.price) : '—'}</td><td>${esc(p.product_type || p.type || '—')}</td></tr>`).join('')}</tbody></table></div>` : ''}
       </section>`;
     }
@@ -911,7 +922,7 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
       const ctl = typeof AbortController === 'function' ? new AbortController() : null;
       const timer = ctl ? setTimeout(() => ctl.abort(), 150000) : null;
       try {
-        const r = await call('/api/competitor-intel', { method: 'POST', body: { competitor_url: c.url, client_type: clientType }, signal: ctl ? ctl.signal : undefined });
+        const r = await call(`/api/intel/competitors/${encodeURIComponent(c.id)}/report`, { method: 'POST', body: {}, signal: ctl ? ctl.signal : undefined });
         if (!alive()) return;
         if (!r.ok) throw new Error(r.body.error || r.body.message || `The report could not be written (${r.status}).`);
         S.report.set(c.id, { state: 'done', data: r.body });
