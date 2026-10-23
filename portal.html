@@ -11643,7 +11643,7 @@
         const place = String((a.analysis && a.analysis.place) || '').trim();
         const still = isStillKind(a.kind);
         const unlabeled = still && !summary && !subjects.length;
-        const kindChoices = (helpers.retagKinds ? helpers.retagKinds(a.kind) : [a.kind]).filter(Boolean);
+        const kindChoices = (helpers.retagKinds ? helpers.retagKinds(a.kind, a.url) : [a.kind]).filter(Boolean);
         const kindOptions = kindChoices.map((k) =>
           `<option value="${escapeHtml(k)}" ${k === a.kind ? 'selected' : ''}>${escapeHtml((helpers.kindLabel && helpers.kindLabel(k)) || k)}</option>`
         ).join('');
@@ -11743,7 +11743,7 @@
         </div>`).join('');
       root.innerHTML = `
         <h3 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700;color:#fff;margin:0 0 4px;">Library</h3>
-        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), scenes, and style stills. Label stills so Coach can find Bunny, a Cadillac, or a nightclub when you name them.</p>
+        <p style="font-size:0.8125rem;color:var(--color-text-muted);margin:0 0 12px;">Logo, colors, characters, items, settings (a group of people), scenes, and style stills. Tag a picture as Outro to use it as the end card. Label stills so Coach can find Bunny, a Cadillac, or a nightclub when you name them.</p>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
           <input id="brand-lib-filter" type="text" placeholder="Filter collection" value="${escapeHtml(prevFilter)}" style="flex:1;min-width:160px;padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;" />
           <button type="button" id="brand-lib-harvest" class="settings-tab" style="padding:6px 12px;">Import logo &amp; colors</button>

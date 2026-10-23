@@ -9,8 +9,8 @@ const KIND_LABEL = {
   item: 'Item', setting: 'Setting', style: 'Style', color: 'Color', video: 'Video',
 };
 const KIND_ACCEPT = {
-  outro: 'video/*',
-  intro: 'video/*',
+  outro: 'image/*,video/*',
+  intro: 'image/*,video/*',
   music: 'audio/*,video/*',
   logo: 'image/*',
   scene: 'image/*',
@@ -150,9 +150,24 @@ function persistFamily(kind) {
   return '';
 }
 
-function retagKinds(kind) {
+function fileKindFromUrl(url) {
+  const path = String(url || '').toLowerCase().split(/[?#]/)[0];
+  if (/\.(png|jpe?g|webp|gif|avif|heic)$/.test(path)) return 'image';
+  if (/\.(mp4|mov|webm|m4v)$/.test(path)) return 'video';
+  if (/\.(mp3|wav|m4a|aac|ogg|flac)$/.test(path)) return 'audio';
+  return '';
+}
+
+function retagKinds(kind, url) {
   const family = persistFamily(kind);
-  return ASSET_KINDS.filter((k) => persistFamily(k) === family);
+  const base = ASSET_KINDS.filter((k) => persistFamily(k) === family);
+  const file = fileKindFromUrl(url);
+  // A designed still can be the end card. A real video cannot become a scene.
+  if (file === 'image' || (!file && family === 'image')) {
+    const stills = ASSET_KINDS.filter((k) => persistFamily(k) === 'image');
+    return [...new Set([...stills, 'outro', 'intro'])];
+  }
+  return base;
 }
 
 function isStillKind(kind) {
