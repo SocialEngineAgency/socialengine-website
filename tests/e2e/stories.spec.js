@@ -164,3 +164,81 @@ test('Manual Story: server rejection is shown; an auto Story offers Post now', a
   expect(approvals[0]).toEqual({ postId: 'recSTORY000000001', publishNow: true });
   await expect(story).toContainText('Published');
 });
+
+test('Story background: make one with AI, pick a stock photo, reuse one from My images, upload, remove; all save with the frame', async ({ page }) => {
+  const saves = [];
+  const gen = [];
+  const uses = [];
+  let uploads = 0;
+  const AI_URL = 'https://cdn.example.test/made.jpg';
+  const STOCK_URL = 'https://cdn.example.test/stock.jpg';
+  const LIB_URL = 'https://cdn.example.test/library.jpg';
+  const UP_URL = 'https://cdn.example.test/upload.jpg';
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/meta-planner' && entry.method === 'GET') { json(200, plan(0)); return 'handled'; }
+      if (entry.path === '/api/calendar-history') { json(200, { posts: [] }); return 'handled'; }
+      if (entry.path === '/api/stories' && entry.method === 'GET') { json(200, { stories: [], stickers: STICKERS }); return 'handled'; }
+      if (entry.path === '/api/stories/draft') { json(200, { draft: { ...AI_DRAFT, frames: AI_DRAFT.frames.map((f) => ({ ...f, sticker: null })) }, validation: { ok: true, errors: [], warnings: [], mode: 'auto' } }); return 'handled'; }
+      if (entry.path === '/api/studio/generate-image') { gen.push(JSON.parse(entry.body || '{}')); json(200, { url: AI_URL }); return 'handled'; }
+      if (entry.path === '/api/studio/stock-photos' && entry.method === 'GET') { json(200, { photos: [{ id: 'pixabay-photo:123', thumb: 'https://cdn.example.test/t.jpg', credit: 'coombesy' }] }); return 'handled'; }
+      if (entry.path === '/api/studio/stock-photos/use') { uses.push(JSON.parse(entry.body || '{}')); json(200, { url: STOCK_URL, credit: 'coombesy' }); return 'handled'; }
+      if (entry.path === '/api/studio/media-library') { json(200, { items: [{ id: 'rec1', title: 'Old post', type: 'image', image_url: LIB_URL }] }); return 'handled'; }
+      if (entry.path === '/api/studio/upload-image') { uploads += 1; json(200, { url: UP_URL, success: true }); return 'handled'; }
+      if (entry.path === '/api/stories' && entry.method === 'POST') {
+        const body = JSON.parse(entry.body || '{}');
+        saves.push(body);
+        json(200, { story: savedStory(body.draft, { status: 'Ready for Review' }), validation: { ok: true, errors: [], warnings: [] } });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="schedule"]');
+  await page.locator('#meta-week-planner [data-mwp-story="new"]').click();
+  await page.fill('#sc-topic', 'planting');
+  await page.click('#sc-ai');
+  await expect(page.locator('#sc-frames .sc-fchip[data-sc-frame]')).toHaveCount(4);
+
+  // Frame 1: made with AI, prompt starts from the topic and asks for a tall picture with no lettering.
+  await page.click('[data-sc-bg="ai"]');
+  await expect(page.locator('#sc-bg-prompt')).toHaveValue('planting');
+  await page.fill('#sc-bg-prompt', 'autumn trees in warm light');
+  await page.click('#sc-bg-make');
+  await expect(page.locator('.sc-bgthumb')).toHaveAttribute('src', AI_URL);
+  await expect(page.locator('#sc-preview')).toHaveAttribute('style', /made\.jpg/);
+  expect(gen).toHaveLength(1);
+  expect(gen[0].format).toBe('9:16');
+  expect(gen[0].prompt).toMatch(/autumn trees in warm light/);
+  expect(gen[0].prompt).toMatch(/No text/i);
+
+  // Frame 2: stock photo.
+  await page.locator('[data-sc-frame="1"]').click();
+  await expect(page.locator('.sc-bgthumb')).toHaveCount(0);
+  await page.click('[data-sc-bg="stock"]');
+  await page.fill('#sc-bg-q', 'sunlight');
+  await page.click('#sc-bg-search');
+  await page.locator('[data-sc-stock="0"]').click();
+  await expect(page.locator('.sc-bgthumb')).toHaveAttribute('src', STOCK_URL);
+  expect(uses[0]).toMatchObject({ id: 'pixabay-photo:123', q: 'sunlight', orientation: 'vertical' });
+
+  // Frame 3: from My images.
+  await page.locator('[data-sc-frame="2"]').click();
+  await page.click('[data-sc-bg="library"]');
+  await page.locator('[data-sc-lib="0"]').click();
+  await expect(page.locator('.sc-bgthumb')).toHaveAttribute('src', LIB_URL);
+
+  // Frame 4: upload, then remove.
+  await page.locator('[data-sc-frame="3"]').click();
+  await page.setInputFiles('#sc-bg-file', { name: 'bg.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==', 'base64') });
+  await expect(page.locator('.sc-bgthumb')).toHaveAttribute('src', UP_URL);
+  expect(uploads).toBe(1);
+  await page.click('[data-sc-bg="clear"]');
+  await expect(page.locator('.sc-bgthumb')).toHaveCount(0);
+
+  await page.click('#sc-save');
+  await expect.poll(() => saves.length).toBe(1);
+  expect(saves[0].draft.frames.map((f) => f.bg.image_url)).toEqual([AI_URL, STOCK_URL, LIB_URL, '']);
+});

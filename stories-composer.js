@@ -109,6 +109,17 @@
       .sc-card{border:1px solid #243049;border-radius:12px;padding:12px}
       .sc-thumbs{display:flex;gap:6px;margin:8px 0}
       .sc-thumbs img{width:54px;height:96px;object-fit:cover;border-radius:6px;border:1px solid #243049}
+      .sc-bg{flex-basis:100%;display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+      .sc-bgbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+      .sc-bgbar .sc-bglabel{font-size:.7rem;color:rgba(255,255,255,.55);margin-right:4px}
+      .sc-bgthumb{width:28px;height:50px;object-fit:cover;border-radius:5px;border:1px solid #243049}
+      .sc-bgpanel{border:1px solid #243049;border-radius:10px;padding:10px;background:#0E1628;display:flex;flex-direction:column;gap:8px}
+      .sc-bgpanel .sc-hint{font-size:.7rem;color:rgba(255,255,255,.5)}
+      .sc-bggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;max-height:190px;overflow:auto}
+      .sc-bggrid button{padding:0;border:1px solid #243049;border-radius:6px;overflow:hidden;background:#111A2E;cursor:pointer;aspect-ratio:9/16}
+      .sc-bggrid button:hover{border-color:#A78BFA}
+      .sc-bggrid img{width:100%;height:100%;object-fit:cover;display:block}
+      .sc-bgurl summary{font-size:.7rem;color:rgba(255,255,255,.5);cursor:pointer}
       .sc-check{font-size:.76rem;color:rgba(255,255,255,.75);margin:8px 0 0 18px}
       .sc-check li{margin-bottom:4px}
       @media (max-width:820px){.sc-body{grid-template-columns:1fr}}
@@ -147,6 +158,125 @@
     return `<div class="sc-row">${prompt}${extra}</div>`;
   }
 
+  // Background image: make one with AI, pick a stock photo, reuse one from the library, upload, or paste a link.
+  function bgHtml(f) {
+    const has = !!(f.bg && f.bg.image_url);
+    const busy = S.bgBusy;
+    const btn = (k, label) => `<button type="button" class="sc-btn${S.bgPanel === k ? ' sc-btn--pri' : ''}" data-sc-bg="${k}" ${busy ? 'disabled' : ''}>${label}</button>`;
+    let panel = '';
+    if (S.bgPanel === 'ai') {
+      panel = `<div class="sc-bgpanel" id="sc-bg-ai">
+        <label style="font-size:.7rem;color:rgba(255,255,255,.55)">Describe the picture</label>
+        <div class="sc-row"><input class="sc-in" id="sc-bg-prompt" style="flex:1;min-width:200px" maxlength="300" value="${esc(S.bgPrompt)}" placeholder="e.g. warm morning light through autumn trees">
+        <button type="button" class="sc-btn sc-btn--pri" id="sc-bg-make" ${busy ? 'disabled' : ''}>${busy === 'ai' ? 'Making it…' : 'Make image'}</button></div>
+        <div class="sc-hint">Made tall for Stories, with no lettering, and room for your text. Takes about a minute. It is saved to your images.</div>
+      </div>`;
+    } else if (S.bgPanel === 'stock') {
+      panel = `<div class="sc-bgpanel" id="sc-bg-stock">
+        <div class="sc-row"><input class="sc-in" id="sc-bg-q" style="flex:1;min-width:200px" maxlength="80" value="${esc(S.stockQ)}" placeholder="Search photos, e.g. sunlight autumn">
+        <button type="button" class="sc-btn" id="sc-bg-search" ${busy ? 'disabled' : ''}>${busy === 'stock' ? 'Searching…' : 'Search'}</button></div>
+        <div class="sc-bggrid">${(S.stockPhotos || []).map((p, i) => `<button type="button" data-sc-stock="${i}" title="${esc(p.credit ? `Photo by ${p.credit}` : 'Stock photo')}"><img src="${esc(p.thumb)}" alt="" loading="lazy"></button>`).join('')}</div>
+        <div class="sc-hint">${esc(S.stockNote || 'Pick one. It is saved with your Story, not linked from the photo site.')}</div>
+      </div>`;
+    } else if (S.bgPanel === 'library') {
+      panel = `<div class="sc-bgpanel" id="sc-bg-library">
+        <div class="sc-bggrid">${(S.libItems || []).map((it, i) => `<button type="button" data-sc-lib="${i}" title="${esc(it.title || 'Image')}"><img src="${esc(it.image_url)}" alt="" loading="lazy"></button>`).join('')}</div>
+        <div class="sc-hint">${busy === 'library' ? 'Loading your images…' : esc(S.libNote || 'Images you have made or uploaded.')}</div>
+      </div>`;
+    }
+    return `<div class="sc-bg">
+      <div class="sc-bgbar">
+        <span class="sc-bglabel">Background image</span>
+        ${has ? `<img class="sc-bgthumb" src="${esc(f.bg.image_url)}" alt="Current background">` : ''}
+        ${btn('ai', 'Make one with AI')}${btn('stock', 'Stock photos')}${btn('library', 'My images')}
+        <button type="button" class="sc-btn" data-sc-bg="upload" ${busy ? 'disabled' : ''}>${busy === 'upload' ? 'Uploading…' : 'Upload'}</button>
+        ${has ? '<button type="button" class="sc-btn" data-sc-bg="clear">Remove image</button>' : ''}
+        <input type="file" id="sc-bg-file" accept="image/*" hidden>
+      </div>
+      ${panel}
+      <details class="sc-bgurl"><summary>Or paste an image link</summary>
+        <input class="sc-in" id="sc-img" style="width:100%;margin-top:6px" value="${esc(f.bg.image_url)}" placeholder="https://… (optional)"></details>
+    </div>`;
+  }
+
+  function setBg(url, idx) {
+    const fr = S.draft.frames[idx == null ? S.sel : idx];
+    if (fr) fr.bg.image_url = url || '';
+    S.bgPanel = null;
+    S.validation = null;
+    render();
+  }
+
+  async function bgMake() {
+    const prompt = String((document.getElementById('sc-bg-prompt') || {}).value || '').trim();
+    S.bgPrompt = prompt;
+    if (prompt.length < 3) { toast('Describe the picture first', 'warning'); return; }
+    const at = S.sel;
+    S.bgBusy = 'ai'; render();
+    try {
+      const out = await call('POST', '/api/studio/generate-image', {
+        prompt: `${prompt}. Vertical background for an Instagram Story. No text, letters, numbers or logos. Keep the middle of the picture calm and uncluttered so a headline can sit on it.`,
+        format: '9:16',
+      });
+      if (!out.url) throw new Error('No image came back');
+      S.bgBusy = null; setBg(out.url, at); toast('Background ready', 'success');
+    } catch (e) {
+      S.bgBusy = null; render();
+      toast(e.message || 'Could not make that image', 'error');
+    }
+  }
+
+  async function bgSearch() {
+    const q = String((document.getElementById('sc-bg-q') || {}).value || '').trim();
+    S.stockQ = q;
+    if (q.length < 2) { toast('Say what to look for', 'warning'); return; }
+    S.bgBusy = 'stock'; render();
+    try {
+      const out = await call('GET', `/api/studio/stock-photos?q=${encodeURIComponent(q)}&orientation=vertical`);
+      S.stockPhotos = (Array.isArray(out.photos) ? out.photos : []).filter((p) => p && /^pixabay-photo:\d{1,12}$/.test(p.id) && /^https:\/\//.test(p.thumb || ''));
+      S.stockNote = S.stockPhotos.length ? '' : (out.notice || 'Nothing matched. Try different words.');
+    } catch (e) { S.stockNote = e.message || 'Stock search failed'; toast(S.stockNote, 'error'); }
+    S.bgBusy = null; render();
+  }
+
+  async function bgUseStock(i) {
+    const p = (S.stockPhotos || [])[i];
+    if (!p) return;
+    const at = S.sel;
+    S.bgBusy = 'stock'; render();
+    try {
+      const out = await call('POST', '/api/studio/stock-photos/use', { id: p.id, q: S.stockQ, orientation: 'vertical' });
+      if (!out.url) throw new Error('Could not save that photo');
+      S.bgBusy = null; setBg(out.url, at);
+    } catch (e) { S.bgBusy = null; render(); toast(e.message || 'Could not save that photo', 'error'); }
+  }
+
+  async function bgLoadLibrary() {
+    S.bgBusy = 'library'; render();
+    try {
+      const out = await call('GET', '/api/studio/media-library?type=image&limit=40');
+      S.libItems = (Array.isArray(out.items) ? out.items : []).filter((it) => it && /^https?:\/\//.test(it.image_url || ''));
+      S.libNote = S.libItems.length ? '' : 'No images yet. Make one with AI or upload one.';
+    } catch (e) { S.libNote = e.message || 'Could not load your images'; toast(S.libNote, 'error'); }
+    S.bgBusy = null; render();
+  }
+
+  async function bgUpload(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { toast('Please choose an image file', 'warning'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10MB', 'warning'); return; }
+    const at = S.sel;
+    S.bgBusy = 'upload'; render();
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${api()}/api/studio/upload-image`, { method: 'POST', headers: headers(), body: fd });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok || !out.url) throw new Error(out.error || 'Upload failed');
+      S.bgBusy = null; setBg(out.url, at);
+    } catch (e) { S.bgBusy = null; render(); toast(e.message || 'Upload failed', 'error'); }
+  }
+
   function composeHtml() {
     const d = S.draft;
     const f = d.frames[S.sel] || blankFrame();
@@ -181,8 +311,8 @@
         <div class="sc-row">
           <label style="flex:1;min-width:200px">Sub line (optional)<input class="sc-in" id="sc-sub" value="${esc(f.sub)}" maxlength="120"></label>
           <label>Colour<input class="sc-in" id="sc-color" type="color" value="${esc(f.bg.color || '#7C3AED')}" style="width:52px;padding:2px"></label>
-          <label style="flex:1;min-width:200px">Background image URL<input class="sc-in" id="sc-img" value="${esc(f.bg.image_url)}" placeholder="https://… (optional)"></label>
         </div>
+        ${bgHtml(f)}
         <div class="sc-row">
           <label>Sticker<select class="sc-sel" id="sc-sticker"><option value="">None</option>${Object.keys(S.stickers).map((k) => `<option value="${k}" ${f.sticker && f.sticker.type === k ? 'selected' : ''}>${esc(S.stickers[k].label)}</option>`).join('')}</select></label>
           <button type="button" class="sc-btn" id="sc-left" ${S.sel === 0 ? 'disabled' : ''}>← Move</button>
@@ -300,6 +430,23 @@
     on('#sc-sub', 'input', (e) => { f().sub = e.target.value; rerenderPreview(); });
     on('#sc-color', 'input', (e) => { f().bg.color = e.target.value; rerenderPreview(); });
     on('#sc-img', 'change', (e) => { f().bg.image_url = e.target.value.trim(); rerenderPreview(); });
+    root.querySelectorAll('[data-sc-bg]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.dataset.scBg;
+      if (k === 'clear') { setBg(''); return; }
+      if (k === 'upload') { root.querySelector('#sc-bg-file')?.click(); return; }
+      if (S.bgPanel === k) { S.bgPanel = null; render(); return; }
+      S.bgPanel = k;
+      if (k === 'ai' && !S.bgPrompt) S.bgPrompt = String(d.topic || f().text || '').slice(0, 120);
+      if (k === 'library' && !S.libItems) { bgLoadLibrary(); return; }
+      render();
+    }));
+    on('#sc-bg-file', 'change', (e) => { const file = e.target.files && e.target.files[0]; e.target.value = ''; bgUpload(file); });
+    on('#sc-bg-make', 'click', bgMake);
+    on('#sc-bg-prompt', 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bgMake(); } });
+    on('#sc-bg-search', 'click', bgSearch);
+    on('#sc-bg-q', 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bgSearch(); } });
+    root.querySelectorAll('[data-sc-stock]').forEach((b) => b.addEventListener('click', () => bgUseStock(Number(b.dataset.scStock))));
+    root.querySelectorAll('[data-sc-lib]').forEach((b) => b.addEventListener('click', () => { const it = (S.libItems || [])[Number(b.dataset.scLib)]; if (it) setBg(it.image_url); }));
     on('#sc-hl', 'input', (e) => { d.highlight.name = e.target.value; });
     on('#sc-date', 'change', (e) => { S.date = e.target.value; });
     on('#sc-time', 'change', (e) => { S.time = e.target.value; });
@@ -326,7 +473,7 @@
         render();
       });
     }
-    root.querySelectorAll('[data-sc-frame]').forEach((b) => b.addEventListener('click', () => { S.sel = Number(b.dataset.scFrame); render(); }));
+    root.querySelectorAll('[data-sc-frame]').forEach((b) => b.addEventListener('click', () => { S.sel = Number(b.dataset.scFrame); S.bgPanel = null; render(); }));
     on('#sc-add', 'click', () => { d.frames.push(blankFrame()); S.sel = d.frames.length - 1; render(); });
     on('#sc-del', 'click', () => { d.frames.splice(S.sel, 1); S.sel = Math.max(0, S.sel - 1); render(); });
     on('#sc-left', 'click', () => { const i = S.sel; [d.frames[i - 1], d.frames[i]] = [d.frames[i], d.frames[i - 1]]; S.sel = i - 1; render(); });
