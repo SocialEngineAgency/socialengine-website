@@ -65,14 +65,14 @@ for (const look of ['new', 'old']) {
       },
     });
 
-    await expect(page.locator('#cs-aspect')).toHaveValue('9:16');
+    // The Post tab starts on the feed size, not the carousel size.
+    await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
     await ask(page, 'make 2 of them as single 4:5 posts');
     const card = page.locator('#cs-coach-log [data-cs-posts]');
     await expect(card).toBeVisible();
-    // Brand posts are made in the brand's format, and the size picker follows it.
-    await expect(card.locator('[data-cs-posts-size]')).toHaveText('Size 4:5, your brand format.');
+    // Brand posts are feed posts, and the size picker follows the size they are made at.
+    await expect(card.locator('[data-cs-posts-size]')).toHaveText('Size 4:5, feed post in your brand style.');
     await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
-    await expect(page.locator('#cs-coach-log')).toContainText('Size switched from 9:16 to 4:5.');
     if (look === 'new') await expect(page.locator('.nl-p2-size button[data-aspect="4:5"]')).toHaveAttribute('aria-pressed', 'true');
     expect(await card.locator('[data-cs-post="0"] .cs-post__img').evaluate((el) => el.style.aspectRatio)).toBe('4 / 5');
     // The first post shows while the second is still being made.
@@ -83,6 +83,7 @@ for (const look of ['new', 'old']) {
     await expect(card.locator('[data-cs-posts-head]')).toHaveText('All 2 posts are ready. Open one to change it, or add them to Review.');
     expect(sent.posts).toHaveLength(1);
     expect(sent.posts[0].posts.map((p) => p.title)).toEqual(POSTS.map((p) => p.title));
+    expect(sent.posts[0].aspect_ratio, 'the size is sent, so the server never falls back to the carousel style size').toBe('4:5');
     await expect(page.locator('#cs-coach-log #cs-design-carousel')).toHaveCount(0);
 
     // One to Review, then the rest with Add all.
@@ -181,28 +182,28 @@ test('no brand design: the size the Coach names is the size the picker switches 
         return 'handled';
       }
       if (entry.path === '/api/chat/v2') {
-        json(200, { reply: 'Making both at 4:5, the best size for the Instagram feed.', coach_actions: [{ type: 'design_posts', engine: 'stage', aspect_ratio: '4:5', posts: POSTS }] });
+        json(200, { reply: 'Making both square, at 1:1.', coach_actions: [{ type: 'design_posts', engine: 'stage', aspect_ratio: '1:1', posts: POSTS }] });
         return 'handled';
       }
       return undefined;
     },
   });
-  await expect(page.locator('#cs-aspect')).toHaveValue('9:16');
+  await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
   sent.generate = [];
   await ask(page, 'make 2 of them');
   const card = page.locator('#cs-coach-log [data-cs-posts]');
   await expect(card.locator('[data-cs-post="1"] img')).toBeVisible();
-  expect(sent.generate.map((g) => g.aspect_ratio)).toEqual(['4:5', '4:5']);
-  await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
-  await expect(page.locator('.nl-p2-size button[data-aspect="4:5"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#cs-coach-log')).toContainText('Size switched from 9:16 to 4:5.');
-  await expect(card.locator('[data-cs-posts-size]')).toHaveText('Size 4:5.');
+  expect(sent.generate.map((g) => g.aspect_ratio)).toEqual(['1:1', '1:1']);
+  await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
+  await expect(page.locator('.nl-p2-size button[data-aspect="1:1"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#cs-coach-log')).toContainText('Size switched from 4:5 to 1:1.');
+  await expect(card.locator('[data-cs-posts-size]')).toHaveText('Size 1:1.');
 
   // Opening a post after picking another size brings the picker back to that post's size.
-  await page.click('.nl-p2-size button[data-aspect="1:1"]');
-  await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
+  await page.click('.nl-p2-size button[data-aspect="9:16"]');
+  await expect(page.locator('#cs-aspect')).toHaveValue('9:16');
   await card.locator('[data-cs-post-open="0"]').click();
-  await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
+  await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
   expect(errors).toEqual([]);
 });
 
@@ -225,23 +226,23 @@ test('a single design the Coach sizes switches the picker; one it leaves at the 
     },
   });
   sent.generate = [];
-  next = { reply: 'I will make it at 4:5 for the feed.', coach_actions: [{ type: 'create', destination: 'design', mode: 'image', prompt: 'A feed post: five small habits that improve your sleep, warm tone', aspect_ratio: '4:5', aspect_explicit: true }] };
+  next = { reply: 'I will make it square for the feed.', coach_actions: [{ type: 'create', destination: 'design', mode: 'image', prompt: 'A feed post: five small habits that improve your sleep, warm tone', aspect_ratio: '1:1', aspect_explicit: true }] };
   // With a post on the canvas this is a change to it, made straight away.
-  await ask(page, 'make the sleep one as a 4:5 feed post');
+  await ask(page, 'make the sleep one as a square feed post');
   await expect.poll(() => sent.generate.length).toBe(1);
-  expect(sent.generate[0].aspect_ratio).toBe('4:5');
-  await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
-  await expect(page.locator('#cs-coach-log')).toContainText('Size switched from 9:16 to 4:5.');
+  expect(sent.generate[0].aspect_ratio).toBe('1:1');
+  await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
+  await expect(page.locator('#cs-coach-log')).toContainText('Size switched from 4:5 to 1:1.');
 
   // The Coach did not name a size (9:16 is only its default): the size picked here stays.
-  await page.click('.nl-p2-size button[data-aspect="1:1"]');
+  await page.click('.nl-p2-size button[data-aspect="4:5"]');
   next = { reply: 'Making a calmer version.', coach_actions: [{ type: 'create', destination: 'design', mode: 'image', prompt: 'A calmer version of the sleep habits post, soft blues', aspect_ratio: '9:16', aspect_explicit: false }] };
   await ask(page, 'make a calmer version');
   // A new design with one on the canvas waits for Apply design.
   await page.click('#cs-coach-apply');
   await expect.poll(() => sent.generate.length).toBe(2);
-  expect(sent.generate[1].aspect_ratio).toBe('1:1');
-  await expect(page.locator('#cs-aspect')).toHaveValue('1:1');
-  await expect(page.locator('#cs-coach-log')).not.toContainText('Size switched from 4:5 to 9:16');
+  expect(sent.generate[1].aspect_ratio).toBe('4:5');
+  await expect(page.locator('#cs-aspect')).toHaveValue('4:5');
+  await expect(page.locator('#cs-coach-log')).not.toContainText('Size switched from 1:1 to 9:16');
   expect(errors).toEqual([]);
 });

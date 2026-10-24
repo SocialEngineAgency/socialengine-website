@@ -2036,9 +2036,9 @@
               <div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;">
                 <input id="cs-style" type="text" placeholder="Bold typographic, dark, minimal" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
                 <select id="cs-aspect" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#fff;font-size:0.79rem;font-family:var(--font-body);outline:none;">
-                  <option value="9:16" selected>9:16 portrait</option>
+                  <option value="9:16"${isCarouselMode ? ' selected' : ''}>9:16 portrait</option>
                   <option value="1:1">1:1 square</option>
-                  <option value="4:5">4:5 portrait</option>
+                  <option value="4:5"${isCarouselMode ? '' : ' selected'}>4:5 portrait</option>
                 </select>
               </div>
             </details>
@@ -3215,7 +3215,7 @@
   function postSizeCss(r) { return ({ '9:16': '9/16', '4:5': '4/5', '1:1': '1/1' })[r] || '4/5'; }
   function currentPostSize() {
     const v = document.getElementById('cs-aspect')?.value || '';
-    return isPostSize(v) ? v : '9:16';
+    return isPostSize(v) ? v : '4:5'; // a feed post is 4:5 unless another size was picked
   }
   function setPostSize(ratio, { say = false } = {}) {
     const v = String(ratio || '');
@@ -3262,13 +3262,15 @@
       const done = posts.filter((p) => p.status === 'done').length;
       const failed = posts.filter((p) => p.status === 'failed').length;
       const working = posts.length - done - failed;
-      const head = working
+      const head = view.setup
+        ? `First time making ${view.size} posts in this style: setting up a ${view.size} version of it, which takes a minute or two. It is saved, so later posts start straight away.`
+        : working
         ? `Making ${posts.length === 1 ? 'your post' : `${posts.length} posts`}${done ? `: ${done} of ${posts.length} done` : ''}. Each one shows here when it is ready.`
         : failed
           ? `${done} of ${posts.length} made. ${failed === 1 ? 'One' : failed} could not be made; try ${failed === 1 ? 'it' : 'them'} again.`
           : `${posts.length === 1 ? 'Your post is' : `All ${posts.length} posts are`} ready. Open one to change it, or add ${posts.length === 1 ? 'it' : 'them'} to Review.`;
       const ready = posts.filter((p) => p.status === 'done' && !p.queued).length;
-      const sizeNote = action.engine === 'brand' ? `Size ${view.size}, your brand format.` : `Size ${view.size}.`;
+      const sizeNote = action.engine === 'brand' ? `Size ${view.size}, feed post in your brand style.` : `Size ${view.size}.`;
       card.innerHTML = `<div class="cs-posts__head" data-cs-posts-head style="font-size:0.74rem;color:rgba(255,255,255,0.7);line-height:1.45;">${escapeHtml(head)}</div>`
         + `<div class="cs-posts__size" data-cs-posts-size style="font-size:0.66rem;color:rgba(255,255,255,0.45);margin-top:-5px;">${escapeHtml(sizeNote)}</div>`
         + `<div class="cs-posts__grid" style="display:grid;grid-template-columns:repeat(${posts.length > 1 ? 2 : 1},minmax(0,1fr));gap:8px;">${posts.map((p, i) => {
@@ -3327,6 +3329,7 @@
       body: JSON.stringify({
         posts: list.map((p) => ({ title: p.title, brief: p.brief })),
         style_id: action.style_id || undefined,
+        aspect_ratio: isPostSize(view.size) ? view.size : undefined,
         medical: action.medical === true || action.medical === 'ask',
         platform: 'instagram',
       }),
@@ -3342,6 +3345,8 @@
       const jd = await jr.json().catch(() => ({}));
       const job = jd.job || {};
       const states = (job.progress && Array.isArray(job.progress.posts)) ? job.progress.posts : [];
+      // The first feed post in a carousel style: its single-post version is made once, then reused.
+      view.setup = job.status === 'running' && !states.length && !!job.progress && ['feed-style', 'draft', 'review', 'final'].includes(job.progress.stage);
       states.forEach((st, k) => {
         const p = view.posts[index(k)];
         if (!p || p.status === 'done') return;
