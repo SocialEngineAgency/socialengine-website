@@ -45,6 +45,9 @@ test('Library nav shows the kit; rename, retag, and delete hit the API', async (
   })).toBeTruthy();
   await expect(page.locator('#brand-library [data-asset-kind="ast_logo1"]')).toHaveValue('logo');
 
+  // The panel on the right shows the item you picked: choose the outro first.
+  await page.click('#brand-library .lb-tile__main[data-id="ast_outro1"]');
+  await expect(page.locator('#lb-panel')).toContainText('Silk end');
   page.once('dialog', (d) => d.accept('End card'));
   await page.click('#brand-library [data-asset-rename="ast_outro1"]');
   await expect.poll(() => calls.some((c) => c.method === 'PATCH' && c.path === '/api/assets/ast_outro1')).toBeTruthy();
