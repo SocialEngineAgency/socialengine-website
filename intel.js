@@ -558,7 +558,7 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
         <p class="in-body">${esc(f.body)}</p>
         <div class="in-find__ft">${src}
           <span class="in-find__acts">
-            <button type="button" class="in-btn" data-a="save" data-fid="${esc(f.id)}" data-fk="save-${esc(f.id)}" aria-pressed="${isSaved}">${isSaved ? 'Saved' : 'Save'}</button>
+            <button type="button" class="in-btn" data-a="save" data-fid="${esc(f.id)}" data-fk="save-${esc(f.id)}" aria-pressed="${isSaved}" title="Keep this for your own posts">${isSaved ? 'Saved' : 'Save'}</button>
             ${plan && f.action.label ? `<button type="button" class="in-btn in-btn--soft" data-a="finding" data-fid="${esc(f.id)}" data-fk="fa-${esc(f.id)}">${esc(f.action.label)}</button>` : ''}
           </span>
         </div></article>`;
@@ -792,6 +792,14 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
         S.pageChecks = r.body.page_checks !== false;
         S.list = Array.isArray(r.body.competitors) ? r.body.competitors.slice() : [];
         S.loaded = true;
+        try {
+          const ideas = await call('/api/idea-lists');
+          if (ideas.ok && Array.isArray(ideas.body.saved_ids)) {
+            const next = {};
+            ideas.body.saved_ids.forEach((sid) => { next[sid] = 1; });
+            writeJson(SAVED_KEY, next);
+          }
+        } catch (_) { /* the watchlist still loads if ideas do not */ }
         if (!S.sel || !byId(S.sel)) S.sel = S.list[0] ? S.list[0].id : null;
         renderNote();
         renderAll();
@@ -936,6 +944,39 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
       } finally { if (timer) clearTimeout(timer); }
     }
 
+    async function saveFinding(c, btn) {
+      if (!c || !btn || btn.disabled) return;
+      const fid = btn.getAttribute('data-fid');
+      if (!fid) return;
+      const saved = readJson(SAVED_KEY, {});
+      const keep = !saved[fid];
+      btn.disabled = true;
+      btn.textContent = keep ? 'Saving' : 'Removing';
+      try {
+        const r = await call(`/api/intel/competitors/${encodeURIComponent(c.id)}/save`, { method: 'POST', body: { finding_id: fid, saved: keep } });
+        if (!alive()) return;
+        if (!r.ok) throw new Error(r.body.error || 'Could not save that');
+        if (Array.isArray(r.body.saved_ids)) {
+          const next = {};
+          r.body.saved_ids.forEach((id) => { next[id] = 1; });
+          writeJson(SAVED_KEY, next);
+        } else if (keep) { saved[fid] = 1; writeJson(SAVED_KEY, saved); }
+        else { delete saved[fid]; writeJson(SAVED_KEY, saved); }
+        const n = Number(r.body.added) || 0;
+        const insight = String(r.body.insight || '').trim();
+        const savedMsg = insight
+          ? insight
+          : (r.body.reviewed === false ? 'Saved the finding. A review was not available, so this is what we read.' : (n > 1 ? `Saved ${n} ideas for your posts` : 'Saved for your posts'));
+        toast(keep ? savedMsg : 'Removed from your ideas', 'success');
+        renderFocus();
+      } catch (e) {
+        if (!alive()) return;
+        btn.disabled = false;
+        btn.textContent = keep ? 'Save' : 'Saved';
+        toast(e.message || 'Could not save that', 'error');
+      }
+    }
+
     /* ── events ── */
     root.addEventListener('click', (ev) => {
       const t = ev.target.closest('[data-a]');
@@ -952,11 +993,8 @@ html.nl[data-nl-theme="day"] .intel .in-sq--n { background:repeating-linear-grad
       else if (a === 'retrydetail') loadDetail(id);
       else if (a === 'reload') { renderAll(); loadList(); }
       else if (a === 'tab') { S.tab = t.getAttribute('data-tab'); renderFocus(); }
-      else if (a === 'save') {
-        const fid = t.getAttribute('data-fid'); const saved = readJson(SAVED_KEY, {});
-        if (saved[fid]) delete saved[fid]; else saved[fid] = 1;
-        writeJson(SAVED_KEY, saved); renderFocus();
-      } else if (a === 'finding') {
+      else if (a === 'save') saveFinding(c, t);
+      else if (a === 'finding') {
         const f = d && (d.findings || []).find((x) => String(x.id) === t.getAttribute('data-fid'));
         if (f) go(f.action);
       } else if (a === 'move') {

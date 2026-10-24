@@ -1356,6 +1356,224 @@
     return b;
   }
 
+  function nlJson(res) { return res.json().catch(() => ({})); }
+
+  function stockOrientation() {
+    const v = document.getElementById('cs-aspect')?.value || '9:16';
+    if (v === '1:1') return 'all';
+    if (v === '16:9') return 'horizontal';
+    return 'vertical';
+  }
+
+  function nlIdeaMenu(brief) {
+    const menu = nlP2Menu('Ideas', '', { id: 'nl-p2-ideas' });
+    const pop = menu.querySelector('.nl-p2-pop');
+    pop.classList.add('nl-p2-pop--wide');
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', 'Ideas');
+    const head = document.createElement('div');
+    head.className = 'nl-p2-pophead';
+    head.textContent = 'IDEAS FOR YOUR POSTS';
+    const listHost = document.createElement('div');
+    listHost.className = 'nl-ideas';
+    const hint = document.createElement('p');
+    hint.className = 'nl-p2-hint';
+    hint.style.padding = '4px 10px 8px';
+    hint.textContent = 'Saving a finding in Intel keeps the useful part, plus a note on what would work better when we can say so. Choosing one fills the brief.';
+    const add = document.createElement('div');
+    add.className = 'nl-p2-field';
+    add.innerHTML = '<label for="nl-idea-title">Add an idea</label><input id="nl-idea-title" type="text" maxlength="90" placeholder="Bake sale, or hands around a wooden cup" data-keep-open="1"><input id="nl-idea-detail" type="text" maxlength="280" placeholder="What worked, in a line (optional)" data-keep-open="1"><div class="nl-p2-inline"><input id="nl-idea-list" type="text" maxlength="80" placeholder="List name, e.g. Fundraising" data-keep-open="1"><button type="button" class="nl-p2-btn" id="nl-idea-add" data-keep-open="1">Add</button></div>';
+    const link = document.createElement('div');
+    link.className = 'nl-p2-field';
+    link.innerHTML = '<label for="nl-idea-url">Or a page of ideas</label><input id="nl-idea-url" type="url" placeholder="https://…" data-keep-open="1"><button type="button" class="nl-p2-btn" id="nl-idea-read" data-keep-open="1">Read this page</button>';
+    pop.append(head, hint, listHost, add, link);
+
+    let lists = [];
+    const paint = () => {
+      listHost.replaceChildren();
+      if (!lists.length) {
+        const empty = document.createElement('p');
+        empty.className = 'nl-p2-hint';
+        empty.style.padding = '4px 10px';
+        empty.textContent = 'No ideas saved yet.';
+        listHost.appendChild(empty);
+        return;
+      }
+      lists.forEach((l) => {
+        const name = document.createElement('div');
+        name.className = 'nl-p2-pophead';
+        name.textContent = l.from ? `${l.name} · ${l.from}` : l.name;
+        listHost.appendChild(name);
+        if (l.insight) {
+          const note = document.createElement('p');
+          note.className = 'nl-p2-hint';
+          note.style.padding = '0 10px 6px';
+          note.textContent = l.insight;
+          listHost.appendChild(note);
+        }
+        l.items.forEach((it) => {
+          const row = document.createElement('div');
+          row.className = 'nl-idea';
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'nl-p2-item';
+          b.textContent = it.title;
+          b.title = it.detail || it.title;
+          b.addEventListener('click', () => {
+            brief.value = it.detail ? `${it.title}: ${it.detail}` : it.title;
+            brief.focus();
+            brief.setSelectionRange(brief.value.length, brief.value.length);
+          });
+          const x = document.createElement('button');
+          x.type = 'button';
+          x.className = 'nl-idea__x';
+          x.dataset.keepOpen = '1';
+          x.textContent = 'Remove';
+          x.addEventListener('click', () => removeIdea(l.id, it.id));
+          row.append(b, x);
+          listHost.appendChild(row);
+        });
+      });
+    };
+    async function refresh() {
+      try {
+        const res = await fetch(`${apiBase()}/api/idea-lists`, { headers: authHeaders() });
+        const data = await nlJson(res);
+        lists = res.ok && Array.isArray(data.lists) ? data.lists : [];
+      } catch { lists = []; }
+      paint();
+    }
+    async function removeIdea(listId, itemId) {
+      try {
+        const res = await fetch(`${apiBase()}/api/idea-lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, { method: 'DELETE', headers: authHeaders() });
+        const data = await nlJson(res);
+        if (!res.ok) throw new Error(data.error || 'Could not remove that');
+        lists = Array.isArray(data.lists) ? data.lists : lists;
+        paint();
+      } catch (e) { toast(e.message || 'Could not remove that', 'error'); }
+    }
+    menu.querySelector('.nl-p2-chip').addEventListener('click', () => { if (!pop.hidden) refresh(); });
+    add.querySelector('#nl-idea-add').addEventListener('click', async () => {
+      const title = add.querySelector('#nl-idea-title').value.trim();
+      const detail = add.querySelector('#nl-idea-detail').value.trim();
+      const name = add.querySelector('#nl-idea-list').value.trim() || (lists[0] && lists[0].name) || 'My ideas';
+      if (title.length < 2) { toast('Name the idea', 'warning'); return; }
+      try {
+        let list = lists.find((l) => l.name.toLowerCase() === name.toLowerCase());
+        if (!list) {
+          const made = await fetch(`${apiBase()}/api/idea-lists`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name }) });
+          const madeData = await nlJson(made);
+          if (!made.ok) throw new Error(madeData.error || 'Could not save that list');
+          lists = Array.isArray(madeData.lists) ? madeData.lists : lists;
+          list = lists.find((l) => l.name.toLowerCase() === name.toLowerCase());
+        }
+        if (!list) throw new Error('Could not save that list');
+        const res = await fetch(`${apiBase()}/api/idea-lists/${encodeURIComponent(list.id)}/items`, {
+          method: 'POST', headers: authHeaders(), body: JSON.stringify({ title, detail }),
+        });
+        const data = await nlJson(res);
+        if (!res.ok) throw new Error(data.error || 'Could not save that idea');
+        lists = Array.isArray(data.lists) ? data.lists : lists;
+        add.querySelector('#nl-idea-title').value = '';
+        add.querySelector('#nl-idea-detail').value = '';
+        paint();
+        toast('Idea saved', 'success');
+      } catch (e) { toast(e.message || 'Could not save that idea', 'error'); }
+    });
+    link.querySelector('#nl-idea-read').addEventListener('click', async () => {
+      const url = link.querySelector('#nl-idea-url').value.trim();
+      const name = add.querySelector('#nl-idea-list').value.trim();
+      if (!/^https?:\/\//i.test(url)) { toast('Paste a link that starts with https://', 'warning'); return; }
+      const btn = link.querySelector('#nl-idea-read');
+      btn.disabled = true;
+      btn.textContent = 'Reading…';
+      try {
+        const res = await fetch(`${apiBase()}/api/idea-lists/ingest`, {
+          method: 'POST', headers: authHeaders(), body: JSON.stringify({ url, name }),
+        });
+        const data = await nlJson(res);
+        if (!res.ok) throw new Error(data.error || 'Could not read that page');
+        lists = Array.isArray(data.lists) ? data.lists : lists;
+        link.querySelector('#nl-idea-url').value = '';
+        paint();
+        toast(data.added ? `Saved ${data.added} ideas` : 'Those ideas are already saved', 'success');
+      } catch (e) { toast(e.message || 'Could not read that page', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Read this page'; }
+    });
+    return menu;
+  }
+
+  function nlStockMenu() {
+    const menu = nlP2Menu('Stock photo', '', { id: 'nl-p2-stock' });
+    const pop = menu.querySelector('.nl-p2-pop');
+    pop.classList.add('nl-p2-pop--wide');
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', 'Stock photo');
+    const field = document.createElement('div');
+    field.className = 'nl-p2-field';
+    field.innerHTML = '<label for="nl-stock-q">Search stock photos</label><div class="nl-p2-inline"><input id="nl-stock-q" type="text" maxlength="80" placeholder="wooden cup, morning light" data-keep-open="1"><button type="button" class="nl-p2-btn" id="nl-stock-go" data-keep-open="1">Search</button></div>';
+    const grid = document.createElement('div');
+    grid.className = 'nl-stock';
+    const note = document.createElement('p');
+    note.className = 'nl-p2-hint';
+    note.style.padding = '0 10px 8px';
+    pop.append(field, grid, note);
+    let lastQ = '';
+    async function search() {
+      const q = field.querySelector('#nl-stock-q').value.trim();
+      if (q.length < 2) { toast('Say what to look for', 'warning'); return; }
+      lastQ = q;
+      grid.replaceChildren();
+      note.textContent = 'Searching…';
+      try {
+        const orientation = stockOrientation();
+        const res = await fetch(`${apiBase()}/api/studio/stock-photos?q=${encodeURIComponent(q)}&orientation=${encodeURIComponent(orientation)}`, { headers: authHeaders() });
+        const data = await nlJson(res);
+        if (!res.ok) throw new Error(data.error || 'Stock search failed');
+        grid.replaceChildren();
+        const photos = Array.isArray(data.photos) ? data.photos : [];
+        if (!photos.length) { note.textContent = data.notice || 'Nothing matched. Try different words.'; return; }
+        note.textContent = 'Pick one. It is saved with your post, not linked from the photo site.';
+        photos.forEach((p) => {
+          if (!p || !/^pixabay-photo:\d{1,12}$/.test(p.id) || !/^https:\/\//.test(p.thumb || '')) return;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.dataset.keepOpen = '1';
+          b.title = p.credit ? `Photo by ${p.credit}` : 'Stock photo';
+          const img = document.createElement('img');
+          img.alt = p.credit ? `Photo by ${p.credit}` : '';
+          img.src = p.thumb;
+          b.appendChild(img);
+          b.addEventListener('click', () => usePhoto(p, orientation));
+          grid.appendChild(b);
+        });
+      } catch (e) {
+        note.textContent = '';
+        toast(e.message || 'Stock search failed', 'error');
+      }
+    }
+    async function usePhoto(p, orientation) {
+      note.textContent = 'Saving the photo…';
+      try {
+        const res = await fetch(`${apiBase()}/api/studio/stock-photos/use`, {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ id: p.id, q: lastQ, orientation }),
+        });
+        const data = await nlJson(res);
+        if (!res.ok || !data.url) throw new Error(data.error || 'Could not save that photo');
+        setReference({ url: data.url, type: 'image', title: p.credit ? `Photo by ${p.credit}` : 'Stock photo', source: 'stock' });
+        toast(p.credit ? `Photo by ${p.credit}` : 'Photo ready', 'success');
+        pop.hidden = true;
+        menu.querySelector('.nl-p2-chip').setAttribute('aria-expanded', 'false');
+      } catch (e) { toast(e.message || 'Could not save that photo', 'error'); }
+    }
+    field.querySelector('#nl-stock-go').addEventListener('click', search);
+    field.querySelector('#nl-stock-q').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); search(); }
+    });
+    return menu;
+  }
+
   function arrangePostMinimalNL(content) {
     const shell = content.querySelector('.atelier-shell');
     const stage = content.querySelector('.atelier-stage');
@@ -1464,6 +1682,7 @@
           <span class="nl-p2-sp"></span>
           <button type="button" class="nl-p2-ghost" id="nl-p2-cancel" hidden>Cancel</button>
         </div></div>
+        <div class="nl-p2-tools" id="nl-p2-tools"></div>
         <div class="nl-p2-starts nl-p2-quick" role="group" aria-label="Quick starts"></div>
         <div class="nl-p2-drop">or <button type="button" class="nl-p2-link" id="nl-p2-finished">upload a finished graphic</button>, or drop one here</div>
         <input type="file" id="nl-p2-file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -1519,6 +1738,11 @@
       });
       starts.appendChild(c);
     });
+    const tools = compose.querySelector('#nl-p2-tools');
+    if (tools) {
+      tools.appendChild(nlIdeaMenu(brief));
+      tools.appendChild(nlStockMenu());
+    }
     compose.querySelector('#nl-p2-ref').addEventListener('click', () => openPicker());
     compose.querySelector('#nl-p2-cancel').addEventListener('click', () => nlP2Edit(false));
     compose.querySelector('#nl-p2-finished').addEventListener('click', () => nlP2PickFinished());
