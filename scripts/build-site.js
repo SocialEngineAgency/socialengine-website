@@ -50,6 +50,7 @@ const ALLOWLIST = [
   'marketing-playbook.js', // portal.html — funnel map, copy check, question log, lead magnets
   'key-dates.js', // portal.html — Calendar key dates (holidays, awareness days) + post ideas
   'intel.js', // portal.html — Intel: competitor watchlist, findings, comparison
+  'library.js', // portal.html — Library: browsable grid, filters, detail panel, multi-select
   'diagram-posts.js', // portal.html — diagram graphics (steps, timeline, compare, cycle, funnel)
   'motion-reels.js', // portal.html — carousel → Reel and text Reels (HyperFrames)
   'agent-run.js', // portal.html — the Coach agent's live project card
