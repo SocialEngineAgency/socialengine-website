@@ -1826,6 +1826,8 @@ html.nl .nl-tle__it { font: 600 13px var(--nl-body); color: var(--nl-fg); margin
 html.nl .nl-tle__f { display: inline-flex; align-items: center; gap: 6px; font: 400 12px var(--nl-body); color: var(--nl-fg3); }
 html.nl .nl-tle__f input { width: 64px; height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--nl-line-strong); border-radius: 7px; background: var(--nl-surface); color: var(--nl-fg); font: 500 12.5px var(--nl-mono); }
 html.nl .nl-tle__f input:focus { outline: none; border-color: var(--nl-fg4); }
+html.nl .nl-tle__f select { height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--nl-line-strong); border-radius: 7px; background: var(--nl-surface); color: var(--nl-fg); font: 500 12.5px var(--nl-body); max-width: 190px; }
+html.nl .nl-tle__f select:focus { outline: none; border-color: var(--nl-fg4); }
 html.nl .nl-tle__len { font: 400 12px var(--nl-mono); color: var(--nl-fg3); }
 html.nl .nl-tle__removed { font: 400 12px var(--nl-body); color: var(--nl-fg3); }
 html.nl .nl-tle__hint { margin: 0; font: 400 12px/1.5 var(--nl-body); color: var(--nl-fg3); }
