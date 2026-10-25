@@ -3058,7 +3058,9 @@
     const lane = el.querySelector('[data-lane]');
     const kept = () => tl.order.filter((id) => !tl.removed.has(id));
     const rerender = () => nlTimelineEditor(el);
-    if (tl.track === 'vo') nlLoadVoices(() => { if (_nlTl === tl) rerender(); });
+    // The voice list can arrive mid-drag: redraw only once the press lands, or the bar being
+    // dragged is replaced and its release (which selects the track) is lost.
+    if (tl.track === 'vo') nlLoadVoices(() => { if (_nlTl !== tl) return; if (tl.down) tl.pending = true; else rerender(); });
     el.querySelector('[data-tl-voice-sample]')?.addEventListener('click', (e) => {
       const url = e.currentTarget.dataset.tlVoiceSample;
       nlStopVoiceSample();

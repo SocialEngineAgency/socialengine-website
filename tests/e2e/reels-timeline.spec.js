@@ -152,3 +152,55 @@ test('Reels timeline: pick another voice for the voiceover and save it', async (
   await expect.poll(() => sent.timeline && sent.timeline.audio).toEqual({ vo: { voice: 'si0svtk05vPEuvwAW93c' } });
   expect(errors).toEqual([]);
 });
+
+test('Reels timeline: the voice list arriving mid-drag does not swap the voiceover bar out from under the pointer', async ({ page }) => {
+  const errors = watchErrors(page);
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const voices = {
+    default_id: 'rachel_id',
+    voices: [
+      { id: 'rachel_id', name: 'Standard voice', blurb: 'Clear and neutral.', accent: 'American', gender: 'Female' },
+      { id: 'si0svtk05vPEuvwAW93c', name: 'Blondie', blurb: 'A powerful British woman with dramatic flair.', accent: 'British', gender: 'Female' },
+    ],
+  };
+  await page.route('https://store.test/**', (r) => r.fulfill({ status: 404, body: '' }));
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    animProjects: [project],
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/animation/voices') { await held; json(200, voices); return 'handled'; }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await page.click('[data-open-project="proj_tl"]');
+  await page.click('[data-nl-tl-edit]');
+  await page.waitForSelector('.nl-tle__rows[data-probed]');
+
+  // Open the voiceover track: the voice list is requested and held back.
+  await page.click('[data-track="vo"]');
+  await expect(page.locator('[data-insp="vo"]')).toBeVisible();
+  const vo = page.locator('[data-audio="vo"]');
+  await vo.evaluate((e) => { e.dataset.same = 'yes'; });
+  const box = await vo.boundingBox();
+  await page.mouse.move(box.x + 20, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 50, box.y + box.height / 2, { steps: 3 });
+
+  // The list lands while the bar is still held: nothing is redrawn under the pointer.
+  release();
+  await page.waitForTimeout(400);
+  await expect(page.locator('[data-audio="vo"]')).toHaveAttribute('data-same', 'yes');
+  await page.mouse.move(box.x + 80, box.y + box.height / 2, { steps: 3 });
+  await page.mouse.up();
+
+  // Once it lands, the panel picks up the voice choice and the move counts.
+  await expect(page.locator('select[data-a="vo.voice"]')).toBeVisible();
+  await expect(page.locator('[data-audio="vo"]')).not.toHaveAttribute('aria-label', /starts at 0\.0 seconds/);
+  await expect(page.locator('[data-tl="save"]')).toBeEnabled();
+  expect(errors).toEqual([]);
+});
