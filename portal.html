@@ -37,6 +37,7 @@
   <script src="./design-studio-v2.js?v=20261020move" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261020work"></script>
+  <script src="./video-coach.js?v=20261025a"></script>
   <script src="./animation-studio.js?v=20261020ship" defer></script>
   <script src="./story-builder.js?v=20261022board" defer></script>
   <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
@@ -7879,6 +7880,7 @@
             </div>
           </div>
               <div id="vs-make-flow" style="display:${vsDoor === 'make' ? 'block' : 'none'};">
+              <div id="vs-coach"></div>
               <details class="atelier-drawer vs-recipes" open style="border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:0;background:rgba(255,255,255,0.015);margin:0 0 18px;">
                 <summary style="font-size:0.72rem;color:rgba(255,255,255,0.5);cursor:pointer;font-weight:600;padding:10px 12px;list-style:none;display:flex;justify-content:space-between;align-items:center;">
                   <span>${isCharityStudio ? 'Start from a recipe' : 'Start from a template'}</span><span style="opacity:0.45;font-size:0.65rem;">▸</span>
@@ -8133,6 +8135,7 @@
         if (window.__SE_VS_DOOR === 'upload' && typeof vsHydrateUploadDoor === 'function') vsHydrateUploadDoor();
       }, 60);
       setTimeout(() => { if (typeof applyFundraiseContentSessionIfAny === 'function') applyFundraiseContentSessionIfAny(); }, 80);
+      try { if (window.seVideoCoach) window.seVideoCoach.mount(); } catch (_) {}
     }
 
     // ━━━ Remix → Studio session (Calendar) ━━━
