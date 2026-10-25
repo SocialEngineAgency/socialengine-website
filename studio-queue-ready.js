@@ -153,8 +153,7 @@ function videoStudioDoor(mode, { remix = false, coachSession = false } = {}) {
   const m = String(mode || '').toLowerCase();
   if (m === 'upload' || m === 'have' || m === 'already') return 'upload';
   if (m === 'make' || m === 'generate') return 'make';
-  if (remix || coachSession) return 'make';
-  return 'choose';
+  return 'make';
 }
 
 function musicVolumeFromPercent(raw) {
