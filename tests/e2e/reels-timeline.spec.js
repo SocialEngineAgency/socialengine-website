@@ -103,3 +103,52 @@ test('Reels timeline: move the voice and the music, set volume, words, song star
   await expect(page.locator('.nl-tle__rows')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('Reels timeline: pick another voice for the voiceover and save it', async ({ page }) => {
+  const errors = watchErrors(page);
+  const sent = { timeline: null };
+  const voices = {
+    default_id: 'rachel_id',
+    voices: [
+      { id: 'rachel_id', name: 'Standard voice', blurb: 'Clear and neutral.', accent: 'American', gender: 'Female' },
+      { id: 'si0svtk05vPEuvwAW93c', name: 'Blondie', blurb: 'A powerful British woman with dramatic flair.', accent: 'British', gender: 'Female', preview_url: 'https://store.test/blondie.mp3' },
+    ],
+  };
+  await page.route('https://store.test/**', (r) => r.fulfill({ status: 404, body: '' }));
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    animProjects: [project],
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/animation/voices') { json(200, voices); return 'handled'; }
+      if (entry.path === '/api/animation/projects/proj_tl/timeline') {
+        sent.timeline = JSON.parse(entry.body || '{}');
+        json(200, { ok: true, removed: 0, reordered: false, trimmed: 0, rebuilding: false, revoice: true, project });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se-look2', 'new'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="create"]');
+  await page.click('.create-seg[data-segment="animation-studio"]');
+  await page.click('[data-open-project="proj_tl"]');
+  await page.click('[data-nl-tl-edit]');
+  await page.waitForSelector('.nl-tle__rows[data-probed]');
+  await expect(page.locator('[data-tl="save"]')).toBeDisabled();
+
+  await page.click('[data-track="vo"]');
+  const pick = page.locator('select[data-a="vo.voice"]');
+  await expect(pick).toBeVisible();
+  await expect(pick).toHaveValue('rachel_id');
+  await expect(page.locator('[data-tl="save"]')).toBeDisabled();
+
+  await pick.selectOption('si0svtk05vPEuvwAW93c');
+  await expect(page.locator('[data-tl="save"]')).toBeEnabled();
+  await expect(page.locator('[data-insp="vo"]')).toContainText('recorded again in the new voice');
+  await expect(page.locator('[data-tl-voice-sample]')).toBeVisible();
+
+  await page.click('[data-tl="save"]');
+  await expect.poll(() => sent.timeline && sent.timeline.audio).toEqual({ vo: { voice: 'si0svtk05vPEuvwAW93c' } });
+  expect(errors).toEqual([]);
+});

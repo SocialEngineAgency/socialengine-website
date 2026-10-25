@@ -2595,6 +2595,23 @@
   const NL_TL_MAX = { voStart: 10, musicStart: 30, musicIn: 300, fade: 5 };
   const nlR1 = (n) => Math.round(Number(n) * 10) / 10;
 
+  /* The voices a client can pick for the voiceover: loaded once, the first time the voiceover panel opens. */
+  let _nlVoices = null;
+  let _nlVoiceSample = null;
+  function nlLoadVoices(done) {
+    if (_nlVoices) return;
+    _nlVoices = { default_id: '', voices: [] };
+    animFetch('/api/animation/voices').then((d) => {
+      _nlVoices = { default_id: String((d && d.default_id) || ''), voices: Array.isArray(d && d.voices) ? d.voices : [] };
+      done();
+    }).catch(() => { /* no list: the panel simply shows no voice choice */ });
+  }
+  function nlStopVoiceSample() {
+    if (!_nlVoiceSample) return;
+    try { _nlVoiceSample.pause(); } catch (_) {}
+    _nlVoiceSample = null;
+  }
+
   /** The audio settings the final is mixed with (same defaults as the server). */
   function nlAudioOf(p) {
     const a = (p && p.pipeline && p.pipeline.assemble) || {};
@@ -2602,7 +2619,7 @@
     const vol = (v, d) => { const x = Number(v); return v == null || v === '' || !Number.isFinite(x) ? d : Math.round(Math.max(0, Math.min(1, x)) * 100) / 100; };
     const voOn = a.vo !== false;
     return {
-      vo: { on: voOn, start: sec(p && p.vo_start_sec, NL_TL_MAX.voStart), volume: vol(p && p.vo_volume, 1), script: String((p && (p.vo_script || p.agent_brief?.vo_script)) || '').trim() },
+      vo: { on: voOn, start: sec(p && p.vo_start_sec, NL_TL_MAX.voStart), volume: vol(p && p.vo_volume, 1), voice: String((p && p.vo_voice_id) || (_nlVoices && _nlVoices.default_id) || ''), script: String((p && (p.vo_script || p.agent_brief?.vo_script)) || '').trim() },
       music: {
         on: a.music !== false,
         start: sec(p && p.music_start_sec, NL_TL_MAX.musicStart),
@@ -2807,6 +2824,7 @@
   /* Listening to a track from the timeline (one at a time). */
   let _nlTlAudio = null;
   function nlTlStop() {
+    nlStopVoiceSample();
     if (!_nlTlAudio) return;
     try { _nlTlAudio.a.pause(); } catch (_) {}
     _nlTlAudio = null;
@@ -2930,19 +2948,26 @@
 
     let inspector = '';
     if (tl.track === 'vo') {
-      const same = voScript === String(p.vo_script || '').trim();
+      const voiceChanged = String(au.vo.voice || '') !== String(tl.audio0.vo.voice || '');
+      const same = voScript === String(p.vo_script || '').trim() && !voiceChanged;
+      const voices = (_nlVoices && _nlVoices.voices) || [];
+      const curVoice = au.vo.voice || (_nlVoices && _nlVoices.default_id) || '';
+      const known = voices.some((v) => v.id === curVoice);
+      const curInfo = voices.find((v) => v.id === curVoice);
+      const voiceField = voices.length > 1 ? `<label class="nl-tle__f">Voice<select data-a="vo.voice" aria-label="Voice for the voiceover">${known || !curVoice ? '' : `<option value="${esc(curVoice)}" selected>Current voice</option>`}${voices.map((v) => `<option value="${esc(v.id)}"${v.id === curVoice ? ' selected' : ''}>${esc(v.name)}${v.accent ? ` · ${esc(v.accent)}` : ''}</option>`).join('')}</select></label>${curInfo && curInfo.preview_url ? `<button type="button" class="nl-abtn nl-abtn--sm" data-tl-voice-sample="${esc(curInfo.preview_url)}" title="${esc(curInfo.blurb || '')}">Hear this voice</button>` : ''}` : '';
       inspector = `
       <div class="nl-tle__insp nl-tle__insp--audio" data-insp="vo">
         <div class="nl-tle__irow">
           <span class="nl-tle__it">Voiceover</span>
           ${sw('vo.on', au.vo.on, 'On')}
+          ${voiceField}
           ${num('vo.start', au.vo.start, NL_TL_MAX.voStart, 'Starts at')}
           ${slider('vo.volume', au.vo.volume, 'Volume')}
           <span class="nl-grow"></span>
           ${play('vo', !!p.vo_url && same, same ? 'No recording yet' : 'Save to hear the new words')}
         </div>
         <label class="nl-tle__script"><span>What the voice says</span><textarea rows="3" data-a="vo.script" maxlength="4500" placeholder="Write what the voice says">${esc(voScript)}</textarea></label>
-        <p class="nl-tle__note">${voOver > 0.2 ? `<b>The voice runs ${voOver.toFixed(1)}s past the end.</b> Move it earlier or shorten the words. ` : ''}${same ? `About ${voSecs.toFixed(1)}s of speech.` : 'New words are recorded when you save, and the length is checked against the video.'}</p>
+        <p class="nl-tle__note">${voOver > 0.2 ? `<b>The voice runs ${voOver.toFixed(1)}s past the end.</b> Move it earlier or shorten the words. ` : ''}${same ? `About ${voSecs.toFixed(1)}s of speech.` : (voiceChanged && voScript === String(p.vo_script || '').trim() ? 'The voiceover is recorded again in the new voice when you save.' : 'New words are recorded when you save, and the length is checked against the video.')}</p>
       </div>`;
     } else if (tl.track === 'music') {
       inspector = p.music_bed_url ? `
@@ -3033,6 +3058,12 @@
     const lane = el.querySelector('[data-lane]');
     const kept = () => tl.order.filter((id) => !tl.removed.has(id));
     const rerender = () => nlTimelineEditor(el);
+    if (tl.track === 'vo') nlLoadVoices(() => { if (_nlTl === tl) rerender(); });
+    el.querySelector('[data-tl-voice-sample]')?.addEventListener('click', (e) => {
+      const url = e.currentTarget.dataset.tlVoiceSample;
+      nlStopVoiceSample();
+      try { _nlVoiceSample = new Audio(url); _nlVoiceSample.play().catch(() => { _nlVoiceSample = null; }); } catch (_) { _nlVoiceSample = null; }
+    });
     const refreshSave = () => {
       const b = el.querySelector('[data-tl="save"]');
       if (b) b.disabled = !nlTlChanged(tl) || tl.saving;
@@ -3097,6 +3128,8 @@
           inp.setAttribute('aria-valuetext', `${Math.round(Number(inp.value))}%`);
           refreshSave();
         });
+      } else if (inp.tagName === 'SELECT') {
+        inp.addEventListener('change', () => { nlStopVoiceSample(); setA(path, inp.value); rerender(); });
       } else if (inp.tagName === 'TEXTAREA') {
         inp.addEventListener('input', () => {
           setA(path, inp.value.trim());
