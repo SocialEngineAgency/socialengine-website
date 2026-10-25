@@ -189,7 +189,13 @@
   }
 
   /** Notes on the clip in the box. Regenerating this shot writes them into the prompt. */
+  /** The owner's own notes on the take now showing (a note on an older take no longer applies). */
+  function ownerNotes(s) {
+    return (s && Array.isArray(s.owner_notes) ? s.owner_notes : []).filter((n) => n && n.note && (!n.video_url || !s.video_url || n.video_url === s.video_url));
+  }
+
   function shotNeedsCorrection(s) {
+    if (ownerNotes(s).length) return true;
     const c = shotCheck(s);
     return !!(c && c.status !== 'pass' && c.status !== 'checking' && c.status !== 'redoing' && c.status !== 'skipped' && (c.problems || []).length);
   }
@@ -201,6 +207,7 @@
       s.id, s.order || 0, s.status, s.video_url || '', s.keyframe_url || '', s.error || '', s.motion || '',
       s.active_take_id || '', (s.takes || []).length, s.prompt || '', s.title || '',
       (s.check && s.check.status) || '', (s.check && s.check.video_url) || '',
+      ownerNotes(s).map((n) => n.id).join(','),
     ]);
     return JSON.stringify([
       p.id, p.status, p.error || '', p.final_url || '', p.final_pre_caption_url || '',
@@ -2431,6 +2438,50 @@
     return el;
   }
 
+  /**
+   * What the owner saw that the check did not. Their notes go into "Regenerate with fixes" with the check's findings,
+   * and the next check is told to look for them.
+   */
+  function nlOwnerNotesBox(s) {
+    if (!s || !s.video_url || s.status === 'generating') return null;
+    const notes = ownerNotes(s);
+    const el = document.createElement('div');
+    el.className = 'nl-mynotes';
+    el.innerHTML = `${notes.length ? `<div class="nl-mynotes__h">You noted</div>
+      <ul class="nl-mynotes__list">${notes.map((n) => `<li><span>${esc(n.note)}</span><button type="button" class="nl-mynotes__x" data-note-del="${esc(n.id)}" aria-label="Remove this note">×</button></li>`).join('')}</ul>` : ''}
+      <form class="nl-mynotes__add" data-note-form>
+        <input type="text" maxlength="300" data-note-input placeholder="${notes.length ? 'Anything else wrong?' : 'Something wrong the check missed? e.g. her head goes through the windshield'}" aria-label="What is wrong with this shot" ${notes.length >= 5 ? 'disabled' : ''} />
+        <button type="submit" class="nl-abtn nl-abtn--sm" ${notes.length >= 5 ? 'disabled' : ''}>Add</button>
+      </form>
+      ${notes.length ? '<p class="nl-mynotes__hint">Regenerate with fixes avoids these, and the next check looks for them.</p>' : ''}`;
+    const save = async (path, opts, done) => {
+      try {
+        const data = await animFetch(path, opts);
+        _project = data.project;
+        _canvasFp = '';
+        renderCanvas();
+        if (done) done();
+      } catch (e) {
+        toast(e.message || 'Could not save that note', 'error', e.request_id);
+      }
+    };
+    el.querySelector('[data-note-form]').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = el.querySelector('[data-note-input]');
+      const note = String(input.value || '').trim();
+      if (!note || !_project) return;
+      input.disabled = true;
+      save(`/api/animation/projects/${_project.id}/scenes/${s.id}/notes`, { method: 'POST', body: JSON.stringify({ note }) }, () => {
+        document.querySelector('.nl-mynotes [data-note-input]')?.focus();
+      }).finally(() => { input.disabled = false; });
+    });
+    el.querySelectorAll('[data-note-del]').forEach((b) => b.addEventListener('click', () => {
+      if (!_project) return;
+      save(`/api/animation/projects/${_project.id}/scenes/${s.id}/notes/${encodeURIComponent(b.dataset.noteDel)}`, { method: 'DELETE' });
+    }));
+    return el;
+  }
+
   function nlSelectShot(id, root) {
     const bar = root.querySelector('[data-slot="shotbar"]');
     const grid = root.querySelector('[data-slot="shots"]');
@@ -2458,8 +2509,11 @@
     h.className = 'nl-shotbar__h';
     h.textContent = `Shot ${card.dataset.nlIndex || ''} · What happens`;
     box.appendChild(h);
-    const chk = nlCheckDetails(nlScenes().find((x) => x.id === id));
+    const shotNow = nlScenes().find((x) => x.id === id);
+    const chk = nlCheckDetails(shotNow);
     if (chk) box.appendChild(chk);
+    const mine = nlOwnerNotesBox(shotNow);
+    if (mine) box.appendChild(mine);
     box.appendChild(meta);
     bar.appendChild(box);
     const ta = meta.querySelector('.anim-shot__prompt-edit');
