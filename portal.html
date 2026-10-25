@@ -42,7 +42,7 @@
   <script src="./story-builder.js?v=20261022board" defer></script>
   <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
-  <script src="./brand-worksheet-suggest.js?v=20261009" defer></script>
+  <script src="./brand-worksheet-suggest.js?v=20261025" defer></script>
   <script src="./stories-composer.js?v=20261020ship" defer></script>
   <script src="./marketing-playbook.js?v=20261010" defer></script>
   <script src="./key-dates.js?v=20261018warm" defer></script>
@@ -676,6 +676,13 @@
     .se-bw__range { width: 100%; accent-color: #7C3AED; }
     .se-bw__scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: rgba(148,163,184,0.55); }
     @media (max-width: 640px) { .se-bw__row { grid-template-columns: 1fr; } }
+    .se-bw__offers { display: flex; flex-direction: column; gap: 6px; }
+    .se-bw__offer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; align-items: center; }
+    .se-bw__x { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--color-border); background: transparent; color: rgba(148,163,184,0.8); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0; }
+    .se-bw__x:hover { color: #fff; border-color: rgba(124,58,237,0.5); }
+    .se-bw__add { margin-top: 2px; align-self: flex-start; width: auto; padding: 5px 10px; border-radius: 8px; border: 1px dashed rgba(124,58,237,0.45); background: transparent; color: #DDD6FE; font-size: 0.72rem; font-weight: 600; cursor: pointer; font-family: var(--font-body); }
+    .se-bw__add[disabled] { opacity: 0.5; cursor: default; }
+    @media (max-width: 640px) { .se-bw__offer { grid-template-columns: minmax(0, 1fr) auto; } .se-bw__offer [data-bw-offer-note] { grid-column: 1 / -1; grid-row: 2; } }
     /* Brand voice summary */
     .bv-tag { display: inline-flex; padding: 3px 10px; background: rgba(20,184,166,0.12); border: 1px solid rgba(20,184,166,0.2); border-radius: var(--radius-full); font-size: 0.75rem; color: var(--color-accent); font-weight: 500; margin: 3px; }
     .archetype-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(255,255,255,0.04)); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); font-weight: 600; color: var(--color-text); font-size: var(--text-sm); margin-bottom: var(--space-4); }
@@ -10665,6 +10672,17 @@
     // Renders into `target` when given (the Settings → Brand tab), else #dash-content.
     const SE_FORMALITY_LABELS = ['', 'Very formal', 'Mostly formal', 'Balanced', 'Mostly casual', 'Very casual'];
 
+    const SE_BW_OFFERS_MAX = 12;
+    function seBwOfferRowHtml(o) {
+      const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      const noFill = 'autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"';
+      return `<div class="se-bw__offer" data-bw-offer>
+        <input type="text" class="se-bw-input" data-bw-offer-name ${noFill} maxlength="60" placeholder="Product or service" value="${esc(o && o.name)}" aria-label="Product or service" />
+        <input type="text" class="se-bw-input" data-bw-offer-note ${noFill} maxlength="140" placeholder="What it is (optional)" value="${esc(o && o.note)}" aria-label="What it is" />
+        <button type="button" class="se-bw__x" data-bw-offer-remove aria-label="Remove">×</button>
+      </div>`;
+    }
+
     function seBrandWorksheetCardHtml(data) {
       const bw = (data && data.brand_worksheet) || {};
       const w = bw.worksheet || {};
@@ -10692,6 +10710,10 @@
         ${row('values', `<label class="se-bw__label">Our 3 values</label><div class="se-bw__row">${three('values', 'Value')}</div>`)}
         ${row('embrace', `<label class="se-bw__label">3 phrases we love</label><div class="se-bw__row">${three('embrace', 'Phrase')}</div>`)}
         ${row('avoid', `<label class="se-bw__label">3 phrases we never use</label><div class="se-bw__row">${three('avoid', 'Never say')}</div>`)}
+        ${row('offerings', `<label class="se-bw__label">What we offer <span class="se-bw__hint">products or services, up to ${SE_BW_OFFERS_MAX}</span></label>
+          <div class="se-bw__offers" id="se-bw-offers">${(w.offerings || []).map(seBwOfferRowHtml).join('')}</div>
+          <button type="button" class="se-bw__add" id="se-bw-offer-add">+ Add a product or service</button>`)}
+        <div id="se-bw-brand" class="se-bw__brand" hidden></div>
         </form>
       </section>`;
     }
@@ -10701,6 +10723,38 @@
       panel.insertAdjacentHTML('afterbegin', seBrandWorksheetCardHtml(clientData));
       if (typeof window.seMountWorksheetSuggest === 'function') window.seMountWorksheetSuggest(panel);
       if (typeof window.seMountFunnel === 'function') window.seMountFunnel(panel);
+      const card = panel.querySelector('#se-brand-worksheet');
+      const offers = panel.querySelector('#se-bw-offers');
+      const addBtn = panel.querySelector('#se-bw-offer-add');
+      const offerRows = () => [...offers.querySelectorAll('[data-bw-offer]')];
+      const refreshAdd = () => { if (addBtn) addBtn.disabled = offerRows().length >= SE_BW_OFFERS_MAX; };
+      // Adds a product or service (the suggestions call this too). Fills an empty row first. false when full.
+      card.seAddOffering = (o) => {
+        const name = String((o && o.name) || '').trim();
+        if (name && offerRows().some((r) => r.querySelector('[data-bw-offer-name]').value.trim().toLowerCase() === name.toLowerCase())) return true;
+        let row = offerRows().find((r) => !r.querySelector('[data-bw-offer-name]').value.trim());
+        if (!row) {
+          if (offerRows().length >= SE_BW_OFFERS_MAX) return false;
+          offers.insertAdjacentHTML('beforeend', seBwOfferRowHtml({}));
+          row = offerRows().pop();
+        }
+        row.querySelector('[data-bw-offer-name]').value = name;
+        row.querySelector('[data-bw-offer-note]').value = String((o && o.note) || '');
+        refreshAdd();
+        return row;
+      };
+      card.seOfferings = () => offerRows()
+        .map((r) => ({ name: r.querySelector('[data-bw-offer-name]').value.trim(), note: r.querySelector('[data-bw-offer-note]').value.trim() }))
+        .filter((o) => o.name);
+      addBtn?.addEventListener('click', () => { const r = card.seAddOffering({}); if (r && r.querySelector) r.querySelector('[data-bw-offer-name]').focus(); });
+      offers.addEventListener('click', (e) => {
+        const x = e.target.closest('[data-bw-offer-remove]');
+        if (!x) return;
+        x.closest('[data-bw-offer]').remove();
+        refreshAdd();
+        card.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      refreshAdd();
       const range = panel.querySelector('#se-bw-formality');
       range?.addEventListener('input', () => {
         const lab = panel.querySelector('#se-bw-formality-val');
@@ -10715,6 +10769,8 @@
           values: list('values'),
           embrace: list('embrace'),
           avoid: list('avoid'),
+          offerings: card.seOfferings(),
+          ...(card.seKeptBrand ? { brand: card.seKeptBrand() } : {}),
         };
         btn.disabled = true;
         btn.textContent = 'Saving…';
@@ -10727,7 +10783,9 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || 'Save failed');
           if (clientData) clientData.brand_worksheet = { worksheet: data.worksheet, exists: true, complete: !!data.complete };
-          showToast(data.complete ? '✓ Brand worksheet saved — new content will follow it' : 'Saved — add values and a phrase to finish it');
+          const libraryNote = data.library && data.library.added ? ` Added ${data.library.added} to your Library.` : (data.library && data.library.error ? ` ${data.library.error}` : '');
+          showToast((data.complete ? '✓ Brand worksheet saved — new content will follow it.' : 'Saved — add values and a phrase to finish it.') + libraryNote);
+          card.dispatchEvent(new CustomEvent('se-bw-saved'));
         } catch (err) {
           showToast(err.message || 'Could not save the worksheet');
         } finally {
