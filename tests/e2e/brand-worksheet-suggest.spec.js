@@ -84,7 +84,16 @@ test('Analyse → suggestions beside the questions → Use fills the form → Sa
 
   await form.locator('[data-bws-adj="warm"]').click();
   await expect(page.locator('#se-bw-adjectives')).toHaveValue('warm');
-  await expect(form.locator('[data-bws-adj="warm"]')).toBeDisabled();
+  await expect(form.locator('[data-bws-adj="warm"]')).toHaveAttribute('aria-pressed', 'true');
+  // A ticked suggestion can be taken back out.
+  await form.locator('[data-bws-adj="neighbourly"]').click();
+  await expect(page.locator('#se-bw-adjectives')).toHaveValue('warm, neighbourly');
+  await form.locator('[data-bws-adj="warm"]').click();
+  await expect(page.locator('#se-bw-adjectives')).toHaveValue('neighbourly');
+  await expect(form.locator('[data-bws-adj="warm"]')).not.toHaveAttribute('aria-pressed', 'true');
+  await form.locator('[data-bws-adj="neighbourly"]').click();
+  await form.locator('[data-bws-adj="warm"]').click();
+  await expect(page.locator('#se-bw-adjectives')).toHaveValue('warm');
 
   await form.locator('[data-bws-value="1"]').click();
   await expect(page.locator('[data-bw-list="values"]').first()).toHaveValue('Slow craft');
@@ -95,10 +104,14 @@ test('Analyse → suggestions beside the questions → Use fills the form → Sa
   await expect(page.locator('[data-bw-list="avoid"]').first()).toHaveValue('game changer');
   await expect(page.locator('#se-bw-adjectives')).toHaveValue('warm');
   await expect(page.locator('#se-bw-save')).toHaveText('Save changes');
+  await form.locator('[data-bws-value="1"]').click();
+  await expect(page.locator('[data-bw-list="values"]').first(), 'the next value moves up').toHaveValue('Local sourcing');
+  await expect(page.locator('[data-bw-list="values"]').nth(1)).toHaveValue('');
+  await form.locator('[data-bws-value="1"]').click();
 
   await page.click('#se-bw-save');
   await expect.poll(() => saves.length).toBe(1);
-  expect(saves[0]).toMatchObject({ formality: 4, values: ['Slow craft', 'Local sourcing'], embrace: ['come say hi'], avoid: ['game changer'], offerings: [{ name: 'Rye loaf', note: '' }] });
+  expect(saves[0]).toMatchObject({ formality: 4, values: ['Local sourcing', 'Slow craft'], embrace: ['come say hi'], avoid: ['game changer'], offerings: [{ name: 'Rye loaf', note: '' }] });
   expect(saves[0].brand, 'post suggestions carry no website colours').toBeUndefined();
   await expect(page.locator('#se-bw-save')).toHaveText('Save');
 });
@@ -171,7 +184,7 @@ test('a new account with an empty worksheet: it is read and filled from the webs
   const form = page.locator('#se-brand-worksheet');
   await expect(form.locator('[data-bws-slot="embrace"] .bws-chip')).not.toContainText('×');
   await expect(form.locator('[data-bws-slot="offerings"] .bws-chip')).toHaveCount(2);
-  await expect(form.locator('[data-bws-offer="0"]')).toBeDisabled();
+  await expect(form.locator('[data-bws-offer="0"]')).toHaveAttribute('aria-pressed', 'true');
 
   // Colours and logo: drop the one that is not theirs.
   const brand = page.locator('#se-bw-brand');
@@ -222,6 +235,32 @@ test('cached website suggestions on a worksheet that has answers: nothing is ove
   await chips.nth(1).click();
   await expect(page.locator('[data-bw-offer-name]')).toHaveCount(1);
   await expect(page.locator('[data-bw-offer-name]').first()).toHaveValue('Wholesale Bread Boxes');
-  await expect(chips.nth(1)).toBeDisabled();
+  await expect(chips.nth(1)).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#se-bw-save')).toHaveText('Save changes');
+  await chips.nth(1).click();
+  await expect(page.locator('[data-bw-offer-name]'), 'clicking a ticked product takes it back out').toHaveCount(0);
+  await expect(chips.nth(1)).not.toHaveAttribute('aria-pressed', 'true');
+});
+
+test('after Save the boxes show what the server kept, so a refresh shows the same', async ({ page }) => {
+  await openBrand(page, async (entry, route, json) => {
+    if (entry.path === '/api/brand-worksheet/suggestions') { json(200, { suggestions: null }); return 'handled'; }
+    if (entry.path === '/api/brand-worksheet' && entry.method === 'POST') {
+      // The server tidies: trims to five and drops a repeat.
+      json(200, { success: true, complete: true, worksheet: { formality: 5, expectation_adjectives: ['bold'], values: ['One', 'Two', 'Three', 'Four', 'Five'], embrace: ['own the night'], avoid: [], offerings: [{ name: 'Velvet Choker', note: '' }] } });
+      return 'handled';
+    }
+    return undefined;
+  }, clientData({ brand_worksheet: { worksheet: { formality: 2, expectation_adjectives: ['bold'], values: ['One'], embrace: [], avoid: [], offerings: [] }, exists: true, complete: false } }));
+  await page.locator('[data-bw-list="values"]').nth(1).fill('Two');
+  await page.locator('[data-bw-list="embrace"]').first().fill('own the night');
+  await page.locator('#se-bw-formality').fill('5');
+  await page.click('#se-bw-offer-add');
+  await page.locator('[data-bw-offer-name]').first().fill('Velvet Choker');
+  await page.click('#se-bw-save');
+  await expect(page.locator('[data-bw-list="values"]').nth(4)).toHaveValue('Five');
+  await expect(page.locator('#se-bw-formality')).toHaveValue('5');
+  await expect(page.locator('#se-bw-formality-val')).toHaveText('Very casual');
+  await expect(page.locator('[data-bw-offer-name]')).toHaveCount(1);
+  await expect(page.locator('#se-bw-save')).toHaveText('Save');
 });
