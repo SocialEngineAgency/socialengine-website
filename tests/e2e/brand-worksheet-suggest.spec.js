@@ -50,6 +50,7 @@ test('Analyse → suggestions beside the questions → Use fills the form → Sa
   await expect(panel).toContainText('Not sure what to write?');
   expect(posts, 'a worksheet with something in it is not read automatically').toBe(0);
   await expect(page.locator('[data-bw-list="avoid"]').last()).toHaveAttribute('autocomplete', 'off');
+  for (const key of ['values', 'embrace', 'avoid']) await expect(page.locator(`[data-bw-list="${key}"]`), `five ${key} boxes`).toHaveCount(5);
   await expect(page.locator('#se-bw-adjectives')).toHaveAttribute('autocomplete', 'off');
   await panel.locator('#bws-run').click();
   await expect.poll(() => posts).toBe(1);

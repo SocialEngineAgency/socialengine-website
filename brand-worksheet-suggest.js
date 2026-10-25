@@ -127,7 +127,7 @@
     function fillList(key, value) {
       if (inList(key, value)) return true;
       const empty = listInputs(key).find((i) => !i.value.trim());
-      if (!empty) { toast('All three boxes are full — clear one first', 'warning'); return false; }
+      if (!empty) { toast('All five boxes are full — clear one first', 'warning'); return false; }
       empty.value = value;
       mark(empty);
       return true;

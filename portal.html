@@ -10688,7 +10688,7 @@
       const w = bw.worksheet || {};
       const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
       const noFill = 'autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"';
-      const three = (key, placeholder) => [0, 1, 2].map((i) =>
+      const five = (key, placeholder) => [0, 1, 2, 3, 4].map((i) =>
         `<input type="text" class="se-bw-input" name="se-bw-${key}-${i}" ${noFill} data-bw-list="${key}" maxlength="80" placeholder="${placeholder} ${i + 1}" value="${esc((w[key] || [])[i])}" />`).join('');
       const formality = Number(w.formality) || 3;
       const row = (slot, field) => `<div class="se-bw__q"><div class="se-bw__field">${field}</div><div class="se-bw__sugg" data-bws-slot="${slot}"></div></div>`;
@@ -10707,9 +10707,9 @@
           <div class="se-bw__scale"><span>Formal</span><span>Casual</span></div>`)}
         ${row('adjectives', `<label class="se-bw__label">People expect us to sound… <span class="se-bw__hint">up to 5 words, comma separated</span></label>
           <input type="text" class="se-bw-input" id="se-bw-adjectives" name="se-bw-adjectives" ${noFill} maxlength="200" placeholder="warm, local, honest, plain-spoken" value="${esc((w.expectation_adjectives || []).join(', '))}" />`)}
-        ${row('values', `<label class="se-bw__label">Our 3 values</label><div class="se-bw__row">${three('values', 'Value')}</div>`)}
-        ${row('embrace', `<label class="se-bw__label">3 phrases we love</label><div class="se-bw__row">${three('embrace', 'Phrase')}</div>`)}
-        ${row('avoid', `<label class="se-bw__label">3 phrases we never use</label><div class="se-bw__row">${three('avoid', 'Never say')}</div>`)}
+        ${row('values', `<label class="se-bw__label">Our values <span class="se-bw__hint">up to 5</span></label><div class="se-bw__row">${five('values', 'Value')}</div>`)}
+        ${row('embrace', `<label class="se-bw__label">Phrases we love <span class="se-bw__hint">up to 5</span></label><div class="se-bw__row">${five('embrace', 'Phrase')}</div>`)}
+        ${row('avoid', `<label class="se-bw__label">Phrases we never use <span class="se-bw__hint">up to 5</span></label><div class="se-bw__row">${five('avoid', 'Never say')}</div>`)}
         ${row('offerings', `<label class="se-bw__label">What we offer <span class="se-bw__hint">products or services, up to ${SE_BW_OFFERS_MAX}</span></label>
           <div class="se-bw__offers" id="se-bw-offers">${(w.offerings || []).map(seBwOfferRowHtml).join('')}</div>
           <button type="button" class="se-bw__add" id="se-bw-offer-add">+ Add a product or service</button>`)}
