@@ -71,11 +71,11 @@ const TAB_DEFINITIONS = [
     nav: 'create',
     data: async (page) => {
       await expect(page.locator('#create-segments')).toBeVisible({ timeout: TAB_TIMEOUT_MS });
-      await expect(page.locator('#dash-content').getByText(/I already have the video|Make one|Generate from a still/i))
+      await expect(page.locator('#dash-content').getByText(/I already have a video|Generate from a still/i))
         .toBeVisible({ timeout: TAB_TIMEOUT_MS });
     },
     ctas: [
-      { name: 'Make one door', locator: (page) => page.locator('#vs-door-make') },
+      { name: 'Upload switch', locator: (page) => page.locator('#vs-mode-upload') },
       { name: 'Generate Video', locator: (page) => page.locator('#vs-generate-btn') },
       { name: 'Template card', locator: (page) => page.locator('.vs-template-card').first() },
     ],

@@ -51,12 +51,12 @@ test('Video AI Models catalog is collapsed, not a full page section', () => {
   assert.match(vs, /<details[\s\S]*AI models|Available models/i);
 });
 
-test('Video uses shared atelier-shell chrome (essentials · stage · inspector)', () => {
+test('Video is one centered workspace: Generate | Upload switch, Generate by default, recipes above the form', () => {
   const vs = renderVideoStudioSlice();
-  assert.match(vs, /class="atelier-shell"/);
-  assert.match(vs, /class="atelier-essentials"/);
-  assert.match(vs, /class="atelier-stage"/);
-  assert.match(vs, /class="atelier-inspector"/);
+  assert.match(vs, /class="vs-page"/);
+  assert.match(vs, /class="vs-switch"/);
+  assert.doesNotMatch(vs, /id="vs-door-pick"/);
+  assert.match(vs, /aria-selected="\$\{vsDoor !== 'upload'\}"/);
   assert.match(vs, /id="vs-mode-upload"/);
   assert.match(vs, /id="vs-mode-make"/);
 });

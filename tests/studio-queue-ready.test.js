@@ -147,8 +147,9 @@ test('home dashboard uses homeQueuePosts not the full review list', () => {
   assert.doesNotMatch(dash, /postsForContentReview\(/);
 });
 
-test('Video & Post starts on two doors unless remix or Coach is landing', () => {
-  assert.equal(videoStudioDoor(''), 'choose');
+test('Video opens on Generate; Upload is one switch away', () => {
+  assert.equal(videoStudioDoor(''), 'make');
+  assert.equal(videoStudioDoor('choose'), 'make');
   assert.equal(videoStudioDoor('upload'), 'upload');
   assert.equal(videoStudioDoor('', { remix: true }), 'make');
   assert.equal(videoStudioDoor('', { coachSession: true }), 'make');
@@ -197,8 +198,8 @@ test('a mixed preview is current only for the same video, bed, volume, and mute'
 
 test('Video & Post source has both doors and the music endpoints', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
-  assert.match(src, /I already have the video/);
-  assert.match(src, /Make one/);
+  assert.match(src, /I already have a video/);
+  assert.match(src, /id="vs-mode-make"/);
   assert.match(src, /\/api\/studio\/generate-music/);
   assert.match(src, /\/api\/studio\/mix-audio/);
   assert.match(src, /accept="video\//);
