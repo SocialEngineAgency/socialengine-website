@@ -436,6 +436,7 @@
       <div class="nav-item" data-section="merchants">Merchants</div>
       <div class="nav-item" data-section="failed">Failed Videos</div>
       <div class="nav-item" data-section="agent">Coach Agent</div>
+      <div class="nav-item" data-section="models">Video Models</div>
       <div class="nav-item disabled">Content Pipeline <span class="coming-soon">Soon</span></div>
       <div class="nav-item disabled">Usage &amp; Cost <span class="coming-soon">Soon</span></div>
       <div class="nav-item disabled">Revenue <span class="coming-soon">Soon</span></div>
@@ -464,6 +465,7 @@
         <section id="section-merchants" class="hidden"></section>
         <section id="section-failed" class="hidden"></section>
         <section id="section-agent" class="hidden"></section>
+        <section id="section-models" class="hidden"></section>
       </div>
     </main>
   </div>
@@ -612,10 +614,12 @@
       document.getElementById('section-merchants').classList.toggle('hidden', sec !== 'merchants');
       document.getElementById('section-failed').classList.toggle('hidden', sec !== 'failed');
       document.getElementById('section-agent').classList.toggle('hidden', sec !== 'agent');
+      document.getElementById('section-models').classList.toggle('hidden', sec !== 'models');
       if (sec === 'health') renderHealth();
       if (sec === 'merchants') renderMerchants();
       if (sec === 'failed') renderFailed();
       if (sec === 'agent') renderAgent();
+      if (sec === 'models') renderModels();
     });
   });
 
@@ -937,6 +941,60 @@
   // ── Coach agent section ──────────────────────────────────────────
   // What the project agent got wrong on the platform (with its proposed fix), tool health, recent
   // projects, a weekly digest written as a draft, and the per-brand on/off switch. Nothing here sends anything.
+  // ── Video Models ──────────────────────────────────────────────────
+  // Which provider carries each model, which routes are switched off, and new models waiting for a yes or no.
+  const PROVIDER_NAMES = { fal: 'fal.ai', higgsfield: 'Higgsfield', atlas: 'Atlas' };
+  async function renderModels() {
+    const root = document.getElementById('section-models');
+    root.innerHTML = `
+      <h1 class="section-title">Video Models</h1>
+      <p class="section-sub">Each model is tried on fal.ai first, then Higgsfield, then Atlas. A route that the provider has retired, or that keeps failing, is switched off and tried again later. New models found by the daily check wait here until you approve them.</p>
+      <div class="row-bar"><button class="btn-sm primary" id="models-run">Check now</button><span id="models-note" style="font-size:11px; color:var(--text-muted);"></span></div>
+      <div id="models-body">${skeletonBlock('', 3)}</div>`;
+    root.querySelector('#models-run').addEventListener('click', async () => {
+      const note = root.querySelector('#models-note');
+      note.textContent = 'Checking…';
+      try { await adminFetch('/api/admin/model-watch/run', { method: 'POST', body: JSON.stringify({ notify: false }) }); note.textContent = 'Done.'; drawModels(); }
+      catch (e) { note.textContent = 'Could not check: ' + e.message; }
+    });
+    drawModels();
+  }
+  async function drawModels() {
+    const el = document.getElementById('models-body');
+    if (!el) return;
+    try {
+      const d = await adminFetch('/api/admin/model-watch');
+      const when = (ms) => new Date(ms).toLocaleString();
+      const fams = d.families.map((f) => `
+        <tr><td><b>${escape(f.name)}</b></td><td>${f.routes.map((r) => {
+          const prov = PROVIDER_NAMES[r.route.split(':')[0]] || r.route.split(':')[0];
+          return r.blocked
+            ? `<span class="tag tag-red" title="${escape(r.reason || '')}">${escape(prov)} off until ${escape(when(r.until))}</span>`
+            : `<span class="tag tag-green">${escape(prov)}</span>`;
+        }).join(' ') || '<span class="tag tag-grey">no provider set up</span>'}</td></tr>`).join('');
+      const pending = (d.pending || []);
+      const pend = pending.length
+        ? `<table class="table"><thead><tr><th>Model</th><th>Provider</th><th>Found</th><th></th></tr></thead><tbody>${pending.map((p) => `
+            <tr><td><b>${escape(p.name || p.id)}</b><div style="font-size:11px; color:var(--text-muted);">${escape(p.id)}</div></td><td>${escape(PROVIDER_NAMES[p.provider] || p.provider)}</td><td>${escape((p.firstSeen || '').slice(0, 10))}</td>
+            <td><button class="btn-sm" data-dismiss="${escape(p.provider)}|${escape(p.id)}">Not interested</button></td></tr>`).join('')}</tbody></table>
+           <p class="section-sub" style="margin-top:8px;">To add one, tell Claude which model; it is added with a test before customers see it.</p>`
+        : '<div class="empty">Nothing waiting. New models appear here when a provider releases one.</div>';
+      const last = d.lastRun;
+      const errs = last && last.errors && last.errors.length ? `<div class="empty" style="color:var(--red);">Last check could not read: ${last.errors.map(escape).join('; ')}</div>` : '';
+      el.innerHTML = `
+        <div class="card" style="padding:0; margin-bottom:14px;"><table class="table"><thead><tr><th>Model</th><th>Providers, in the order they are tried</th></tr></thead><tbody>${fams}</tbody></table></div>
+        <h2 class="section-title">Waiting for your approval</h2>${pend}${errs}
+        <p class="section-sub" style="margin-top:14px;">${last ? 'Last check: ' + escape(new Date(last.at).toLocaleString()) : 'The daily check has not run yet.'}</p>`;
+      el.querySelectorAll('[data-dismiss]').forEach((b) => b.addEventListener('click', async () => {
+        const [provider, ...rest] = b.dataset.dismiss.split('|');
+        try { await adminFetch('/api/admin/model-watch/dismiss', { method: 'POST', body: JSON.stringify({ provider, id: rest.join('|') }) }); drawModels(); }
+        catch (e) { toast('Could not dismiss: ' + e.message, 'error'); }
+      }));
+    } catch (e) {
+      if (e.message !== 'unauth') el.innerHTML = `<div class="empty">Could not load: ${escape(e.message)}</div>`;
+    }
+  }
+
   let agentFilter = 'open';
   const AGENT_CATS = { tool_failed: 'Tool failed', slow: 'Too slow', quality: 'Quality', missing_capability: 'Missing', confusing: 'Confusing', other: 'Other' };
   const AGENT_SEV = { 1: ['Minor', 'tag-grey'], 2: ['Worth fixing', 'tag-gold'], 3: ['Blocking', 'tag-red'] };
