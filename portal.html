@@ -7805,6 +7805,7 @@
         : (window.__SE_VS_DOOR || 'make');
       window.__SE_VS_DOOR = vsDoor;
       const uploadDraft = window.__SE_VS_UPLOAD || {};
+      const vsDone = window.__SE_VS_DONE || null;
       const vsPlatforms = (typeof vsConnectedPlatforms === 'function') ? vsConnectedPlatforms() : ['Instagram', 'Facebook'];
       const mixSettings = {
         sourceVideoUrl: uploadDraft.sourceVideoUrl || uploadDraft.videoUrl || '',
@@ -7857,8 +7858,15 @@
           <div id="vs-upload-flow" class="dash-card" style="display:${vsDoor === 'upload' ? 'block' : 'none'};margin-bottom:24px;overflow:hidden;">
             <div style="padding:24px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;">
-                <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;color:#fff;margin:0;">I already have the video</h3>
+                <h3 style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;color:#fff;margin:0;">${uploadDraft.fromGenerate ? 'Finish and post your clip' : 'I already have the video'}</h3>
               </div>
+              ${vsDone ? `<div id="vs-finish-done" role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;padding:12px 14px;margin-bottom:16px;border-radius:10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);">
+                <div style="font-size:0.82rem;color:#A7F3D0;font-weight:600;">${vsDone.postNow ? 'Posted.' : 'Added to your queue.'} <span style="font-weight:400;color:rgba(255,255,255,0.6);">${vsDone.captioned ? 'With captions. ' : ''}${vsDone.note || ''}</span></div>
+                <div style="display:flex;gap:8px;">
+                  <button type="button" id="vs-done-review" onclick="vsOpenReviewAfterDone()" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(16,185,129,0.4);background:rgba(16,185,129,0.12);color:#D1FAE5;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Open Content Review</button>
+                  <button type="button" onclick="vsDismissDone()" style="padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.55);font-size:0.72rem;cursor:pointer;font-family:var(--font-body);">Close</button>
+                </div>
+              </div>` : ''}
               <div class="vs-two"><div>
               <div id="vs-finished-drop" style="border:2px dashed rgba(255,255,255,0.12);border-radius:12px;padding:28px 18px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.02);${uploadDraft.videoUrl ? 'display:none;' : ''}" onclick="document.getElementById('vs-finished-input').click();" ondragover="event.preventDefault();this.style.borderColor='rgba(124,58,237,0.4)';" ondrop="event.preventDefault();handleVSFinishedVideo(event.dataTransfer.files[0]);" ondragleave="this.style.borderColor='rgba(255,255,255,0.12)';">
                 <div style="font-size:0.88rem;color:rgba(255,255,255,0.7);font-weight:600;">Drop mp4 or mov</div>
@@ -7905,6 +7913,12 @@
               <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Caption</label>
               <textarea id="vs-upload-caption" rows="4" placeholder="Write the caption for this post" style="width:100%;padding:10px 14px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:8px;color:#fff;font-size:0.85rem;font-family:var(--font-body);outline:none;resize:vertical;margin-bottom:8px;">${uploadDraft.caption || ''}</textarea>
               <button type="button" onclick="generateVSUploadCaption(this)" style="padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);margin-bottom:16px;">Write caption</button>
+              <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Captions on the video</label>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;color:rgba(255,255,255,0.75);"><input type="checkbox" id="vs-burn-captions" onchange="vsToggleCaptions(this.checked)" ${uploadDraft.captionsOn ? 'checked' : ''}> Show the words said, word by word</label>
+                <button type="button" id="vs-captions-preview" onclick="previewVSCaptions()" style="padding:6px 11px;border-radius:8px;border:1px solid rgba(167,139,250,0.45);background:rgba(124,58,237,0.16);color:#E9D5FF;font-size:0.7rem;font-weight:700;cursor:pointer;font-family:var(--font-body);${uploadDraft.captionsOn ? '' : 'display:none;'}">See it with captions</button>
+              </div>
+              <div id="vs-captions-status" style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-bottom:16px;">${uploadDraft.captionsOn ? (uploadDraft.captionedUrl ? 'Captions are ready.' : 'Captions are added when you queue or post.') : 'Off. Works when someone speaks in the video.'}</div>
               <label style="display:block;font-size:0.78rem;font-weight:600;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Platforms</label>
               <div id="vs-upload-platforms" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
                 ${vsPlatforms.map((p) => `<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:rgba(255,255,255,0.75);"><input type="checkbox" value="${p}" checked> ${p}</label>`).join('')}
@@ -8879,6 +8893,19 @@
             videoUrl = draft.sourceVideoUrl || settings.sourceVideoUrl;
           }
         }
+        let captioned = false;
+        let note = '';
+        if (draft.captionsOn) {
+          if (queueBtn) queueBtn.textContent = 'Adding captions…';
+          try {
+            videoUrl = await vsEnsureCaptionedVideo(videoUrl);
+            captioned = true;
+          } catch (capErr) {
+            if (!capErr.noSpeech) throw capErr;
+            note = 'No speech was heard, so it went without captions.';
+          }
+          if (queueBtn) queueBtn.textContent = postNow ? 'Posting…' : 'Queuing…';
+        }
         const body = typeof ready.buildUploadVideoQueueBody === 'function'
           ? ready.buildUploadVideoQueueBody({
               videoUrl,
@@ -8904,7 +8931,11 @@
         } else {
           showToast('Added to content queue', 'success');
         }
-        if (typeof ready.openContentReviewAfterQueue === 'function') ready.openContentReviewAfterQueue();
+        // Stay here: the clip is done, the page is ready for the next one, Content Review is one click away.
+        window.__SE_VS_DONE = { postNow: !!postNow, record_id: qData.record_id || '', captioned, note };
+        window.__SE_VS_UPLOAD = {};
+        renderVideoStudio();
+        return;
       } catch (e) {
         showToast(e.message || 'Could not queue that video', 'error');
         if (queueBtn) queueBtn.textContent = prev || (postNow ? 'Post now' : 'Add to Queue');
@@ -8913,6 +8944,81 @@
       }
     }
 
+    // A finished generated clip goes into the same finishing step as an uploaded one: music, caption, captions on
+    // the video, platforms, queue or post now.
+    function finishVSClip(videoUrl, label) {
+      if (!/^https?:\/\//i.test(String(videoUrl || ''))) return;
+      window.__SE_VS_DONE = null;
+      window.__SE_VS_UPLOAD = { videoUrl, sourceVideoUrl: videoUrl, filename: String(label || 'Generated clip'), fromGenerate: true };
+      setVideoStudioDoor('upload');
+      document.getElementById('vs-upload-flow')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function vsToggleCaptions(on) {
+      const draft = vsUploadDraft();
+      draft.captionsOn = !!on;
+      const btn = document.getElementById('vs-captions-preview');
+      if (btn) btn.style.display = on ? '' : 'none';
+      const st = document.getElementById('vs-captions-status');
+      if (st) {
+        st.style.color = 'rgba(255,255,255,0.4)';
+        st.textContent = on ? (draft.captionedUrl ? 'Captions are ready.' : 'Captions are added when you queue or post.') : 'Off. Works when someone speaks in the video.';
+      }
+    }
+
+    // The captioned copy of `baseUrl` (the video with music when there is music). The words are read from the
+    // original clip, before music went under it. Made once per base video. Throws { noSpeech } when nobody speaks.
+    async function vsEnsureCaptionedVideo(baseUrl) {
+      const draft = vsUploadDraft();
+      if (draft.captionedUrl && draft.captionedFor === baseUrl) return draft.captionedUrl;
+      const res = await fetch(`${API}/api/studio/caption-video`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ video_url: baseUrl, audio_url: draft.sourceVideoUrl || baseUrl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 422 && data.code === 'NO_SPEECH') throw Object.assign(new Error(data.error || 'No speech was heard in this clip.'), { noSpeech: true });
+      if (!res.ok || !data.video_url) throw new Error(data.error || 'Captions failed');
+      draft.captionedUrl = data.video_url;
+      draft.captionedFor = baseUrl;
+      return data.video_url;
+    }
+
+    async function previewVSCaptions() {
+      const draft = vsUploadDraft();
+      const btn = document.getElementById('vs-captions-preview');
+      const st = document.getElementById('vs-captions-status');
+      if (!draft.videoUrl) { showToast('Add the video first', 'error'); return; }
+      const prev = btn?.textContent;
+      if (btn) { btn.disabled = true; btn.textContent = 'Adding captions…'; }
+      try {
+        const base = draft.musicUrl ? await vsEnsureMixedVideo() : (draft.sourceVideoUrl || draft.videoUrl);
+        const url = await vsEnsureCaptionedVideo(base);
+        const player = document.getElementById('vs-finished-video');
+        if (player) { player.src = url; player.load(); }
+        if (st) { st.style.color = '#6EE7B7'; st.textContent = 'Video player shows the captions. Hit play on the video.'; }
+      } catch (e) {
+        if (st) { st.style.color = e.noSpeech ? '#FCD34D' : '#FCA5A5'; st.textContent = e.message || 'Captions failed'; }
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = prev || 'See it with captions'; }
+      }
+    }
+
+    function vsOpenReviewAfterDone() {
+      window.__SE_VS_DONE = null;
+      const ready = window.studioQueueReady || {};
+      if (typeof ready.openContentReviewAfterQueue === 'function') ready.openContentReviewAfterQueue();
+    }
+    function vsDismissDone() {
+      window.__SE_VS_DONE = null;
+      document.getElementById('vs-finish-done')?.remove();
+    }
+
+    window.finishVSClip = finishVSClip;
+    window.vsToggleCaptions = vsToggleCaptions;
+    window.previewVSCaptions = previewVSCaptions;
+    window.vsOpenReviewAfterDone = vsOpenReviewAfterDone;
+    window.vsDismissDone = vsDismissDone;
     window.setVideoStudioDoor = setVideoStudioDoor;
     window.handleVSFinishedVideo = handleVSFinishedVideo;
     window.clearVSFinishedVideo = clearVSFinishedVideo;
@@ -9309,9 +9415,10 @@
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.85rem;font-weight:600;color:#fff;">${label}</div>
-          <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:2px;">Ready to download</div>
+          <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:2px;">Ready to finish and post</div>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button type="button" data-vs-finish onclick="finishVSClip('${videoUrl}', '${label.replace(/'/g,'')}');" style="font-size:0.72rem;font-weight:700;color:#fff;padding:6px 12px;background:linear-gradient(135deg,#7C3AED,#A78BFA);border:none;border-radius:6px;cursor:pointer;font-family:var(--font-body);">Finish and post</button>
           <button onclick="downloadProxiedVideo('${videoUrl}', '${label.replace(/'/g,'')}');" style="font-size:0.72rem;font-weight:600;color:#7C3AED;padding:6px 12px;background:rgba(124,58,237,0.08);border-radius:6px;text-decoration:none;display:flex;align-items:center;gap:4px;border:none;cursor:pointer;font-family:var(--font-body);">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download
@@ -9345,9 +9452,10 @@
                 <div style="font-size:0.85rem;font-weight:600;color:#fff;">${v.product_name || 'Video'}</div>
                 <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:2px;">${v.template || ''} • ${new Date(v.created_at).toLocaleDateString()}</div>
               </div>
-              ${v.video_url ? '<a href="' + v.video_url + '" download style="font-size:0.72rem;font-weight:600;color:#7C3AED;padding:6px 12px;background:rgba(124,58,237,0.08);border-radius:6px;text-decoration:none;">Download</a>' : '<span style="font-size:0.72rem;color:rgba(255,255,255,0.3);">' + (v.status || 'pending') + '</span>'}
+              ${v.video_url ? '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;"><button type="button" data-vs-finish-url="' + escapeHtml(v.video_url).replace(/"/g, '&quot;') + '" data-vs-finish-label="' + escapeHtml(v.product_name || 'Video').replace(/"/g, '&quot;') + '" style="font-size:0.72rem;font-weight:700;color:#fff;padding:6px 12px;background:linear-gradient(135deg,#7C3AED,#A78BFA);border:none;border-radius:6px;cursor:pointer;font-family:var(--font-body);">Finish and post</button><a href="' + v.video_url + '" download style="font-size:0.72rem;font-weight:600;color:#7C3AED;padding:6px 12px;background:rgba(124,58,237,0.08);border-radius:6px;text-decoration:none;">Download</a></div>' : '<span style="font-size:0.72rem;color:rgba(255,255,255,0.3);">' + (v.status || 'pending') + '</span>'}
             </div>
           `).join('');
+          list.querySelectorAll('[data-vs-finish-url]').forEach((b) => b.addEventListener('click', () => finishVSClip(b.dataset.vsFinishUrl, b.dataset.vsFinishLabel)));
         }
       } catch {}
     }
