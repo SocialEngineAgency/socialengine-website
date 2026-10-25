@@ -724,6 +724,16 @@ html.nl .nl-shotchk--flagged .nl-shotchk__h b { color: var(--nl-warn); }
 html.nl .nl-shotchk__list { margin: 0; padding: 0 0 0 15px; list-style: none; display: flex; flex-direction: column; gap: 3px; }
 html.nl .nl-shotchk__list b { color: var(--nl-fg2); font-weight: 500; margin-right: 4px; }
 html.nl .nl-shotchk__err { margin: 0; padding-left: 15px; color: var(--nl-fg4); }
+html.nl .nl-mynotes { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+html.nl .nl-mynotes__h { font: 600 12px var(--nl-body); color: var(--nl-fg2); }
+html.nl .nl-mynotes__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: none; }
+html.nl .nl-mynotes__list li { box-sizing: border-box; width: 100%; max-width: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 10px; border: 1px solid var(--nl-line); border-left: 2px solid var(--nl-warn); border-radius: 7px; background: var(--nl-s2); font: 400 12.5px/1.4 var(--nl-body); color: var(--nl-fg); }
+html.nl .nl-mynotes__x { flex: 0 0 auto; width: 24px; height: 24px; border: none; border-radius: 6px; background: transparent; color: var(--nl-fg3); cursor: pointer; font-size: 15px; line-height: 1; }
+html.nl .nl-mynotes__x:hover { background: var(--nl-s3, rgba(255,255,255,0.06)); color: var(--nl-fg); }
+html.nl .nl-mynotes__add { display: flex; gap: 8px; }
+html.nl .nl-mynotes__add input { flex: 1; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--nl-line-strong); border-radius: 7px; background: var(--nl-surface); color: var(--nl-fg); font: 400 12.5px var(--nl-body); }
+html.nl .nl-mynotes__add input:focus { outline: none; border-color: var(--nl-fg4); }
+html.nl .nl-mynotes__hint { margin: 0; font: 400 11.5px/1.4 var(--nl-body); color: var(--nl-fg4); }
 html.nl .nl-shot__takes { font: 400 10.5px var(--nl-mono); color: var(--nl-fg3); }
 html.nl .nl-shot__what { margin: 0; padding: 0 4px; font: 400 12px/1.4 var(--nl-body); color: var(--nl-fg2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 html.nl .nl-ashots__grid .anim-add-scene-wrap { flex: 0 0 120px; margin: 0 !important; display: flex; flex-direction: column; gap: 6px; }
