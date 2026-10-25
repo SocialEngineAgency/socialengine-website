@@ -7665,6 +7665,38 @@
     //                    pick something that will 404 at generate time
     //   'tier_locked'  → rendered faded with an "Upgrade" pill; also
     //                    omitted from the <select>
+    // "8.2/10 · 24 kept or rejected by you", or "Not rated yet". Never a number nobody earned.
+    function modelRatingText(m) {
+      const r = m && m.rating;
+      if (!r || typeof r.score !== 'number') return 'Not rated yet';
+      return r.score.toFixed(1) + '/10 · ' + r.n + (r.basis === 'you' ? ' decided by you' : ' decided by everyone');
+    }
+    // Rated models first, best first; the rest stay in catalog order.
+    function sortModelsByRating(list) {
+      return list.map((m, i) => ({ m, i })).sort((a, b) => {
+        const sa = a.m.rating ? a.m.rating.score : -1;
+        const sb = b.m.rating ? b.m.rating.score : -1;
+        return sb - sa || a.i - b.i;
+      }).map((x) => x.m);
+    }
+    async function rateStudioVideo(requestId, verdict, btn) {
+      const row = btn && btn.parentElement;
+      try {
+        const res = await apiFetch(`${API}/api/studio/video-feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_id: requestId, verdict }),
+        });
+        if (!res.ok) throw new Error('rate ' + res.status);
+        if (row) row.innerHTML = '<span style="font-size:0.72rem;color:rgba(255,255,255,0.5);">' + (verdict === 'good' ? 'Marked good. Thanks.' : 'Marked not good. Thanks.') + '</span>';
+        window._unifiedVideoModels = null;
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Could not save that rating', 'warning');
+      }
+    }
+    window.rateStudioVideo = rateStudioVideo;
+    window.modelRatingText = modelRatingText;
+
     async function loadUnifiedVideoModels(force = false) {
       if (!force && Array.isArray(window._unifiedVideoModels) && window._unifiedVideoModels.length) {
         return window._unifiedVideoModels;
@@ -7677,11 +7709,9 @@
         const rows = (data.models || []).map(m => ({
           id: m.id,
           name: m.displayName,
-          provider: 'SocialEngine AI',
-          pres: typeof m.preservationScore === 'number' ? m.preservationScore : 0,
+          // The rating is earned from kept and rejected videos (yours, then everyone's); nothing is hand-assigned.
+          rating: m.rating && typeof m.rating.score === 'number' ? m.rating : null,
           speed: m.speed || 'Moderate',
-          badge: m.badge || '',
-          badgeColor: m.badgeColor || '',
           desc: m.description || '',
           status: m.status,
           tier: m.tier,
@@ -7753,7 +7783,7 @@
       // Coming-soon and tier-locked models are excluded from the <select>
       // but still rendered in the reference grid below (with a Coming
       // Soon / Upgrade pill) so customers can see the full roadmap.
-      const selectableModels = models.filter(m => m.status === 'available');
+      const selectableModels = sortModelsByRating(models.filter(m => m.status === 'available'));
       const allModelsForRef = models;
       const ready = (typeof window !== 'undefined' && window.studioQueueReady) || {};
       const vsDoor = typeof ready.videoStudioDoor === 'function'
@@ -8028,7 +8058,7 @@
                           ? (models.length
                             ? '<option disabled>No models available for this plan</option>'
                             : '<option disabled>Loading models…</option>')
-                          : selectableModels.map(m => '<option value="' + m.id + '">' + m.name + ' (' + m.provider + ') — Preservation ' + m.pres + '/10' + (m.badge ? ' [' + m.badge + ']' : '') + '</option>').join('')}
+                          : selectableModels.map(m => '<option value="' + m.id + '">' + m.name + ' — ' + modelRatingText(m) + '</option>').join('')}
                       </select>
 
                       <div style="display:flex;align-items:center;gap:10px;">
@@ -8087,15 +8117,13 @@
                     <div>
                       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         <span style="font-size:0.88rem;font-weight:600;color:#fff;">${m.name}</span>
-                        <span style="font-size:0.65rem;color:rgba(255,255,255,0.35);">${m.provider}</span>
-                        ${m.badge ? '<span style="font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:4px;background:' + m.badgeColor + '20;color:' + m.badgeColor + ';">' + m.badge + '</span>' : ''}
                         ${statusPill}
                       </div>
                       <div style="font-size:0.75rem;color:var(--color-text-muted);margin-top:3px;">${m.desc}</div>
                     </div>
                     <div style="text-align:right;">
-                      <div style="font-size:0.85rem;font-weight:700;color:${m.pres >= 9 ? '#7C3AED' : m.pres >= 7 ? '#F59E0B' : 'rgba(255,255,255,0.5)'};">${m.pres}/10</div>
-                      <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);">Preservation</div>
+                      <div style="font-size:0.85rem;font-weight:700;color:${m.rating ? '#C4B5FD' : 'rgba(255,255,255,0.4)'};">${m.rating ? m.rating.score.toFixed(1) + '/10' : 'Not rated yet'}</div>
+                      <div style="font-size:0.65rem;color:rgba(255,255,255,0.3);">${m.rating ? 'Decided by ' + (m.rating.basis === 'you' ? 'you' : 'everyone') + ' (' + m.rating.n + ')' : 'Earned from kept and rejected videos'}</div>
                     </div>
                   </div>
                 `;
@@ -8199,13 +8227,13 @@
         btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Generate Remixed Video';
       }
 
-      // Prefer a high-preservation model when available
+      // Prefer the best-rated model when any has earned a rating
       const modelSel = document.getElementById('vs-model');
       if (modelSel && modelSel.options.length) {
         let best = null, bestPres = -1;
         for (const opt of modelSel.options) {
           const m = (window._unifiedVideoModels || []).find(x => x.id === opt.value);
-          const pres = Number(m?.pres) || 0;
+          const pres = m && m.rating ? m.rating.score : -1;
           if (pres > bestPres) { bestPres = pres; best = opt.value; }
         }
         if (best) modelSel.value = best;
@@ -9285,6 +9313,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Preview
           </button>
+          <span style="display:inline-flex;gap:6px;align-items:center;"><button type="button" onclick="rateStudioVideo('${requestId}','good',this)" style="font-size:0.72rem;font-weight:600;color:#6EE7B7;padding:6px 10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:6px;cursor:pointer;">Good</button><button type="button" onclick="rateStudioVideo('${requestId}','bad',this)" style="font-size:0.72rem;font-weight:600;color:#FCA5A5;padding:6px 10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:6px;cursor:pointer;">Not good</button></span>
         </div>
       `;
       if (typeof window.refreshContentReview === 'function') window.refreshContentReview();
@@ -19263,6 +19292,9 @@
     try { _exposeOnWindow('showCancellationModal',    typeof showCancellationModal    !== 'undefined' ? showCancellationModal    : undefined); } catch(_){}
     try { _exposeOnWindow('showToast',                typeof showToast                !== 'undefined' ? showToast                : undefined); } catch(_){}
     try { _exposeOnWindow('submitVideoGeneration',    typeof submitVideoGeneration    !== 'undefined' ? submitVideoGeneration    : undefined); } catch(_){}
+    try { _exposeOnWindow('updateGenComplete',        typeof updateGenComplete        !== 'undefined' ? updateGenComplete        : undefined); } catch(_){}
+    try { _exposeOnWindow('downloadProxiedVideo',     typeof downloadProxiedVideo     !== 'undefined' ? downloadProxiedVideo     : undefined); } catch(_){}
+    try { _exposeOnWindow('previewProxiedVideo',      typeof previewProxiedVideo      !== 'undefined' ? previewProxiedVideo      : undefined); } catch(_){}
     try { _exposeOnWindow('submitVoiceFeedback',      typeof submitVoiceFeedback      !== 'undefined' ? submitVoiceFeedback      : undefined); } catch(_){}
     try { _exposeOnWindow('toggleNotifications',      typeof toggleNotifications      !== 'undefined' ? toggleNotifications      : undefined); } catch(_){}
     try { _exposeOnWindow('triggerCompetitorSnipe',   typeof triggerCompetitorSnipe   !== 'undefined' ? triggerCompetitorSnipe   : undefined); } catch(_){}
