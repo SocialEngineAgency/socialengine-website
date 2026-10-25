@@ -10743,6 +10743,24 @@
         refreshAdd();
         return row;
       };
+      card.seRemoveOffering = (name) => {
+        const k = String(name || '').trim().toLowerCase();
+        offerRows().filter((r) => r.querySelector('[data-bw-offer-name]').value.trim().toLowerCase() === k).forEach((r) => r.remove());
+        refreshAdd();
+      };
+      // After a save the boxes show what the server kept (it trims and tidies), so nothing changes on refresh.
+      card.seShowSaved = (w) => {
+        if (!w) return;
+        if (range) { range.value = String(w.formality || 3); range.dispatchEvent(new Event('input', { bubbles: true })); }
+        const adj = panel.querySelector('#se-bw-adjectives');
+        if (adj) adj.value = Array.isArray(w.expectation_adjectives) ? w.expectation_adjectives.join(', ') : String(w.expectation_adjectives || '');
+        ['values', 'embrace', 'avoid'].forEach((key) => {
+          panel.querySelectorAll(`[data-bw-list="${key}"]`).forEach((i, n) => { i.value = (w[key] || [])[n] || ''; });
+        });
+        offers.innerHTML = (Array.isArray(w.offerings) ? w.offerings : []).map((o) => seBwOfferRowHtml(typeof o === 'string' ? { name: o } : o)).join('');
+        refreshAdd();
+        adj?.dispatchEvent(new Event('input', { bubbles: true }));
+      };
       card.seOfferings = () => offerRows()
         .map((r) => ({ name: r.querySelector('[data-bw-offer-name]').value.trim(), note: r.querySelector('[data-bw-offer-note]').value.trim() }))
         .filter((o) => o.name);
@@ -10783,6 +10801,7 @@
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || 'Save failed');
           if (clientData) clientData.brand_worksheet = { worksheet: data.worksheet, exists: true, complete: !!data.complete };
+          card.seShowSaved(data.worksheet);
           const libraryNote = data.library && data.library.added ? ` Added ${data.library.added} to your Library.` : (data.library && data.library.error ? ` ${data.library.error}` : '');
           showToast((data.complete ? '✓ Brand worksheet saved — new content will follow it.' : 'Saved — add values and a phrase to finish it.') + libraryNote);
           card.dispatchEvent(new CustomEvent('se-bw-saved'));

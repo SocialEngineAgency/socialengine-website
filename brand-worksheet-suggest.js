@@ -57,6 +57,8 @@
       .bws-chip { padding: 4px 10px; border-radius: 14px; border: 1px solid rgba(124,58,237,0.35); background: rgba(124,58,237,0.1); color: #DDD6FE; font-size: 0.72rem; font-weight: 600; cursor: pointer; width: auto; font-family: inherit; text-align: left; line-height: 1.35; }
       .bws-chip:hover:not([disabled]) { background: rgba(124,58,237,0.22); }
       .bws-chip[disabled] { opacity: 0.5; cursor: default; }
+      .bws-chip.is-on { opacity: 0.6; }
+      .bws-chip.is-on:hover { opacity: 1; background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.45); color: #FECACA; }
       .bws-chip small { font-weight: 500; opacity: 0.7; margin-left: 4px; }
       .se-bw__brand { padding: 12px 0 2px; border-top: 1px solid rgba(255,255,255,0.05); }
       .bws-brand__row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; }
@@ -133,6 +135,20 @@
       return true;
     }
 
+    function removeAdjective(word) {
+      const list = adjList().filter((w) => w.toLowerCase() !== String(word).toLowerCase());
+      adjInput().value = list.join(', ');
+      mark(adjInput());
+    }
+
+    // Takes a value out of a list and moves the ones after it up, so the boxes stay filled from the left.
+    function removeFromList(key, value) {
+      const inputs = listInputs(key);
+      const kept = inputs.map((i) => i.value.trim()).filter((v) => v && v.toLowerCase() !== String(value).toLowerCase());
+      inputs.forEach((i, n) => { i.value = kept[n] || ''; });
+      markDirty();
+    }
+
     function fillEmpty(quiet) {
       const d = S.data;
       let n = 0;
@@ -171,7 +187,11 @@
     }
 
     const why = (items) => (items.length ? `<details class="bws-why"><summary>Why?</summary><ul>${items.join('')}</ul></details>` : '');
-    const chip = (attrs, label, used, extra = '') => `<button type="button" class="bws-chip" ${attrs} ${used ? 'disabled' : ''}>${used ? '✓ ' : '+ '}${esc(label)}${extra}</button>`;
+    // A used chip is ticked; clicking it takes the answer back out (formality has no "none", so its chip just stays ticked).
+    const chip = (attrs, label, used, extra = '', removable = true) => {
+      const on = used && removable;
+      return `<button type="button" class="bws-chip${on ? ' is-on' : ''}" ${attrs} ${used && !removable ? 'disabled' : ''} ${on ? `aria-pressed="true" title="Click to remove “${esc(label)}”"` : ''}>${used ? '✓ ' : '+ '}${esc(label)}${extra}</button>`;
+    };
 
     function renderStrip() {
       const d = S.data;
@@ -227,7 +247,7 @@
 
       const f = d.formality;
       slot('formality').innerHTML = `<div class="bws-s__label">Suggested</div>
-        <div class="bws-s__chips">${chip(`data-bws-formality="${f.value}"`, FORMALITY[f.value] || '', formalityNow() === f.value)}</div>
+        <div class="bws-s__chips">${chip(`data-bws-formality="${f.value}"`, FORMALITY[f.value] || '', formalityNow() === f.value, '', false)}</div>
         ${why(f.why ? [`<li>${esc(f.why)}</li>`] : [])}`;
 
       const adj = d.expectation_adjectives;
@@ -265,15 +285,22 @@
         slot('offerings').innerHTML = `<div class="bws-s__label">Named on your website</div>
           <div class="bws-s__chips">${offs.map((o, i) => chip(`data-bws-offer="${i}" title="${esc(o.note)}"`, o.name, have.includes(o.name.toLowerCase()))).join('')}</div>`;
         form.querySelectorAll('[data-bws-offer]').forEach((b) => b.addEventListener('click', () => {
-          if (form.seAddOffering(offs[Number(b.dataset.bwsOffer)])) { markDirty(); renderSlots(); } else toast('The list is full — remove one first', 'warning');
+          const o = offs[Number(b.dataset.bwsOffer)];
+          if (b.classList.contains('is-on')) { if (typeof form.seRemoveOffering === 'function') form.seRemoveOffering(o.name); markDirty(); renderSlots(); return; }
+          if (form.seAddOffering(o)) { markDirty(); renderSlots(); } else toast('The list is full — remove one first', 'warning');
         }));
       }
 
       form.querySelectorAll('[data-bws-formality]').forEach((b) => b.addEventListener('click', () => { setFormality(Number(b.dataset.bwsFormality)); renderSlots(); }));
-      form.querySelectorAll('[data-bws-adj]').forEach((b) => b.addEventListener('click', () => { if (addAdjective(b.dataset.bwsAdj)) renderSlots(); }));
-      form.querySelectorAll('[data-bws-value]').forEach((b) => b.addEventListener('click', () => { if (fillList('values', vals[Number(b.dataset.bwsValue)].value)) renderSlots(); }));
-      form.querySelectorAll('[data-bws-embrace]').forEach((b) => b.addEventListener('click', () => { if (fillList('embrace', emb[Number(b.dataset.bwsEmbrace)].phrase)) renderSlots(); }));
-      form.querySelectorAll('[data-bws-avoid]').forEach((b) => b.addEventListener('click', () => { if (fillList('avoid', av[Number(b.dataset.bwsAvoid)].phrase)) renderSlots(); }));
+      const toggle = (b, add, remove) => { if (b.classList.contains('is-on')) { remove(); renderSlots(); } else if (add()) renderSlots(); };
+      form.querySelectorAll('[data-bws-adj]').forEach((b) => b.addEventListener('click', () => toggle(b, () => addAdjective(b.dataset.bwsAdj), () => removeAdjective(b.dataset.bwsAdj))));
+      const listChip = (sel, key, item) => form.querySelectorAll(sel).forEach((b) => b.addEventListener('click', () => {
+        const v = item(b);
+        toggle(b, () => fillList(key, v), () => removeFromList(key, v));
+      }));
+      listChip('[data-bws-value]', 'values', (b) => vals[Number(b.dataset.bwsValue)].value);
+      listChip('[data-bws-embrace]', 'embrace', (b) => emb[Number(b.dataset.bwsEmbrace)].phrase);
+      listChip('[data-bws-avoid]', 'avoid', (b) => av[Number(b.dataset.bwsAvoid)].phrase);
     }
 
     // Colours and logo read from the website. The client drops what is wrong; what is kept goes to the Library on Save.
