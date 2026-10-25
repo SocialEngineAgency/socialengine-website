@@ -63,6 +63,7 @@ const ALLOWLIST = [
   'animation-studio.js', // portal.html
   'story-builder.js', // portal.html — Animate: Build a Story (new look)
   'coach-create-session.js', // portal.html
+  'video-coach.js', // portal.html
   'carousel-templates.js', // portal.html
   'design-studio-v2.js', // portal.html
   'claude-studio.js', // portal.html
