@@ -40,7 +40,7 @@
   // Post tab: pictures attached in the Coach chat (a photo, the logo, anything). They are for the chat only, sent with
   // every message while they are attached, and never used as style references for Generate.
   let _csCoachPictures = [];
-  const CS_MAX_COACH_PICTURES = 6;
+  const CS_MAX_COACH_PICTURES = 5; // plus the canvas picture: the Coach sees up to 6
   function csTab() { return window.__SE_CS_MODE === 'carousel' ? 'carousel' : 'post'; }
   function threadApi() { return window.seCreateCoachThread || null; }
   let _csChatPicker = null;
@@ -888,6 +888,7 @@
     document.getElementById('cs-ref-clear')?.addEventListener('click', () => setReference(null));
     document.getElementById('cs-ref-more')?.addEventListener('click', openMorePicker);
     box.querySelectorAll('[data-cs-more-del]').forEach((b) => b.addEventListener('click', () => removeMoreRef(Number(b.dataset.csMoreDel))));
+    box.querySelectorAll('[data-cs-more-logo]').forEach((b) => b.addEventListener('click', () => toggleMoreLogo(Number(b.dataset.csMoreLogo))));
     nlP2Sync();
   }
 
@@ -898,6 +899,14 @@
     _csPickAddMore = true;
     // Another picture is nearly always one of theirs (a logo, a second photo): start on Uploads.
     setPickerTab('uploads');
+  }
+
+  function toggleMoreLogo(i) {
+    const was = !!(_csMoreRefs[i] && _csMoreRefs[i].logo);
+    _csMoreRefs.forEach((r) => { r.logo = false; });
+    if (_csMoreRefs[i]) _csMoreRefs[i].logo = !was;
+    renderRefSummary();
+    nlP2Sync();
   }
 
   function removeMoreRef(i) {
@@ -912,7 +921,11 @@
     const box = inline ? ' style="position:relative;display:inline-flex;width:40px;height:40px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);"' : '';
     const img = inline ? ' style="width:100%;height:100%;object-fit:cover;"' : '';
     const x = inline ? ' style="position:absolute;top:1px;right:1px;width:16px;height:16px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;line-height:16px;cursor:pointer;"' : '';
-    return _csMoreRefs.map((r, i) => `<span class="${cls}" title="${escapeHtml(r.title)}"${box}><img src="${escapeHtml(mediaSrc(r.url))}" alt="" referrerpolicy="no-referrer"${img}><button type="button" data-cs-more-del="${i}" aria-label="Remove ${escapeHtml(r.title)}"${x}>×</button></span>`).join('');
+    // "Logo": this picture is their logo, placed on the finished post as it is (never redrawn by the model).
+    const tag = (on) => (inline
+      ? ` style="position:absolute;left:1px;bottom:1px;padding:0 3px;border:none;border-radius:4px;font-size:9px;line-height:13px;cursor:pointer;background:${on ? '#7C3AED' : 'rgba(0,0,0,0.7)'};color:#fff;"`
+      : '');
+    return _csMoreRefs.map((r, i) => `<span class="${cls}${r.logo ? ' is-logo' : ''}" title="${escapeHtml(r.logo ? `${r.title} (your logo)` : r.title)}"${box}><img src="${escapeHtml(mediaSrc(r.url))}" alt="" referrerpolicy="no-referrer"${img}><button type="button" data-cs-more-del="${i}" aria-label="Remove ${escapeHtml(r.title)}"${x}>×</button><button type="button" class="cs-more-logo" data-cs-more-logo="${i}" aria-pressed="${r.logo ? 'true' : 'false'}" title="${r.logo ? 'This is your logo. Click if it is not.' : 'Is this your logo? Click to place it as your logo.'}"${tag(r.logo)}>Logo</button></span>`).join('');
   }
 
   function openPicker() {
@@ -925,6 +938,8 @@
   function closePicker() {
     const modal = document.getElementById('cs-picker-modal');
     if (modal) modal.style.display = 'none';
+    // Closed without picking: the next picture chosen anywhere replaces the main one again.
+    _csPickAddMore = false;
   }
 
   function setPickerTab(tab) {
@@ -1152,18 +1167,22 @@
     chip.style.padding = '0';
     chip.style.border = 'none';
     chip.style.background = 'transparent';
-    _csChatPicker = api.mountPicker(chip, csTab(), () => hydrateDesignCoachLog());
-    api.ensure(csTab()).then(() => {
+    _csChatPicker = api.mountPicker(chip, csTab(), () => hydrateDesignCoachLog(), { busy: () => _csCoachSending });
+    const before = (api.current(csTab()) || {}).threadId || '';
+    api.ensure(csTab()).then((sel) => {
       if (_csChatPicker) _csChatPicker.refresh();
-      hydrateDesignCoachLog();
+      // Only when the chat turned out to be another one, and never over a message being answered.
+      if (sel && sel.threadId !== before && !_csCoachSending) hydrateDesignCoachLog();
     }).catch(() => {});
   }
 
   function applyDesignCoachSession() {
     const s = window.__SE_COACH_CREATE_SESSION;
     // Sent here from a chat on the main Coach page: carry on in that chat (the picker shows it and can change it).
-    if (s && s.prompt && s.threadId && threadApi()) {
+    // Once per hand-off, and only one meant for this tab.
+    if (s && s.prompt && s.threadId && s.destination === 'design' && !s.chatPicked && threadApi()) {
       threadApi().set(csTab(), { projectId: s.projectId, threadId: s.threadId, projectName: s.projectName, threadName: s.threadName });
+      s.chatPicked = true;
     }
     renderWorkspaceChip();
     if (!s || s.destination !== 'design' || !s.prompt) return;
@@ -1775,6 +1794,8 @@
     compose.querySelector('#nl-p2-more').addEventListener('click', (e) => {
       const del = e.target.closest('[data-cs-more-del]');
       if (del) { removeMoreRef(Number(del.dataset.csMoreDel)); return; }
+      const logo = e.target.closest('[data-cs-more-logo]');
+      if (logo) { toggleMoreLogo(Number(logo.dataset.csMoreLogo)); return; }
       if (e.target.closest('[data-cs-more-add]')) openMorePicker();
     });
     compose.querySelector('#nl-p2-cancel').addEventListener('click', () => nlP2Edit(false));
@@ -3124,7 +3145,11 @@
       if (_csRef && hero) {
         payload.reference = { ..._csRef, url: hero };
         payload.photo_url = hero;
-        if (_csMoreRefs.length) payload.reference_urls = _csMoreRefs.map((r) => r.url);
+        // The picture marked as their logo is placed as their logo; the rest go to the model as pictures to use.
+        const logoRef = _csMoreRefs.find((r) => r.logo);
+        const others = _csMoreRefs.filter((r) => !r.logo).map((r) => r.url);
+        if (others.length) payload.reference_urls = others;
+        if (logoRef) payload.logo_url = logoRef.url;
       }
       // FigureLabs and GPT Image return a job_id immediately; HTML/Soul stay sync.
       const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
@@ -3339,7 +3364,8 @@
           ? `${done} of ${posts.length} made. ${failed === 1 ? 'One' : failed} could not be made; try ${failed === 1 ? 'it' : 'them'} again.`
           : `${posts.length === 1 ? 'Your post is' : `All ${posts.length} posts are`} ready. Open one to change it, or add ${posts.length === 1 ? 'it' : 'them'} to Review.`;
       const ready = posts.filter((p) => p.status === 'done' && !p.queued).length;
-      const sizeNote = action.engine === 'brand' ? `Size ${view.size}, feed post in your brand style.` : `Size ${view.size}.`;
+      const allBrand = posts.every((p) => (p.engine || action.engine) === 'brand');
+      const sizeNote = allBrand ? `Size ${view.size}, feed post in your brand style.` : `Size ${view.size}.`;
       card.innerHTML = `<div class="cs-posts__head" data-cs-posts-head style="font-size:0.74rem;color:rgba(255,255,255,0.7);line-height:1.45;">${escapeHtml(head)}</div>`
         + `<div class="cs-posts__size" data-cs-posts-size style="font-size:0.66rem;color:rgba(255,255,255,0.45);margin-top:-5px;">${escapeHtml(sizeNote)}</div>`
         + `<div class="cs-posts__grid" style="display:grid;grid-template-columns:repeat(${posts.length > 1 ? 2 : 1},minmax(0,1fr));gap:8px;">${posts.map((p, i) => {
@@ -3390,8 +3416,10 @@
   }
 
   // Brand design system: one job makes every post; its progress carries each finished url.
+  // only: one post's index, a list of indexes (made in one job), or null for every post.
   async function makePostsWithBrand(view, action, only) {
-    const list = only != null ? [view.posts[only]] : view.posts;
+    const idx = Array.isArray(only) ? only : only != null ? [only] : view.posts.map((_, i) => i);
+    const list = idx.map((i) => view.posts[i]);
     const res = await fetch(`${apiBase()}/api/design/posts`, {
       method: 'POST',
       headers: authHeaders(),
@@ -3406,7 +3434,7 @@
     const data = await res.json().catch(() => ({}));
     if (res.status === 409 && data.code === 'DESIGN_NO_SYSTEM') return false;
     if (!res.ok || !data.job_id) throw new Error(data.error || 'Could not start the posts');
-    const index = (k) => (only != null ? only : k);
+    const index = (k) => idx[k];
     const started = Date.now();
     while (Date.now() - started < 15 * 60_000) {
       await new Promise((r) => setTimeout(r, _csPostsPollMs));
@@ -3527,9 +3555,10 @@
         if (onBrand.length === view.posts.length && only == null) {
           if (!await makePostsWithBrand(view, action, null)) await makePostsWithStage(view, null, action);
         } else {
+          // Brand posts in one job (the brand's feed style is set up once), photo posts alongside.
           const jobs = [];
           if (onStage.length) jobs.push(makePostsWithStage(view, onStage, action));
-          for (const i of onBrand) jobs.push(makePostsWithBrand(view, action, i).then((ok) => (ok ? null : makePostsWithStage(view, i, action))));
+          if (onBrand.length) jobs.push(makePostsWithBrand(view, action, onBrand).then((ok) => (ok ? null : makePostsWithStage(view, onBrand, action))));
           await Promise.all(jobs);
         }
       } catch (e) {
@@ -3688,13 +3717,14 @@
     chip.style.flexDirection = 'column';
     chip.style.gap = '6px';
     const thumbs = _csCoachPictures.map((url, i) => (
-      `<span class="cs-coach-pic" style="position:relative;display:inline-flex;flex-shrink:0;" title="Attached picture ${i + 1}">`
-      + `<img src="${escapeHtml(mediaSrc(url))}" alt="Attached picture ${i + 1}" referrerpolicy="no-referrer" style="width:32px;height:32px;border-radius:6px;object-fit:cover;background:#111;border:1px solid rgba(255,255,255,0.18);">`
+      `<span class="cs-coach-pic" style="position:relative;display:inline-flex;flex-shrink:0;" title="Picture ${i + 1}">`
+      + `<img src="${escapeHtml(mediaSrc(url))}" alt="Picture ${i + 1}" referrerpolicy="no-referrer" style="width:32px;height:32px;border-radius:6px;object-fit:cover;background:#111;border:1px solid rgba(255,255,255,0.18);">`
+      + `<span aria-hidden="true" style="position:absolute;left:1px;bottom:1px;padding:0 3px;border-radius:4px;background:rgba(0,0,0,0.75);color:#fff;font-size:9px;line-height:12px;">${i + 1}</span>`
       + `<button type="button" data-pic-clear="${i}" aria-label="Remove picture ${i + 1}" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;padding:0;border-radius:999px;border:none;background:#1E1433;color:#E9D5FF;font-size:11px;line-height:16px;cursor:pointer;">×</button>`
       + '</span>'
     )).join('');
     chip.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-      + `<span style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.75);">Attached (${_csCoachPictures.length}): sent with each message</span>`
+      + `<span style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.75);">Pictures 1 to ${_csCoachPictures.length}: sent with each message</span>`
       + '<button type="button" data-pic-clear-all="1" style="background:none;border:none;color:rgba(233,213,255,0.75);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Clear all</button>'
       + `</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">${thumbs}</div>`;
     chip.querySelectorAll('[data-pic-clear]').forEach((btn) => btn.addEventListener('click', () => {
@@ -3759,7 +3789,7 @@
         if (chipBtn) { chipBtn.style.alignSelf = 'flex-start'; chipBtn.style.marginTop = '0'; log.appendChild(chipBtn); }
       }
       if (m && m.role !== 'user' && Array.isArray(m.posts) && m.posts.length) {
-        runDesignPosts({ type: 'design_posts', aspect_ratio: (m.posts.find((p) => p.ratio) || {}).ratio || '', posts: m.posts.map((p) => ({ title: p.title, brief: p.brief })) }, { finished: m.posts });
+        runDesignPosts({ type: 'design_posts', aspect_ratio: (m.posts.find((p) => p.ratio) || {}).ratio || '', posts: m.posts.map((p) => ({ title: p.title, brief: p.brief, engine: p.engine, photo_url: p.photo_url, reference_urls: p.reference_urls, logo_url: p.logo_url })) }, { finished: m.posts });
       }
     });
     if (!log.childElementCount) {
@@ -4221,8 +4251,9 @@
       const chat = threadApi() ? await threadApi().ensure(csTab()).catch(() => threadApi().current(csTab())) : null;
       const where = { create_tab: csTab(), ...(chat && chat.threadId ? { threadId: chat.threadId, projectId: chat.projectId } : {}) };
       // Post tab: the canvas picture and the attached pictures, each named as what it is (the Coach numbers them).
+      // Attached pictures first, so "picture 1" on the chip is Image 1 for the Coach; the canvas comes after them.
       const postPictures = onPost
-        ? [...(/^https:\/\//i.test(attached) ? [{ url: attached, role: 'canvas' }] : []), ...pictures.filter((u) => u !== attached).map((url) => ({ url, role: 'picture' }))]
+        ? [...pictures.map((url) => ({ url, role: 'picture' })), ...(/^https:\/\//i.test(attached) && !pictures.includes(attached) ? [{ url: attached, role: 'canvas' }] : [])]
         : [];
       const outbound = styleUrls.length >= 4
         ? `${message}\n\n${styleUrls.length} format-reference slides are attached. Train from their layout, color, and type. The plan must have exactly ${styleUrls.length} slides. Content comes from the source infographic.`
@@ -4248,7 +4279,7 @@
       });
       if (!res.ok) throw new Error('Coach error');
       const data = await res.json().catch(() => ({}));
-      if (threadApi()) { threadApi().fromReply(csTab(), data); if (_csChatPicker) _csChatPicker.refresh(); }
+      if (threadApi()) { threadApi().fromReply(csTab(), data, chat && chat.threadId); if (_csChatPicker) _csChatPicker.refresh(); }
       markCoachStylesSent(styleUrls);
       setCoachStatusBusy(false);
       const reply = String(data.reply || 'Got it.');

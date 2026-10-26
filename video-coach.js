@@ -135,7 +135,7 @@
     const res = await d.post({ message: text, surface: 'video', create_tab: 'video', ...(chat && chat.threadId ? { threadId: chat.threadId, projectId: chat.projectId } : {}) });
     if (!res || !res.ok) throw new Error('The Coach could not answer just now. Try again in a moment.');
     const data = await res.json().catch(() => ({}));
-    if (threads) threads.fromReply('video', data);
+    if (threads) threads.fromReply('video', data, chat && chat.threadId);
     const reply = String(data.reply || 'Got it.');
     const brief = pickVideoBrief(data.coach_actions);
     const entry = { role: 'assistant', text: reply, brief: brief || null, loaded: false };
@@ -165,7 +165,7 @@
           const msgs = await d.threads.messages(sel.threadId);
           window.__SE_VS_COACH_LOG = msgs.slice(-MAX_LOG).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.content || '') }));
           paint(false);
-        });
+        }, { busy: () => sending });
       }
       bind();
     };
@@ -203,7 +203,17 @@
       }));
     }
     paint(false);
-    if (d.threads) d.threads.ensure('video').then(() => { if (picker) picker.refresh(); }).catch(() => {});
+    // The Video tab's chat; its messages show when nothing has been said here yet in this visit.
+    if (d.threads) {
+      d.threads.ensure('video').then(async (sel) => {
+        if (picker) picker.refresh();
+        if (!sel || logStore().length || sending) return;
+        const msgs = await d.threads.messages(sel.threadId);
+        if (!msgs.length || logStore().length || sending) return;
+        window.__SE_VS_COACH_LOG = msgs.slice(-MAX_LOG).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.content || '') }));
+        paint(false);
+      }).catch(() => {});
+    }
     return true;
   }
 

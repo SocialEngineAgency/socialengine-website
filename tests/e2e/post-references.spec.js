@@ -62,12 +62,15 @@ test('new look: a photo plus more pictures (add, remove), sent together; a logo 
   await expect(page.locator('#nl-p2-more .nl-p2-moreref')).toHaveCount(1);
   await expect(page.locator('#nl-p2-more .nl-p2-moreref img')).toHaveAttribute('src', /logo\.png/);
 
-  // Changing the main picture (the chip) still replaces it, and keeps the extras.
+  // The remaining picture is their logo: marked, it goes as the logo (placed, never redrawn), not as a picture.
+  await page.click('#nl-p2-more [data-cs-more-logo="0"]');
+  await expect(page.locator('#nl-p2-more .nl-p2-moreref.is-logo')).toHaveCount(1);
   await page.locator('#cs-brief').fill('Happy Anniversary to Fiona and Simon. Use the logo, white, upper left corner.');
   await page.click('#cs-generate');
   await expect.poll(() => sent.generate.length).toBe(1);
   expect(sent.generate[0].photo_url).toBe('https://store.test/wedding.png');
-  expect(sent.generate[0].reference_urls).toEqual(['https://store.test/logo.png']);
+  expect(sent.generate[0].logo_url).toBe('https://store.test/logo.png');
+  expect(sent.generate[0].reference_urls).toBeUndefined();
   await expect(page.locator('body')).toContainText('There is no logo in your Library yet');
   expect(errors).toEqual([]);
 });
@@ -116,7 +119,7 @@ test('Post tab Coach: its own chat, pictures sent as what they are, and each pos
     return undefined;
   });
   // The Post tab's own chat, not the Carousels chat open on the Coach page.
-  await expect(page.locator('#cs-workspace-chip [data-se-cc-label]')).toHaveText('Posts · Main chat');
+  await expect(page.locator('#cs-workspace-chip [data-se-cc-label]')).toHaveText('Post tab · Main chat');
   await expect(page.locator('#cs-coach-log')).not.toContainText('heartburn');
 
   await page.setInputFiles('#cs-coach-style-file', [
@@ -124,7 +127,7 @@ test('Post tab Coach: its own chat, pictures sent as what they are, and each pos
     { name: 'opa-logo.png', mimeType: 'image/png', buffer: PNG },
   ]);
   await expect(page.locator('#cs-coach-style-chip .cs-coach-pic')).toHaveCount(2);
-  await expect(page.locator('#cs-coach-style-chip')).toContainText('Attached (2)');
+  await expect(page.locator('#cs-coach-style-chip')).toContainText('Pictures 1 to 2');
   await page.locator('#cs-coach-input').fill('create me a post in 4:5 for Fiona and Simon on the wedding photo, use the logo white upper left');
   await page.click('#cs-coach-send');
   const card = page.locator('#cs-coach-log [data-cs-posts]');
@@ -160,11 +163,11 @@ test('Post tab Coach: the chat picker switches chats and starts a new one, witho
     return undefined;
   });
   const pick = page.locator('#cs-workspace-chip [data-se-cc-pick]');
-  await expect(pick).toContainText('Posts · Main chat');
+  await expect(pick).toContainText('Post tab · Main chat');
   await pick.click();
   const menu = page.locator('#cs-workspace-chip .se-cc-menu');
   await expect(menu).toContainText('Carousels');
-  await expect(menu).toContainText('Posts');
+  await expect(menu).toContainText('Post tab');
   // Pick the Carousels chat: its messages show, and the next message goes there.
   await menu.locator('[data-se-cc-thread="thr_carousels"]').click();
   await expect(pick).toContainText('Carousels · Main chat');
@@ -184,4 +187,28 @@ test('Post tab Coach: the chat picker switches chats and starts a new one, witho
   await page.click('.dash-nav-item[data-nav="create"]');
   await page.click('.create-seg[data-segment="design-studio"]');
   await expect(page.locator('#cs-workspace-chip [data-se-cc-pick]')).toContainText('Carousels · New chat');
+});
+
+test('Post tab Coach: the chat cannot be switched while a message is being answered', async ({ page }) => {
+  let answer;
+  await openPost(page, async (entry, route, json) => {
+    if (entry.path === '/api/chat/v2') {
+      await new Promise((r) => { answer = r; });
+      const b = JSON.parse(entry.body || '{}');
+      json(200, { reply: 'Answered here.', threadId: b.threadId, projectId: b.projectId });
+      return 'handled';
+    }
+    return undefined;
+  });
+  const pick = page.locator('#cs-workspace-chip [data-se-cc-pick]');
+  await expect(pick).toContainText('Post tab · Main chat');
+  await page.locator('#cs-coach-input').fill('hello');
+  await page.click('#cs-coach-send');
+  await expect.poll(() => typeof answer).toBe('function');
+  await pick.click();
+  await expect(page.locator('#cs-workspace-chip .se-cc-menu')).toHaveCount(0);
+  answer();
+  await expect(page.locator('#cs-coach-log')).toContainText('Answered here.');
+  await pick.click();
+  await expect(page.locator('#cs-workspace-chip .se-cc-menu')).toHaveCount(1);
 });

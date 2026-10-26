@@ -80,11 +80,15 @@
     return write(t, { projectId: d.project.id, threadId: d.thread.id, projectName: d.project.name, threadName: d.thread.name });
   }
 
-  /** The chat the reply was saved in (the server may have made the tab's chat). */
-  function fromReply(tab, data) {
+  /**
+   * The chat the reply was saved in (the server may have made the tab's chat). sentTo: the chat the message was sent
+   * in; when another chat has been picked since, the pick stands.
+   */
+  function fromReply(tab, data, sentTo) {
     if (!data || !data.threadId) return current(tab);
     const t = tabOf(tab);
     const was = read(t) || {};
+    if (sentTo && was.threadId && was.threadId !== sentTo) return was;
     return write(t, {
       projectId: data.projectId || was.projectId || '',
       threadId: data.threadId,
@@ -113,7 +117,7 @@
    * The chat picker: a button with the chat's name, and a menu of every project's chats plus "New chat".
    * onChange(sel) runs after a different chat is picked (or a new one is started).
    */
-  function mountPicker(el, tab, onChange) {
+  function mountPicker(el, tab, onChange, { busy = () => false } = {}) {
     if (!el || typeof document === 'undefined') return null;
     const t = tabOf(tab);
     el.style.position = 'relative';
@@ -139,6 +143,12 @@
     };
     const open = async () => {
       if (menu) { close(); return; }
+      // A message being answered belongs to this chat: switching now would show its reply in another one.
+      if (busy()) {
+        btn.title = 'Wait for the Coach to answer, then switch chats';
+        btn.animate && btn.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(3px)' }, { transform: 'translateX(0)' }], { duration: 220 });
+        return;
+      }
       menu = document.createElement('div');
       menu.className = 'se-cc-menu';
       menu.setAttribute('role', 'listbox');
@@ -158,7 +168,14 @@
       const projects = Array.isArray(list.projects) ? list.projects : [];
       const here = projects.find((p) => p.id === sel.projectId);
       menu.innerHTML = projects.map((p) => `<div style="padding:6px 9px 3px;font-size:0.64rem;letter-spacing:0.06em;text-transform:uppercase;color:rgba(255,255,255,0.42);">${esc(p.name)}</div>`
-        + (p.threads || []).slice(0, 10).map((th) => {
+        + (() => {
+          // Most recent first; the chat open here is always listed.
+          const all = (p.threads || []).slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+          const shown = all.slice(0, 10);
+          const mine = all.find((th) => th.id === sel.threadId);
+          if (mine && !shown.includes(mine)) shown.push(mine);
+          return shown;
+        })().map((th) => {
           const on = th.id === sel.threadId;
           return `<button type="button" role="option" aria-selected="${on}" data-se-cc-thread="${esc(th.id)}" data-se-cc-project="${esc(p.id)}" data-se-cc-pname="${esc(p.name)}" data-se-cc-tname="${esc(th.name)}" style="${ITEM}${on ? 'background:rgba(124,58,237,0.25);color:#fff;' : ''}">${esc(th.name)}${th.messageCount ? `<span style="opacity:0.45;"> · ${th.messageCount}</span>` : ''}</button>`;
         }).join('')).join('')

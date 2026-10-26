@@ -99,14 +99,14 @@ async function mockApi(page, base, { data = clientData(), onRequest, assets = []
     if (url.pathname.startsWith('/api/workspace/')) {
       const ws = workspace;
       const summary = () => ({ success: true, active: ws.active, projects: ws.projects.map((p) => ({ id: p.id, name: p.name, kind: p.kind, threads: p.threads.map((t) => ({ id: t.id, name: t.name, messageCount: t.messages.length })) })) });
-      const tabs = { post: ['still', 'Posts'], carousel: ['carousel', 'Carousels'], video: ['reel', 'Videos'] };
+      const tabs = { post: ['still', 'Post tab'], carousel: ['carousel', 'Carousels tab'], video: ['reel', 'Video tab'] };
       if (url.pathname === '/api/workspace/projects' && req.method() === 'GET') return json(200, summary());
       if (url.pathname === '/api/workspace/surface-thread') {
         const tab = JSON.parse(entry.body || '{}').tab;
         const [kind, name] = tabs[tab] || [];
         if (!kind) return json(400, { error: 'Which tab?' });
-        let p = ws.projects.find((x) => x.kind === kind);
-        if (!p) { p = { id: `proj_${kind}`, name, kind, threads: [{ id: `thr_${kind}`, name: 'Main chat', messages: [] }] }; ws.projects.push(p); }
+        let p = ws.projects.find((x) => x.tab === tab);
+        if (!p) { p = { id: `proj_${kind}`, name, kind, tab, threads: [{ id: `thr_${kind}`, name: 'Main chat', messages: [] }] }; ws.projects.push(p); }
         return json(200, { ...summary(), tab, project: { id: p.id, name: p.name, kind: p.kind }, thread: p.threads[0] });
       }
       const th = url.pathname.match(/^\/api\/workspace\/threads\/([^/]+)$/);
