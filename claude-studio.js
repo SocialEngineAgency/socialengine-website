@@ -19,6 +19,10 @@
   let _nlP2Finished = false; // a finished graphic was dropped in: it is the post, not a reference
   let _nlP2Platforms = null; // ['Instagram', 'Facebook'] when the toggles are shown
   let _csRef = null; // { url, type, title, source, product_id?, video_url?, poster_url? }
+  // More pictures for the same post (the logo, a second photo…), after the main reference. Images only.
+  const CS_MORE_REFS_MAX = 4;
+  let _csMoreRefs = []; // [{ url, title }]
+  let _csPickAddMore = false; // the picker is open to add one more picture, not to change the main one
   let _csPickerTab = 'products';
   let _csCarousel = null; // { originalUrl, width, height, method, slides: [{ url, y0, y1 }], queueOrder: number[], selected: 0 }
   let _csOriginalPreviewUrl = null;
@@ -33,6 +37,13 @@
   const CS_MAX_STYLE_REFS = 10;
   const CS_CAROUSEL_SEED = 'Redesign this infographic into a 9:16 Instagram carousel. Look at the image. If reference slides are attached, propose exactly that many slides (Instagram max 10). If none are attached, propose 4 to 6 complete slides. Do not crop strips.';
   let _csCoachStyleUrls = [];
+  // Post tab: pictures attached in the Coach chat (a photo, the logo, anything). They are for the chat only, sent with
+  // every message while they are attached, and never used as style references for Generate.
+  let _csCoachPictures = [];
+  const CS_MAX_COACH_PICTURES = 6;
+  function csTab() { return window.__SE_CS_MODE === 'carousel' ? 'carousel' : 'post'; }
+  function threadApi() { return window.seCreateCoachThread || null; }
+  let _csChatPicker = null;
   /** Style https URLs already injected into a Coach chat turn (do not re-attach). */
   let _csCoachStylesSentToChat = new Set();
   /** Prior Stage posters for Restore previous (newest at end). */
@@ -461,6 +472,7 @@
     _csHtml = next.html || '';
     _csCarousel = next.carousel;
     _csRef = next.ref;
+    if (!_csRef) _csMoreRefs = [];
     _csOriginalPreviewUrl = null;
     _csQueueSingleUrl = null;
     _csDesignId = null;
@@ -786,9 +798,22 @@
   }
 
   function setReference(ref) {
+    if (_csPickAddMore && ref && ref.url && _csRef) {
+      _csPickAddMore = false;
+      const url = String(ref.type === 'video' ? (ref.poster_url || '') : ref.url);
+      if (!url) { toast('Add a still picture here, not a video', 'error'); return; }
+      if (url !== _csRef.url && !_csMoreRefs.some((r) => r.url === url) && _csMoreRefs.length < CS_MORE_REFS_MAX) {
+        _csMoreRefs.push({ url, title: String(ref.title || 'Picture') });
+      }
+      renderRefSummary();
+      nlP2Sync();
+      return;
+    }
+    _csPickAddMore = false;
     const prevUrl = _csRef?.url || '';
     let clearedCarouselForNewRef = false;
     if (!ref || !ref.url) {
+      _csMoreRefs = [];
       startFresh({ keepStyles: true, keepBrief: true });
       return;
     } else {
@@ -854,16 +879,44 @@
           ${_csRef.type === 'video' && !_csRef.poster_url ? '<div style="font-size:0.68rem;color:#FBBF24;margin-top:4px;">Video selected — Design Studio needs a still. Upload a frame or open Video Studio.</div>' : ''}
         </div>
       </div>
+      ${_csRef.type === 'image' ? `<div class="cs-more-refs" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${moreRefsHtml('cs-more-ref')}${_csMoreRefs.length < CS_MORE_REFS_MAX ? '<button type="button" id="cs-ref-more" style="padding:6px 9px;background:transparent;border:1px dashed rgba(255,255,255,0.18);border-radius:8px;color:rgba(255,255,255,0.6);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">+ Add another picture</button>' : ''}</div>` : ''}
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button type="button" id="cs-ref-open" style="flex:1;padding:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.7);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Change</button>
         <button type="button" id="cs-ref-clear" style="padding:8px 10px;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.4);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Clear</button>
       </div>`;
     document.getElementById('cs-ref-open')?.addEventListener('click', openPicker);
     document.getElementById('cs-ref-clear')?.addEventListener('click', () => setReference(null));
+    document.getElementById('cs-ref-more')?.addEventListener('click', openMorePicker);
+    box.querySelectorAll('[data-cs-more-del]').forEach((b) => b.addEventListener('click', () => removeMoreRef(Number(b.dataset.csMoreDel))));
     nlP2Sync();
   }
 
+  function openMorePicker() {
+    if (!_csRef) { openPicker(); return; }
+    if (_csMoreRefs.length >= CS_MORE_REFS_MAX) { toast(`Up to ${CS_MORE_REFS_MAX + 1} pictures per post`, 'warning'); return; }
+    openPicker();
+    _csPickAddMore = true;
+    // Another picture is nearly always one of theirs (a logo, a second photo): start on Uploads.
+    setPickerTab('uploads');
+  }
+
+  function removeMoreRef(i) {
+    _csMoreRefs.splice(i, 1);
+    renderRefSummary();
+    nlP2Sync();
+  }
+
+  function moreRefsHtml(cls) {
+    // The classic look has no stylesheet for these, so its thumbnails carry their own styles.
+    const inline = cls === 'cs-more-ref';
+    const box = inline ? ' style="position:relative;display:inline-flex;width:40px;height:40px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);"' : '';
+    const img = inline ? ' style="width:100%;height:100%;object-fit:cover;"' : '';
+    const x = inline ? ' style="position:absolute;top:1px;right:1px;width:16px;height:16px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;line-height:16px;cursor:pointer;"' : '';
+    return _csMoreRefs.map((r, i) => `<span class="${cls}" title="${escapeHtml(r.title)}"${box}><img src="${escapeHtml(mediaSrc(r.url))}" alt="" referrerpolicy="no-referrer"${img}><button type="button" data-cs-more-del="${i}" aria-label="Remove ${escapeHtml(r.title)}"${x}>×</button></span>`).join('');
+  }
+
   function openPicker() {
+    _csPickAddMore = false;
     const modal = document.getElementById('cs-picker-modal');
     if (!modal) return;
     modal.style.display = 'flex';
@@ -1090,54 +1143,28 @@
     toast('URL set as reference', 'success');
   }
 
-  function readWorkspaceHandoff() {
-    let handoff = null;
-    try {
-      const params = new URLSearchParams(window.location.search || '');
-      const project = params.get('project') || '';
-      const thread = params.get('thread') || '';
-      if (project || thread) {
-        handoff = {
-          projectId: project,
-          threadId: thread,
-          projectName: params.get('projectName') || '',
-          threadName: params.get('threadName') || '',
-        };
-      }
-    } catch (_) {}
-    if (!handoff) {
-      try { handoff = JSON.parse(sessionStorage.getItem('se_workspace_handoff') || 'null'); } catch (_) { handoff = null; }
-    }
-    const s = window.__SE_COACH_CREATE_SESSION;
-    if ((!handoff || (!handoff.projectName && !handoff.threadName)) && s && (s.projectId || s.projectName)) {
-      handoff = {
-        projectId: s.projectId || handoff?.projectId || '',
-        threadId: s.threadId || handoff?.threadId || '',
-        projectName: s.projectName || handoff?.projectName || '',
-        threadName: s.threadName || handoff?.threadName || '',
-        kind: s.kind || handoff?.kind || '',
-      };
-    }
-    return handoff && (handoff.projectName || handoff.threadName || handoff.projectId) ? handoff : null;
-  }
-
+  // Which chat the Coach here talks in: this tab's own chat, or the one picked in the chip (see create-coach-thread.js).
   function renderWorkspaceChip() {
     const chip = document.getElementById('cs-workspace-chip');
-    if (!chip) return;
-    const handoff = readWorkspaceHandoff();
-    if (!handoff) {
-      chip.style.display = 'none';
-      chip.textContent = '';
-      return;
-    }
-    const project = handoff.projectName || 'Project';
-    const thread = handoff.threadName || 'chat';
+    const api = threadApi();
+    if (!chip || !api) return;
     chip.style.display = 'block';
-    chip.textContent = 'Working in: ' + project + ' · ' + thread;
+    chip.style.padding = '0';
+    chip.style.border = 'none';
+    chip.style.background = 'transparent';
+    _csChatPicker = api.mountPicker(chip, csTab(), () => hydrateDesignCoachLog());
+    api.ensure(csTab()).then(() => {
+      if (_csChatPicker) _csChatPicker.refresh();
+      hydrateDesignCoachLog();
+    }).catch(() => {});
   }
 
   function applyDesignCoachSession() {
     const s = window.__SE_COACH_CREATE_SESSION;
+    // Sent here from a chat on the main Coach page: carry on in that chat (the picker shows it and can change it).
+    if (s && s.prompt && s.threadId && threadApi()) {
+      threadApi().set(csTab(), { projectId: s.projectId, threadId: s.threadId, projectName: s.projectName, threadName: s.threadName });
+    }
     renderWorkspaceChip();
     if (!s || s.destination !== 'design' || !s.prompt) return;
     const apply = typeof window.applyCoachCreateFields === 'function' ? window.applyCoachCreateFields : null;
@@ -1678,6 +1705,7 @@
         <p class="nl-p2-sub"></p>
         <div class="nl-p2-box"><div class="nl-p2-row">
           <button type="button" class="nl-p2-chip nl-p2-ref" id="nl-p2-ref"></button>
+          <span class="nl-p2-more" id="nl-p2-more"></span>
           <div class="nl-p2-stylewrap"></div>
           <span class="nl-p2-sp"></span>
           <button type="button" class="nl-p2-ghost" id="nl-p2-cancel" hidden>Cancel</button>
@@ -1744,6 +1772,11 @@
       tools.appendChild(nlStockMenu());
     }
     compose.querySelector('#nl-p2-ref').addEventListener('click', () => openPicker());
+    compose.querySelector('#nl-p2-more').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-cs-more-del]');
+      if (del) { removeMoreRef(Number(del.dataset.csMoreDel)); return; }
+      if (e.target.closest('[data-cs-more-add]')) openMorePicker();
+    });
     compose.querySelector('#nl-p2-cancel').addEventListener('click', () => nlP2Edit(false));
     compose.querySelector('#nl-p2-finished').addEventListener('click', () => nlP2PickFinished());
     compose.querySelector('#nl-p2-file').addEventListener('change', (e) => {
@@ -1844,8 +1877,9 @@
       send.setAttribute('aria-label', 'Send');
       send.title = 'Send';
       attach.innerHTML = NL_ICON.clip;
-      attach.setAttribute('aria-label', 'Add a style reference photo');
-      attach.title = 'Add a style reference photo';
+      const attachSays = csTab() === 'post' ? 'Attach a picture (your photo, your logo)' : 'Add a style reference photo';
+      attach.setAttribute('aria-label', attachSays);
+      attach.title = attachSays;
       input.placeholder = 'Ask for a change…';
       input.dataset.placeholder = 'Ask for a change…';
       const row = send.parentElement;
@@ -1927,6 +1961,13 @@
     const refHtml = ref
       ? `<img src="${escapeHtml(mediaSrc(ref.poster_url || ref.url))}" alt="" referrerpolicy="no-referrer"><span>${escapeHtml(String(ref.title || 'Reference').slice(0, 24))}</span>`
       : `${NL_ICON.image}<span>Reference</span>`;
+    const more = p.compose.querySelector('#nl-p2-more');
+    if (more) {
+      const moreHtml = ref && ref.type === 'image'
+        ? `${moreRefsHtml('nl-p2-moreref')}${_csMoreRefs.length < CS_MORE_REFS_MAX ? '<button type="button" class="nl-p2-chip" data-cs-more-add aria-label="Add another picture (a logo, a second photo)">+ Picture</button>' : ''}`
+        : '';
+      if (more.dataset.html !== moreHtml) { more.innerHTML = moreHtml; more.dataset.html = moreHtml; }
+    }
     if (p.ref.dataset.html !== refHtml) {
       p.ref.innerHTML = refHtml;
       p.ref.dataset.html = refHtml;
@@ -2176,7 +2217,7 @@
             <input id="cs-coach-style-file" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none;">
             <textarea id="cs-coach-input" rows="2" placeholder="Ask your coach…" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 10px;color:#fff;font-size:0.78rem;font-family:var(--font-body);line-height:1.45;resize:none;outline:none;min-height:52px;max-height:160px;overflow-y:auto;"></textarea>
             <div style="display:flex;gap:8px;">
-              <button type="button" id="cs-coach-style" style="flex:1;padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">+ Reference photo</button>
+              <button type="button" id="cs-coach-style" style="flex:1;padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.75);font-size:0.74rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">${csMode === 'post' ? '+ Picture' : '+ Reference photo'}</button>
               <button type="button" id="cs-coach-send" style="flex:1;padding:9px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Send</button>
             </div>
           </div>
@@ -2244,6 +2285,11 @@
     document.getElementById('cs-export')?.addEventListener('click', () => exportPng(false));
     document.getElementById('cs-coach-send')?.addEventListener('click', () => designCoachAsk());
     document.getElementById('cs-coach-style')?.addEventListener('click', () => {
+      if (csTab() === 'post') {
+        if (_csCoachPictures.length >= CS_MAX_COACH_PICTURES) { toast(`${CS_MAX_COACH_PICTURES} pictures at most`, 'error'); return; }
+        document.getElementById('cs-coach-style-file')?.click();
+        return;
+      }
       if (_csCoachStyleUrls.length >= CS_MAX_STYLE_REFS) {
         toast('10 reference photos max', 'error');
         return;
@@ -2254,6 +2300,24 @@
       const files = Array.from(e.target?.files || []);
       e.target.value = '';
       if (!files.length) return;
+      if (csTab() === 'post') {
+        try {
+          let added = 0;
+          for (const file of files) {
+            if (_csCoachPictures.length >= CS_MAX_COACH_PICTURES) { toast(`${CS_MAX_COACH_PICTURES} pictures at most`, 'error'); break; }
+            const url = await uploadStudioImage(file);
+            if (!url) throw new Error('Upload failed');
+            if (_csCoachPictures.includes(url)) continue;
+            _csCoachPictures.push(url);
+            added += 1;
+          }
+          renderCoachStyleChip();
+          if (added) toast(added === 1 ? 'Picture attached. Say what it is for.' : `${added} pictures attached. Say what each is for.`, 'success');
+        } catch (err) {
+          toast(err.message || 'Upload failed', 'error');
+        }
+        return;
+      }
       try {
         let added = 0;
         for (const file of files) {
@@ -3060,6 +3124,7 @@
       if (_csRef && hero) {
         payload.reference = { ..._csRef, url: hero };
         payload.photo_url = hero;
+        if (_csMoreRefs.length) payload.reference_urls = _csMoreRefs.map((r) => r.url);
       }
       // FigureLabs and GPT Image return a job_id immediately; HTML/Soul stay sync.
       const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
@@ -3094,6 +3159,8 @@
         else throw new Error('Generation failed');
         toast('Design ready', 'success');
       }
+      // The real logo: say when it could not be placed (no logo in the Library, or a failed placement).
+      if (result && result.logo && result.logo.placed === false && result.logo.note) toast(result.logo.note, 'warning');
       if (styleUrls.length && !(result.style_lock && result.style_lock.sent)) {
         toast('Style photo did not reach the generator — re-attach it', 'error');
       } else if (styleUrls.length && result.method && result.method !== 'figurelabs' && result.method !== 'gpt-image') {
@@ -3110,9 +3177,11 @@
     }
   }
 
+  // What this chat showed (posts made, their cards), kept per chat so switching chats switches what is shown.
   function sharedCoachStorageKey() {
     const email = window.__clientEmail || window.clientEmail || window._seEmail || '';
-    return email ? 'se_chat_history_' + email : '';
+    const sel = threadApi() && threadApi().current(csTab());
+    return email && sel && sel.threadId ? `se_create_coach_${email}_${sel.threadId}` : '';
   }
 
   function persistSharedCoach(role, text, extra) {
@@ -3378,8 +3447,17 @@
   }
 
   // No brand design system: each post is a Stage generation of its own, two at a time.
-  async function makeOneWithStage(p) {
+  async function makeOneWithStage(p, action = {}) {
     p.status = 'working';
+    // A Coach post made from the client's own pictures carries them (its photo, other pictures, an attached logo).
+    const photo = p.photo_url || action.photo_url || '';
+    const more = Array.isArray(p.reference_urls) ? p.reference_urls : (Array.isArray(action.reference_urls) ? action.reference_urls : []);
+    const logo = p.logo_url || action.logo_url || '';
+    const pics = {
+      ...(photo ? { photo_url: photo } : {}),
+      ...(more.length ? { reference_urls: more } : {}),
+      ...(logo ? { logo_url: logo } : {}),
+    };
     const res = await fetch(`${apiBase()}/api/studio/design-generate`, {
       method: 'POST',
       headers: authHeaders(),
@@ -3388,6 +3466,7 @@
         brief: p.brief,
         aspect_ratio: isPostSize(p.ratio) ? p.ratio : currentPostSize(),
         model: selectedEngineId(),
+        ...pics,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -3405,14 +3484,16 @@
     }
     if (!url) throw new Error(data.html ? 'This engine makes a layout, not an image; open it on the canvas instead' : 'Could not be made');
     Object.assign(p, { status: 'done', url });
+    if (data.logo && data.logo.placed === false && data.logo.note) toast(data.logo.note, 'warning');
   }
 
-  async function makePostsWithStage(view, only) {
-    const queue = only != null ? [only] : view.posts.map((_, i) => i);
+  // only: one post's index, or a list of indexes, or null for every post.
+  async function makePostsWithStage(view, only, action = {}) {
+    const queue = Array.isArray(only) ? only.slice() : only != null ? [only] : view.posts.map((_, i) => i);
     const worker = async () => {
       while (queue.length) {
         const p = view.posts[queue.shift()];
-        try { await makeOneWithStage(p); } catch (e) { Object.assign(p, { status: 'failed', error: e.message || 'Could not be made' }); }
+        try { await makeOneWithStage(p, action); } catch (e) { Object.assign(p, { status: 'failed', error: e.message || 'Could not be made' }); }
         view.paint();
       }
     };
@@ -3439,8 +3520,18 @@
       list.forEach((p) => Object.assign(p, { status: 'working', error: '' }));
       view.paint();
       try {
-        const brand = action.engine === 'brand' && await makePostsWithBrand(view, action, only);
-        if (!brand) await makePostsWithStage(view, only);
+        // Each post goes to its own maker: a post on the client's photo to the photo maker, the rest to the brand layouts.
+        const idx = only != null ? [only] : view.posts.map((_, i) => i);
+        const onBrand = idx.filter((i) => (view.posts[i].engine || action.engine) === 'brand');
+        const onStage = idx.filter((i) => !onBrand.includes(i));
+        if (onBrand.length === view.posts.length && only == null) {
+          if (!await makePostsWithBrand(view, action, null)) await makePostsWithStage(view, null, action);
+        } else {
+          const jobs = [];
+          if (onStage.length) jobs.push(makePostsWithStage(view, onStage, action));
+          for (const i of onBrand) jobs.push(makePostsWithBrand(view, action, i).then((ok) => (ok ? null : makePostsWithStage(view, i, action))));
+          await Promise.all(jobs);
+        }
       } catch (e) {
         list.forEach((p) => { if (p.status !== 'done') Object.assign(p, { status: 'failed', error: e.message || 'Could not be made' }); });
         view.paint();
@@ -3546,6 +3637,7 @@
   function renderCoachStyleChip() {
     const chip = document.getElementById('cs-coach-style-chip');
     if (!chip) return;
+    if (csTab() === 'post') { renderCoachPicturesChip(chip); return; }
     if (!_csCoachStyleUrls.length) {
       chip.style.display = 'none';
       chip.innerHTML = '';
@@ -3587,6 +3679,29 @@
       renderCoachStyleChip();
       loadDesignEngines();
     });
+  }
+
+  // Post tab: the pictures attached to the chat, numbered as the Coach sees them after the canvas picture.
+  function renderCoachPicturesChip(chip) {
+    if (!_csCoachPictures.length) { chip.style.display = 'none'; chip.innerHTML = ''; return; }
+    chip.style.display = 'flex';
+    chip.style.flexDirection = 'column';
+    chip.style.gap = '6px';
+    const thumbs = _csCoachPictures.map((url, i) => (
+      `<span class="cs-coach-pic" style="position:relative;display:inline-flex;flex-shrink:0;" title="Attached picture ${i + 1}">`
+      + `<img src="${escapeHtml(mediaSrc(url))}" alt="Attached picture ${i + 1}" referrerpolicy="no-referrer" style="width:32px;height:32px;border-radius:6px;object-fit:cover;background:#111;border:1px solid rgba(255,255,255,0.18);">`
+      + `<button type="button" data-pic-clear="${i}" aria-label="Remove picture ${i + 1}" style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;padding:0;border-radius:999px;border:none;background:#1E1433;color:#E9D5FF;font-size:11px;line-height:16px;cursor:pointer;">×</button>`
+      + '</span>'
+    )).join('');
+    chip.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+      + `<span style="font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.75);">Attached (${_csCoachPictures.length}): sent with each message</span>`
+      + '<button type="button" data-pic-clear-all="1" style="background:none;border:none;color:rgba(233,213,255,0.75);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">Clear all</button>'
+      + `</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">${thumbs}</div>`;
+    chip.querySelectorAll('[data-pic-clear]').forEach((btn) => btn.addEventListener('click', () => {
+      _csCoachPictures.splice(Number(btn.getAttribute('data-pic-clear')), 1);
+      renderCoachPicturesChip(chip);
+    }));
+    chip.querySelector('[data-pic-clear-all]')?.addEventListener('click', () => { _csCoachPictures = []; renderCoachPicturesChip(chip); });
   }
 
   function setDesignCoachApply(pending) {
@@ -3648,7 +3763,22 @@
       }
     });
     if (!log.childElementCount) {
-      appendDesignCoachBubble('assistant', 'Tell me what you want to post, or describe it on the canvas. Once it is made, ask me for any change and it updates here.');
+      // Nothing kept in this browser for this chat: show what the chat holds on the server (said on another device, or
+      // on the Coach page).
+      const sel = threadApi() && threadApi().current(csTab());
+      const want = sel && sel.threadId;
+      if (want) {
+        threadApi().messages(want).then((msgs) => {
+          const now = threadApi().current(csTab());
+          if (!msgs.length || !now || now.threadId !== want || log.querySelector('.cs-cb--me')) return;
+          log.innerHTML = '';
+          msgs.slice(-12).forEach((m) => appendDesignCoachBubble(m.role === 'user' ? 'user' : 'assistant', String(m.content || '')));
+          scrollCoachLogToBottom();
+        });
+      }
+      appendDesignCoachBubble('assistant', csTab() === 'post'
+        ? 'Tell me what you want to post. Attach your photo or logo with the paperclip and say what each is for.'
+        : 'Tell me what you want to post, or describe it on the canvas. Once it is made, ask me for any change and it updates here.');
     }
     if (window.seWork && typeof window.seWork.attach === 'function') window.seWork.attach(); // work still going comes back to the top of the log
   }
@@ -4067,21 +4197,33 @@
     }
     _csCoachSending = true;
     if (typeof window.coachStartsNewDesignTopic === 'function' && window.coachStartsNewDesignTopic(message)) _csPosterOk = '';
-    const allStyleUrls = coachStyleHttpsUrls();
-    // Inject style vision once per attach. Re-sending on every turn floods the model.
-    const styleUrls = coachStylesPendingForChat();
+    const onPost = csTab() === 'post';
+    const allStyleUrls = onPost ? [] : coachStyleHttpsUrls();
+    // Inject style vision once per attach. Re-sending on every turn floods the model. (Carousels only: on the Post
+    // tab the attached pictures go with every message, as what they are.)
+    const styleUrls = onPost ? [] : coachStylesPendingForChat();
+    const pictures = onPost ? _csCoachPictures.filter((u) => /^https:\/\//i.test(u)) : [];
     setCoachStatusBusy(true, { hasStyleRefs: styleUrls.length > 0 });
     if (_csCoachStyleUrls.length && !allStyleUrls.length) {
       toast('Style photos need a stored https URL — re-upload them', 'error');
     }
     const shown = styleUrls.length
       ? `${message}\n\n${styleUrls.length === 1 ? '1 style reference attached.' : `${styleUrls.length} style references attached.`}`
-      : message;
+      : pictures.length
+        ? `${message}\n\n${pictures.length === 1 ? '1 picture attached.' : `${pictures.length} pictures attached.`}`
+        : message;
     appendDesignCoachBubble('user', shown);
     persistSharedCoach('user', shown);
     scrollCoachLogToBottom();
     try {
       const attached = masterImageUrl() || window._seCoachAttachedImage || window.__SE_COACH_MASTER_IMAGE || '';
+      // This tab's chat (made the first time); the server falls back to it too when this cannot be loaded.
+      const chat = threadApi() ? await threadApi().ensure(csTab()).catch(() => threadApi().current(csTab())) : null;
+      const where = { create_tab: csTab(), ...(chat && chat.threadId ? { threadId: chat.threadId, projectId: chat.projectId } : {}) };
+      // Post tab: the canvas picture and the attached pictures, each named as what it is (the Coach numbers them).
+      const postPictures = onPost
+        ? [...(/^https:\/\//i.test(attached) ? [{ url: attached, role: 'canvas' }] : []), ...pictures.filter((u) => u !== attached).map((url) => ({ url, role: 'picture' }))]
+        : [];
       const outbound = styleUrls.length >= 4
         ? `${message}\n\n${styleUrls.length} format-reference slides are attached. Train from their layout, color, and type. The plan must have exactly ${styleUrls.length} slides. Content comes from the source infographic.`
         : styleUrls.length === 1
@@ -4093,16 +4235,20 @@
         method: 'POST',
         headers: authHeaders(),
         signal: AbortSignal.timeout(styleUrls.length >= 6 ? 120_000 : 90_000),
-        body: JSON.stringify({
-          message: outbound,
-          attached_image_url: /^https:\/\//i.test(attached) ? attached : '',
-          style_image_url: styleUrls[0] || '',
-          style_image_urls: styleUrls,
-          surface: 'design',
-        }),
+        body: JSON.stringify(onPost
+          ? { message: outbound, reference_images: postPictures, surface: 'design', ...where }
+          : {
+            message: outbound,
+            attached_image_url: /^https:\/\//i.test(attached) ? attached : '',
+            style_image_url: styleUrls[0] || '',
+            style_image_urls: styleUrls,
+            surface: 'design',
+            ...where,
+          }),
       });
       if (!res.ok) throw new Error('Coach error');
       const data = await res.json().catch(() => ({}));
+      if (threadApi()) { threadApi().fromReply(csTab(), data); if (_csChatPicker) _csChatPicker.refresh(); }
       markCoachStylesSent(styleUrls);
       setCoachStatusBusy(false);
       const reply = String(data.reply || 'Got it.');

@@ -55,10 +55,13 @@ function cors(extra = {}) {
 
 // Mock API. `data` is the /api/client-data payload. `onRequest(entry, route, json)`
 // may fulfil a request itself and return 'handled'.
-async function mockApi(page, base, { data = clientData(), onRequest, assets = [], animProjects = [] } = {}) {
+async function mockApi(page, base, { data = clientData(), onRequest, assets = [], animProjects = [], coachWorkspace = null } = {}) {
   const calls = [];
   const library = Array.isArray(assets) ? assets.slice() : [];
   const projects = new Map((animProjects || []).map((p) => [p.id, p]));
+  // Coach chats; none until a spec gives some (or a Create tab asks for its own).
+  const workspace = coachWorkspace || { active: { projectId: null, threadId: null }, projects: [] };
+
   const ctx = page.context();
   // These specs were written for the old look; new-look.spec.js switches the new look on itself.
   await page.addInitScript(() => { try { if (!localStorage.getItem('se-look2')) localStorage.setItem('se-look2', 'old'); } catch (_) {} });
@@ -92,6 +95,36 @@ async function mockApi(page, base, { data = clientData(), onRequest, assets = []
     if (url.pathname === '/api/auth/session') return json(200, { ok: true, client: data.client, expires_at: new Date(Date.now() + 86400e3).toISOString(), legacy_credential: false });
     if (url.pathname === '/api/models') return json(200, { models: [], count: {}, requested_tier: 'growth', source: 'authenticated' });
     if (url.pathname === '/api/onboarding/state') return json(200, { completed: true, step: 5 });
+    // Coach chats (projects and their chats). A Create tab gets its own chat the first time it asks.
+    if (url.pathname.startsWith('/api/workspace/')) {
+      const ws = workspace;
+      const summary = () => ({ success: true, active: ws.active, projects: ws.projects.map((p) => ({ id: p.id, name: p.name, kind: p.kind, threads: p.threads.map((t) => ({ id: t.id, name: t.name, messageCount: t.messages.length })) })) });
+      const tabs = { post: ['still', 'Posts'], carousel: ['carousel', 'Carousels'], video: ['reel', 'Videos'] };
+      if (url.pathname === '/api/workspace/projects' && req.method() === 'GET') return json(200, summary());
+      if (url.pathname === '/api/workspace/surface-thread') {
+        const tab = JSON.parse(entry.body || '{}').tab;
+        const [kind, name] = tabs[tab] || [];
+        if (!kind) return json(400, { error: 'Which tab?' });
+        let p = ws.projects.find((x) => x.kind === kind);
+        if (!p) { p = { id: `proj_${kind}`, name, kind, threads: [{ id: `thr_${kind}`, name: 'Main chat', messages: [] }] }; ws.projects.push(p); }
+        return json(200, { ...summary(), tab, project: { id: p.id, name: p.name, kind: p.kind }, thread: p.threads[0] });
+      }
+      const th = url.pathname.match(/^\/api\/workspace\/threads\/([^/]+)$/);
+      if (th) {
+        for (const p of ws.projects) { const t = p.threads.find((x) => x.id === decodeURIComponent(th[1])); if (t) return json(200, { success: true, project: { id: p.id, name: p.name, kind: p.kind }, thread: t, active: ws.active }); }
+        return json(404, { error: 'Thread not found' });
+      }
+      const nt = url.pathname.match(/^\/api\/workspace\/projects\/([^/]+)\/threads$/);
+      if (nt && req.method() === 'POST') {
+        const p = ws.projects.find((x) => x.id === decodeURIComponent(nt[1]));
+        if (!p) return json(404, { error: 'Project not found' });
+        const b = JSON.parse(entry.body || '{}');
+        const t = { id: `thr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: b.name || 'New chat', messages: [] };
+        p.threads.unshift(t);
+        if (!b.keepActive) ws.active = { projectId: p.id, threadId: t.id };
+        return json(200, { ...summary(), thread: t, project: { id: p.id, name: p.name, kind: p.kind } });
+      }
+    }
     if (url.pathname === '/api/archive-post') {
       const b = JSON.parse(entry.body || '{}');
       const post = (data.content || []).find((p) => p.id === b.postId);
