@@ -90,6 +90,7 @@
           <span aria-hidden="true" style="opacity:0.45;font-size:0.65rem;">▸</span>
         </summary>
         <div class="vsc-body">
+          <div id="vsc-chat" style="margin-bottom:10px;"></div>
           ${chips}
           <div class="vsc-log" id="vsc-log" role="log" aria-live="polite">${rows}${typing}</div>
           <div class="vsc-form">
@@ -117,6 +118,7 @@
         return typeof w.applyCoachCreateSessionIfAny === 'function' ? w.applyCoachCreateSessionIfAny() : false;
       },
       toast: (m, t) => { if (typeof w.showToast === 'function') w.showToast(m, t); },
+      threads: w.seCreateCoachThread || null,
     };
   }
 
@@ -127,9 +129,13 @@
     if (!text) return null;
     const log = logStore();
     log.push({ role: 'user', text });
-    const res = await d.post({ message: text, surface: 'video' });
+    // The Video tab's own chat (or the one picked above the log), never the chat open on the Coach page.
+    const threads = d.threads;
+    const chat = threads ? await threads.ensure('video').catch(() => threads.current('video')) : null;
+    const res = await d.post({ message: text, surface: 'video', create_tab: 'video', ...(chat && chat.threadId ? { threadId: chat.threadId, projectId: chat.projectId } : {}) });
     if (!res || !res.ok) throw new Error('The Coach could not answer just now. Try again in a moment.');
     const data = await res.json().catch(() => ({}));
+    if (threads) threads.fromReply('video', data, chat && chat.threadId);
     const reply = String(data.reply || 'Got it.');
     const brief = pickVideoBrief(data.coach_actions);
     const entry = { role: 'assistant', text: reply, brief: brief || null, loaded: false };
@@ -144,6 +150,7 @@
     const host = document.getElementById('vs-coach');
     if (!host) return false;
     const d = Object.assign(defaults(), deps || {});
+    let picker = null;
     const paint = (busy) => {
       const open = document.getElementById('vsc-details');
       host.innerHTML = panelHtml(logStore(), { busy, open: open ? open.open : window.__SE_VS_COACH_OPEN !== false });
@@ -151,6 +158,15 @@
       if (det) det.addEventListener('toggle', () => { window.__SE_VS_COACH_OPEN = det.open; });
       const logEl = document.getElementById('vsc-log');
       if (logEl) logEl.scrollTop = logEl.scrollHeight;
+      // Which chat this is; picking another shows that chat's messages.
+      const chatEl = document.getElementById('vsc-chat');
+      if (chatEl && d.threads) {
+        picker = d.threads.mountPicker(chatEl, 'video', async (sel) => {
+          const msgs = await d.threads.messages(sel.threadId);
+          window.__SE_VS_COACH_LOG = msgs.slice(-MAX_LOG).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.content || '') }));
+          paint(false);
+        }, { busy: () => sending });
+      }
       bind();
     };
     const send = async (preset) => {
@@ -187,6 +203,17 @@
       }));
     }
     paint(false);
+    // The Video tab's chat; its messages show when nothing has been said here yet in this visit.
+    if (d.threads) {
+      d.threads.ensure('video').then(async (sel) => {
+        if (picker) picker.refresh();
+        if (!sel || logStore().length || sending) return;
+        const msgs = await d.threads.messages(sel.threadId);
+        if (!msgs.length || logStore().length || sending) return;
+        window.__SE_VS_COACH_LOG = msgs.slice(-MAX_LOG).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.content || '') }));
+        paint(false);
+      }).catch(() => {});
+    }
     return true;
   }
 

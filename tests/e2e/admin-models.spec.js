@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-test('Video Models panel: shows each model's providers, switched-off routes and new models waiting; dismiss works', async ({ page }) => {
+test('Video Models panel: shows each model’s providers, switched-off routes and new models waiting; dismiss works', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('se_admin_token', 't'));
   const dismissed = [];
   await page.route('**/*', (route) => {

@@ -28,9 +28,29 @@ test('ask() sends surface video, loads the brief, and keeps the conversation', a
     post: async (b) => { sent.push(b); return { ok: true, json: async () => ({ reply: 'Loading it.', coach_actions: [{ type: 'create', prompt: 'steam on a mug' }] }) }; },
     loadBrief: () => true,
   });
-  assert.deepEqual(sent, [{ message: 'a mug video', surface: 'video' }]);
+  // The Video tab's own chat (no chat picked yet: the server uses the tab's chat).
+  assert.deepEqual(sent, [{ message: 'a mug video', surface: 'video', create_tab: 'video' }]);
   assert.equal(out.loaded, true);
   assert.deepEqual(VC.logStore().map((m) => m.role), ['user', 'assistant']);
   await assert.rejects(VC.ask('again', { post: async () => ({ ok: false }) }), /could not answer/);
+  delete global.window;
+});
+
+test('ask() talks in the chat picked for the Video tab, and keeps the one the reply used', async () => {
+  global.window = {};
+  const sent = [];
+  const kept = [];
+  const threads = {
+    ensure: async () => ({ projectId: 'p1', threadId: 't1' }),
+    current: () => null,
+    fromReply: (tab, data) => kept.push([tab, data.threadId]),
+  };
+  await VC.ask('a reel', {
+    post: async (b) => { sent.push(b); return { ok: true, json: async () => ({ reply: 'Sure.', threadId: 't1', projectId: 'p1' }) }; },
+    loadBrief: () => false,
+    threads,
+  });
+  assert.deepEqual(sent, [{ message: 'a reel', surface: 'video', create_tab: 'video', threadId: 't1', projectId: 'p1' }]);
+  assert.deepEqual(kept, [['video', 't1']]);
   delete global.window;
 });
