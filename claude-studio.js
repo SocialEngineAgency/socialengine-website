@@ -68,8 +68,8 @@
         if (carousel || designed || type === 'video') return '';
         return String(imageUrl || '').trim();
       },
-      captionForQueue({ typedCaption, generatedCaption, brief }) {
-        return String(typedCaption || generatedCaption || brief || '').trim();
+      captionForQueue({ typedCaption, generatedCaption }) {
+        return String(typedCaption || generatedCaption || '').trim();
       },
       queueReviewStatus() { return 'Pending'; },
       openContentReviewAfterQueue() { return false; },
@@ -87,7 +87,6 @@
     return queueReady().captionForQueue({
       typedCaption: typed,
       generatedCaption: box?.dataset?.caption || '',
-      brief: document.getElementById('cs-brief')?.value || _csBrief,
     });
   }
 
@@ -3335,10 +3334,17 @@
   // Each post is its own image: in the brand's design system when the client has one, else
   // made by the Stage engine. They are made two at a time and each tile fills in as it lands;
   // Open puts one on the canvas, Add to Review queues it, Add all queues every finished one.
+  // A caption the design job wrote for this post (before the picture existed), or ''. Never its brief or title.
   function designPostsCaption(post) {
+    const body = String(post.caption || '').trim();
+    if (!body) return '';
     const tags = Array.isArray(post.hashtags) ? post.hashtags.filter(Boolean).join(' ') : '';
-    const body = String(post.caption || '').trim() || String(post.brief || post.title || '').trim();
     return tags && !body.includes(tags) ? `${body}\n\n${tags}` : body;
+  }
+
+  // The server wrote the caption from the picture; say so when it could not.
+  function noteQueuedCaption(data) {
+    if (data && data.caption_written === false) toast('Added to Review without a caption. Write one there before it posts.', 'warning');
   }
 
   function designPostsCard(action) {
@@ -3405,7 +3411,10 @@
       body: JSON.stringify({
         image_url: post.url,
         brief: post.brief || post.title,
-        caption: designPostsCaption(post),
+        // Written on the server from the finished picture, with the platform's caption rules.
+        caption: '',
+        caption_draft: designPostsCaption(post),
+        write_caption: true,
         platform: queuePlatform(),
         status: queueReady().queueReviewStatus(),
       }),
@@ -3413,6 +3422,7 @@
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !(data.ok || data.success)) throw new Error(data.error || 'Could not add it to Review');
     post.queued = true;
+    noteQueuedCaption(data);
   }
 
   // Brand design system: one job makes every post; its progress carries each finished url.
@@ -3596,11 +3606,11 @@
       } else if (all) {
         all.disabled = true;
         all.textContent = 'Adding…';
+        // Each caption is written from its picture on the server, so they go side by side, not one after another.
         let added = 0;
-        for (const p of view.posts) {
-          if (p.status !== 'done' || p.queued) continue;
+        await Promise.all(view.posts.filter((p) => p.status === 'done' && !p.queued).map(async (p) => {
           try { await queueDesignPost(p); added += 1; } catch (err) { toast(err.message, 'error'); }
-        }
+        }));
         if (added) toast(`${added} post${added === 1 ? '' : 's'} added to Review`, 'success');
         view.paint();
         rememberQueued();
@@ -4504,7 +4514,8 @@
         body: JSON.stringify({
           image_url: upData.url,
           brief: _csBrief,
-          caption: captionText || _csBrief,
+          caption: captionText,
+          write_caption: true,
           platform: queuePlatform(),
           status: queueReady().queueReviewStatus(),
         }),
@@ -4512,6 +4523,7 @@
       const qData = await q.json().catch(() => ({}));
       if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
       afterQueued();
+      noteQueuedCaption(qData);
       if (btn) btn.textContent = 'Added ✓';
       setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
     } catch (e) {
@@ -4529,10 +4541,7 @@
     try {
       _csBrief = document.getElementById('cs-brief')?.value?.trim() || _csBrief;
       const caption = readQueueCaption();
-      if (!caption) {
-        toast('Paste the caption (or write it in Describe your post)', 'warning');
-        return;
-      }
+      if (btn && !caption) btn.textContent = 'Writing caption…';
       const q = await fetch(`${apiBase()}/api/studio/design-queue`, {
         method: 'POST',
         headers: authHeaders(),
@@ -4540,6 +4549,7 @@
           image_url: imageUrl,
           brief: _csBrief,
           caption,
+          write_caption: true,
           platform: queuePlatform(),
           status: queueReady().queueReviewStatus(),
         }),
@@ -4547,6 +4557,7 @@
       const qData = await q.json().catch(() => ({}));
       if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
       afterQueued();
+      noteQueuedCaption(qData);
       if (btn) btn.textContent = 'Added ✓';
       setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
     } catch (e) {
@@ -4593,7 +4604,8 @@
         body: JSON.stringify({
           image_urls: imageUrls,
           brief: _csBrief,
-          caption: captionText || _csBrief,
+          caption: captionText,
+          write_caption: true,
           platform: queuePlatform(),
           status: queueReady().queueReviewStatus(),
         }),
@@ -4601,6 +4613,7 @@
       const qData = await q.json().catch(() => ({}));
       if (!q.ok || !(qData.ok || qData.success)) throw new Error(qData.error || 'Queue failed');
       afterQueued();
+      noteQueuedCaption(qData);
       if (btn) btn.textContent = 'Added ✓';
       setTimeout(() => { if (btn) btn.textContent = prev || 'Add to Queue'; }, 1600);
     } catch (e) {

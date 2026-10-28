@@ -58,12 +58,13 @@ test('typed caption wins over generated caption and brief', () => {
   }), 'Shop the drop');
 });
 
-test('brief is the caption when nothing was typed or generated', () => {
+test('the brief is never the caption: nothing typed or written leaves it for the server to write', () => {
   assert.equal(captionForQueue({
     typedCaption: '',
     generatedCaption: '',
-    brief: 'Already wrote this elsewhere',
-  }), 'Already wrote this elsewhere');
+    brief: 'Background photo: the Cardiff Half Marathon start line',
+  }), '');
+  assert.equal(captionForQueue({ typedCaption: 'Writing caption…', generatedCaption: '' }), '');
 });
 
 test('Add to Queue writes Pending so the card shows in review', () => {

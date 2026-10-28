@@ -306,6 +306,11 @@ test('new look Post: one canvas and the Coach; start from a line, quick starts, 
   await expect(page.locator('.nl-p2-title')).toHaveText('Finished graphic');
   expect(sent.upload).toBe(1);
   await expect(page.locator('#cs-queue')).toBeEnabled();
+  // No caption typed: it goes without one and the server writes it from the picture. Never the brief.
+  await expect(page.locator('#cs-caption-box')).toHaveValue('');
+  await page.click('#cs-queue');
+  await expect.poll(() => sent.queue.length).toBe(2);
+  expect(sent.queue[1]).toMatchObject({ caption: '', write_caption: true });
   expect(errors).toEqual([]);
 });
 

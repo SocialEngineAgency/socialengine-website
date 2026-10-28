@@ -6,12 +6,12 @@ function queueableSingleImage({ carousel = false, designed = false, imageUrl = '
   return String(imageUrl || '').trim();
 }
 
-function captionForQueue({ typedCaption = '', generatedCaption = '', brief = '' } = {}) {
+// The caption they typed, or one written for this post. Never the brief: that describes the picture, and posting
+// it read "Background photo: the start line..." in the feed. Empty means the server writes one from the picture.
+function captionForQueue({ typedCaption = '', generatedCaption = '' } = {}) {
   const typed = String(typedCaption || '').trim();
-  if (typed) return typed;
-  const generated = String(generatedCaption || '').trim();
-  if (generated) return generated;
-  return String(brief || '').trim();
+  if (typed && typed !== 'Writing caption…') return typed;
+  return String(generatedCaption || '').trim();
 }
 
 function queueReviewStatus() {
