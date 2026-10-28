@@ -375,9 +375,11 @@ function resolveDesignCoachApply({ reply = '', userMessage = '', hasCanvas = fal
   return { mode: 'none', job };
 }
 
+// Only when THIS reply promises the button (or bounces off the platform). An earlier "Create this now" in the
+// chat already had its button; reading it again put a stale button under every later reply.
 function inferCreateActionFromReply(reply, userMessage, priorTexts) {
   if (isCoachFailedReply(reply) || isCoachCarouselRedesignAsk(userMessage)) return null;
-  const blob = [reply, ...(priorTexts || [])].join(' ').toLowerCase();
+  const blob = String(reply || '').toLowerCase();
   if (!/create this now|generate this|one-click button|canva\.com|canva pro|synthesia|socialengine account manager|\[create_content\]|can't press a button|cannot press a button|button isn't rendering/.test(blob)) return null;
   const user = normalizeCoachPrompt(String(userMessage || '').replace(/<[^>]+>/g, ' '));
   if (
