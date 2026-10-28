@@ -8343,7 +8343,11 @@
         if (preview) preview.style.display = 'block';
         if (img) img.src = result.attached_image_url;
       }
-      if (!already && typeof showToast === 'function') showToast('Coach brief loaded in Studio — review, then Generate.');
+      if (!already) {
+        // The brief box sits below the Video tab's own Coach and recipes: bring it into view so the hand-off is seen.
+        try { dir.scrollIntoView({ block: 'center', behavior: 'smooth' }); dir.focus({ preventScroll: true }); } catch (_) {}
+        if (typeof showToast === 'function') showToast('Coach brief loaded in Studio — review, then Generate.');
+      }
       return true;
     }
 

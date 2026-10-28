@@ -199,6 +199,17 @@ test('portal deep-links Create this now instead of coach-create', () => {
   assert.doesNotMatch(createClick.slice(0, 1800), /\/api\/coach-create/);
 });
 
+test('an old Create this now earlier in the chat does not make a button under a later reply', () => {
+  // Main Coach chat, 27 Oct: a caption ending "Would you like me to build a carousel or a short reel?" showed
+  // Create this now because an earlier reply in the chat had said it.
+  const action = inferCreateActionFromReply(
+    'Here is your post: Lace up for the Cardiff Half Marathon 2027. Register now at the link in our bio.\n\nWould you like me to build a carousel or a short reel around this to give it more reach?',
+    'write an instagram post for runners signing up to the Cardiff Half',
+    ['Create this now is below. It opens Studio with the brief already written.']
+  );
+  assert.equal(action, null);
+});
+
 test('a promised Create this now reply still yields a create action in the portal', () => {
   const action = inferCreateActionFromReply(
     'This should now render as a one-click button. Click "Create this now" and the 25-30s Reel will generate with flat vector animation.',
