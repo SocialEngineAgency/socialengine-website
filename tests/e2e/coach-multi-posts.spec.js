@@ -89,7 +89,8 @@ for (const look of ['new', 'old']) {
     // One to Review, then the rest with Add all.
     await card.locator('[data-cs-post-queue="0"]').click();
     await expect.poll(() => sent.queue.length).toBe(1);
-    expect(sent.queue[0]).toMatchObject({ image_url: 'https://store.test/post1.png', caption: 'Stress shows up in the body first. Listen to it.\n\n#OPA #Wellbeing' });
+    // The caption is written on the server from the finished picture; the design job's caption is only a draft.
+    expect(sent.queue[0]).toMatchObject({ image_url: 'https://store.test/post1.png', caption: '', write_caption: true, caption_draft: 'Stress shows up in the body first. Listen to it.\n\n#OPA #Wellbeing' });
     await expect(card.locator('[data-cs-post-queue="0"]')).toHaveText('In Review');
     await expect(card.locator('[data-cs-posts-queue-all]')).toHaveCount(0);
 
@@ -148,7 +149,12 @@ test('no brand design: each post is its own Stage generation; a failed one can b
   expect(sent.generate.map((g) => g.brief)).toEqual([POSTS[0].brief, POSTS[1].brief, POSTS[1].brief]);
   await card.locator('[data-cs-posts-queue-all]').click();
   await expect.poll(() => sent.queue.length).toBe(2);
-  expect(sent.queue.map((q) => q.image_url)).toEqual(['https://store.test/stage1.png', 'https://store.test/stage2.png']);
+  expect(sent.queue.map((q) => q.image_url).sort()).toEqual(['https://store.test/stage1.png', 'https://store.test/stage2.png']);
+  // No caption yet: the server writes it from each picture. The brief is never sent as the caption.
+  for (const q of sent.queue) {
+    expect(q).toMatchObject({ caption: '', caption_draft: '', write_caption: true });
+    expect(q.brief).toBeTruthy();
+  }
   await expect(card.locator('[data-cs-post-queue="1"]')).toHaveText('In Review');
   expect(errors).toEqual([]);
 });
