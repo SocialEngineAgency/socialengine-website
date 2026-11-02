@@ -34,14 +34,14 @@
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
   <script src="./create-coach-thread.js?v=20261026a"></script>
-  <script src="./content-project-handoff.js?v=20261102-runtime-live"></script>
-  <script src="./claude-studio.js?v=20261026a" defer></script>
+  <script src="./content-project-handoff.js?v=20261102-all-handoffs"></script>
+  <script src="./claude-studio.js?v=20261102-projects" defer></script>
   <script src="./design-studio-v2.js?v=20261020move" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261020work"></script>
-  <script src="./video-coach.js?v=20261026a"></script>
-  <script src="./animation-studio.js?v=20261020ship" defer></script>
-  <script src="./story-builder.js?v=20261022board" defer></script>
+  <script src="./video-coach.js?v=20261102-projects"></script>
+  <script src="./animation-studio.js?v=20261102-projects" defer></script>
+  <script src="./story-builder.js?v=20261102-projects" defer></script>
   <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261025" defer></script>
@@ -8573,7 +8573,11 @@
       }
       const project = handoff.checkLoadedProject(action, payload.project);
 
-      const destination = handoff.destinationForProject(action, project.project_id, project.brief_version);
+      // Design and Storyboard: the project, opened by ID, fills the tool's own form with the persisted brief.
+      const toolOpen = handoff.toolSessionForProject(action, project);
+      const destination = toolOpen
+        ? { nav: toolOpen.nav, mode: toolOpen.tool, project_id: project.project_id, brief_version: project.brief_version }
+        : handoff.destinationForProject(action, project.project_id, project.brief_version);
       handoff.resetLegacyCreationState(window);
       window.__SE_CONTENT_PROJECT = project;
       window.__SE_CONTENT_DESTINATION = destination;
@@ -8588,7 +8592,9 @@
       if (destination.nav === 'brand-design') {
         window.__SE_CAROUSEL_VIEW = destination.view || 'slides';
       }
-      if (destination.nav === 'stories-composer') {
+      if (toolOpen) {
+        if (!openCreateFromCoach(toolOpen.session, toolOpen.identity)) throw new Error('Project brief could not be opened');
+      } else if (destination.nav === 'stories-composer') {
         if (typeof window.openStoriesComposer !== 'function') throw new Error('Stories composer is unavailable');
         window.openStoriesComposer({
           topic: handoff.projectPrompt(project),
@@ -8621,7 +8627,8 @@
       }
     }
 
-    function openCreateFromCoach(action) {
+    // extras: fields the session keeps as given (a ContentProject's identity when the project opened the tool).
+    function openCreateFromCoach(action, extras) {
       const normalize = typeof window.normalizeCoachCreateSession === 'function'
         ? window.normalizeCoachCreateSession
         : null;
@@ -8629,6 +8636,11 @@
       if (!session || !session.prompt) {
         if (typeof showToast === 'function') showToast('Coach did not send a usable prompt', 'warning');
         return false;
+      }
+      if (extras && typeof extras === 'object') {
+        Object.assign(session, extras);
+        // A project's brief is opened word for word, whatever the normalizer would tidy.
+        if (extras.content_project_id && action && action.prompt) session.prompt = String(action.prompt);
       }
       const ws = window.__SE_WORKSPACE_ACTIVE || {};
       if (ws.projectId) session.projectId = ws.projectId;
@@ -8650,9 +8662,15 @@
         window.__SE_STORY_COACH = {
           title: about ? about[1].trim().slice(0, 60) : 'New storyboard',
           brief: session.prompt,
-          look: /\bcartoon\b/i.test(session.prompt) ? 'cartoon' : (/\brealistic\b/i.test(session.prompt) ? 'realistic' : 'stylized'),
+          look: ['cartoon', 'realistic', 'stylized'].includes(String(session.look || ''))
+            ? String(session.look)
+            : (/\bcartoon\b/i.test(session.prompt) ? 'cartoon' : (/\brealistic\b/i.test(session.prompt) ? 'realistic' : 'stylized')),
           refs: (Array.isArray(session.references) ? session.references : []).slice(0, 6),
         };
+        if (session.content_project_id) {
+          window.__SE_STORY_COACH.content_project_id = session.content_project_id;
+          window.__SE_STORY_COACH.content_brief_version = session.content_brief_version;
+        }
       }
       if (session.destination === 'studio' || session.destination === 'creation-studio' || !session.destination) {
         window.__SE_VS_DOOR = 'make';

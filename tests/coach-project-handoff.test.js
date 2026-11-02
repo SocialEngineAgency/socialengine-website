@@ -139,3 +139,79 @@ test('portal opens a persisted project by ID, re-checks a restored one, and fall
   assert.match(restore, /status === 404/);
   assert.equal((portal.match(/await openContentProjectFromCoach\(payload\)/g) || []).length, 2, 'live and restored buttons');
 });
+
+// ── Design, Storyboard, voiceover-first/outro Reels and the Video-tab Coach open their project by ID ──
+
+const DESIGN_PROJECT = {
+  project_id: 'cp_design',
+  brief_version: 3,
+  capability_id: 'post.create',
+  brief: {
+    topic: 'Spring Bake Sale',
+    format: '4:5 Post',
+    full_brief: 'A 4:5 poster for the Spring Bake Sale.\n  Keep the spacing   exactly like this.',
+    tool_session: { tool: 'design', mode: 'image', aspect_ratio: '4:5', aspect_explicit: true, attached_image_url: 'https://x.test/still.png', product_name: 'Rye loaf' },
+  },
+};
+
+test('a Design project opens the Design tool with the persisted brief word for word and its identity', () => {
+  const open = handoff.toolSessionForProject({ type: 'create_project', open_in: 'design' }, DESIGN_PROJECT);
+  assert.equal(open.nav, 'design-studio');
+  assert.equal(open.session.destination, 'design');
+  assert.equal(open.session.prompt, DESIGN_PROJECT.brief.full_brief, 'exact, whitespace and all');
+  assert.equal(open.session.aspect_ratio, '4:5');
+  assert.equal(open.session.aspect_explicit, true);
+  assert.equal(open.session.attached_image_url, 'https://x.test/still.png');
+  assert.equal(open.session.product_name, 'Rye loaf');
+  assert.deepEqual(open.identity, { content_project_id: 'cp_design', content_brief_version: 3 });
+  assert.equal(handoff.toolSessionForProject({ open_in: '' }, { ...DESIGN_PROJECT, brief: { full_brief: 'x' } }), null, 'Reels/Video projects are not tool sessions');
+});
+
+test('a Storyboard project carries its look and identity into the story builder', () => {
+  const board = { project_id: 'cp_board', brief_version: 1, capability_id: 'storyboard.create', brief: { full_brief: 'A storyboard about Maya at the bakery.', style: { preset: 'cartoon' }, tool_session: { tool: 'storyboard', mode: 'video', aspect_ratio: '9:16' } } };
+  const open = handoff.toolSessionForProject({ open_in: 'storyboard' }, board);
+  assert.equal(open.nav, 'storyboard');
+  assert.equal(open.session.look, 'cartoon');
+  assert.equal(open.session.mode, 'video');
+  const opener = slice(portal, 'function openCreateFromCoach(action, extras)', 'window.applyCoachCreateSessionIfAny =');
+  assert.match(opener, /Object\.assign\(session, extras\)/);
+  assert.match(opener, /extras\.content_project_id && action && action\.prompt\) session\.prompt = String\(action\.prompt\)/);
+  assert.match(opener, /\['cartoon', 'realistic', 'stylized'\]\.includes\(String\(session\.look/);
+  assert.match(opener, /__SE_STORY_COACH\.content_project_id = session\.content_project_id/);
+  const builder = fs.readFileSync(path.join(__dirname, '..', 'story-builder.js'), 'utf8');
+  assert.match(builder, /The full brief stays on project/);
+});
+
+test('the portal routes Design/Storyboard projects through the tool, Reels/Video through the project destination', () => {
+  const create = slice(portal, 'async function createContentProjectFromCoach', 'async function openContentProjectFromCoach');
+  assert.match(create, /toolSessionForProject\(action, project\)/);
+  assert.match(create, /openCreateFromCoach\(toolOpen\.session, toolOpen\.identity\)/);
+  assert.match(create, /__SE_CONTENT_PROJECT = project/);
+  assert.ok(create.indexOf('resetLegacyCreationState') < create.indexOf('openCreateFromCoach(toolOpen'), 'reset first, then the tool session');
+});
+
+test('Design never auto-generates a project brief: it waits for Generate', () => {
+  const design = fs.readFileSync(path.join(__dirname, '..', 'claude-studio.js'), 'utf8');
+  const apply = slice(design, 'function applyDesignCoachSession()', 'function applyRedesignedSlides');
+  const guard = apply.indexOf('if (s.content_project_id)');
+  assert.ok(guard > 0);
+  assert.ok(guard < apply.indexOf('generate()'), 'the project returns before the auto-generate');
+  assert.match(apply, /Review it, then Generate/);
+});
+
+test('a voiceover-first Reels project opens on Voiceover with the exact script, outro card and music bed', () => {
+  const extras = handoff.reelExtrasForProject({ brief: { entry: 'vo', script: 'We bake before sunrise.\nCome taste it.', full_brief: 'other', outro: { url: 'https://x.test/o.png', asset_id: 'a1' }, music_bed: { url: 'https://x.test/m.mp3' } } });
+  assert.equal(extras.entry, 'vo');
+  assert.equal(extras.script, 'We bake before sunrise.\nCome taste it.');
+  assert.equal(extras.outro_url, 'https://x.test/o.png');
+  assert.equal(extras.music_bed_url, 'https://x.test/m.mp3');
+  assert.equal(handoff.reelExtrasForProject({ brief: { outro: { url: 'javascript:alert(1)' } } }).outro_url, '', 'https only');
+  assert.equal(handoff.reelExtrasForProject({ brief: { full_brief: 'x' } }).entry, 'prompt');
+  const render = slice(animate, 'window.renderAnimationStudio = async function', null, 60000);
+  assert.match(render, /reelExtras\.entry === 'vo'\s*\? reelExtras\.script/);
+  assert.match(render, /writeAnimEntry\(reelExtras\.entry\)/);
+  assert.match(render, /_pendingOutroUrl = reelExtras\.outro_url/);
+  assert.match(render, /_pendingMusicUrl = reelExtras\.music_bed_url/);
+  assert.match(render, /if \(_project && !_project\.id\)/, 'never rewrites a reel already open');
+  assert.match(render, /prompt\.value = projectText\(research\)/, 'research keeps the VO script');
+});

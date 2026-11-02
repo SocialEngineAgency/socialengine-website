@@ -1207,6 +1207,13 @@
       toast('Graphic loaded. Write the caption, then Add to Queue.', 'success');
       return;
     }
+    // A ContentProject opened by ID is reviewed first: nothing generates (or spends) until Generate is pressed.
+    if (s.content_project_id) {
+      if (s.loadedProject === s.content_project_id + '@' + s.content_brief_version) return;
+      s.loadedProject = s.content_project_id + '@' + s.content_brief_version;
+      toast(`Project ${s.content_project_id} loaded. Review it, then Generate.`, 'success');
+      return;
+    }
     toast('Coach brief loaded — generating now…', 'success');
     applyRedesignedSlides();
     if (!_csGenerating && !masterImageUrl()) {

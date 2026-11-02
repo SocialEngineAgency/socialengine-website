@@ -54,3 +54,28 @@ test('ask() talks in the chat picked for the Video tab, and keeps the one the re
   assert.deepEqual(kept, [['video', 't1']]);
   delete global.window;
 });
+
+test('the Video-tab Coach opens a video.create project by ID, preferring it over a loose brief', async () => {
+  const project = { type: 'create_project', capability_id: 'video.create', persisted: true, project_id: 'cp_v', brief_version: 1, project: { capability_id: 'video.create' }, legacy: { type: 'create', prompt: 'p' } };
+  const picked = VC.pickVideoBrief([{ type: 'create', prompt: 'loose' }, project]);
+  assert.equal(picked.type, 'create_project');
+  assert.equal(picked.project_id, 'cp_v');
+  assert.equal(VC.pickVideoBrief([{ ...project, capability_id: 'reel.create', project: { capability_id: 'reel.create' } }]), null, 'not a Reels project');
+
+  const opened = [];
+  global.window = { openContentProjectFromCoach: async (a) => { opened.push(a.project_id); return { project: {} }; } };
+  const out = await VC.ask('a mug clip', {
+    post: async () => ({ ok: true, json: async () => ({ reply: 'Saved as a project.', coach_actions: [project] }) }),
+    threads: null,
+  });
+  assert.deepEqual(opened, ['cp_v']);
+  assert.equal(out.loaded, true);
+  global.window.openContentProjectFromCoach = async () => { throw new Error('gone'); };
+  global.window.showToast = () => {};
+  const failed = await VC.ask('again', {
+    post: async () => ({ ok: true, json: async () => ({ reply: 'x', coach_actions: [project] }) }),
+    threads: null,
+  });
+  assert.equal(failed.loaded, false);
+  delete global.window;
+});

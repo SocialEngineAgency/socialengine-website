@@ -5827,9 +5827,24 @@
     }
     if (contentProject && window.SEContentProjectHandoff) {
       const prompt = document.getElementById('anim-prompt');
-      if (prompt) prompt.value = window.SEContentProjectHandoff.projectPrompt(contentProject, window.__SE_CONTENT_RESEARCH);
-      writeAnimEntry('prompt');
-      applyAnimEntryUI('prompt');
+      // A voiceover-first project opens on the Voiceover entry with its script word for word.
+      const reelExtras = window.SEContentProjectHandoff.reelExtrasForProject
+        ? window.SEContentProjectHandoff.reelExtrasForProject(contentProject)
+        : { entry: 'prompt' };
+      const projectText = (research) => (reelExtras.entry === 'vo'
+        ? reelExtras.script
+        : window.SEContentProjectHandoff.projectPrompt(contentProject, research));
+      if (prompt) prompt.value = projectText(window.__SE_CONTENT_RESEARCH);
+      writeAnimEntry(reelExtras.entry);
+      applyAnimEntryUI(reelExtras.entry);
+      // The outro card and music bed the Coach attached ride with the reel (never on a reel already open).
+      if (reelExtras.outro_url) _pendingOutroUrl = reelExtras.outro_url;
+      if (reelExtras.music_bed_url) _pendingMusicUrl = reelExtras.music_bed_url;
+      if (_project && !_project.id) {
+        if (reelExtras.outro_url) _project.outro_url = reelExtras.outro_url;
+        if (reelExtras.music_bed_url) _project.music_bed_url = reelExtras.music_bed_url;
+      }
+      if (reelExtras.missing_outro) toast(reelExtras.missing_outro, 'error');
       // Every stated look (not only realistic) and the exact duration; the gate below blocks a length the picker lacks.
       applyAnimStatedLookAndLength({ look: contentProject.brief?.style?.preset, seconds: contentProject.brief?.duration_seconds });
       // The project's references (Library assets the Coach attached) become the reel's refs.
@@ -5864,7 +5879,7 @@
         button.textContent = 'Researching…';
         try {
           const research = await window.runContentProjectResearch();
-          if (prompt) prompt.value = window.SEContentProjectHandoff.projectPrompt(contentProject, research);
+          if (prompt) prompt.value = projectText(research);
           const status = document.getElementById('anim-research-status');
           if (status) status.textContent = `Research complete · ${research.evidence.length} evidence source${research.evidence.length === 1 ? '' : 's'} · generation still requires explicit 1-credit approval`;
           applyGate();
