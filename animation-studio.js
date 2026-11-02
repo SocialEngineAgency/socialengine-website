@@ -4401,6 +4401,14 @@
       startPoll();
       toast(hasChar ? 'Generating character sheet…' : 'Generating shots as text-to-video…', 'success');
     } catch (e) {
+      // A refused start (e.g. a shot that contradicts the locked brief) comes back with the saved project:
+      // show it as it is, not as "generating".
+      if (e.project) {
+        _project = e.project;
+        stopPoll();
+        renderCanvas();
+        renderChat();
+      }
       toast(e.message || 'Approve failed', 'error', e.request_id);
     } finally {
       _busy = false;
