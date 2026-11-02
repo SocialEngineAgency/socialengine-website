@@ -2037,6 +2037,7 @@
     // 'post' = Create → Post (single posts). 'carousel' = Create → Carousels → Infographic or finished slides.
     const csMode = window.__SE_CS_MODE === 'carousel' ? 'carousel' : 'post';
     const isCarouselMode = csMode === 'carousel';
+    const contentProject = window.contentProjectFor?.(isCarouselMode ? 'brand-design' : 'design-studio') || null;
 
     const data = window._studioClientData || window.__clientData || window.clientData || {};
     _csBrandName = data?.client?.business_name || data?.business_name || 'Your Brand';
@@ -2069,6 +2070,14 @@
               ? `<button type="button" id="cs-mode-brand" style="margin-top:10px;padding:0;background:none;border:none;color:rgba(255,255,255,0.6);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-decoration:underline;">← Brand template carousels</button>`
               : `<button type="button" id="cs-mode-carousels" style="margin-top:10px;padding:0;background:none;border:none;color:rgba(255,255,255,0.6);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);text-decoration:underline;">Making a carousel? Open Carousels →</button>`}
           </div>
+          ${contentProject ? `<section id="content-project-brief" style="padding:11px 12px;border:1px solid rgba(167,139,250,0.45);border-radius:10px;background:rgba(124,58,237,0.12);font-size:0.68rem;line-height:1.5;color:#E2E8F0;">
+            <div style="font-weight:800;color:#E9D5FF;margin-bottom:4px;">Canonical project · review before generating</div>
+            <div><strong>${escapeHtml(contentProject.brief?.topic || 'Untitled')}</strong> · version ${escapeHtml(String(contentProject.brief_version))}</div>
+            <div>Style${contentProject.brief?.style?.hard_lock ? ' (locked)' : ''}: ${escapeHtml(contentProject.brief?.style?.preset || 'not specified')}</div>
+            <div id="cs-research-status">Research: ${escapeHtml(contentProject.brief?.claims_policy?.research_mode || 'off')} · generation waits for your approval</div>
+            ${contentProject.brief?.claims_policy?.research_mode === 'required' ? '<button type="button" id="cs-run-research" style="margin-top:7px;padding:6px 9px;border:1px solid rgba(167,139,250,0.45);border-radius:7px;background:rgba(124,58,237,0.16);color:#E9D5FF;font-size:0.66rem;font-weight:700;cursor:pointer;">Run required research</button>' : ''}
+            <div id="cs-project-warning" role="alert" style="display:none;margin-top:6px;color:#FCD34D;font-weight:650;"></div>
+          </section>` : ''}
           <div id="cs-workspace-chip" style="display:none;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);font-size:0.72rem;color:rgba(255,255,255,0.72);font-weight:600;line-height:1.35;"></div>
           <div style="display:flex;gap:4px;">
             <button type="button" id="cs-new-post" title="New post" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:rgba(255,255,255,0.7);font-size:0.68rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">New</button>
@@ -2272,6 +2281,47 @@
 
       <div id="cs-export-mount" style="position:fixed;left:-10000px;top:0;width:1080px;height:1080px;overflow:hidden;pointer-events:none;"></div>
     `;
+    if (contentProject && window.SEContentProjectHandoff) {
+      const brief = document.getElementById('cs-brief');
+      const style = document.getElementById('cs-style');
+      const aspect = document.getElementById('cs-aspect');
+      if (brief) brief.value = window.SEContentProjectHandoff.projectPrompt(contentProject, window.__SE_CONTENT_RESEARCH);
+      if (style) style.value = contentProject.brief?.style?.preset || '';
+      const ratio = String(contentProject.brief?.format || '').match(/\b(9:16|1:1|4:5)\b/)?.[1];
+      if (aspect && ratio && Array.from(aspect.options).some((option) => option.value === ratio)) aspect.value = ratio;
+      const applyGate = () => {
+        const reasons = window.SEContentProjectHandoff.projectBlockReasons(contentProject, window.__SE_CONTENT_RESEARCH, []);
+        const warning = document.getElementById('cs-project-warning');
+        const generate = document.getElementById('cs-generate');
+        if (warning) {
+          warning.style.display = reasons.length ? 'block' : 'none';
+          warning.textContent = reasons.join(' ');
+        }
+        if (generate) {
+          generate.disabled = reasons.length > 0;
+          generate.title = reasons.join(' ');
+        }
+        return reasons;
+      };
+      applyGate();
+      document.getElementById('cs-run-research')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = 'Researching…';
+        try {
+          const research = await window.runContentProjectResearch();
+          if (brief) brief.value = window.SEContentProjectHandoff.projectPrompt(contentProject, research);
+          const status = document.getElementById('cs-research-status');
+          if (status) status.textContent = `Research complete · ${research.evidence.length} evidence source${research.evidence.length === 1 ? '' : 's'} · generation still requires approval`;
+          applyGate();
+          button.textContent = 'Research complete';
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'Retry required research';
+          toast(error.message || 'Research failed', 'error');
+        }
+      });
+    }
     if (document.documentElement.classList.contains('nl')) {
       if (isCarouselMode) arrangePostNL(content, isCarouselMode);
       else arrangePostMinimalNL(content);
@@ -3112,6 +3162,15 @@
   async function generate(opts = {}) {
     const continueBusy = !!opts.continueBusy;
     if (_csGenerating && !continueBusy) return;
+    const contentProject = window.contentProjectFor?.(window.__SE_CS_MODE === 'carousel' ? 'brand-design' : 'design-studio') || null;
+    if (contentProject && window.SEContentProjectHandoff) {
+      const reasons = window.SEContentProjectHandoff.projectBlockReasons(contentProject, window.__SE_CONTENT_RESEARCH, []);
+      if (reasons.length || !window.contentProjectResearchSatisfied(contentProject)) {
+        toast(reasons.join(' ') || 'Canonical project requirements are not satisfied', 'error');
+        if (continueBusy) setBusy(false);
+        return;
+      }
+    }
     const briefEl = document.getElementById('cs-brief');
     let brief = briefEl?.value?.trim() || '';
     if (!brief) {
@@ -3136,6 +3195,11 @@
         style_hint: document.getElementById('cs-style')?.value?.trim() || undefined,
         aspect_ratio: document.getElementById('cs-aspect')?.value || '9:16',
         model: selectedEngineId(),
+        canonical_project_id: contentProject?.project_id || undefined,
+        canonical_brief_version: contentProject?.brief_version,
+        evidence_ids: Array.isArray(window.__SE_CONTENT_RESEARCH?.evidence)
+          ? window.__SE_CONTENT_RESEARCH.evidence.map((item) => item.evidence_id).filter(Boolean)
+          : [],
       };
       if (styleUrls.length) {
         payload.style_image_url = styleUrls[0];
