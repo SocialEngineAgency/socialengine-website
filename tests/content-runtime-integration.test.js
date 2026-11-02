@@ -33,9 +33,12 @@ test('current and restored Coach action arrays retain create_project actions', (
 
 test('Coach persists canonical projects with auth and deterministic idempotency, then routes without generating', () => {
   const fn = slice(portal, 'async function createContentProjectFromCoach', 'function openCreateFromCoach');
-  assert.match(fn, /\/api\/content-runtime\/projects/);
+  // The endpoint and idempotency key come from the handoff helper (load by ID, or create with a stable key).
+  const helper = fs.readFileSync(path.join(__dirname, '..', 'content-project-handoff.js'), 'utf8');
+  assert.match(helper, /\/api\/content-runtime\/projects/);
+  assert.match(helper, /projectIdempotencyKey\(action\)/);
   assert.match(fn, /authHeaders/);
-  assert.match(fn, /projectIdempotencyKey/);
+  assert.match(fn, /projectRequestFor/);
   assert.match(fn, /resetLegacyCreationState/);
   assert.match(fn, /destinationForProject/);
   assert.match(fn, /sessionStorage/);

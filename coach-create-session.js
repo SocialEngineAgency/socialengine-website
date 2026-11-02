@@ -29,6 +29,51 @@ function normalizeCoachFormat(value) {
   return ANIM_FORMATS.includes(String(value || '')) ? String(value) : '';
 }
 
+// Reels looks the Animate tool offers. Anime has no look of its own there: it is the cartoon / animated look.
+const COACH_LOOKS = { realistic: 'realistic', photorealistic: 'realistic', 'photo-real': 'realistic', stylized: 'stylized', stylised: 'stylized', cartoon: 'cartoon', animated: 'cartoon', anime: 'cartoon' };
+
+/** A look the brief states ("realistic Reel"), ignoring ones it rules out ("no anime"). */
+function statedCoachLook(text) {
+  const t = String(text || '').toLowerCase();
+  const re = /\b(photorealistic|photo-real|realistic|stylized|stylised|cartoon|anime|animated)\b/g;
+  let m;
+  while ((m = re.exec(t))) {
+    const before = t.slice(Math.max(0, m.index - 24), m.index);
+    if (/\b(no|not|never|avoid|without|non)\b[^.;\n]*$/.test(before)) continue;
+    // "animated Reel" alone is the Reels tool, not a look request.
+    if (m[1] === 'animated') continue;
+    return COACH_LOOKS[m[1]] || '';
+  }
+  return '';
+}
+
+function normalizeCoachLook(value, text) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (COACH_LOOKS[raw]) return COACH_LOOKS[raw];
+  return statedCoachLook(raw) || statedCoachLook(text);
+}
+
+/** The whole reel's length in seconds as stated (30 stays 30); "Shot 1: 5s" is a shot, not the reel. */
+function normalizeCoachReelSeconds(value, text) {
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 0 && n <= 600) return n;
+  const t = String(text || '');
+  const sec = '(?:s|sec|secs|second|seconds)';
+  const patterns = [
+    new RegExp('\\b(\\d{1,3})\\s*[-–]?\\s*' + sec + '\\b(?:\\s+long)?(?=[^.\\n]{0,40}\\b(reels?|videos?|clips?|animations?|explainers?|ads?)\\b)', 'i'),
+    new RegExp('\\b(?:reels?|videos?|animations?)\\b[^.\\n]{0,20}?\\b(\\d{1,3})\\s*[-–]?\\s*' + sec + '\\b', 'i'),
+    new RegExp('\\b(?:length|duration|runtime|total)\\s*(?:of|is|:|=)?\\s*(\\d{1,3})\\s*' + sec + '\\b', 'i'),
+  ];
+  for (const re of patterns) {
+    const m = re.exec(t);
+    if (!m) continue;
+    if (/\b(shot|frame|scene|beat)\s*\d+\s*[:\-–]?\s*$/i.test(t.slice(Math.max(0, m.index - 16), m.index))) continue;
+    const secs = Number(m[1]);
+    if (secs > 0 && secs <= 600) return secs;
+  }
+  return 0;
+}
+
 function normalizeCoachEntry(value) {
   return value === 'vo' ? 'vo' : (value === 'prompt' ? 'prompt' : '');
 }
@@ -159,6 +204,9 @@ function normalizeCoachCreateSession(intent = {}) {
     destination,
     attached_image_url,
     duration: normalizeCoachDuration(intent.duration) || extras.duration,
+    // The look and total length the brief states, so a Reel handoff cannot fall back to Stylized / 15s.
+    look: normalizeCoachLook(intent.look || intent.style, prompt),
+    reel_seconds: normalizeCoachReelSeconds(intent.reel_seconds || intent.duration_seconds, prompt),
     format_template_id: normalizeCoachFormat(intent.format_template_id) || extras.format_template_id,
     entry: normalizeCoachEntry(intent.entry) || extras.entry,
     outro_url: httpsUrl(intent.outro_url),
@@ -415,6 +463,8 @@ function inferCreateActionFromReply(reply, userMessage, priorTexts) {
 function sessionApplyExtras(session) {
   return {
     duration: session.duration || 0,
+    look: session.look || '',
+    reel_seconds: session.reel_seconds || 0,
     format_template_id: session.format_template_id || '',
     entry: session.entry || '',
     outro_url: session.outro_url || '',
@@ -582,9 +632,16 @@ function persistCoachHistoryEntry(role, text, extra = {}) {
   if (role === 'assistant' && Array.isArray(extra.actions) && extra.actions.length) {
     const actions = extra.actions.filter((a) => a && (
       (a.type === 'create' && a.prompt)
+      // A canonical project button comes back after a reload and reopens the same project by ID.
+      || (a.type === 'create_project' && a.project && a.project.capability_id)
       || (a.type === 'carousel_redesign' && Array.isArray(a.slides) && a.slides.length >= 2)
     ));
-    if (actions.length) entry.actions = actions;
+    if (actions.length) {
+      // The full stored project is reloaded by ID on click; keep the history entry small.
+      entry.actions = actions.map((a) => (a.type === 'create_project' && a.persisted_project
+        ? Object.fromEntries(Object.entries(a).filter(([k]) => k !== 'persisted_project'))
+        : a));
+    }
   }
   // Work that ended in a tab (Carousels, Posts, ...): the way back to it comes back with the message.
   if (role === 'assistant' && ['carousels', 'posts', 'reels', 'storyboard', 'review'].includes(extra.open_tab)) entry.open_tab = extra.open_tab;

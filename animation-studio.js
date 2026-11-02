@@ -5284,6 +5284,27 @@
   }
   window.applyAnimRemixSessionIfAny = applyAnimRemixSessionIfAny;
 
+  // The look and total length a Coach brief or canonical project states. Returns a note when the length cannot be
+  // shown in the Length picker (only 15/30/45): it is left as stated in the brief, never silently shortened.
+  const ANIM_LOOK_FOR_PRESET = { realistic: 'realistic', stylized: 'stylized', stylised: 'stylized', cartoon: 'cartoon', anime: 'cartoon', animated: 'cartoon' };
+  function applyAnimStatedLookAndLength({ look, seconds } = {}) {
+    let note = '';
+    const want = ANIM_LOOK_FOR_PRESET[String(look || '').toLowerCase()] || (/real/i.test(String(look || '')) ? 'realistic' : '');
+    const lookEl = document.getElementById('anim-look');
+    if (lookEl && want && Array.from(lookEl.options).some((o) => o.value === want) && lookEl.value !== want) {
+      lookEl.value = want;
+      lookEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const secs = Number(seconds);
+    const lenEl = document.getElementById('anim-length');
+    if (lenEl && Number.isFinite(secs) && secs > 0) {
+      if (Array.from(lenEl.options).some((o) => Number(o.value) === secs)) lenEl.value = String(secs);
+      else note = `The brief asks for ${secs}s; Length offers 15s, 30s or 45s, so it was not changed. Pick the closest before you generate.`;
+    }
+    return { look: want, note };
+  }
+  window.applyAnimStatedLookAndLength = applyAnimStatedLookAndLength;
+
   async function applyAnimCoachCreateSessionIfAny() {
     const s = window.__SE_COACH_CREATE_SESSION;
     const ta = document.getElementById('anim-prompt');
@@ -5333,6 +5354,9 @@
       if (result.music_bed_url) _project.music_bed_url = result.music_bed_url;
       if (_project.id && (result.outro_url || result.music_bed_url)) await syncMotionSettings();
     }
+    // The Coach's stated look and length (e.g. Realistic, 30s): the tool's Stylized / 15s defaults never win.
+    const stated = applyAnimStatedLookAndLength({ look: result.look, seconds: result.reel_seconds });
+    if (stated.note) toast(stated.note, 'error');
     if (result.missing_outro) toast(result.missing_outro, 'error');
     if (!already) toast('Coach brief loaded in Reels. Review it, then Write shots.', 'success');
     return true;
@@ -5806,15 +5830,14 @@
       if (prompt) prompt.value = window.SEContentProjectHandoff.projectPrompt(contentProject, window.__SE_CONTENT_RESEARCH);
       writeAnimEntry('prompt');
       applyAnimEntryUI('prompt');
-      const length = document.getElementById('anim-length');
-      if (length && Number.isFinite(contentProject.brief?.duration_seconds)
-        && Array.from(length.options).some((option) => Number(option.value) === Number(contentProject.brief.duration_seconds))) {
-        length.value = String(contentProject.brief.duration_seconds);
-      }
-      const look = document.getElementById('anim-look');
-      if (look && contentProject.brief?.style?.hard_lock && /real/i.test(contentProject.brief.style.preset || '')
-        && Array.from(look.options).some((option) => option.value === 'realistic')) {
-        look.value = 'realistic';
+      // Every stated look (not only realistic) and the exact duration; the gate below blocks a length the picker lacks.
+      applyAnimStatedLookAndLength({ look: contentProject.brief?.style?.preset, seconds: contentProject.brief?.duration_seconds });
+      // The project's references (Library assets the Coach attached) become the reel's refs.
+      const projectRefs = Array.isArray(contentProject.brief?.references) ? contentProject.brief.references : [];
+      if (projectRefs.length && !_refs.length) {
+        _refs = projectRefs.filter((r) => r && /^https:\/\//i.test(String(r.url || ''))).slice(0, 8)
+          .map((r) => ({ url: r.url, title: r.title || r.name || 'Project ref', role: r.role === 'character' ? 'character' : 'scene' }));
+        renderRefs();
       }
       const applyGate = () => {
         const reasons = window.SEContentProjectHandoff.projectBlockReasons(
@@ -5983,6 +6006,10 @@
     }
     if (coachSession && coachSession.prompt && coachSession.destination === 'animate') {
       await applyAnimCoachCreateSessionIfAny();
+    }
+    // The composer can be rebuilt by renderCanvas (and restores the saved Length): re-apply the project's look and length.
+    if (contentProject) {
+      applyAnimStatedLookAndLength({ look: contentProject.brief?.style?.preset, seconds: contentProject.brief?.duration_seconds });
     }
     const pendingRef = window.__SE_ANIM_PENDING_REF;
     if (pendingRef && pendingRef.url && !_refs.some((r) => r.url === pendingRef.url)) {
