@@ -56,6 +56,37 @@
     return `content-project:${hashString(stable)}`;
   }
 
+  /**
+   * How the portal gets the project behind a Coach create_project action. A project the Coach already persisted
+   * (action.project_id) is loaded by ID; only an unpersisted action is created here, with its idempotency key.
+   */
+  function projectRequestFor(action) {
+    const body = buildProjectCreateBody(action);
+    const id = String(action.project_id || '').trim();
+    if (action.persisted === true && id) {
+      return { method: 'GET', path: `/api/content-runtime/projects/${encodeURIComponent(id)}`, project_id: id };
+    }
+    return {
+      method: 'POST',
+      path: '/api/content-runtime/projects',
+      idempotency_key: action.idempotency_key || projectIdempotencyKey(action),
+      body,
+    };
+  }
+
+  /** The project the server returned must be the one the action names: same ID and the same capability. */
+  function checkLoadedProject(action, project) {
+    if (!project?.project_id || project.brief_version === undefined) throw new Error('Project could not be loaded');
+    if (action.project_id && String(project.project_id) !== String(action.project_id)) {
+      throw new Error('The server returned a different project');
+    }
+    const capability = action.capability_id || action.project?.capability_id;
+    if (capability && project.capability_id && project.capability_id !== capability) {
+      throw new Error('The project is for a different tool');
+    }
+    return project;
+  }
+
   function destinationForProject(action, projectId, briefVersion) {
     const destination = String(action?.destination || '');
     const target = destinations[destination];
@@ -133,6 +164,7 @@
         : '',
       brief.topic ? `Topic: ${brief.topic}` : '',
       brief.format ? `Format: ${brief.format}` : '',
+      brief.product_name ? `Subject: ${brief.product_name}` : '',
       Number.isFinite(brief.duration_seconds)
         ? `Duration: exactly ${brief.duration_seconds} seconds${Number.isFinite(brief.duration_tolerance_seconds) ? ` (tolerance ${brief.duration_tolerance_seconds} seconds)` : ''}`
         : '',
@@ -146,6 +178,7 @@
         ? `Exclusions: ${brief.exclusions.join('; ')}`
         : '',
       brief.script ? `Script: ${brief.script}` : '',
+      brief.full_brief ? `Coach brief (follow the constraints above where they differ):\n${brief.full_brief}` : '',
       brief.caption ? `Caption: ${brief.caption}` : '',
       Array.isArray(brief.hashtags) && brief.hashtags.length
         ? `Hashtags: ${brief.hashtags.join(' ')}`
@@ -198,12 +231,14 @@
   return Object.freeze({
     activeProjectForDestination,
     buildProjectCreateBody,
+    checkLoadedProject,
     contentProjectResearchSatisfied,
     destinationForProject,
     hydrateStudioProject,
     projectIdempotencyKey,
     projectBlockReasons,
     projectPrompt,
+    projectRequestFor,
     resetLegacyCreationState,
   });
 });
