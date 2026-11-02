@@ -13654,7 +13654,7 @@
                   return;
                 }
                 btn.dataset.busy = '1';
-                btn.innerHTML = 'Opened Design';
+                btn.innerHTML = 'Opened in Carousels';
                 window.seDesignStudio.openWith({ brief: payload.brief, slides: payload.slides, source_image_url: payload.source_image_url, medical: payload.medical, style_id: payload.style_id || undefined, autostart: true });
                 return;
               }
@@ -13665,7 +13665,7 @@
                 btn.innerHTML = 'Redesigning…';
                 try {
                   const ok = await acceptCarouselRedesign(payload);
-                  if (ok) btn.innerHTML = 'Opened Design Studio';
+                  if (ok) btn.innerHTML = 'Opened in Carousels';
                   else {
                     btn.innerHTML = origLabel;
                     btn.dataset.busy = '';

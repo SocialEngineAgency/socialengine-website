@@ -336,7 +336,7 @@
       };
       window._studioReference = { ..._csRef };
       persistLastDesign();
-      toast('Poster ready in Design Studio', 'success');
+      toast('Poster ready in the Post tab', 'success');
     }
   }
 
