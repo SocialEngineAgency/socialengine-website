@@ -22,6 +22,7 @@
   let _pendingStylePackId = null;
   let _pendingOutroUrl = null;
   let _pendingMusicUrl = null;
+  let _hydratedContentProjectKey = '';
   const REF_ROLES = [
     { id: 'character', label: 'Char' },
     { id: 'item', label: 'Item' },
@@ -1022,6 +1023,8 @@
             look: document.getElementById('anim-look')?.value || 'stylized',
             motion_mode: 'drive',
             driving_video_url: data.url,
+            canonical_project_id: window.contentProjectFor?.('animation-studio')?.project_id || null,
+            canonical_brief_version: window.contentProjectFor?.('animation-studio')?.brief_version ?? null,
           }),
         });
         _project = created.project;
@@ -2065,7 +2068,7 @@
         <ol class="nl-plan__list">${rows}</ol>
         ${adding}
         <div class="nl-plan__f">
-          <button type="button" class="nl-sbtn nl-sbtn--primary" id="anim-accept">Accept &amp; generate · ${count}</button>
+          <button type="button" class="nl-sbtn nl-sbtn--primary" id="anim-accept">Accept &amp; generate · approve 1 credit</button>
           <button type="button" class="nl-sbtn" data-plan-add ${full || _nlPlan.adding ? 'disabled' : ''} ${full ? `title="A reel holds up to ${NL_PLAN_MAX} shots"` : ''}>${nlSvg('M12 5v14 M5 12h14', 13)}Add shot</button>
           <span class="nl-grow"></span>
           <button type="button" class="nl-sbtn" id="anim-rebrief">Try again</button>
@@ -4180,7 +4183,7 @@
             <div class="anim-brief-card__title">${(brief.shots || []).length || 0} shots from your idea</div>
             ${lines || '<div class="anim-brief-shot-line">No shots yet — try again.</div>'}
             <div class="anim-brief-btns">
-              <button type="button" class="anim-btn" id="anim-accept">Accept & generate</button>
+              <button type="button" class="anim-btn" id="anim-accept">Accept & generate · approve 1 credit</button>
               <button type="button" class="anim-btn anim-btn--ghost" id="anim-rebrief">Try again</button>
             </div>
           </div>`;
@@ -4227,6 +4230,8 @@
         references,
         reference_urls: references.map((r) => r.url),
         character_ref_url: references.find((r) => r.role === 'character')?.url || null,
+        canonical_project_id: window.contentProjectFor?.('animation-studio')?.project_id || null,
+        canonical_brief_version: window.contentProjectFor?.('animation-studio')?.brief_version ?? null,
       }),
     });
     _project = data.project;
@@ -4251,6 +4256,17 @@
 
   async function sendPrompt(opts = {}) {
     if (_busy) return;
+    const contentProject = window.contentProjectFor?.('animation-studio') || null;
+    if (contentProject && window.SEContentProjectHandoff) {
+      const reasons = window.SEContentProjectHandoff.projectBlockReasons(
+        contentProject,
+        window.__SE_CONTENT_RESEARCH,
+        [15, 30, 45]
+      );
+      if (reasons.length || !window.contentProjectResearchSatisfied(contentProject)) {
+        return toast(reasons.join(' ') || 'Canonical project requirements are not satisfied', 'error');
+      }
+    }
     const ta = document.getElementById('anim-prompt');
     const entry = document.querySelector('#anim-entry-mode [data-entry].active')?.dataset.entry || readAnimEntry();
     const text = (ta?.value || '').trim();
@@ -4305,6 +4321,11 @@
         format_template_id: _pendingFormatTemplateId || undefined,
         style_pack_id: _pendingStylePackId || undefined,
         story_brief: animStoryBriefFromDraft(),
+        canonical_project_id: contentProject?.project_id || null,
+        canonical_brief_version: contentProject?.brief_version ?? null,
+        evidence_ids: Array.isArray(window.__SE_CONTENT_RESEARCH?.evidence)
+          ? window.__SE_CONTENT_RESEARCH.evidence.map((item) => item.evidence_id).filter(Boolean)
+          : [],
       };
       if (entry === 'vo') {
         briefBody.vo_script = text;
@@ -4352,6 +4373,10 @@
 
   async function acceptBrief() {
     if (_busy || !_project?.id) return;
+    const contentProject = window.contentProjectFor?.('animation-studio') || null;
+    if (contentProject && !window.contentProjectResearchSatisfied(contentProject)) {
+      return toast('Required research must complete for this exact brief before generation', 'error');
+    }
     _busy = true;
     _briefing = false;
     const hasChar = !!(_refs.some((r) => r.role === 'character')
@@ -4368,7 +4393,7 @@
     try {
       const data = await animFetch(`/api/animation/projects/${_project.id}/approve-brief`, {
         method: 'POST',
-        body: JSON.stringify({ agent_brief: _project.agent_brief || {} }),
+        body: JSON.stringify({ agent_brief: _project.agent_brief || {}, approved_credits: 1 }),
       });
       _project = data.project;
       renderCanvas();
@@ -5335,6 +5360,26 @@
     window.__clientEmail = window.clientEmail || window.__clientEmail || '';
     window.API = typeof API !== 'undefined' ? API : window._seAPI;
 
+    const contentDestination = window.__SE_CONTENT_DESTINATION;
+    const contentProject = window.SEContentProjectHandoff?.activeProjectForDestination(
+      window.__SE_CONTENT_PROJECT,
+      contentDestination,
+      'animation-studio'
+    ) || null;
+    const contentProjectKey = contentProject
+      ? `${contentProject.project_id}:${contentProject.brief_version}`
+      : '';
+    const staleContentDestination = contentDestination?.nav === 'animation-studio' && !contentProject;
+    if (staleContentDestination || (contentProjectKey && contentProjectKey !== _hydratedContentProjectKey)) {
+      _project = null;
+      _refs = [];
+      _pendingFormatTemplateId = null;
+      _pendingStylePackId = null;
+      stopPoll();
+      rememberOpenProject('');
+      _hydratedContentProjectKey = contentProjectKey;
+    }
+
     const remixSession = window.__SE_ANIM_REMIX_SESSION;
     const coachSession = window.__SE_COACH_CREATE_SESSION;
     if (remixSession && remixSession.referenceUrl) {
@@ -5693,6 +5738,15 @@
                 ${_project?.driving_video_url ? `<video src="${esc(mediaSrc(_project.driving_video_url))}" muted playsinline controls style="margin-top:8px;width:100%;max-height:120px;border-radius:8px;background:#000;"></video>` : ''}
               </div>
               ${!(_meta?.providers?.elevenlabs_configured) ? `<div style="font-size:0.65rem;color:#FCD34D;margin:0 0 10px;line-height:1.35;">Voiceover and music generation aren't enabled on this account — captions, uploaded music and outros still work.</div>` : ''}
+              ${contentProject ? `<section id="anim-content-project" style="padding:10px 12px;margin:0 0 10px;border:1px solid rgba(167,139,250,0.45);border-radius:10px;background:rgba(124,58,237,0.12);font-size:0.7rem;line-height:1.5;color:#E2E8F0;">
+                <div style="font-weight:800;color:#E9D5FF;margin-bottom:4px;">Canonical project · review before generating</div>
+                <div><strong>${esc(contentProject.brief?.topic || 'Untitled')}</strong> · version ${esc(String(contentProject.brief_version))}</div>
+                <div>Style${contentProject.brief?.style?.hard_lock ? ' (locked)' : ''}: ${esc(contentProject.brief?.style?.preset || 'not specified')}</div>
+                <div>Required: ${esc((contentProject.brief?.required_beats || []).join(' · ') || 'none specified')}</div>
+                <div id="anim-research-status">Research: ${esc(contentProject.brief?.claims_policy?.research_mode || 'off')} · generation waits for explicit 1-credit approval</div>
+                ${contentProject.brief?.claims_policy?.research_mode === 'required' ? '<button type="button" class="anim-btn anim-btn--ghost" id="anim-run-research" style="width:auto;margin-top:7px;padding:6px 10px;font-size:0.68rem;">Run required research</button>' : ''}
+                <div id="anim-project-warning" role="alert" style="display:none;margin-top:6px;color:#FCD34D;font-weight:650;"></div>
+              </section>` : ''}
               <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin:0 0 6px;">References</div>
               <div class="anim-refs" id="anim-refs"></div>
               <div class="anim-ref-tools">
@@ -5739,6 +5793,67 @@
     document.getElementById('anim-prompt')?.addEventListener('input', growPrompt);
     growPrompt();
     document.getElementById('anim-send')?.addEventListener('click', sendPrompt);
+    if (staleContentDestination) {
+      const send = document.getElementById('anim-send');
+      if (send) {
+        send.disabled = true;
+        send.title = 'This canonical project handoff is stale. Return to Coach and create it again.';
+      }
+      toast('This project handoff is stale. Return to Coach and create it again.', 'error');
+    }
+    if (contentProject && window.SEContentProjectHandoff) {
+      const prompt = document.getElementById('anim-prompt');
+      if (prompt) prompt.value = window.SEContentProjectHandoff.projectPrompt(contentProject, window.__SE_CONTENT_RESEARCH);
+      writeAnimEntry('prompt');
+      applyAnimEntryUI('prompt');
+      const length = document.getElementById('anim-length');
+      if (length && Number.isFinite(contentProject.brief?.duration_seconds)
+        && Array.from(length.options).some((option) => Number(option.value) === Number(contentProject.brief.duration_seconds))) {
+        length.value = String(contentProject.brief.duration_seconds);
+      }
+      const look = document.getElementById('anim-look');
+      if (look && contentProject.brief?.style?.hard_lock && /real/i.test(contentProject.brief.style.preset || '')
+        && Array.from(look.options).some((option) => option.value === 'realistic')) {
+        look.value = 'realistic';
+      }
+      const applyGate = () => {
+        const reasons = window.SEContentProjectHandoff.projectBlockReasons(
+          contentProject,
+          window.__SE_CONTENT_RESEARCH,
+          [15, 30, 45]
+        );
+        const warning = document.getElementById('anim-project-warning');
+        const send = document.getElementById('anim-send');
+        if (warning) {
+          warning.style.display = reasons.length ? 'block' : 'none';
+          warning.textContent = reasons.join(' ');
+        }
+        if (send) {
+          send.disabled = reasons.length > 0;
+          send.title = reasons.join(' ');
+        }
+        return reasons;
+      };
+      applyGate();
+      document.getElementById('anim-run-research')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = 'Researching…';
+        try {
+          const research = await window.runContentProjectResearch();
+          if (prompt) prompt.value = window.SEContentProjectHandoff.projectPrompt(contentProject, research);
+          const status = document.getElementById('anim-research-status');
+          if (status) status.textContent = `Research complete · ${research.evidence.length} evidence source${research.evidence.length === 1 ? '' : 's'} · generation still requires explicit 1-credit approval`;
+          applyGate();
+          button.textContent = 'Research complete';
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'Retry required research';
+          toast(error.message || 'Research failed', 'error');
+        }
+      });
+      toast('Canonical Coach project loaded. Review it, then Write shots.', 'success');
+    }
     document.getElementById('anim-new')?.addEventListener('click', newProject);
     document.getElementById('anim-home')?.addEventListener('click', goHome);
     document.getElementById('anim-ref-upload')?.addEventListener('click', () => document.getElementById('anim-ref-file')?.click());
@@ -5835,7 +5950,7 @@
     // Auto-resume in-flight work. Never auto-delete on expired media.
     if (_project && projectMediaExpired(_project)) {
       toast('Some media links died after a restart — re-upload Char refs if needed.', 'warning');
-    } else if (!_project && !(remixSession && remixSession.referenceUrl) && !(coachSession && coachSession.prompt && coachSession.destination === 'animate')) {
+    } else if (!_project && !contentProject && !staleContentDestination && !(remixSession && remixSession.referenceUrl) && !(coachSession && coachSession.prompt && coachSession.destination === 'animate')) {
       const lastId = lastOpenProjectId();
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)

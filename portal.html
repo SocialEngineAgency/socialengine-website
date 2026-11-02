@@ -34,6 +34,7 @@
   <script src="./design-scene.js?v=20260919-tmpl-direct"></script>
   <script src="./carousel-templates.js?v=20261010" defer></script>
   <script src="./create-coach-thread.js?v=20261026a"></script>
+  <script src="./content-project-handoff.js?v=20261102-runtime-live"></script>
   <script src="./claude-studio.js?v=20261026a" defer></script>
   <script src="./design-studio-v2.js?v=20261020move" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
@@ -3422,6 +3423,18 @@
       try { window.__SE_ANIM_REMIX_SESSION = null; } catch (_) {}
       try { window.__SE_COACH_CREATE_SESSION = null; } catch (_) {}
       try {
+        window.__SE_CONTENT_PROJECT = null;
+        window.__SE_CONTENT_DESTINATION = null;
+        window.__SE_CONTENT_RESEARCH = null;
+        const activeId = sessionStorage.getItem('se.activeContentProjectId');
+        if (activeId) {
+          sessionStorage.removeItem('se.contentProject.' + activeId);
+          sessionStorage.removeItem('se.contentResearch.' + activeId);
+        }
+        sessionStorage.removeItem('se.activeContentProjectId');
+        sessionStorage.removeItem('se.activeContentDestination');
+      } catch (_) {}
+      try {
         localStorage.removeItem('se_anim_last_project');
         localStorage.removeItem('se_create_segment');
       } catch (_) {}
@@ -3538,6 +3551,71 @@
     };
     window.authHeaders = authHeaders;
     window.apiFetch = apiFetch;
+
+    function restoreContentProjectHandoff() {
+      try {
+        const id = sessionStorage.getItem('se.activeContentProjectId');
+        if (!id) return;
+        const project = JSON.parse(sessionStorage.getItem('se.contentProject.' + id) || 'null');
+        const destination = JSON.parse(sessionStorage.getItem('se.activeContentDestination') || 'null');
+        const research = JSON.parse(sessionStorage.getItem('se.contentResearch.' + id) || 'null');
+        if (!window.SEContentProjectHandoff?.activeProjectForDestination(project, destination, destination?.nav)) return;
+        window.__SE_CONTENT_PROJECT = project;
+        window.__SE_CONTENT_DESTINATION = destination;
+        window.__SE_CONTENT_RESEARCH = research;
+      } catch (_) {}
+    }
+    restoreContentProjectHandoff();
+
+    window.contentProjectFor = function contentProjectFor(nav) {
+      return window.SEContentProjectHandoff?.activeProjectForDestination(
+        window.__SE_CONTENT_PROJECT,
+        window.__SE_CONTENT_DESTINATION,
+        nav
+      ) || null;
+    };
+
+    window.contentProjectResearchSatisfied = function contentProjectResearchSatisfied(project) {
+      return Boolean(window.SEContentProjectHandoff?.contentProjectResearchSatisfied(
+        project,
+        window.__SE_CONTENT_RESEARCH
+      ));
+    };
+
+    window.runContentProjectResearch = async function runContentProjectResearch() {
+      const project = window.__SE_CONTENT_PROJECT;
+      if (!project?.project_id || project.brief_version === undefined) {
+        throw new Error('No active canonical content project');
+      }
+      const response = await apiFetch(`${API}/api/content-runtime/projects/${encodeURIComponent(project.project_id)}/research`, {
+        method: 'POST',
+        headers: authHeaders({
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `research:${project.project_id}:${project.brief_version}`,
+        }),
+        body: JSON.stringify({
+          brief_version: project.brief_version,
+          queries: [project.brief?.topic || ''],
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.research) {
+        throw new Error(payload.error || 'Research could not be completed');
+      }
+      const research = Object.assign({}, payload.research, {
+        project_id: project.project_id,
+        brief_version: project.brief_version,
+      });
+      if (!window.SEContentProjectHandoff.contentProjectResearchSatisfied(project, research)) {
+        throw new Error(payload.research.code || 'Required evidence was not found for this brief');
+      }
+      window.__SE_CONTENT_RESEARCH = research;
+      try {
+        sessionStorage.setItem('se.contentResearch.' + project.project_id, JSON.stringify(research));
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent('se:content-research-ready', { detail: research }));
+      return research;
+    };
 
     function getNativeOAuthApi() {
       return window.SENativeOAuth || null;
@@ -7734,6 +7812,7 @@
 
     function renderVideoStudio() {
       const content = document.getElementById('dash-content');
+      const contentProject = window.contentProjectFor?.('creation-studio') || null;
       const isPaid = clientData?.client?.is_paid;
       const credits = parseInt(clientData?.client?.video_credits || 0);
       const isCharityStudio = typeof isCharityClient === 'function' && isCharityClient(clientData);
@@ -7840,6 +7919,15 @@
         </style>
         <div class="vs-page">
           <div class="vs-wrap">
+            ${contentProject ? `<section id="vs-content-project" style="padding:14px 16px;margin-bottom:18px;border:1px solid rgba(167,139,250,0.45);border-radius:12px;background:rgba(124,58,237,0.12);font-size:0.76rem;line-height:1.55;color:#E2E8F0;">
+              <div style="font-weight:800;color:#E9D5FF;margin-bottom:5px;">Canonical project · review before generating</div>
+              <div><strong>${escapeHtml(contentProject.brief?.topic || 'Untitled')}</strong> · ${escapeHtml(contentProject.capability_id || '')} · version ${escapeHtml(String(contentProject.brief_version))}</div>
+              <div>Style${contentProject.brief?.style?.hard_lock ? ' (locked)' : ''}: ${escapeHtml(contentProject.brief?.style?.preset || 'not specified')}</div>
+              <div>Required: ${escapeHtml((contentProject.brief?.required_beats || []).join(' · ') || 'none specified')}</div>
+              <div id="vs-research-status">Research: ${escapeHtml(contentProject.brief?.claims_policy?.research_mode || 'off')} · generation waits for your approval</div>
+              ${contentProject.brief?.claims_policy?.research_mode === 'required' ? '<button type="button" id="vs-run-research" style="margin-top:8px;padding:7px 11px;border:1px solid rgba(167,139,250,0.45);border-radius:8px;background:rgba(124,58,237,0.16);color:#E9D5FF;font-size:0.7rem;font-weight:700;cursor:pointer;">Run required research</button>' : ''}
+              <div id="vs-project-warning" role="alert" style="display:none;margin-top:7px;color:#FCD34D;font-weight:650;"></div>
+            </section>` : ''}
             <header class="vs-head">
               <div>
                 <h1>Video</h1>
@@ -8160,6 +8248,51 @@
 
 
       `;
+      if (contentProject && window.SEContentProjectHandoff) {
+        const result = window.SEContentProjectHandoff.hydrateStudioProject(
+          contentProject,
+          document,
+          window.__SE_CONTENT_RESEARCH
+        );
+        const productName = document.getElementById('vs-product-name');
+        if (productName) productName.value = contentProject.brief?.topic || '';
+        const warning = document.getElementById('vs-project-warning');
+        const generate = document.getElementById('vs-generate-btn');
+        if (result.blocked) {
+          if (warning) {
+            warning.style.display = 'block';
+            warning.textContent = result.reasons.join(' ');
+          }
+          if (generate) {
+            generate.disabled = true;
+            generate.title = result.reasons.join(' ');
+          }
+        }
+        document.getElementById('vs-run-research')?.addEventListener('click', async (event) => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          button.textContent = 'Researching…';
+          try {
+            const research = await window.runContentProjectResearch();
+            const next = window.SEContentProjectHandoff.hydrateStudioProject(contentProject, document, research);
+            const status = document.getElementById('vs-research-status');
+            if (status) status.textContent = `Research complete · ${research.evidence.length} evidence source${research.evidence.length === 1 ? '' : 's'} · generation still requires approval`;
+            if (warning) {
+              warning.style.display = next.blocked ? 'block' : 'none';
+              warning.textContent = next.reasons.join(' ');
+            }
+            if (generate) {
+              generate.disabled = next.blocked;
+              generate.title = next.reasons.join(' ');
+            }
+            button.textContent = 'Research complete';
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = 'Retry required research';
+            showToast(error.message || 'Research failed', 'error');
+          }
+        });
+      }
       setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
       loadRecentGenerations();
       // Fetch live credits from API
@@ -8354,10 +8487,15 @@
     function coachRestoredActionsHtml(actions, payloads) {
       if (!Array.isArray(actions) || !actions.length) return '';
       const buttons = actions.map((a, i) => {
-        if (!a || a.type !== 'create' || !a.prompt) return '';
+        if (!a || !['create', 'create_project'].includes(a.type)) return '';
+        if (a.type === 'create' && !a.prompt) return '';
+        if (a.type === 'create_project' && !a.project?.capability_id) return '';
         payloads[i] = a;
-        const label = a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now';
-        return '<button class="coach-action-btn" data-type="create" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + label + '</button>';
+        const label = a.type === 'create_project'
+          ? String(a.label || 'Create project')
+          : (a.product_name ? ('Create this now: ' + a.product_name) : 'Create this now');
+        const safeLabel = label.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        return '<button class="coach-action-btn" data-type="' + a.type + '" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + safeLabel + '</button>';
       }).join('');
       if (!buttons) return '';
       return '<div class="coach-actions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' + buttons + '</div>';
@@ -8365,15 +8503,76 @@
 
     function bindRestoredCoachCreateButtons(root, payloads) {
       if (!root) return;
-      root.querySelectorAll('.coach-action-btn[data-type="create"]').forEach(btn => {
-        btn.addEventListener('click', () => {
+      root.querySelectorAll('.coach-action-btn[data-type="create"], .coach-action-btn[data-type="create_project"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
           const payload = payloads[Number(btn.dataset.actionIdx)] || {};
+          if (btn.dataset.type === 'create_project') {
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Creating project…';
+            try {
+              await createContentProjectFromCoach(payload);
+              btn.innerHTML = 'Project ready';
+            } catch (error) {
+              btn.disabled = false;
+              btn.innerHTML = original;
+              if (typeof showToast === 'function') showToast(error.message || 'Project could not be created', 'error');
+            }
+            return;
+          }
           const ok = openCreateFromCoach(payload);
           if (ok) {
             btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Opened';
           }
         });
       });
+    }
+
+    async function createContentProjectFromCoach(action) {
+      const handoff = window.SEContentProjectHandoff;
+      if (!handoff) throw new Error('Project handoff is unavailable');
+      const response = await apiFetch(`${API}/api/content-runtime/projects`, {
+        method: 'POST',
+        headers: authHeaders({
+          'Content-Type': 'application/json',
+          'Idempotency-Key': handoff.projectIdempotencyKey(action),
+        }),
+        body: JSON.stringify(handoff.buildProjectCreateBody(action)),
+      });
+      const payload = await response.json().catch(() => ({}));
+      const project = payload.project;
+      if (!response.ok || !project?.project_id || project.brief_version === undefined) {
+        throw new Error(payload.error || 'Project could not be created');
+      }
+
+      const destination = handoff.destinationForProject(action, project.project_id, project.brief_version);
+      handoff.resetLegacyCreationState(window);
+      window.__SE_CONTENT_PROJECT = project;
+      window.__SE_CONTENT_DESTINATION = destination;
+      window.__SE_CONTENT_RESEARCH = null;
+      try {
+        sessionStorage.setItem('se.contentProject.' + project.project_id, JSON.stringify(project));
+        sessionStorage.setItem('se.activeContentProjectId', project.project_id);
+        sessionStorage.setItem('se.activeContentDestination', JSON.stringify(destination));
+        sessionStorage.removeItem('se.contentResearch.' + project.project_id);
+      } catch (_) {}
+
+      if (destination.nav === 'brand-design') {
+        window.__SE_CAROUSEL_VIEW = destination.view || 'slides';
+      }
+      if (destination.nav === 'stories-composer') {
+        if (typeof window.openStoriesComposer !== 'function') throw new Error('Stories composer is unavailable');
+        window.openStoriesComposer({
+          topic: handoff.projectPrompt(project),
+          story_type: project.brief?.story_type || '',
+          view: 'compose',
+        });
+      } else {
+        if (typeof window.switchNav !== 'function') throw new Error('Destination navigation is unavailable');
+        window.switchNav(destination.nav);
+      }
+      if (typeof showToast === 'function') showToast('Project created. Review the canonical brief before generating.', 'success');
+      return project;
     }
 
     function openCreateFromCoach(action) {
@@ -8441,6 +8640,7 @@
     }
     window.applyCoachCreateSessionIfAny = applyCoachCreateSessionIfAny;
     window.openCreateFromCoach = openCreateFromCoach;
+    window.createContentProjectFromCoach = createContentProjectFromCoach;
 
     function openCoachForCarouselRedesign(imageUrl, seedPrompt) {
       const url = String(imageUrl || '').trim();
@@ -9247,6 +9447,18 @@
 
     async function submitVideoGeneration() {
       const btn = document.getElementById('vs-generate-btn');
+      const contentProject = window.contentProjectFor?.('creation-studio') || null;
+      if (contentProject && window.SEContentProjectHandoff) {
+        const gate = window.SEContentProjectHandoff.hydrateStudioProject(
+          contentProject,
+          document,
+          window.__SE_CONTENT_RESEARCH
+        );
+        if (gate.blocked || !window.contentProjectResearchSatisfied(contentProject)) {
+          showToast(gate.reasons.join(' ') || 'Canonical project requirements are not satisfied', 'error');
+          return;
+        }
+      }
       const productName = document.getElementById('vs-product-name').value.trim();
       const creativeDir = document.getElementById('vs-creative-dir').value.trim();
       const model = document.getElementById('vs-model').value;
@@ -9307,6 +9519,11 @@
             remixedCaption: window.__SE_REMIX_SESSION?.remixedCaption || undefined,
             remixSourcePostId: window.__SE_REMIX_SESSION?.sourcePostId || undefined,
             mode: generateMode,
+            canonical_project_id: contentProject?.project_id || undefined,
+            canonical_brief_version: contentProject?.brief_version,
+            evidence_ids: Array.isArray(window.__SE_CONTENT_RESEARCH?.evidence)
+              ? window.__SE_CONTENT_RESEARCH.evidence.map((item) => item.evidence_id).filter(Boolean)
+              : [],
           }),
         });
         const data = await res.json();
@@ -13245,6 +13462,11 @@
           if (coachActions.length) {
             actionsHtml = '<div class="coach-actions" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
               coachActions.map((a, i) => {
+                if (a.type === 'create_project' && a.project?.capability_id) {
+                  coachActionPayloads[i] = a;
+                  const safeLabel = String(a.label || 'Create project').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+                  return '<button class="coach-action-btn" data-type="create_project" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#A78BFA);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(124,58,237,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + safeLabel + '</button>';
+                }
                 if (a.type === 'regenerate') {
                   const safeTid = String(a.template_id || '').replace(/"/g, '&quot;');
                   const safeProd = String(a.product_name || '').replace(/"/g, '&quot;');
@@ -13335,6 +13557,23 @@
           aiRow.querySelectorAll('.coach-action-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
               if (btn.dataset.busy === '1') return;
+              if (btn.dataset.type === 'create_project') {
+                const payload = coachActionPayloads[Number(btn.dataset.actionIdx)] || {};
+                const original = btn.innerHTML;
+                btn.dataset.busy = '1';
+                btn.disabled = true;
+                btn.innerHTML = 'Creating project…';
+                try {
+                  await createContentProjectFromCoach(payload);
+                  btn.innerHTML = 'Project ready';
+                } catch (error) {
+                  btn.dataset.busy = '';
+                  btn.disabled = false;
+                  btn.innerHTML = original;
+                  if (typeof showToast === 'function') showToast(error.message || 'Project could not be created', 'error');
+                }
+                return;
+              }
               if (btn.dataset.type === 'create') {
                 const payload = coachActionPayloads[Number(btn.dataset.actionIdx)] || {};
                 const ok = openCreateFromCoach(payload);

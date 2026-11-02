@@ -63,6 +63,7 @@ const ALLOWLIST = [
   'animation-studio.js', // portal.html
   'story-builder.js', // portal.html — Animate: Build a Story (new look)
   'coach-create-session.js', // portal.html
+  'content-project-handoff.js', // portal.html — canonical Coach project routing and gates
   'video-coach.js', // portal.html
   'create-coach-thread.js', // portal.html (which chat each Create tab's Coach uses)
   'carousel-templates.js', // portal.html
