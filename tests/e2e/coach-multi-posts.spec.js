@@ -252,3 +252,43 @@ test('a single design the Coach sizes switches the picker; one it leaves at the 
   await expect(page.locator('#cs-coach-log')).not.toContainText('Size switched from 1:1 to 9:16');
   expect(errors).toEqual([]);
 });
+
+test('Post-tab Coach: each post the Coach saved as a ContentProject sends its project ID to the maker it is made by', async ({ page }) => {
+  const errors = watchErrors(page);
+  const sent = { generate: [], posts: [] };
+  const LINKED = [
+    { ...POSTS[0], engine: 'brand', content_project_id: 'cp_post-one-0001', content_brief_version: 1 },
+    { ...POSTS[1], engine: 'stage', content_project_id: 'cp_post-two-0002', content_brief_version: 1 },
+  ];
+  await openPost(page, {
+    look: 'new',
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/studio/design-generate') {
+        const body = JSON.parse(entry.body || '{}');
+        sent.generate.push(body);
+        json(200, { ok: true, image_url: 'https://store.test/stage2.png' });
+        return 'handled';
+      }
+      if (entry.path === '/api/chat/v2') {
+        json(200, { reply: 'Making both posts now.', coach_actions: [{ type: 'design_posts', engine: 'brand', aspect_ratio: '4:5', posts: LINKED }] });
+        return 'handled';
+      }
+      if (entry.path === '/api/design/posts') { sent.posts.push(JSON.parse(entry.body || '{}')); json(202, { ok: true, job_id: 'job-linked' }); return 'handled'; }
+      if (entry.path === '/api/design/jobs/job-linked') {
+        json(200, { ok: true, job: { status: 'done', progress: { done: 1, total: 1 }, result: { posts: [{ title: POSTS[0].title, url: 'https://store.test/post1.png', content_project: { project_id: 'cp_post-one-0001', brief_version: 1 } }], ratio: '4:5' } } });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  sent.generate = [];
+  await ask(page, 'make 2 of them');
+  const card = page.locator('#cs-coach-log [data-cs-posts]');
+  await expect(card.locator('[data-cs-post="0"] img')).toHaveAttribute('src', /post1\.png/);
+  await expect(card.locator('[data-cs-post="1"] img')).toHaveAttribute('src', /stage2\.png/);
+  expect(sent.posts).toHaveLength(1);
+  expect(sent.posts[0].posts).toEqual([{ title: POSTS[0].title, brief: POSTS[0].brief, content_project_id: 'cp_post-one-0001', content_brief_version: 1 }]);
+  expect(sent.generate).toHaveLength(1);
+  expect(sent.generate[0]).toMatchObject({ brief: POSTS[1].brief, content_project_id: 'cp_post-two-0002' });
+  expect(errors).toEqual([]);
+});

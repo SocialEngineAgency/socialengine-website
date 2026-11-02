@@ -961,6 +961,8 @@
         research: !!el('dsv2-research').checked,
         source_image_url: state.source || undefined,
         format_override: state.formatOverride ? true : undefined,
+        // Only while the brief is still the project's: an edited brief is a new carousel, not that project.
+        content_project_id: state.handoffProject && state.handoffProject.brief === brief ? state.handoffProject.id : undefined,
       });
       state.formatOverride = false;
       store.set('job', { id: r.job_id, kind: 'carousel', brief });
@@ -1923,6 +1925,8 @@
     el('dsv2-slides').value = Number(p.slides) >= 3 ? String(Math.min(10, Math.round(Number(p.slides)))) : 'auto';
     if (/^https:\/\//i.test(String(p.source_image_url || ''))) { state.source = p.source_image_url; drawSource(); }
     state.handoffMedical = p.medical === true || p.medical === false || p.medical === 'ask' ? p.medical : undefined;
+    // The Post-tab Coach saved this carousel as a ContentProject: the carousel made from this brief is tied to it.
+    state.handoffProject = p.content_project_id ? { id: String(p.content_project_id), brief: brief.value.trim() } : null;
     reveal(brief);
     if (p.autostart && !store.get('job')) startCarousel();
   }

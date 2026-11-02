@@ -141,6 +141,9 @@
     paint();
   }
 
+  // Same limit as the API (lib/studio/story-kit.js STORY_IDEA_MAX): a whole Coach brief fits.
+  const STORY_IDEA_MAX = 6000;
+
   const onStoryboardTab = () => window.__SE_CREATE_SURFACE === 'storyboard';
 
   function ensureHeader() {
@@ -165,16 +168,14 @@
     S.newKit = {
       title: String(h.title || '').slice(0, 80),
       look: h.look || 'stylized',
-      brief: String(h.brief).slice(0, 1500),
+      brief: String(h.brief).slice(0, STORY_IDEA_MAX),
       refs,
     };
-    // Opened from a ContentProject: the project keeps the whole brief; say so when the writer's limit cuts it.
+    // Opened from a ContentProject: the kit and its reels are linked to it, and the story writer reads the
+    // project's whole brief from the server (the idea box shows up to STORY_IDEA_MAX characters of it).
     if (h.content_project_id) {
       S.newKit.content_project_id = String(h.content_project_id);
       S.newKit.content_brief_version = h.content_brief_version;
-      if (String(h.brief).length > 1500) {
-        toast(`The story writer reads the first 1,500 characters. The full brief stays on project ${h.content_project_id}.`, 'warning');
-      }
     }
     S.pendingIdea = S.newKit.brief;
     S.coachRefs = refs;
@@ -356,6 +357,10 @@
     const nk = S.newKit || {};
     try {
       const body = fromId ? { from_project_id: fromId } : { title: nk.title || '', look: nk.look || 'stylized' };
+      if (!fromId && nk.content_project_id) {
+        body.canonical_project_id = nk.content_project_id;
+        body.canonical_brief_version = nk.content_brief_version;
+      }
       const d = await api('/api/animation/kits', { method: 'POST', body: JSON.stringify(body) });
       S.newKit = null;
       S.kit = d.kit;
@@ -1074,7 +1079,7 @@
     const W = S.writer;
     const writer = W ? `<div class="nl-swriter">
         <label class="nl-slabel" for="nl-sw-idea">What is this reel about?</label>
-        <textarea id="nl-sw-idea" class="nl-sinput nl-sarea" data-w-idea data-fk="widea" rows="3" maxlength="1500" placeholder="A dad notices a symptom early, reads our leaflet and books a GP appointment.">${esc(W.idea || '')}</textarea>
+        <textarea id="nl-sw-idea" class="nl-sinput nl-sarea" data-w-idea data-fk="widea" rows="3" maxlength="${STORY_IDEA_MAX}" placeholder="A dad notices a symptom early, reads our leaflet and books a GP appointment.">${esc(W.idea || '')}</textarea>
         <div class="nl-srow">
           <button type="button" class="nl-sbtn nl-sbtn--primary" data-w-go ${W.busy ? 'disabled' : ''}>${W.busy ? '<i class="nl-sspin"></i>Writing…' : `${svg(I.spark, 13)}${scenes.length ? 'Rewrite the scenes' : 'Write the scenes'}`}</button>
           ${scenes.length ? `<button type="button" class="nl-sbtn" data-w-cancel ${W.busy ? 'disabled' : ''}>Cancel</button><span class="nl-snote">Replaces the lines and clears previews.</span>` : '<button type="button" class="nl-slink" data-add-scene>or write the lines yourself</button>'}

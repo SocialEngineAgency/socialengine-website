@@ -374,7 +374,7 @@
         persistDesignJob({ job_id: id, status: 'processing', started_at: started });
         await new Promise((r) => setTimeout(r, 2500));
       }
-      throw new Error('Still generating — reopen Design Studio in a minute');
+      throw new Error('Still generating — reopen the Post tab in a minute');
     })().finally(() => {
       if (_csActiveDesignPoll && _csActiveDesignPoll.jobId === id) _csActiveDesignPoll = null;
     });
@@ -875,7 +875,7 @@
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.78rem;font-weight:700;color:#fff;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(_csRef.title)}</div>
           <div style="font-size:0.65rem;color:rgba(255,255,255,0.35);margin-top:3px;text-transform:uppercase;letter-spacing:0.06em;">${escapeHtml(_csRef.source)} · ${_csRef.type}</div>
-          ${_csRef.type === 'video' && !_csRef.poster_url ? '<div style="font-size:0.68rem;color:#FBBF24;margin-top:4px;">Video selected — Design Studio needs a still. Upload a frame or open Video Studio.</div>' : ''}
+          ${_csRef.type === 'video' && !_csRef.poster_url ? '<div style="font-size:0.68rem;color:#FBBF24;margin-top:4px;">Video selected — the Post tab needs a still. Upload a frame or open the Video tab.</div>' : ''}
         </div>
       </div>
       ${_csRef.type === 'image' ? `<div class="cs-more-refs" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${moreRefsHtml('cs-more-ref')}${_csMoreRefs.length < CS_MORE_REFS_MAX ? '<button type="button" id="cs-ref-more" style="padding:6px 9px;background:transparent;border:1px dashed rgba(255,255,255,0.18);border-radius:8px;color:rgba(255,255,255,0.6);font-size:0.7rem;font-weight:600;cursor:pointer;font-family:var(--font-body);">+ Add another picture</button>' : ''}</div>` : ''}
@@ -1041,7 +1041,7 @@
               poster_url: '',
             });
             closePicker();
-            toast('Video needs a still for Design Studio — upload a frame or use Video Studio', 'warning');
+            toast('Video needs a still for the Post tab — upload a frame or use the Video tab', 'warning');
             return;
           }
           if (!url) { toast('No usable image on that item', 'warning'); return; }
@@ -1070,7 +1070,7 @@
       ? `<button type="button" id="cs-use-vs-upload" style="margin-top:10px;width:100%;padding:10px;border-radius:9px;border:1px solid rgba(16,185,129,0.35);background:rgba(16,185,129,0.1);color:#6EE7B7;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Use Video Studio upload</button>`
       : '';
     sess.innerHTML = `
-      <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);line-height:1.45;margin-bottom:12px;">Upload an image (preferred). Videos need a still frame for Design Studio.</div>
+      <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);line-height:1.45;margin-bottom:12px;">Upload an image (preferred). Videos need a still frame for the Post tab.</div>
       <div id="cs-drop" style="border:2px dashed rgba(255,255,255,0.12);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.02);">
         <div style="font-size:0.85rem;font-weight:600;color:rgba(255,255,255,0.7);">Drop image here or click</div>
         <div style="font-size:0.7rem;color:rgba(255,255,255,0.3);margin-top:6px;">PNG / JPG / WEBP · max 10MB</div>
@@ -3334,6 +3334,7 @@
         source_image_url: action.source_image_url || masterImageUrl() || '',
         medical: action.medical,
         style_id: action.style_id || undefined,
+        content_project_id: action.content_project_id || undefined,
         autostart: true,
       });
     });
@@ -3505,7 +3506,8 @@
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
-        posts: list.map((p) => ({ title: p.title, brief: p.brief })),
+        // Each post the Post-tab Coach saved as a ContentProject names it, so what is made is tied to it.
+        posts: list.map((p) => ({ title: p.title, brief: p.brief, ...(p.content_project_id ? { content_project_id: p.content_project_id, content_brief_version: p.content_brief_version } : {}) })),
         style_id: action.style_id || undefined,
         aspect_ratio: isPostSize(view.size) ? view.size : undefined,
         medical: action.medical === true || action.medical === 'ask',
@@ -3576,6 +3578,7 @@
         aspect_ratio: isPostSize(p.ratio) ? p.ratio : currentPostSize(),
         model: selectedEngineId(),
         ...pics,
+        ...(p.content_project_id ? { content_project_id: p.content_project_id } : {}),
       }),
     });
     const data = await res.json().catch(() => ({}));
