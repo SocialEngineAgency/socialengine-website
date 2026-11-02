@@ -336,7 +336,7 @@
       };
       window._studioReference = { ..._csRef };
       persistLastDesign();
-      toast('Poster ready in Design Studio', 'success');
+      toast('Poster ready in the Post tab', 'success');
     }
   }
 
@@ -1205,6 +1205,13 @@
     if (s.aspect_explicit !== false) setPostSize(s.aspect_ratio);
     if (s.finished && result.attached_image_url) {
       toast('Graphic loaded. Write the caption, then Add to Queue.', 'success');
+      return;
+    }
+    // A ContentProject opened by ID is reviewed first: nothing generates (or spends) until Generate is pressed.
+    if (s.content_project_id) {
+      if (s.loadedProject === s.content_project_id + '@' + s.content_brief_version) return;
+      s.loadedProject = s.content_project_id + '@' + s.content_brief_version;
+      toast(`Project ${s.content_project_id} loaded. Review it, then Generate.`, 'success');
       return;
     }
     toast('Coach brief loaded — generating now…', 'success');

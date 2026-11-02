@@ -199,6 +199,68 @@
     return lines.filter(Boolean).join('\n');
   }
 
+  // Design and Storyboard open the project by ID, then fill their own form from it (the project carries
+  // the tool's session). Reels and Video hydrate from the project directly.
+  const TOOL_NAVS = Object.freeze({ design: 'design-studio', storyboard: 'storyboard' });
+
+  function projectTool(action, project) {
+    const tool = String(project?.brief?.tool_session?.tool || action?.open_in || '');
+    return TOOL_NAVS[tool] ? tool : '';
+  }
+
+  /**
+   * The legacy create session a Design or Storyboard project opens with: the persisted brief word for word
+   * (brief.full_brief), the tool fields saved with it, and the project's identity. Null for other tools.
+   */
+  function toolSessionForProject(action, project) {
+    const tool = projectTool(action, project);
+    if (!tool) return null;
+    const brief = project?.brief || {};
+    const saved = brief.tool_session || {};
+    const prompt = String(brief.full_brief || brief.script || brief.topic || '').trim();
+    if (!prompt) return null;
+    const session = {
+      type: 'create',
+      destination: tool,
+      prompt,
+      product_name: String(brief.product_name || saved.product_name || ''),
+      mode: saved.mode === 'video' ? 'video' : 'image',
+      aspect_ratio: saved.aspect_ratio || ((String(brief.format || '').match(/\b(9:16|16:9|1:1|4:5)\b/) || [])[1]) || '9:16',
+      aspect_explicit: saved.aspect_explicit === true,
+      attached_image_url: saved.attached_image_url || '',
+      look: brief.style?.preset || saved.look || '',
+      references: Array.isArray(saved.references) ? clone(saved.references) : (Array.isArray(brief.references) ? clone(brief.references) : []),
+      ref_image_urls: Array.isArray(saved.ref_image_urls) ? saved.ref_image_urls.slice() : [],
+    };
+    if (saved.collection) session.collection = saved.collection;
+    return {
+      nav: TOOL_NAVS[tool],
+      tool,
+      session,
+      identity: { content_project_id: project.project_id, content_brief_version: project.brief_version },
+    };
+  }
+
+  /**
+   * What a Reels project needs beyond the prompt: a voiceover-first reel opens on the Voiceover entry with
+   * the script word for word; its outro card and music bed come with it.
+   */
+  function reelExtrasForProject(project) {
+    const brief = project?.brief || {};
+    const https = (value) => (/^https:\/\//i.test(String(value || '')) ? String(value) : '');
+    const vo = brief.entry === 'vo' && String(brief.script || brief.full_brief || '').trim();
+    return {
+      entry: vo ? 'vo' : 'prompt',
+      script: vo ? String(brief.script || brief.full_brief) : '',
+      outro_url: https(brief.outro?.url),
+      outro_asset_id: String(brief.outro?.asset_id || ''),
+      music_bed_url: https(brief.music_bed?.url),
+      music_asset_id: String(brief.music_bed?.asset_id || ''),
+      missing_outro: String(brief.missing_outro || ''),
+      format_template_id: String(brief.format_template_id || ''),
+    };
+  }
+
   function selectHasValue(select, value) {
     return Array.from(select?.options || []).some((option) => String(option.value) === String(value));
   }
@@ -238,6 +300,9 @@
     projectIdempotencyKey,
     projectBlockReasons,
     projectPrompt,
+    projectTool,
+    reelExtrasForProject,
+    toolSessionForProject,
     projectRequestFor,
     resetLegacyCreationState,
   });

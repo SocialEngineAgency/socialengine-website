@@ -55,6 +55,10 @@ test('Calendar shows the week plan; Engage saves the week; an open Reel slot ope
         return 'handled';
       }
       if (entry.path === '/api/calendar-history') { json(200, { posts: [] }); return 'handled'; }
+      if (entry.path === '/api/meta-planner/ideas' && entry.method === 'POST') {
+        json(200, { ideas: [{ title: 'A day in the bakery, from my eyes', why: 'POV Reels get sent.', brief: 'POV: opening the bakery at 5am.', make: { kind: 'reel' } }] });
+        return 'handled';
+      }
       return undefined;
     },
   });
@@ -72,6 +76,10 @@ test('Calendar shows the week plan; Engage saves the week; an open Reel slot ope
   await expect(card.locator('[data-mwp-mode="engage"]')).toHaveClass(/is-on/);
   await expect(card.locator('.mwp__meter').first()).toContainText('2/3');
 
+  // An open slot opens as ideas in the Post Coach (since 8830010); a Reel idea opens Animate with the slot's story type.
   await card.locator('.mwp__slot--open').click();
+  const make = page.getByRole('button', { name: 'Make this' }).first();
+  await expect(make).toBeVisible({ timeout: 15000 });
+  await make.click();
   await expect(page.locator('#anim-story-type')).toHaveValue('pov', { timeout: 15000 });
 });

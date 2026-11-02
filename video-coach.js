@@ -23,8 +23,12 @@
 
   // The brief the Coach wants loaded into the Video form, or null. Anything not meant for the Studio clip
   // form (a poster, an animation) is ignored here.
+  // A clip brief the Coach saved as a ContentProject (video.create) is preferred: it opens by ID.
   function pickVideoBrief(actions) {
     const list = Array.isArray(actions) ? actions : [];
+    const project = list.find((a) => a && a.type === 'create_project'
+      && (a.capability_id || (a.project && a.project.capability_id)) === 'video.create');
+    if (project) return JSON.parse(JSON.stringify(project));
     const hit = list.find((a) => a && a.type === 'create' && String(a.prompt || '').trim()
       && (!a.destination || a.destination === 'studio' || a.destination === 'creation-studio')
       && (!a.mode || a.mode === 'video'));
@@ -112,7 +116,17 @@
         body: JSON.stringify(body),
         signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(90000) : undefined,
       }),
-      loadBrief: (brief) => {
+      loadBrief: async (brief) => {
+        if (brief && brief.type === 'create_project') {
+          if (typeof w.openContentProjectFromCoach !== 'function') return false;
+          try {
+            await w.openContentProjectFromCoach(brief);
+            return true;
+          } catch (e) {
+            if (typeof w.showToast === 'function') w.showToast((e && e.message) || 'Project could not be opened', 'error');
+            return false;
+          }
+        }
         const normalize = typeof w.normalizeCoachCreateSession === 'function' ? w.normalizeCoachCreateSession : (x) => x;
         w.__SE_COACH_CREATE_SESSION = normalize(brief);
         return typeof w.applyCoachCreateSessionIfAny === 'function' ? w.applyCoachCreateSessionIfAny() : false;
@@ -139,7 +153,7 @@
     const reply = String(data.reply || 'Got it.');
     const brief = pickVideoBrief(data.coach_actions);
     const entry = { role: 'assistant', text: reply, brief: brief || null, loaded: false };
-    if (brief) entry.loaded = !!d.loadBrief(brief);
+    if (brief) entry.loaded = !!(await d.loadBrief(brief));
     log.push(entry);
     while (log.length > MAX_LOG) log.shift();
     return { reply, brief, loaded: entry.loaded };
@@ -199,7 +213,13 @@
       host.querySelectorAll('[data-vsc-chip]').forEach((el) => el.addEventListener('click', () => send(el.getAttribute('data-vsc-chip'))));
       host.querySelectorAll('[data-vsc-load]').forEach((el) => el.addEventListener('click', () => {
         const m = logStore()[Number(el.getAttribute('data-vsc-load'))];
-        if (m && m.brief && d.loadBrief(m.brief)) { m.loaded = true; d.toast('Coach brief loaded. Review it, then Generate.'); paint(false); }
+        if (!m || !m.brief) return;
+        Promise.resolve(d.loadBrief(m.brief)).then((ok) => {
+          if (!ok) return;
+          m.loaded = true;
+          d.toast(m.brief.type === 'create_project' ? 'Project opened. Review it, then Generate.' : 'Coach brief loaded. Review it, then Generate.');
+          paint(false);
+        });
       }));
     }
     paint(false);

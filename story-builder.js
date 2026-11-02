@@ -168,6 +168,14 @@
       brief: String(h.brief).slice(0, 1500),
       refs,
     };
+    // Opened from a ContentProject: the project keeps the whole brief; say so when the writer's limit cuts it.
+    if (h.content_project_id) {
+      S.newKit.content_project_id = String(h.content_project_id);
+      S.newKit.content_brief_version = h.content_brief_version;
+      if (String(h.brief).length > 1500) {
+        toast(`The story writer reads the first 1,500 characters. The full brief stays on project ${h.content_project_id}.`, 'warning');
+      }
+    }
     S.pendingIdea = S.newKit.brief;
     S.coachRefs = refs;
     S.view = 'start';

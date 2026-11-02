@@ -13,7 +13,7 @@ test('Design Studio polls async design jobs and allows leaving the tab', () => {
   assert.match(src, /\/api\/studio\/design-job\//);
   assert.match(src, /data\.async && data\.job_id/);
   assert.match(src, /resumeDesignJobIfAny/);
-  assert.match(src, /Poster ready in Design Studio/);
+  assert.match(src, /Poster ready in the Post tab/);
   assert.match(src, /se-design-job:/);
 });
 

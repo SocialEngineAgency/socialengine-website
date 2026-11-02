@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 # Netlify publish directory, produced by scripts/build-site.js
 dist/
 scripts/mediapipe-models/
