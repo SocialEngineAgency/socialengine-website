@@ -17,7 +17,9 @@ jobs:
   # Portal ↔ API session contract (login / Bearer / storage / logout / 401 /
   # oauth-start) against a mocked API. Hermetic: no network beyond localhost.
   portal-sessions:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04 on 2026-11-03 and Playwright 1.59
+    # cannot install Chromium there. Move back once Playwright supports it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,7 +39,8 @@ jobs:
   # Portal nav / Settings / Coach / errors / Content Review archive+refresh /
   # Animate VO-first against a mocked API. Hermetic like portal-sessions.
   portal-ui:
-    runs-on: ubuntu-latest
+    # Pinned for the same reason as portal-sessions.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
