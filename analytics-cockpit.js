@@ -844,7 +844,7 @@
         ${idea.why ? `<div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:4px">Why: ${esc(idea.why)}</div>` : ''}
         <div style="margin-top:8px;display:flex;gap:8px">
           <button type="button" class="grow-ghost-btn" style="width:auto" data-mi-make="animate" data-mi-idea="${i}">Make in Reels</button>
-          <button type="button" class="grow-ghost-btn" style="width:auto" data-mi-make="design" data-mi-idea="${i}">Make in Design</button>
+          <button type="button" class="grow-ghost-btn" style="width:auto" data-mi-make="design" data-mi-idea="${i}">Make in Post</button>
         </div>
       </div>`).join('');
     return `<div id="mi-brief" style="margin-top:22px;padding:16px;border:1px solid #243049;border-radius:12px;background:#0B1120">

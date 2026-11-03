@@ -179,10 +179,12 @@ test('a Storyboard project carries its look and identity into the story builder'
   assert.match(opener, /\['cartoon', 'realistic', 'stylized'\]\.includes\(String\(session\.look/);
   assert.match(opener, /__SE_STORY_COACH\.content_project_id = session\.content_project_id/);
   const builder = fs.readFileSync(path.join(__dirname, '..', 'story-builder.js'), 'utf8');
-  assert.match(builder, /The full brief stays on project/);
+  // The kit is linked to the project, so the writer reads its whole brief on the server; nothing is cut at 1,500.
+  assert.match(builder, /body\.canonical_project_id = nk\.content_project_id;/);
+  assert.doesNotMatch(builder, /first 1,500 characters/);
 });
 
-test('the portal routes Design/Storyboard projects through the tool, Reels/Video through the project destination', () => {
+test('the portal routes Post/Storyboard projects through the tool, Reels/Video through the project destination', () => {
   const create = slice(portal, 'async function createContentProjectFromCoach', 'async function openContentProjectFromCoach');
   assert.match(create, /toolSessionForProject\(action, project\)/);
   assert.match(create, /openCreateFromCoach\(toolOpen\.session, toolOpen\.identity\)/);
