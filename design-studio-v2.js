@@ -203,13 +203,22 @@
       .dsv2-spin { width:15px; height:15px; border:2px solid rgba(233,213,255,0.3); border-top-color:#E9D5FF; border-radius:50%; animation:dsv2spin 0.7s linear infinite; flex-shrink:0; }
       @keyframes dsv2spin { to { transform:rotate(360deg); } }
       .dsv2-error { color:#FCA5A5; font-size:0.82rem; margin-top:14px; padding:10px 12px; border-radius:10px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); }
-      .dsv2-slides { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; margin-top:16px; }
-      .dsv2-slide { margin:0; }
-      .dsv2-slide button { display:block; width:100%; padding:0; border:none; background:none; cursor:zoom-in; border-radius:11px; overflow:hidden; }
-      .dsv2-slide img { width:100%; display:block; border-radius:11px; border:1px solid rgba(255,255,255,0.08); background:#0B0F1A; transition:transform .2s; }
-      .dsv2-slide button:hover img { transform:scale(1.02); }
-      .dsv2-slide-meta { font-size:0.68rem; color:rgba(255,255,255,0.55); margin-top:6px; line-height:1.45; }
-      .dsv2-slide-meta .dsv2-link { font-size:0.72rem; margin-right:6px; }
+      .dsv2-slides { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:16px; margin-top:16px; }
+      .dsv2-slide { margin:0; display:flex; flex-direction:column; gap:8px; }
+      .dsv2-slide-open { display:block; width:100%; padding:0; border:none; background:none; cursor:zoom-in; border-radius:11px; overflow:hidden; }
+      .dsv2-slide-open img { width:100%; display:block; border-radius:11px; border:1px solid rgba(255,255,255,0.08); background:#0B0F1A; transition:transform .2s; }
+      .dsv2-slide-open:hover img { transform:scale(1.02); }
+      .dsv2-slide-actions { display:flex; gap:8px; flex-wrap:wrap; }
+      .dsv2-slide-actions .dsv2-btn { flex:1; min-width:0; justify-content:center; }
+      .dsv2-slide-meta { font-size:0.72rem; color:rgba(255,255,255,0.55); line-height:1.45; }
+      .dsv2-slide-meta strong { color:rgba(255,255,255,0.78); font-weight:700; }
+      .dsv2-review { margin-top:6px; display:flex; flex-direction:column; gap:6px; }
+      .dsv2-review-fix { color:rgba(233,213,255,0.72); font-size:0.7rem; line-height:1.4; }
+      .dsv2-review-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px; }
+      .dsv2-review-list label { display:flex; gap:7px; align-items:flex-start; cursor:pointer; color:rgba(255,255,255,0.62); font-size:0.68rem; line-height:1.4; }
+      .dsv2-review-list input { margin-top:2px; flex-shrink:0; accent-color:#A78BFA; }
+      .dsv2-slide.is-busy { opacity:0.55; pointer-events:none; }
+      .dsv2-slide-busy { font-size:0.7rem; color:#C4B5FD; display:flex; align-items:center; gap:6px; }
       .dsv2-ed { position:fixed; inset:0; z-index:10000; background:rgba(3,6,14,0.84); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; padding:18px; font-family:var(--font-body); color:#E2E8F0; }
       .dsv2-ed *, .dsv2-ed *::before { box-sizing:border-box; }
       .dsv2-ed-box { background:#111726; border:1px solid rgba(255,255,255,0.1); border-radius:18px; width:min(1240px,100%); height:min(920px,100%); display:flex; flex-direction:column; box-shadow:0 30px 80px rgba(0,0,0,0.55); overflow:hidden; }
@@ -1080,6 +1089,22 @@
     return [String(result.caption || '').trim(), tags].filter(Boolean).join('\n\n');
   }
 
+  /** Build the Ask-AI instruction from a slide's creative-director review and the notes still checked. */
+  function reviewInstruction(critic, selectedIdxs) {
+    const c = critic || {};
+    const problems = Array.isArray(c.problems) ? c.problems.map(String) : [];
+    const want = Array.isArray(selectedIdxs)
+      ? selectedIdxs.map((n) => problems[Number(n)]).filter(Boolean)
+      : problems.slice();
+    const bits = [];
+    const fix = String(c.fix || '').trim();
+    if (fix) bits.push(fix);
+    if (want.length) bits.push(`Also address these notes:\n${want.map((p, i) => `${i + 1}. ${p}`).join('\n')}`);
+    else if (!fix && problems.length) bits.push(`Fix these review notes:\n${problems.map((p, i) => `${i + 1}. ${p}`).join('\n')}`);
+    if (c.redo_art) bits.push('Replace the picture on this slide.');
+    return bits.join('\n\n').trim().slice(0, 1000);
+  }
+
   function showResult(result, scroll) {
     state.resultStyle = (result && result.style && result.style.id) || '';
     const box = el('dsv2-result');
@@ -1099,11 +1124,25 @@
       <div class="dsv2-hint" id="dsv2-posts-to" style="margin:-6px 0 12px;text-align:right;">${queuePlatforms().length ? `Posts to ${queuePlatforms().join(' + ')}` : 'Connect Instagram or Facebook in Settings to post'}
       </div>
       <div class="dsv2-slides">${slides.map((s, i) => {
+        const real = result.slides.indexOf(s);
         const c = s.critic || {};
         const score = Number(c.score) || 0;
-        const notes = (c.problems || []).slice(0, 2).join('; ');
-        return `<figure class="dsv2-slide"><button type="button" data-open="${i}" aria-label="View slide ${i + 1}"><img src="${esc(s.url)}" alt="Slide ${i + 1}" loading="lazy" style="aspect-ratio:${ratio};object-fit:cover;"></button>
-          <figcaption class="dsv2-slide-meta"><button type="button" class="dsv2-link" data-edit="${i}">Edit</button>Slide ${i + 1}${score ? ` · review <span class="dsv2-score${score < 4 ? ' dsv2-score--low' : ''}">${score}/5</span>` : ''}${notes ? `<br>${esc(notes)}` : ''}</figcaption></figure>`;
+        const problems = Array.isArray(c.problems) ? c.problems.map(String).filter(Boolean) : [];
+        const fix = String(c.fix || '').trim();
+        const hasReview = !!(problems.length || fix);
+        const checkOn = score > 0 && score < 4;
+        const review = hasReview ? `<div class="dsv2-review" data-review="${real}">
+            ${fix ? `<div class="dsv2-review-fix">${esc(fix)}</div>` : ''}
+            ${problems.length ? `<ul class="dsv2-review-list">${problems.map((p, pi) => `<li><label><input type="checkbox" data-prob="${pi}"${checkOn ? ' checked' : ''}>${esc(p)}</label></li>`).join('')}</ul>` : ''}
+          </div>` : '';
+        return `<figure class="dsv2-slide" data-slide-card="${real}">
+          <button type="button" class="dsv2-slide-open" data-open="${i}" aria-label="View slide ${i + 1}"><img src="${esc(s.url)}" alt="Slide ${i + 1}" loading="lazy" style="aspect-ratio:${ratio};object-fit:cover;"></button>
+          <div class="dsv2-slide-actions">
+            <button type="button" class="dsv2-btn dsv2-btn--sm" data-edit="${real}">Edit</button>
+            ${hasReview ? `<button type="button" class="dsv2-btn dsv2-btn--sm dsv2-btn--primary" data-apply="${real}">Apply review</button>` : ''}
+          </div>
+          <figcaption class="dsv2-slide-meta"><strong>Slide ${i + 1}</strong>${score ? ` · review <span class="dsv2-score${score < 4 ? ' dsv2-score--low' : ''}">${score}/5</span>` : ''}${review}</figcaption>
+        </figure>`;
       }).join('')}</div>
       <label class="dsv2-label" for="dsv2-caption">Caption</label>
       <textarea id="dsv2-caption" style="min-height:130px;">${esc(captionWithTags(result))}</textarea>
@@ -1111,11 +1150,52 @@
     </div>`;
     const urls = slides.map((s) => s.url);
     box.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => lightbox(urls, Number(b.dataset.open))));
-    box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editSlide(result, result.slides.indexOf(slides[Number(b.dataset.edit)]))));
+    box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editSlide(result, Number(b.dataset.edit))));
+    box.querySelectorAll('[data-apply]').forEach((b) => b.addEventListener('click', () => applyReview(result, Number(b.dataset.apply))));
     el('dsv2-zip').addEventListener('click', () => downloadZip(urls));
     el('dsv2-rcp-save').addEventListener('click', () => openSaveRecipe(result));
     el('dsv2-queue').addEventListener('click', () => queue(urls, result));
     if (scroll) reveal(box.firstElementChild);
+  }
+
+  async function applyReview(result, index) {
+    const slide = result && result.slides && result.slides[index];
+    if (!slide || !slide.slots) { toast('This slide cannot be edited yet. Make the carousel again.', 'info'); return; }
+    const card = el('dsv2-result') && el('dsv2-result').querySelector(`[data-slide-card="${index}"]`);
+    const checked = card
+      ? [...card.querySelectorAll('input[data-prob]:checked')].map((n) => Number(n.dataset.prob))
+      : null;
+    const instruction = reviewInstruction(slide.critic, checked);
+    if (!instruction) { toast('Tick at least one note, or leave the Fix text in place', 'info'); return; }
+    if (card) {
+      card.classList.add('is-busy');
+      const actions = card.querySelector('.dsv2-slide-actions');
+      if (actions) actions.innerHTML = `<span class="dsv2-slide-busy"><span class="dsv2-spin"></span> Applying review…</span>`;
+    }
+    try {
+      const r = await call('POST', '/api/design/slide', {
+        slide: { pattern: slide.pattern, slots: slide.slots, style: slide.style || {} },
+        index,
+        total: result.slides.length,
+        instruction,
+        medical: result.medical === true ? true : undefined,
+        research: result.medical ? result.research || '' : undefined,
+        brief: result.brief || undefined,
+      });
+      const out = await waitJob(r.job_id);
+      result.slides[index] = Object.assign({}, out.slide, {
+        critic: null,
+        history: (slide.history || []).concat([versionOf(slide)]).slice(-10),
+        future: [],
+      });
+      const last = store.get('last');
+      if (last && last.title === result.title) store.set('last', Object.assign({}, result));
+      showResult(result, false);
+      toast(`Slide ${index + 1} updated`, 'success');
+    } catch (e) {
+      if (card) showResult(result, false);
+      toast(e.message || 'Could not apply the review', 'error');
+    }
   }
 
   function waitJob(id, onProgress) {
@@ -2131,5 +2211,5 @@
     if (typeof global.switchNav === 'function') global.switchNav('brand-design');
   }
 
-  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, makePost, runStyleAction, pictureSlotOf, pictureSlotsOf, activePictureSlot, slotsForEditor };
+  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, makePost, runStyleAction, pictureSlotOf, pictureSlotsOf, activePictureSlot, slotsForEditor, reviewInstruction };
 })(typeof window !== 'undefined' ? window : globalThis);
