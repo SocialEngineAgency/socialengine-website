@@ -268,18 +268,29 @@ test('Content Review reschedule includes a time when the date is already set', (
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   const start = src.indexOf('Reschedule:');
   assert.ok(start > 0, 'Reschedule row missing');
-  const block = src.slice(start, start + 1200);
+  const block = src.slice(start, start + 1600);
   assert.match(block, /type="time"/);
   assert.match(block, /reschedule-time-/);
+  assert.match(block, />Update</);
+  assert.match(block, /Post now/);
+  // Must not auto-save on each picker change — that caused partial schedules.
+  assert.doesNotMatch(block, /onchange="reschedulePost/);
 });
 
 test('reschedulePost persists time with the date', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
   const start = src.indexOf('async function reschedulePost');
   assert.ok(start > 0);
-  const fn = src.slice(start, start + 700);
+  const fn = src.slice(start, start + 900);
   assert.match(fn, /persistPostSchedule/);
   assert.match(fn, /reschedule-time-|newTime/);
+  assert.match(fn, /Commit only when called explicitly/);
+});
+
+test('Content Review offers Post now before a schedule is set', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'portal.html'), 'utf8');
+  assert.match(src, /Schedule or post now/);
+  assert.match(src, /Times are \$\{tzShort\}/);
 });
 
 
