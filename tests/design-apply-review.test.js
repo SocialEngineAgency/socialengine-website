@@ -50,3 +50,18 @@ test('reviewInstruction prefers the Fix line and only the checked notes', () => 
   assert.match(none, /Add a blood-draw illustration/);
   assert.doesNotMatch(none, /Also address these notes/);
 });
+
+test('Apply review stays pending until Accept, keeps critic notes, and can Reject', () => {
+  assert.match(src, /audit:\s*true/);
+  assert.match(src, /pending:\s*true/);
+  assert.match(src, /function acceptPending/);
+  assert.match(src, /function rejectPending/);
+  assert.match(src, /function undoGridSlide/);
+  assert.match(src, /data-accept=/);
+  assert.match(src, /data-reject=/);
+  assert.match(src, /data-undo-grid=/);
+  assert.match(src, /critic: slide\.critic \|\| null/);
+  assert.match(src, /Kept slide/);
+  assert.match(src, /Accept or Reject/);
+  assert.match(src, /Notes stay until you Accept/);
+});
