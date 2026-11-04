@@ -4834,24 +4834,36 @@
               ${isRegenerating ? 'Regenerating...' : status === 'Ready for Review' ? 'Pending' : status}
             </span>
           </div>
-          ${date ? `<div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:-6px;">Scheduled ${date}</div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+          ${date ? (() => {
+              const safeId = String(post.id || '').replace(/'/g, "\\'");
+              const tzName = (typeof window._clientTimezone === 'function') ? window._clientTimezone() : 'Europe/London';
+              const tzShort = (typeof window._tzShortLabel === 'function') ? window._tzShortLabel(tzName) : tzName;
+              return `<div style="font-size:0.72rem;color:rgba(255,255,255,0.35);margin-top:-6px;">Scheduled ${date} <span style="opacity:0.7;">(${tzShort})</span></div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               <span style="font-size:0.72rem;color:rgba(255,255,255,0.4);">Reschedule:</span>
-              <input type="date" id="reschedule-date-${String(post.id || '').replace(/'/g, "\\'")}" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;" onchange="reschedulePost('${String(post.id || '').replace(/'/g, "\\'")}')">
-              <input type="time" id="reschedule-time-${String(post.id || '').replace(/'/g, "\\'")}" value="${schedTime || '09:00'}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;" onchange="reschedulePost('${String(post.id || '').replace(/'/g, "\\'")}')">
-            </div>` : (status === 'Approved' || status === 'Scheduled') ? (() => {
+              <input type="date" id="reschedule-date-${safeId}" value="${post.scheduled_date}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;">
+              <input type="time" id="reschedule-time-${safeId}" value="${schedTime || '09:00'}" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#fff;font-size:0.72rem;font-family:var(--font-body);cursor:pointer;outline:none;">
+              <button type="button" onclick="reschedulePost('${safeId}')" style="padding:6px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:7px;color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Update</button>
+              ${/^(Approved|Scheduled|publish_error)$/i.test(status) ? `<button type="button" onclick="closeStudioModal();_retryPublishPost('${safeId}')" style="padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:7px;color:#fff;font-size:0.72rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post now</button>` : ''}
+            </div>
+            <div style="margin-top:6px;font-size:0.62rem;color:rgba(255,255,255,0.35);">Times are ${tzShort} (${tzName}). Change date and time, then hit Update — nothing saves until then.</div>`;
+            })() : (status === 'Approved' || status === 'Scheduled') ? (() => {
               const todayKey = (typeof window._clientTodayDateKey === 'function')
                 ? window._clientTodayDateKey()
                 : new Date().toISOString().slice(0, 10);
               const safeId = String(post.id || '').replace(/'/g, "\\'");
+              const tzName = (typeof window._clientTimezone === 'function') ? window._clientTimezone() : 'Europe/London';
+              const tzShort = (typeof window._tzShortLabel === 'function') ? window._tzShortLabel(tzName) : tzName;
               return `<div style="margin-top:8px;padding:12px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.22);border-radius:10px;">
-                <div style="font-size:0.72rem;font-weight:700;color:#C4B5FD;margin-bottom:8px;">Schedule this post</div>
+                <div style="font-size:0.72rem;font-weight:700;color:#C4B5FD;margin-bottom:8px;">Schedule or post now</div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                   <input type="date" id="modal-sched-date-${safeId}" min="${todayKey}" value="${todayKey}" style="padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;font-size:0.75rem;font-family:var(--font-body);outline:none;">
                   <input type="time" id="modal-sched-time-${safeId}" value="09:00" style="padding:6px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#fff;font-size:0.75rem;font-family:var(--font-body);outline:none;">
                   <button type="button" onclick="scheduleApprovedPost('${safeId}')" style="flex:1;min-width:110px;padding:8px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule</button>
+                  <button type="button" onclick="closeStudioModal();_retryPublishPost('${safeId}')" style="flex:1;min-width:110px;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:8px;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post now</button>
                 </div>
+                <div style="margin-top:8px;font-size:0.62rem;color:rgba(255,255,255,0.4);">Times are ${tzShort} (${tzName}). Set date and time, then Schedule — or Post now.</div>
               </div>`;
             })() : ''}
 
@@ -4907,11 +4919,11 @@
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
               <div>
                 <div style="font-size:0.82rem;font-weight:600;color:#7C3AED;">Approved</div>
-                <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);">${post.scheduled_date ? 'Scheduled for publishing' : 'Pick a date above, then Schedule'}</div>
+                <div style="font-size:0.68rem;color:rgba(255,255,255,0.4);">${post.scheduled_date ? 'Scheduled for publishing' : 'Schedule above, or Post now'}</div>
               </div>
             </div>` : `<div style="padding:8px 0;font-size:0.8rem;color:rgba(255,255,255,0.4);">${status === 'Scheduled' ? 'Scheduled for publishing' : status === 'Published' ? 'Published' : status}</div>`}
-            ${(status === 'Approved' || status === 'Scheduled') && !post.scheduled_date ? `<button type="button" onclick="scheduleApprovedPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule post</button>` : ''}
-            ${post.scheduled_date && /^(Approved|Scheduled|publish_error)$/i.test(status) ? `<button type="button" onclick="closeStudioModal();_retryPublishPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Publish now</button>` : ''}
+            ${/^(Approved|Scheduled|publish_error)$/i.test(status) && !post.scheduled_date ? `<div style="display:flex;gap:8px;margin-top:12px;"><button type="button" onclick="scheduleApprovedPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="flex:1;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Schedule post</button><button type="button" onclick="closeStudioModal();_retryPublishPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="flex:1;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post now</button></div>` : ''}
+            ${post.scheduled_date && /^(Approved|Scheduled|publish_error)$/i.test(status) ? `<button type="button" onclick="closeStudioModal();_retryPublishPost('${String(post.id || '').replace(/'/g, "\\'")}')" style="width:100%;margin-top:12px;padding:10px 12px;background:linear-gradient(135deg,#7C3AED,#4F46E5);border:none;border-radius:8px;color:#fff;font-size:0.78rem;font-weight:700;cursor:pointer;font-family:var(--font-body);">Post now</button>` : ''}
             ${isArchivedPost(post) ? `<button type="button" class="studio-card__restore-btn" onclick="studioRestore('${String(post.id || '').replace(/'/g, "\\'")}', this)" style="width:100%;margin-top:12px;justify-content:center;">Restore</button>` : (!isLivePublishedPost(post) ? `<button type="button" class="studio-card__archive-btn" onclick="studioArchive('${String(post.id || '').replace(/'/g, "\\'")}', this)" style="width:100%;margin-top:12px;justify-content:center;">Archive</button>` : '')}
           </div>`}
 
@@ -11764,17 +11776,31 @@
       return data;
     }
 
+    function _scheduleTzSuffix() {
+      try {
+        const tz = (typeof window._clientTimezone === 'function') ? window._clientTimezone() : 'Europe/London';
+        const short = (typeof window._tzShortLabel === 'function') ? window._tzShortLabel(tz) : tz;
+        return ' ' + short;
+      } catch (_) { return ''; }
+    }
+
     async function reschedulePost(postId, newDate, newTime) {
+      // Commit only when called explicitly (Update button). Do not wire date/time
+      // inputs to onchange — Safari/Chrome fire on every partial picker change.
       const date = newDate || document.getElementById('reschedule-date-' + postId)?.value || '';
       const time = newTime
         || document.getElementById('reschedule-time-' + postId)?.value
         || document.getElementById('modal-sched-time-' + postId)?.value
         || '09:00';
-      if (!date) return;
+      if (!date) { showToast('Pick a date first', 'warning'); return; }
+      if (!time) { showToast('Pick a time first', 'warning'); return; }
       try {
         await persistPostSchedule(postId, date, time);
-        showToast('Post rescheduled to ' + new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + ' at ' + time);
-        setTimeout(() => document.querySelector('[data-nav=content]')?.click(), 800);
+        showToast('Post rescheduled to ' + new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + ' at ' + time + _scheduleTzSuffix());
+        // Stay on the card so the user can confirm — do not bounce to the grid.
+        if (typeof openStudioModal === 'function' && typeof studioCurrentIndex === 'number') {
+          openStudioModal(studioCurrentIndex);
+        }
       } catch { showToast('Failed to reschedule — try again'); }
     }
 
@@ -11786,7 +11812,7 @@
       if (!newDate) { showToast('Pick a date first', 'warning'); return; }
       try {
         await persistPostSchedule(postId, newDate, newTime);
-        showToast('Scheduled for ' + new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' }) + ' at ' + newTime);
+        showToast('Scheduled for ' + new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' }) + ' at ' + newTime + _scheduleTzSuffix());
         if (typeof closeStudioModal === 'function') closeStudioModal();
         setTimeout(() => document.querySelector('[data-nav=content]')?.click(), 600);
       } catch (e) {
@@ -22277,6 +22303,7 @@
   window._batchCloseSchedulePicker  = _batchCloseSchedulePicker;
   window._batchApplySchedulePicker  = _batchApplySchedulePicker;
   window._clientTimezone            = _clientTimezone;
+  window._tzShortLabel              = _tzShortLabel;
   window._batchRemove               = _batchRemove;
   window._batchGenerateOne          = _batchGenerateOne;
   window._batchGenerateAll          = _batchGenerateAll;
