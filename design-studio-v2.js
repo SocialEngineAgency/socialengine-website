@@ -219,6 +219,8 @@
       .dsv2-review-list input { margin-top:2px; flex-shrink:0; accent-color:#A78BFA; }
       .dsv2-slide.is-busy { opacity:0.55; pointer-events:none; }
       .dsv2-slide-busy { font-size:0.7rem; color:#C4B5FD; display:flex; align-items:center; gap:6px; }
+      .dsv2-slide.is-pending { outline:2px solid rgba(167,139,250,0.55); outline-offset:3px; border-radius:12px; }
+      .dsv2-pending-note { font-size:0.68rem; color:#C4B5FD; line-height:1.4; margin-top:4px; }
       .dsv2-ed { position:fixed; inset:0; z-index:10000; background:rgba(3,6,14,0.84); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; padding:18px; font-family:var(--font-body); color:#E2E8F0; }
       .dsv2-ed *, .dsv2-ed *::before { box-sizing:border-box; }
       .dsv2-ed-box { background:#111726; border:1px solid rgba(255,255,255,0.1); border-radius:18px; width:min(1240px,100%); height:min(920px,100%); display:flex; flex-direction:column; box-shadow:0 30px 80px rgba(0,0,0,0.55); overflow:hidden; }
@@ -1130,18 +1132,23 @@
         const problems = Array.isArray(c.problems) ? c.problems.map(String).filter(Boolean) : [];
         const fix = String(c.fix || '').trim();
         const hasReview = !!(problems.length || fix);
-        const checkOn = score > 0 && score < 4;
+        const pending = !!s.pending;
+        const checkOn = !pending && score > 0 && score < 4;
         const review = hasReview ? `<div class="dsv2-review" data-review="${real}">
             ${fix ? `<div class="dsv2-review-fix">${esc(fix)}</div>` : ''}
-            ${problems.length ? `<ul class="dsv2-review-list">${problems.map((p, pi) => `<li><label><input type="checkbox" data-prob="${pi}"${checkOn ? ' checked' : ''}>${esc(p)}</label></li>`).join('')}</ul>` : ''}
+            ${problems.length ? `<ul class="dsv2-review-list">${problems.map((p, pi) => `<li><label><input type="checkbox" data-prob="${pi}"${checkOn ? ' checked' : ''}${pending ? ' disabled' : ''}>${esc(p)}</label></li>`).join('')}</ul>` : ''}
           </div>` : '';
-        return `<figure class="dsv2-slide" data-slide-card="${real}">
+        const actions = pending
+          ? `<button type="button" class="dsv2-btn dsv2-btn--sm dsv2-btn--primary" data-accept="${real}">Accept</button>
+             <button type="button" class="dsv2-btn dsv2-btn--sm" data-reject="${real}">Reject</button>
+             <button type="button" class="dsv2-btn dsv2-btn--sm" data-undo-grid="${real}"${(s.history || []).length ? '' : ' disabled'}>Undo</button>`
+          : `<button type="button" class="dsv2-btn dsv2-btn--sm" data-edit="${real}">Edit</button>
+             ${hasReview ? `<button type="button" class="dsv2-btn dsv2-btn--sm dsv2-btn--primary" data-apply="${real}">Apply review</button>` : ''}
+             ${(s.history || []).length ? `<button type="button" class="dsv2-btn dsv2-btn--sm" data-undo-grid="${real}">Undo</button>` : ''}`;
+        return `<figure class="dsv2-slide${pending ? ' is-pending' : ''}" data-slide-card="${real}">
           <button type="button" class="dsv2-slide-open" data-open="${i}" aria-label="View slide ${i + 1}"><img src="${esc(s.url)}" alt="Slide ${i + 1}" loading="lazy" style="aspect-ratio:${ratio};object-fit:cover;"></button>
-          <div class="dsv2-slide-actions">
-            <button type="button" class="dsv2-btn dsv2-btn--sm" data-edit="${real}">Edit</button>
-            ${hasReview ? `<button type="button" class="dsv2-btn dsv2-btn--sm dsv2-btn--primary" data-apply="${real}">Apply review</button>` : ''}
-          </div>
-          <figcaption class="dsv2-slide-meta"><strong>Slide ${i + 1}</strong>${score ? ` · review <span class="dsv2-score${score < 4 ? ' dsv2-score--low' : ''}">${score}/5</span>` : ''}${review}</figcaption>
+          <div class="dsv2-slide-actions">${actions}</div>
+          <figcaption class="dsv2-slide-meta"><strong>Slide ${i + 1}</strong>${score ? ` · review <span class="dsv2-score${score < 4 ? ' dsv2-score--low' : ''}">${score}/5</span>` : ''}${pending ? '<div class="dsv2-pending-note">Suggested change — Accept to keep, Reject to go back. Notes stay until you Accept.</div>' : ''}${review}</figcaption>
         </figure>`;
       }).join('')}</div>
       <label class="dsv2-label" for="dsv2-caption">Caption</label>
@@ -1152,15 +1159,72 @@
     box.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => lightbox(urls, Number(b.dataset.open))));
     box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editSlide(result, Number(b.dataset.edit))));
     box.querySelectorAll('[data-apply]').forEach((b) => b.addEventListener('click', () => applyReview(result, Number(b.dataset.apply))));
+    box.querySelectorAll('[data-accept]').forEach((b) => b.addEventListener('click', () => acceptPending(result, Number(b.dataset.accept))));
+    box.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', () => rejectPending(result, Number(b.dataset.reject))));
+    box.querySelectorAll('[data-undo-grid]').forEach((b) => b.addEventListener('click', () => undoGridSlide(result, Number(b.dataset.undoGrid))));
     el('dsv2-zip').addEventListener('click', () => downloadZip(urls));
     el('dsv2-rcp-save').addEventListener('click', () => openSaveRecipe(result));
     el('dsv2-queue').addEventListener('click', () => queue(urls, result));
     if (scroll) reveal(box.firstElementChild);
   }
 
+  function persistResult(result) {
+    const last = store.get('last');
+    if (last && last.title === result.title) store.set('last', Object.assign({}, result));
+  }
+
+  function acceptPending(result, index) {
+    const slide = result.slides[index];
+    if (!slide || !slide.pending) return;
+    result.slides[index] = Object.assign({}, slide, { pending: false, critic: null, audit: null });
+    persistResult(result);
+    showResult(result, false);
+    toast(`Slide ${index + 1} kept`, 'success');
+  }
+
+  function rejectPending(result, index) {
+    const slide = result.slides[index];
+    if (!slide || !slide.pending) return;
+    const back = (slide.history || []).slice();
+    const prev = back.pop();
+    if (!prev) {
+      result.slides[index] = Object.assign({}, slide, { pending: false });
+    } else {
+      result.slides[index] = Object.assign({}, prev, {
+        critic: slide.critic || null,
+        history: back,
+        future: [],
+        pending: false,
+        audit: null,
+      });
+    }
+    persistResult(result);
+    showResult(result, false);
+    toast(`Slide ${index + 1} restored — review notes kept`, 'info');
+  }
+
+  function undoGridSlide(result, index) {
+    const slide = result.slides[index];
+    if (!slide) return;
+    const back = (slide.history || []).slice();
+    const prev = back.pop();
+    if (!prev) { toast('Nothing to undo on this slide', 'info'); return; }
+    result.slides[index] = Object.assign({}, prev, {
+      critic: slide.pending ? (slide.critic || null) : (prev.critic || slide.critic || null),
+      history: back,
+      future: (slide.future || []).concat([versionOf(slide)]).slice(-10),
+      pending: false,
+      audit: null,
+    });
+    persistResult(result);
+    showResult(result, false);
+    toast(`Slide ${index + 1} undone`, 'info');
+  }
+
   async function applyReview(result, index) {
     const slide = result && result.slides && result.slides[index];
     if (!slide || !slide.slots) { toast('This slide cannot be edited yet. Make the carousel again.', 'info'); return; }
+    if (slide.pending) { toast('Accept or Reject the current suggestion first', 'info'); return; }
     const card = el('dsv2-result') && el('dsv2-result').querySelector(`[data-slide-card="${index}"]`);
     const checked = card
       ? [...card.querySelectorAll('input[data-prob]:checked')].map((n) => Number(n.dataset.prob))
@@ -1174,24 +1238,32 @@
     }
     try {
       const r = await call('POST', '/api/design/slide', {
-        slide: { pattern: slide.pattern, slots: slide.slots, style: slide.style || {} },
+        slide: { pattern: slide.pattern, slots: slide.slots, style: slide.style || {}, issues: slide.issues || [] },
         index,
         total: result.slides.length,
         instruction,
+        audit: true,
         medical: result.medical === true ? true : undefined,
         research: result.medical ? result.research || '' : undefined,
         brief: result.brief || undefined,
       });
       const out = await waitJob(r.job_id);
+      if (out.rejected || !out.slide) {
+        showResult(result, false);
+        const why = (out.reasons || []).slice(0, 3).join(' · ') || 'The change did not pass review';
+        toast(`Kept slide ${index + 1}: ${why}`, 'info');
+        return;
+      }
       result.slides[index] = Object.assign({}, out.slide, {
-        critic: null,
+        critic: slide.critic || null,
         history: (slide.history || []).concat([versionOf(slide)]).slice(-10),
         future: [],
+        pending: true,
+        audit: out.audit || null,
       });
-      const last = store.get('last');
-      if (last && last.title === result.title) store.set('last', Object.assign({}, result));
+      persistResult(result);
       showResult(result, false);
-      toast(`Slide ${index + 1} updated`, 'success');
+      toast(`Slide ${index + 1} ready — Accept or Reject`, 'success');
     } catch (e) {
       if (card) showResult(result, false);
       toast(e.message || 'Could not apply the review', 'error');
