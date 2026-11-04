@@ -1157,11 +1157,13 @@
   const clone = (v) => JSON.parse(JSON.stringify(v == null ? null : v));
   const versionOf = (s) => ({ url: s.url, pattern: s.pattern, slots: clone(s.slots || {}), style: clone(s.style || {}), issues: s.issues || [] });
 
-  /** The picture slot on a layout: an image-kind slot, or an <img> whose src is a slot. Logo is not a picture. */
-  function pictureSlotOf(pattern) {
+  /** Every picture slot on a layout: image-kind slots, or <img> tags whose src is a slot. Logo is not a picture. */
+  function pictureSlotsOf(pattern) {
     const slots = (pattern && pattern.slots) || {};
-    const byKind = Object.entries(slots).find(([, sp]) => sp && sp.kind === 'image');
-    if (byKind) return byKind;
+    const byKind = Object.entries(slots).filter(([, sp]) => sp && sp.kind === 'image');
+    if (byKind.length) return byKind;
+    const found = [];
+    const seen = new Set();
     const html = String((pattern && pattern.html) || '');
     const img = /<img\b[^>]*>/gi;
     let tag;
@@ -1169,11 +1171,33 @@
       const named = /data-slot=["']([A-Za-z][\w-]{0,40})["']/.exec(tag[0]);
       const src = /\bsrc=["']\{\{\s*([A-Za-z][\w-]{0,40})\s*\}\}["']/.exec(tag[0]);
       const name = (named && named[1]) || (src && src[1]) || '';
-      if (!name || name === 'logo') continue;
+      if (!name || name === 'logo' || seen.has(name)) continue;
+      seen.add(name);
       const spec = slots[name];
-      return [name, spec && spec.kind === 'image' ? spec : Object.assign({ kind: 'image' }, spec || {})];
+      found.push([name, spec && spec.kind === 'image' ? spec : Object.assign({ kind: 'image' }, spec || {})]);
     }
-    return null;
+    return found;
+  }
+
+  /** First picture slot (layouts that only have one, or callers that need any picture). */
+  function pictureSlotOf(pattern) {
+    const all = pictureSlotsOf(pattern);
+    return all.length ? all[0] : null;
+  }
+
+  /**
+   * Which picture the Picture tab should edit: the selected one if it is a picture,
+   * else the first empty picture, else the first picture.
+   */
+  function activePictureSlot(pattern, selected, slideSlots) {
+    const all = pictureSlotsOf(pattern);
+    if (!all.length) return null;
+    if (selected && all.some(([n]) => n === selected)) return all.find(([n]) => n === selected);
+    const empty = all.find(([n]) => {
+      const v = slideSlots && slideSlots[n];
+      return v == null || v === '';
+    });
+    return empty || all[0];
   }
 
   /** Fields the editor can change: the layout's slots, plus any words or pictures already on the slide. */
@@ -1386,12 +1410,12 @@
         const name = hit.getAttribute('data-slot');
         const found = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
         const pattern = Object.assign({}, found, { slots: slotsForEditor(found, draft.slots, discovered) });
-        const pic = pictureSlotOf(pattern);
+        const pics = pictureSlotsOf(pattern);
         const kind = (pattern.slots[name] || {}).kind;
         selected = name;
         doc.querySelectorAll('.se-sel').forEach((n) => n.classList.remove('se-sel'));
         doc.querySelectorAll(`[data-slot="${name}"]`).forEach((n) => n.classList.add('se-sel'));
-        tab = (pic && pic[0] === name) || kind === 'image' ? 'picture' : 'text';
+        tab = pics.some(([n]) => n === name) || kind === 'image' ? 'picture' : 'text';
         drawPanel();
         const field = q(`[data-field="${name}"]`);
         if (field) {
@@ -1450,16 +1474,26 @@
         <span>${esc(p.name || p.id)}</span></button>`).join('');
     }
     function pictureTab(pattern) {
-      const slot = pictureSlotOf(pattern);
-      if (!slot) {
+      const all = pictureSlotsOf(pattern);
+      if (!all.length) {
         const choices = pictureLayouts();
         if (!choices) return '<p class="dsv2-ed-note">This style has no layout with a picture, so there is nowhere to put an upload.</p>';
         return `<p class="dsv2-ed-note">This layout has no picture. Choose one that does. Your words move with it.</p><div class="dsv2-ed-layouts">${choices}</div>`;
       }
+      const slot = activePictureSlot(pattern, selected, draft.slots) || all[0];
+      selected = slot[0];
       const url = draft.slots[slot[0]];
       const art = (draft.style || {}).art || { zoom: 1, x: 50, y: 50 };
       const medicalPic = result.medical && info.figurelabs;
+      const picker = all.length > 1
+        ? `<div class="dsv2-ed-seg" style="margin-bottom:10px;flex-wrap:wrap;" title="Which picture">${all.map(([name], idx) => {
+          const filled = !!(draft.slots[name]);
+          return `<button type="button" data-pic-slot="${esc(name)}" class="${selected === name ? 'is-on' : ''}" aria-label="Picture ${idx + 1}">${idx + 1}${filled ? '' : ' · empty'}</button>`;
+        }).join('')}</div>`
+        : '';
       return `<div class="dsv2-ed-field" data-field="${esc(slot[0])}">
+        ${picker}
+        <input type="hidden" id="dsv2-ed-art-slot" value="${esc(slot[0])}">
         <div class="dsv2-ed-picrow">
           ${url ? `<img class="dsv2-ed-pic-now" src="${esc(url)}" alt="">` : '<span class="dsv2-ed-pic-now"></span>'}
           <div style="flex:1;min-width:0;">
@@ -1556,13 +1590,18 @@
         markDirty();
       }));
       const setPic = (url) => {
-        const slot = pictureSlotOf(pattern);
+        const slot = activePictureSlot(pattern, selected, draft.slots) || pictureSlotOf(pattern);
         if (!slot || !url) return;
         draft.slots[slot[0]] = url;
+        selected = slot[0];
         picUrl = url;
         markDirty();
         drawPanel();
       };
+      panel.querySelectorAll('[data-pic-slot]').forEach((b) => b.addEventListener('click', () => {
+        selected = b.dataset.picSlot;
+        drawPanel();
+      }));
       const up = panel.querySelector('#dsv2-ed-upload');
       if (up) up.addEventListener('change', async (ev) => {
         const f = ev.target.files && ev.target.files[0];
@@ -1714,6 +1753,12 @@
       const cur = result.slides[i];
       const artInput = q('#dsv2-ed-art');
       const artSubject = artInput ? artInput.value.trim() : '';
+      const artSlotEl = q('#dsv2-ed-art-slot');
+      const found = patterns.find((p) => p.id === draft.pattern) || { slots: {} };
+      const patternNow = Object.assign({}, found, { slots: slotsForEditor(found, draft.slots, discovered) });
+      const artSlot = artSubject
+        ? ((artSlotEl && artSlotEl.value) || (activePictureSlot(patternNow, selected, draft.slots) || [])[0] || undefined)
+        : undefined;
       const sci = q('#dsv2-ed-sci');
       if (!dirty && !artSubject && !extra.instruction) { setStatus('No changes to save.'); return; }
       const body = {
@@ -1722,6 +1767,7 @@
         total: result.slides.length,
         instruction: extra.instruction || undefined,
         art_subject: artSubject || undefined,
+        art_slot: artSlot || undefined,
         scientific: !!(sci && sci.checked && artSubject) || undefined,
         medical: result.medical === true ? true : undefined,
         research: result.medical ? result.research || '' : undefined,
@@ -2085,5 +2131,5 @@
     if (typeof global.switchNav === 'function') global.switchNav('brand-design');
   }
 
-  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, makePost, runStyleAction, pictureSlotOf, slotsForEditor };
+  global.seDesignStudio = { render, openWith, stageText, buildStyle, makeCarousel, makePost, runStyleAction, pictureSlotOf, pictureSlotsOf, activePictureSlot, slotsForEditor };
 })(typeof window !== 'undefined' ? window : globalThis);

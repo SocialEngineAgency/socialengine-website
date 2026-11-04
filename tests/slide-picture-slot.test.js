@@ -45,6 +45,31 @@ test('a picture box is an upload slot even when the layout label is not image', 
   assert.equal(pictureSlotOf({ slots: { title: { kind: 'text' } }, html: '<h1 data-slot="title">{{title}}</h1>' }), null);
 });
 
+test('Picture tab targets the selected or empty picture slot, not always the first', () => {
+  const context = { console, setTimeout, clearTimeout };
+  context.window = context;
+  context.globalThis = context;
+  vm.createContext(context);
+  vm.runInContext(src, context);
+  const { pictureSlotsOf, activePictureSlot } = context.seDesignStudio;
+  const pattern = {
+    slots: {
+      pic_a: { kind: 'image' },
+      pic_b: { kind: 'image' },
+      pic_c: { kind: 'image' },
+    },
+    html: '',
+  };
+  assert.equal(pictureSlotsOf(pattern).map(([n]) => n).join(','), 'pic_a,pic_b,pic_c');
+  assert.equal(activePictureSlot(pattern, 'pic_c', { pic_a: 'https://cdn/a.png', pic_b: 'https://cdn/b.png', pic_c: '' })[0], 'pic_c');
+  assert.equal(activePictureSlot(pattern, '', { pic_a: 'https://cdn/a.png', pic_b: 'https://cdn/b.png', pic_c: '' })[0], 'pic_c', 'empty slot wins when nothing is selected');
+  assert.equal(activePictureSlot(pattern, 'pic_a', { pic_a: 'https://cdn/a.png', pic_b: '', pic_c: '' })[0], 'pic_a', 'clicked slot wins over empties');
+  const fn = src.slice(src.indexOf('async function editSlide'), src.indexOf('function lightbox'));
+  assert.match(fn, /art_slot/);
+  assert.match(fn, /activePictureSlot/);
+  assert.match(fn, /data-pic-slot/);
+});
+
 test('words already on the slide stay editable when the layout lists no fields', () => {
   const context = { console, setTimeout, clearTimeout };
   context.window = context;
