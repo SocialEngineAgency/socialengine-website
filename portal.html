@@ -4353,26 +4353,40 @@
 
     /** Atlas/OSS URLs block browser referers — route through API proxy for playback. */
     function resolvePlayableVideoUrl(url) {
+      const base = (typeof API !== 'undefined' && API) ? API : (window.API || '');
+      if (window.studioQueueReady && typeof window.studioQueueReady.playableVideoUrl === 'function') {
+        return window.studioQueueReady.playableVideoUrl(url, base);
+      }
       if (!url || typeof url !== 'string') return '';
       const u = url.trim();
       if (!/^https?:\/\//i.test(u)) return u.startsWith('blob:') ? u : '';
       if (u.includes('/api/video-proxy') || u.includes('/api/media/')) return u;
       if (/aliyuncs\.com|atlascloud\.ai|higgsfield\.ai|cloudfront\.net|storage\.googleapis\.com/i.test(u)) {
-        const base = (typeof API !== 'undefined' && API) ? API : (window.API || '');
         return base + '/api/video-proxy?url=' + encodeURIComponent(u);
       }
       return u;
     }
     window.resolvePlayableVideoUrl = resolvePlayableVideoUrl;
 
+    /** Prefer shared resolver so Story videos in media[] / image_url still play. */
+    function resolvePostVideo(post) {
+      const base = (typeof API !== 'undefined' && API) ? API : (window.API || '');
+      if (window.studioQueueReady && typeof window.studioQueueReady.resolvePostPlayableVideo === 'function') {
+        return window.studioQueueReady.resolvePostPlayableVideo(post, base);
+      }
+      return resolvePlayableVideoUrl(post?.video_url || '');
+    }
+    window.resolvePostVideo = resolvePostVideo;
+
     function contentFormatKey(post) {
       const ct = String(post?.content_type || '').toLowerCase();
       const pl = String(post?.post_label || '').toLowerCase();
-      const hasVid = !!(post?.video_url && (/^https?:\/\//i.test(String(post.video_url)) || String(post.video_url).startsWith('blob:')));
+      // Story label wins over "has a video file" so video Stories stay badged Story.
       if (ct.includes('reel') || pl.includes('reel')) return 'reel';
-      if (hasVid || ct.includes('video')) return 'video';
+      if (ct.includes('story') || pl.includes('story')) return 'story';
       if (ct.includes('carousel')) return 'carousel';
-      if (ct.includes('story')) return 'story';
+      const hasVid = !!resolvePostVideo(post);
+      if (hasVid || ct.includes('video')) return 'video';
       return 'static';
     }
     window.contentFormatKey = contentFormatKey;
@@ -4709,14 +4723,18 @@
       const proxied = (u) => (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
         ? window.studioQueueReady.cardMediaSrc(u, mediaBase)
         : u;
-      const slideUrls = (!post.video_url && window.studioQueueReady && typeof window.studioQueueReady.reviewSlideUrls === 'function')
+      const videoUrl = resolvePostVideo(post);
+      const hasVideo = !!videoUrl;
+      const slideUrls = (!hasVideo && window.studioQueueReady && typeof window.studioQueueReady.reviewSlideUrls === 'function')
         ? window.studioQueueReady.reviewSlideUrls(post)
         : [];
       window.__studioSlides = slideUrls.length > 1 ? { srcs: slideUrls.map(proxied), i: 0 } : null;
+      const posterRaw = (window.studioQueueReady && typeof window.studioQueueReady.resolvePostVideoPoster === 'function')
+        ? (window.studioQueueReady.resolvePostVideoPoster(post) || '')
+        : '';
+      const posterUrl = posterRaw ? proxied(posterRaw) : '';
       const imageUrl = proxied(slideUrls[0] || rawImage);
       const hasImage = !!(slideUrls.length || rawImage);
-      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
-      const hasVideo = !!videoUrl;
       const hasVideoBrief = hookLine.includes('🎬');
       const regenCount = parseInt(post.regen_count || 0);
       const regenLeft = Math.max(0, 3 - regenCount);
@@ -4780,8 +4798,9 @@
       // Preview (left side)
       let previewHTML = '';
       if (hasVideo) {
+        const posterAttr = posterUrl ? ` poster="${String(posterUrl).replace(/"/g, '&quot;')}"` : '';
         previewHTML = `<div id="video-regen-container" style="position:relative;width:100%;height:100%;">
-          <video id="modal-video-player" src="${videoUrl}" controls playsinline style="width:100%;height:100%;object-fit:contain;" autoplay muted></video>
+          <video id="modal-video-player" src="${videoUrl}"${posterAttr} controls playsinline style="width:100%;height:100%;object-fit:contain;" autoplay muted></video>
           ${isPending && !isRegenerating ? `<button id="video-regen-btn" onclick="regenVideo('${post.id}')" style="position:absolute;top:12px;right:12px;display:flex;align-items:center;gap:5px;padding:6px 14px;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.85);font-size:0.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body);transition:all 0.15s;z-index:2;" onmouseenter="this.style.background='rgba(139,92,246,0.5)';this.style.borderColor='rgba(139,92,246,0.6)'" onmouseleave="this.style.background='rgba(0,0,0,0.7)';this.style.borderColor='rgba(255,255,255,0.15)'"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Regen Video</button>` : ''}
           <div id="video-regen-overlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:3;">
             <div style="width:32px;height:32px;border:2px solid rgba(255,255,255,0.15);border-top-color:rgba(139,92,246,0.8);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
@@ -6343,7 +6362,7 @@
         ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
         : rawImage;
       const hasImage = !!imageUrl;
-      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
+      const videoUrl = resolvePostVideo(post);
       const hasVideo = !!videoUrl;
       const fullText = post.full_post_text || post.caption || '';
       const hashtags = fullText.match(/#[\w]+/g) || [];
@@ -6477,7 +6496,7 @@
         ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
         : rawImage;
       const hasImage = !!imageUrl;
-      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
+      const videoUrl = resolvePostVideo(post);
       const hasVideo = !!videoUrl;
       const fullText = post.full_post_text || post.caption || '';
       const date = (() => {
@@ -10048,8 +10067,14 @@
       const imageUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
         ? window.studioQueueReady.cardMediaSrc(rawImage, (typeof API !== 'undefined' ? API : (window.API || '')))
         : rawImage;
-      const videoUrl = resolvePlayableVideoUrl(post.video_url || '');
-      if (videoUrl) return `<video src="${escapeHtml(videoUrl)}" muted loop playsinline preload="metadata" poster="${escapeHtml(imageUrl || '')}" onmouseenter="this.play().catch(()=>{})" onmouseleave="this.pause()"></video>`;
+      const videoUrl = resolvePostVideo(post);
+      const posterRaw = (window.studioQueueReady && typeof window.studioQueueReady.resolvePostVideoPoster === 'function')
+        ? (window.studioQueueReady.resolvePostVideoPoster(post) || rawImage)
+        : rawImage;
+      const posterUrl = (window.studioQueueReady && typeof window.studioQueueReady.cardMediaSrc === 'function')
+        ? window.studioQueueReady.cardMediaSrc(posterRaw, (typeof API !== 'undefined' ? API : (window.API || '')))
+        : posterRaw;
+      if (videoUrl) return `<video src="${escapeHtml(videoUrl)}" muted loop playsinline preload="metadata" poster="${escapeHtml(posterUrl || imageUrl || '')}" onmouseenter="this.play().catch(()=>{})" onmouseleave="this.pause()"></video>`;
       if (imageUrl) return `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'nl-rv-card__ph',textContent:'Image not loading'}))">`;
       const st = String(post.status || '');
       const fk = contentFormatKey(post);
