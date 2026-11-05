@@ -50,10 +50,14 @@ function reviewSlideUrls(post) {
     }
   };
   if (!post || typeof post !== 'object') return [];
-  list(post.media);
+  // Still frames only — video attachments belong in resolvePostPlayableVideo.
+  const stillMedia = Array.isArray(post.media)
+    ? post.media.filter((item) => !attachmentLooksLikeVideo(item))
+    : post.media;
+  list(stillMedia);
   if (!urls.length) list(post.slide_urls);
   if (!urls.length) list(post.image);
-  if (!urls.length) push(post.image_url);
+  if (!urls.length && !urlLooksLikeVideo(post.image_url)) push(post.image_url);
   return urls.slice(0, 20);
 }
 
@@ -66,6 +70,84 @@ function cardMediaSrc(url, apiBase) {
     return `${base}/api/media-fetch?url=${encodeURIComponent(u)}`;
   }
   return u;
+}
+
+const VIDEO_URL_RE = /\.(mp4|mov|webm|m4v)(\?|$)/i;
+
+function attachmentLooksLikeVideo(att) {
+  if (!att || typeof att !== 'object') return false;
+  if (/^video\//i.test(String(att.type || ''))) return true;
+  return VIDEO_URL_RE.test(String(att.filename || att.url || ''));
+}
+
+function urlLooksLikeVideo(url) {
+  return VIDEO_URL_RE.test(String(url || ''));
+}
+
+/** Atlas/OSS URLs need the API proxy so the browser can play them. */
+function playableVideoUrl(url, apiBase) {
+  if (!url || typeof url !== 'string') return '';
+  const u = url.trim();
+  if (!/^https?:\/\//i.test(u)) return u.startsWith('blob:') ? u : '';
+  if (u.includes('/api/video-proxy') || u.includes('/api/media/')) return u;
+  if (/aliyuncs\.com|atlascloud\.ai|higgsfield\.ai|cloudfront\.net|storage\.googleapis\.com/i.test(u)) {
+    const base = String(apiBase || '').replace(/\/$/, '');
+    return `${base}/api/video-proxy?url=${encodeURIComponent(u)}`;
+  }
+  return u;
+}
+
+/**
+ * Story/reel/video posts sometimes store the file on video_url, video[],
+ * media_url, or (wrongly) media[] / a video-looking image_url. Review only
+ * used to play video_url, so Story videos rendered as a still.
+ */
+function resolvePostPlayableVideo(post, apiBase) {
+  if (!post || typeof post !== 'object') return '';
+  const candidates = [];
+  const push = (u) => {
+    const s = String(u || '').trim();
+    if (s && !candidates.includes(s)) candidates.push(s);
+  };
+  push(post.video_url);
+  if (Array.isArray(post.video)) {
+    for (const att of post.video) {
+      if (att && att.url) push(att.url);
+    }
+  }
+  push(post.media_url);
+  if (Array.isArray(post.media)) {
+    for (const att of post.media) {
+      if (attachmentLooksLikeVideo(att) && att.url) push(att.url);
+    }
+  }
+  if (urlLooksLikeVideo(post.image_url)) push(post.image_url);
+  for (const c of candidates) {
+    const playable = playableVideoUrl(c, apiBase);
+    if (playable) return playable;
+  }
+  return '';
+}
+
+/** Poster/still for a video preview — prefer attachment thumbnails over a video URL. */
+function resolvePostVideoPoster(post) {
+  if (!post || typeof post !== 'object') return '';
+  const atts = []
+    .concat(Array.isArray(post.video) ? post.video : [])
+    .concat(Array.isArray(post.media) ? post.media : []);
+  for (const att of atts) {
+    if (!attachmentLooksLikeVideo(att)) continue;
+    const thumb = att.thumbnails?.large?.url || att.thumbnails?.full?.url || att.thumbnails?.small?.url || '';
+    if (/^https?:\/\//i.test(thumb)) return thumb;
+  }
+  const thumbs = post.image_thumbnails;
+  if (thumbs && typeof thumbs === 'object') {
+    const t = thumbs.large?.url || thumbs.full?.url || thumbs.small?.url || '';
+    if (/^https?:\/\//i.test(t)) return t;
+  }
+  const img = String(post.image_url || post.thumbnail_url || '').trim();
+  if (/^https?:\/\//i.test(img) && !urlLooksLikeVideo(img)) return img;
+  return '';
 }
 
 function contentReviewWhen(post = {}) {
@@ -271,6 +353,11 @@ if (typeof module !== 'undefined' && module.exports) {
     openContentReviewAfterQueue,
     reviewSlideUrls,
     cardMediaSrc,
+    attachmentLooksLikeVideo,
+    urlLooksLikeVideo,
+    playableVideoUrl,
+    resolvePostPlayableVideo,
+    resolvePostVideoPoster,
     contentReviewWhen,
     sortPostsForReview,
     postsForContentReview,
@@ -298,6 +385,11 @@ if (typeof window !== 'undefined') {
     openContentReviewAfterQueue,
     reviewSlideUrls,
     cardMediaSrc,
+    attachmentLooksLikeVideo,
+    urlLooksLikeVideo,
+    playableVideoUrl,
+    resolvePostPlayableVideo,
+    resolvePostVideoPoster,
     contentReviewWhen,
     sortPostsForReview,
     postsForContentReview,

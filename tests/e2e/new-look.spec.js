@@ -593,8 +593,8 @@ test('new look Review: filter bar, cards with Approve/Reject, the post opens inl
   const posts = [
     { id: 'recP1', status: 'Ready for Review', platform: 'instagram', content_type: 'carousel', full_post_text: 'Five ways to join the walk #walk', image_url: 'https://store.test/a.png' },
     { id: 'recP2', status: 'Ready for Review', platform: 'tiktok', content_type: 'reel', full_post_text: 'Meet the nurses', image_url: 'https://store.test/b.png' },
-    // Tiny data URI so the preview <img> stays in the DOM (http mocks 404 → onerror replaces it).
-    { id: 'recStory', status: 'Published', platform: 'instagram', content_type: 'story', full_post_text: 'A blood test that spots stomach cancer early', image_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' },
+    // Story video often lands in media[] (not video_url). Preview must still play it.
+    { id: 'recStory', status: 'Published', platform: 'instagram', content_type: 'story', full_post_text: 'A blood test that spots stomach cancer early', image_url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', media: [{ url: 'https://store.test/story.mp4', type: 'video/mp4', filename: 'story.mp4', thumbnails: { large: { url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==' } } }] },
     { id: 'recLive', status: 'Published', platform: 'facebook', full_post_text: 'Thank you all', image_url: 'https://store.test/c.png' },
     { id: 'recArch', status: 'Archived', archived_from: 'Ready for Review', platform: 'instagram', full_post_text: 'Old draft' },
   ];
@@ -643,12 +643,15 @@ test('new look Review: filter bar, cards with Approve/Reject, the post opens inl
   await modal.locator('.studio-modal__close').click();
   await expect(page.locator('#studio-modal')).toBeHidden();
 
-  // Story detail preview must keep the same 560px height cap as other formats
-  // (inline max-height:100% used to let tall 9:16 assets blow past it).
+  // Story video in media[] plays with controls (not a static still), and keeps the 560px cap.
   await page.locator('.nl-rv-card[data-post-id="recStory"] .nl-rv-card__media').click();
   const storyModal = page.locator('#nl-rv-detail #studio-modal.active');
   await expect(storyModal).toBeVisible();
-  const storyMaxH = await storyModal.locator('.studio-modal__preview img').evaluate((el) => getComputedStyle(el).maxHeight);
+  const storyVideo = storyModal.locator('#modal-video-player');
+  await expect(storyVideo).toBeVisible();
+  await expect(storyVideo).toHaveAttribute('controls', '');
+  await expect(storyVideo).toHaveAttribute('src', /story\.mp4/);
+  const storyMaxH = await storyVideo.evaluate((el) => getComputedStyle(el).maxHeight);
   expect(storyMaxH).toBe('560px');
   await storyModal.locator('.studio-modal__close').click();
   await expect(page.locator('#studio-modal')).toBeHidden();

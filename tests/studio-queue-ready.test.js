@@ -10,6 +10,10 @@ const {
   openContentReviewAfterQueue,
   reviewSlideUrls,
   cardMediaSrc,
+  resolvePostPlayableVideo,
+  resolvePostVideoPoster,
+  attachmentLooksLikeVideo,
+  urlLooksLikeVideo,
   sortPostsForReview,
   postsForContentReview,
   homeQueuePosts,
@@ -81,6 +85,40 @@ test('after queue, Content Review nav is clicked', () => {
 test('Atlas card thumbs go through media-fetch so they are not hotlink-blocked', () => {
   const src = cardMediaSrc('https://oss.aliyuncs.com/opa/slide.png', 'https://api.example');
   assert.equal(src, 'https://api.example/api/media-fetch?url=' + encodeURIComponent('https://oss.aliyuncs.com/opa/slide.png'));
+});
+
+test('Story video in media[] (no video_url) still resolves to a playable URL', () => {
+  const url = resolvePostPlayableVideo({
+    content_type: 'story',
+    image_url: 'https://cdn.example/poster.jpg',
+    media: [{ url: 'https://cdn.example/story.mp4', type: 'video/mp4', filename: 'story.mp4' }],
+  }, 'https://api.example');
+  assert.equal(url, 'https://cdn.example/story.mp4');
+  assert.equal(attachmentLooksLikeVideo({ type: 'video/mp4', url: 'https://cdn.example/x' }), true);
+  assert.equal(urlLooksLikeVideo('https://cdn.example/clip.mov'), true);
+});
+
+test('Story video poster prefers attachment thumbnails over the mp4 URL', () => {
+  const poster = resolvePostVideoPoster({
+    content_type: 'story',
+    image_url: 'https://cdn.example/story.mp4',
+    media: [{
+      url: 'https://cdn.example/story.mp4',
+      type: 'video/mp4',
+      thumbnails: { large: { url: 'https://cdn.example/poster.jpg' } },
+    }],
+  });
+  assert.equal(poster, 'https://cdn.example/poster.jpg');
+});
+
+test('review slides skip video attachments so Stories do not become fake carousels', () => {
+  const urls = reviewSlideUrls({
+    media: [
+      { url: 'https://cdn.example/story.mp4', type: 'video/mp4', filename: 'story.mp4' },
+      { url: 'https://cdn.example/still.jpg', type: 'image/jpeg' },
+    ],
+  });
+  assert.deepEqual(urls, ['https://cdn.example/still.jpg']);
 });
 
 test('a just-queued post sorts above older scheduled posts', () => {
