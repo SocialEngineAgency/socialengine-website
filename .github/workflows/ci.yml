@@ -8,7 +8,8 @@ permissions:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    # Pin: ubuntu-latest moved to 26.04; Playwright 1.59 has no chromium deps for it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       # Unit tests + Netlify publish-allowlist build test (Node built-ins only, no npm install needed)
@@ -17,7 +18,7 @@ jobs:
   # Portal ↔ API session contract (login / Bearer / storage / logout / 401 /
   # oauth-start) against a mocked API. Hermetic: no network beyond localhost.
   portal-sessions:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,7 +38,7 @@ jobs:
   # Portal nav / Settings / Coach / errors / Content Review archive+refresh /
   # Animate VO-first against a mocked API. Hermetic like portal-sessions.
   portal-ui:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
