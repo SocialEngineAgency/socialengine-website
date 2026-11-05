@@ -109,6 +109,52 @@ test('Planner → Make a Story → AI draft with a poll → phone mode → save 
   await expect(card.locator('.mwp__meter--stories')).toContainText('1/7');
 });
 
+test('Unchecking Stickers strips AI stickers; clicking the backdrop keeps the draft; reopen restores it', async ({ page }) => {
+  const drafts = [];
+  await mockApi(page, srv.base, {
+    data: clientData(),
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/meta-planner' && entry.method === 'GET') { json(200, plan(0)); return 'handled'; }
+      if (entry.path === '/api/calendar-history') { json(200, { posts: [] }); return 'handled'; }
+      if (entry.path === '/api/stories/draft') {
+        drafts.push(JSON.parse(entry.body || '{}'));
+        json(200, { draft: AI_DRAFT, validation: { ok: true, errors: [], warnings: [], mode: 'phone' } });
+        return 'handled';
+      }
+      if (entry.path === '/api/stories' && entry.method === 'GET') { json(200, { stories: [], stickers: STICKERS }); return 'handled'; }
+      return undefined;
+    },
+  });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="schedule"]');
+  await page.locator('#meta-week-planner [data-mwp-story="new"]').click();
+  await expect(page.locator('.sc-modal')).toBeVisible();
+
+  await page.fill('#sc-topic', 'gastric cancer symptoms');
+  await page.locator('#sc-allow').uncheck();
+  await page.click('#sc-ai');
+  await expect.poll(() => drafts.length).toBe(1);
+  expect(drafts[0].allow_stickers).toBe(false);
+  await expect(page.locator('#sc-preview')).toContainText('Plant a tree in 3 steps');
+  await page.locator('[data-sc-frame="3"]').click();
+  await expect(page.locator('#sc-sticker')).toHaveValue('');
+  await expect(page.locator('#sc-mode')).toContainText('Auto-publish');
+
+  // Backdrop click must not dismiss the composer.
+  await page.locator('#sc-root').click({ position: { x: 4, y: 4 } });
+  await expect(page.locator('.sc-modal')).toBeVisible();
+  await expect(page.locator('#sc-topic')).toHaveValue('gastric cancer symptoms');
+
+  // Close via X, reopen — draft comes back.
+  await page.click('#sc-close');
+  await expect(page.locator('.sc-modal')).toHaveCount(0);
+  await page.locator('#meta-week-planner [data-mwp-story="new"]').click();
+  await expect(page.locator('.sc-modal')).toBeVisible();
+  await expect(page.locator('#sc-topic')).toHaveValue('gastric cancer symptoms');
+  await expect(page.locator('#sc-allow')).not.toBeChecked();
+  await expect(page.locator('#sc-preview')).toContainText('Plant a tree in 3 steps');
+});
+
 test('Manual Story: server rejection is shown; an auto Story offers Post now', async ({ page }) => {
   let stories = [];
   let reject = true;
