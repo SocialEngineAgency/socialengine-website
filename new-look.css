@@ -927,7 +927,17 @@ html.nl .studio-modal.nl-inline .studio-modal__backdrop { display: none; }
 html.nl .studio-modal.nl-inline .studio-modal__panel { max-width: none !important; width: 100%; height: auto !important; margin: 0 !important; border-radius: 12px !important; border: 1px solid var(--nl-line) !important; box-shadow: none !important; background: var(--nl-surface) !important; overflow: hidden; }
 html.nl .studio-modal.nl-inline .studio-modal__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 360px); border: 0 !important; box-shadow: none !important; overflow: visible; }
 html.nl .studio-modal.nl-inline .studio-modal__preview { border-radius: 0 !important; background: var(--nl-bg) !important; min-height: 460px; padding: 28px; }
-html.nl .studio-modal.nl-inline .studio-modal__preview img, html.nl .studio-modal.nl-inline .studio-modal__preview video { max-height: 560px; border-radius: 4px; }
+/* Inline Review detail: panel height is auto, so max-height:100% on <img> does not
+   cap tall 9:16 Story assets. Beat the inline style so Stories match other formats. */
+html.nl .studio-modal.nl-inline .studio-modal__preview img,
+html.nl .studio-modal.nl-inline .studio-modal__preview video {
+  max-width: 100% !important;
+  max-height: 560px !important;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+}
 html.nl .studio-modal.nl-inline .studio-modal__details { border-left: 1px solid var(--nl-line); padding: 16px 18px !important; overflow: visible; max-height: none; }
 html.nl .studio-modal.nl-inline .studio-modal__close { top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 8px; background: transparent !important; border: 1px solid var(--nl-line-strong) !important; color: var(--nl-fg2) !important; backdrop-filter: none; }
 html.nl .studio-modal.nl-inline .studio-modal__meta-row { padding-right: 40px; }
