@@ -11,8 +11,39 @@
     slider: { label: 'Emoji slider' }, link: { label: 'Link' }, music: { label: 'Music' },
   };
   const LIMITS = { min: 3, max: 8, readable: 90, hook: 60 };
+  const DRAFT_KEY = 'se_story_composer_draft';
 
   let S = null;
+
+  function persistCompose() {
+    if (!S || !S.draft || S.view !== 'compose') return;
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+        draft: cleanDraft(),
+        date: S.date,
+        time: S.time,
+        allowStickers: S.allowStickers,
+        editingId: S.editingId,
+        sel: S.sel,
+      }));
+    } catch (_) { /* private mode / quota */ }
+  }
+  function loadPersistedCompose() {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.draft || !Array.isArray(parsed.draft.frames)) return null;
+      return parsed;
+    } catch (_) { return null; }
+  }
+  function clearPersistedCompose() {
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch (_) { /* ignore */ }
+  }
+  function stripStickersFromDraft() {
+    if (!S || !S.draft) return;
+    S.draft.frames.forEach((f) => { f.sticker = null; });
+  }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -381,6 +412,7 @@
       ${S.view === 'compose' ? composeHtml() : listHtml()}
     </div>`;
     bind(root);
+    if (S.view === 'compose') persistCompose();
   }
 
   function refreshIssues() {
@@ -425,7 +457,12 @@
     const on = (id, ev, fn) => root.querySelector(id)?.addEventListener(ev, fn);
     on('#sc-type', 'change', (e) => { d.story_type = e.target.value; });
     on('#sc-topic', 'input', (e) => { d.topic = e.target.value; });
-    on('#sc-allow', 'change', (e) => { S.allowStickers = e.target.checked; });
+    on('#sc-allow', 'change', (e) => {
+      S.allowStickers = e.target.checked;
+      if (!S.allowStickers) stripStickersFromDraft();
+      persistCompose();
+      render();
+    });
     on('#sc-text', 'input', (e) => { f().text = e.target.value; rerenderPreview(); });
     on('#sc-sub', 'input', (e) => { f().sub = e.target.value; rerenderPreview(); });
     on('#sc-color', 'input', (e) => { f().bg.color = e.target.value; rerenderPreview(); });
@@ -526,7 +563,10 @@
         story_type: S.draft.story_type, topic: S.draft.topic, frames: n, allow_stickers: S.allowStickers, date: S.date,
       });
       adoptDraft({ ...out.draft, topic: S.draft.topic || out.draft.topic });
+      // Defense in depth: server strips when allow_stickers is false; keep client honest too.
+      if (!S.allowStickers) stripStickersFromDraft();
       S.validation = out.validation || null;
+      persistCompose();
     } catch (e) {
       toast(e.message, 'error');
     } finally {
@@ -544,6 +584,7 @@
       toast(out.story.mode === 'phone' ? 'Story saved — download the frames and post from your phone.' : 'Story saved — approve it to publish.', 'success');
       S.editingId = null;
       S.validation = null;
+      clearPersistedCompose();
       adoptDraft({ frames: [] });
       S.view = 'list';
       if (typeof global.onStoriesChanged === 'function') global.onStoriesChanged();
@@ -624,6 +665,7 @@
   }
 
   function close() {
+    if (S && S.view === 'compose' && S.draft) persistCompose();
     document.getElementById('sc-root')?.remove();
     document.removeEventListener('keydown', onKey);
     S = null;
@@ -633,25 +675,37 @@
   function openStoriesComposer(opts) {
     const o = opts || {};
     ensureStyles();
-    close();
+    // Persist before tear-down so "Make a Story" again still restores work.
+    if (S && S.view === 'compose' && S.draft) persistCompose();
+    document.getElementById('sc-root')?.remove();
+    document.removeEventListener('keydown', onKey);
+    S = null;
+
+    const saved = (o.view !== 'list' && !o.fresh) ? loadPersistedCompose() : null;
     S = {
       view: o.view === 'list' ? 'list' : 'compose',
-      sel: 0,
-      date: /^\d{4}-\d{2}-\d{2}$/.test(String(o.date || '')) ? o.date : today(),
-      time: '09:00',
-      allowStickers: true,
+      sel: Number.isInteger(saved?.sel) ? saved.sel : 0,
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(o.date || '')) ? o.date : (saved?.date || today()),
+      time: saved?.time || '09:00',
+      allowStickers: saved ? saved.allowStickers !== false : true,
       stickers: FALLBACK_STICKERS,
       stories: [],
-      editingId: null,
+      editingId: saved?.editingId || null,
       validation: null,
       busy: null,
       draft: null,
     };
-    adoptDraft({ story_type: o.story_type || '', goal: o.goal, topic: o.topic || '', frames: [] });
+    if (saved && saved.draft) {
+      adoptDraft(saved.draft);
+      if (!S.allowStickers) stripStickersFromDraft();
+    } else {
+      adoptDraft({ story_type: o.story_type || '', goal: o.goal, topic: o.topic || '', frames: [] });
+    }
     const root = document.createElement('div');
     root.id = 'sc-root';
     root.className = 'sc-overlay';
-    root.addEventListener('click', (e) => { if (e.target === root) close(); });
+    // Backdrop click used to dismiss and wipe work. Keep the modal open; X / Escape still close (and persist).
+    root.addEventListener('click', (e) => { if (e.target === root) e.stopPropagation(); });
     document.body.appendChild(root);
     document.addEventListener('keydown', onKey);
     if (S.view === 'list') loadList(); else render();
