@@ -3325,7 +3325,9 @@
     btn.id = 'cs-design-carousel';
     btn.className = 'cs-coach-act';
     const n = Number(action && action.slides);
-    btn.textContent = n ? `Design this ${n}-slide carousel in my brand style` : 'Design this carousel in my brand style';
+    btn.textContent = n === 1
+      ? 'Design this post in my brand style'
+      : (n > 1 ? `Design this ${n}-slide carousel in my brand style` : 'Design this carousel in my brand style');
     btn.style.cssText = 'align-self:flex-start;background:#7C3AED;color:#fff;border:none;border-radius:9px;padding:8px 13px;font-size:0.76rem;font-weight:700;cursor:pointer;font-family:var(--font-body);';
     btn.addEventListener('click', () => {
       window.seDesignStudio.openWith({
