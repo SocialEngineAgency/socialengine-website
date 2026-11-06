@@ -174,12 +174,28 @@ test('Coach design_carousel → Design this carousel → Design tab starts with 
   await page.click('#chat-send');
   const btn = page.locator('.coach-action-btn[data-type="design_carousel"]');
   await expect(btn).toBeVisible({ timeout: 10000 });
+  await expect(btn).toHaveText('Design this 6-slide carousel');
   await btn.click();
   await expect(page).toHaveURL(/#create\/carousels$/);
   await expect(page.locator('#dsv2-brief')).toHaveValue('Five signs of reflux and when to see a GP');
   await expect.poll(() => calls.filter((c) => c[0] === 'carousel').length).toBe(1);
   expect(calls.find((c) => c[0] === 'carousel')[1]).toMatchObject({ count: 6, source_image_url: 'https://store.test/poster.png' });
   await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
+});
+
+test('Coach single-slide design_carousel button says Design this post', async ({ page }) => {
+  const chatReply = {
+    reply: 'That single slide post is being designed now and will land in your review queue shortly.',
+    coach_actions: [{ type: 'design_carousel', brief: 'One tip for early heartburn checks', slides: 1 }],
+  };
+  await mockApi(page, srv.base, { onRequest: designMock({ hasSystem: true, calls: [], chatReply }) });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="ai-coach"]');
+  await page.fill('#chat-input', 'make a single post about heartburn');
+  await page.click('#chat-send');
+  const btn = page.locator('.coach-action-btn[data-type="design_carousel"]');
+  await expect(btn).toBeVisible({ timeout: 10000 });
+  await expect(btn).toHaveText('Design this post');
 });
 
 test('All Tools has a Carousels card that opens the Carousels tab', async ({ page }) => {

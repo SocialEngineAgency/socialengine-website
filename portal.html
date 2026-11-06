@@ -13621,7 +13621,11 @@
                   coachActionPayloads[i] = Object.assign({}, a, {
                     source_image_url: a.source_image_url || attachedImageUrl || '',
                   });
-                  return '<button class="coach-action-btn" data-type="design_carousel" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#EC4899);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;">Design this carousel</button>';
+                  const slideN = Number(a.slides);
+                  const designLabel = slideN === 1
+                    ? 'Design this post'
+                    : (slideN > 1 ? ('Design this ' + slideN + '-slide carousel') : 'Design this carousel');
+                  return '<button class="coach-action-btn" data-type="design_carousel" data-action-idx="' + i + '" style="background:linear-gradient(135deg,#7C3AED,#EC4899);color:white;font-size:0.78rem;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;border:none;font-family:var(--font-body);display:inline-flex;align-items:center;gap:6px;">' + designLabel + '</button>';
                 }
                 return '';
               }).join('') + '</div>';
