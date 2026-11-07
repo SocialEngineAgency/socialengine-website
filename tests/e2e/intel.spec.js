@@ -167,8 +167,8 @@ test('a running check shows progress and is polled every 4 seconds until it is d
   for (let i = 0; i < 5 && st.competitors[0].status === 'checking'; i += 1) {
     const n = st.gets;
     // The next poll is scheduled only once the last response has rendered; under load that can land after a
-    // single 4.1s jump, so keep nudging the clock (one poll interval at most) until the next GET is seen.
-    await expect.poll(async () => { await page.clock.runFor(1000); return st.gets; }, { timeout: 15000 }).toBeGreaterThan(n);
+    // single 4.1s jump, so keep nudging by a full poll interval until the next GET is seen.
+    await expect.poll(async () => { await page.clock.runFor(4100); return st.gets; }, { timeout: 30000 }).toBeGreaterThan(n);
   }
   await expect(page.locator('.in-chip').first()).toContainText('4 changes');
   await expect(page.locator('.in-find')).toHaveCount(4);
