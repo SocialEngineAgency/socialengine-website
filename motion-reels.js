@@ -139,9 +139,11 @@
     ov.querySelectorAll('.mr-tab').forEach((t) => t.addEventListener('click', () => {
       if (t.dataset.mode === kind) return;
       kind = t.dataset.mode;
-      if (kind === 'faceless' && !scenes.length) {
-        const raw = (form.querySelector('#mr-lines')?.value || seedLines || '').split('\n').map((s) => s.trim()).filter(Boolean);
-        scenes = raw.map((line) => ({ line, search: '', searches: [], options: [], pick: null }));
+      // Convert-from-carousel only: carry simplified lines into Voiceover + footage.
+      // Do not seed from the text-tab textarea on ordinary Make a Reel flows (beats API owns that).
+      if (kind === 'faceless' && !scenes.length && fromCarousel && seedLines) {
+        scenes = seedLines.split('\n').map((s) => s.trim()).filter(Boolean)
+          .map((line) => ({ line, search: '', searches: [], options: [], pick: null }));
       }
       syncHead();
       out.innerHTML = '';
