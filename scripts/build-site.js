@@ -53,6 +53,7 @@ const ALLOWLIST = [
   'fundraise.js', // portal.html — Fundraise: fundraisers list, drafts, campaign builder
   'library.js', // portal.html — Library: browsable grid, filters, detail panel, multi-select
   'diagram-posts.js', // portal.html — diagram graphics (steps, timeline, compare, cycle, funnel)
+  'carousel-reel-lines.js', // portal.html — carousel slots → kinetic Reel beats
   'motion-reels.js', // portal.html — carousel → Reel and text Reels (HyperFrames)
   'agent-run.js', // portal.html — the Coach agent's live project card
   'coach-work.js', // portal.html — the work panel beside the Coach chat

@@ -97,12 +97,17 @@
     injectStyles();
     let kind = ['carousel', 'faceless'].includes(opts.kind) ? opts.kind : 'text';
     const slides = (opts.slides || []).filter((u) => /^https:\/\//i.test(String(u || '')));
+    const fromCarousel = opts.origin === 'carousel' || opts.convert === true;
+    const seedLines = Array.isArray(opts.lines)
+      ? opts.lines.map((l) => String(l || '').trim()).filter(Boolean).join('\n')
+      : String(opts.lines || '').trim();
+    if (seedLines) opts = Object.assign({}, opts, { lines: seedLines });
     let scenes = [];
     let lastOptions = null;
     let busy = false;
     const ov = document.createElement('div');
     ov.className = 'mr-overlay';
-    ov.innerHTML = `<div class="mr-modal" role="dialog" aria-label="Motion Reel">
+    ov.innerHTML = `<div class="mr-modal" role="dialog" aria-label="${fromCarousel ? 'Convert to Reel' : 'Motion Reel'}">
       <div class="mr-head"><h3 id="mr-title"></h3><button type="button" class="mr-x" aria-label="Close">×</button></div>
       ${kind === 'carousel' ? '' : `<div class="mr-tabs" role="tablist"><button type="button" class="mr-tab" data-mode="text">Text on screen</button><button type="button" class="mr-tab" data-mode="faceless">Voiceover + footage</button></div>`}
       <p class="mr-lead" id="mr-lead"></p>
@@ -118,9 +123,11 @@
     const stage = ov.querySelector('#mr-stage');
     const out = ov.querySelector('#mr-out');
     const COPY = {
-      carousel: ['Turn this carousel into a Reel', 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
-      text: ['Make a Reel', 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
-      faceless: ['Make a Reel', 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
+      carousel: [fromCarousel ? 'Convert to Reel' : 'Turn this carousel into a Reel', 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
+      text: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', fromCarousel
+        ? 'Short lines from your carousel animate in, one beat at a time. Add music here; use Voiceover + footage for a spoken version.'
+        : 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
+      faceless: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
     };
 
     function syncHead() {
@@ -132,6 +139,12 @@
     ov.querySelectorAll('.mr-tab').forEach((t) => t.addEventListener('click', () => {
       if (t.dataset.mode === kind) return;
       kind = t.dataset.mode;
+      // Convert-from-carousel only: carry simplified lines into Voiceover + footage.
+      // Do not seed from the text-tab textarea on ordinary Make a Reel flows (beats API owns that).
+      if (kind === 'faceless' && !scenes.length && fromCarousel && seedLines) {
+        scenes = seedLines.split('\n').map((s) => s.trim()).filter(Boolean)
+          .map((line) => ({ line, search: '', searches: [], options: [], pick: null }));
+      }
       syncHead();
       out.innerHTML = '';
       if (lastOptions) renderForm(lastOptions);
@@ -447,7 +460,7 @@
         <select class="mr-select" id="mr-font">${(o.fonts || ['inter']).map((f) => `<option value="${esc(f)}">${esc(FONT_LABELS[f] || f)}</option>`).join('')}</select>
         <label class="mr-label" for="mr-music">Music</label>
         ${musicHtml(o)}
-        <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-go" ${ready ? '' : 'disabled'}>Make the Reel</button><span class="mr-hint" id="mr-cap">${esc(capUsed)} of ${esc(capMax)} used today</span></div>`;
+        <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-go" ${ready ? '' : 'disabled'}>${fromCarousel ? 'Convert' : 'Make the Reel'}</button><span class="mr-hint" id="mr-cap">${esc(capUsed)} of ${esc(capMax)} used today</span></div>`;
       if (kind === 'text' && opts.text && !opts.lines && !form.dataset.beatsTried) { form.dataset.beatsTried = '1'; suggestBeats(true); }
       form.querySelector('#mr-beats')?.addEventListener('click', () => suggestBeats(false));
       const musicSel = form.querySelector('#mr-music');
