@@ -1171,32 +1171,29 @@
     if (scroll) reveal(box.firstElementChild);
   }
 
-  /** Handoff finished carousel → Motion Reels (kinetic text when slots exist). */
+  /** Handoff finished carousel → Motion Reels using the slide graphics (keeps the carousel look). */
   function convertResultToReel(result, urls) {
     if (typeof window.seOpenMotionReel !== 'function') {
       toast('Motion Reels is not ready. Hard refresh and try again.', 'error');
       return;
     }
-    const helper = window.seCarouselReelLines;
-    const lines = helper && typeof helper.linesFromSlides === 'function'
-      ? helper.linesFromSlides(result && result.slides)
-      : [];
     const name = String((result && result.title) || 'Carousel reel').slice(0, 60);
-    if (lines.length) {
+    const https = (urls || []).filter((u) => /^https:\/\//i.test(String(u || '')));
+    if (https.length) {
+      const helper = window.seCarouselReelLines;
+      const lines = helper && typeof helper.linesFromSlides === 'function'
+        ? helper.linesFromSlides(result && result.slides)
+        : [];
       window.seOpenMotionReel({
-        kind: 'text',
-        lines: helper.joinLines(lines),
+        kind: 'carousel',
+        slides: https,
         name,
         origin: 'carousel',
+        lines: lines.length && helper ? helper.joinLines(lines) : undefined,
       });
       return;
     }
-    const https = (urls || []).filter((u) => /^https:\/\//i.test(String(u || '')));
-    if (https.length) {
-      window.seOpenMotionReel({ kind: 'carousel', slides: https, name, origin: 'carousel' });
-      return;
-    }
-    toast('Add finished slides first', 'info');
+    toast('Slides need to finish uploading first, then Convert to Reel again', 'info');
   }
 
   function persistResult(result) {

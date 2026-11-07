@@ -19,7 +19,7 @@ const SYSTEM = {
 const RESULT = {
   title: 'Heartburn myths', angle: 'Myth-busting hook',
   caption: 'Know the facts.', hashtags: ['#heartburn', '#health'],
-  slides: [1, 2, 3].map((i) => ({ url: `${PNG}#slide${i}`, pattern: 'hook', slots: { title: `Title ${i}`, art: 'https://store.test/art.png' }, critic: { score: i === 2 ? 3 : 5, problems: i === 2 ? ['busy layout'] : [] } })),
+  slides: [1, 2, 3].map((i) => ({ url: `https://store.test/slide${i}.png`, pattern: 'hook', slots: { title: `Title ${i}`, art: 'https://store.test/art.png' }, critic: { score: i === 2 ? 3 : 5, problems: i === 2 ? ['busy layout'] : [] } })),
   sources: ['https://www.nhs.uk/conditions/heartburn-and-acid-reflux/'],
 };
 
@@ -484,7 +484,7 @@ test('Recipes: save a carousel as a recipe, rerun it with a new topic, edit and 
   expect(errors).toEqual([]);
 });
 
-test('Convert to Reel opens Motion Reels with kinetic lines from slide slots', async ({ page }) => {
+test('Convert to Reel opens Motion Reels with the carousel slide graphics', async ({ page }) => {
   const calls = [];
   const design = designMock({ hasSystem: true, calls });
   await mockApi(page, srv.base, {
@@ -511,6 +511,8 @@ test('Convert to Reel opens Motion Reels with kinetic lines from slide slots', a
   await expect(page.locator('#dsv2-convert-reel')).toHaveText('Convert to Reel');
   await page.locator('#dsv2-convert-reel').click();
   await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
-  await expect(page.locator('#mr-lines')).toHaveValue(/Title 1/);
+  await expect(page.locator('.mr-thumbs img')).toHaveCount(3);
+  await expect(page.locator('.mr-lead')).toContainText(/carousel slides stay|brand look/i);
   await expect(page.locator('#mr-go')).toHaveText('Convert');
+  await expect(page.locator('#mr-lines')).toHaveCount(0);
 });

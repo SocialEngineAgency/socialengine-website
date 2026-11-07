@@ -123,11 +123,11 @@
     const stage = ov.querySelector('#mr-stage');
     const out = ov.querySelector('#mr-out');
     const COPY = {
-      carousel: [fromCarousel ? 'Convert to Reel' : 'Turn this carousel into a Reel', 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
-      text: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', fromCarousel
-        ? 'Short lines from your carousel animate in, one beat at a time. Add music here; use Voiceover + footage for a spoken version.'
-        : 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
-      faceless: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
+      carousel: [fromCarousel ? 'Convert to Reel' : 'Turn this carousel into a Reel', fromCarousel
+        ? 'Your finished carousel slides stay on screen — each one holds, then the next. Add music below; the brand look from the carousel is kept.'
+        : 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
+      text: ['Make a Reel', 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
+      faceless: ['Make a Reel', 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
     };
 
     function syncHead() {
