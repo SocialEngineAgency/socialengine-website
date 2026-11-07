@@ -1104,6 +1104,7 @@
     if (want.length) bits.push(`Also address these notes:\n${want.map((p, i) => `${i + 1}. ${p}`).join('\n')}`);
     else if (!fix && problems.length) bits.push(`Fix these review notes:\n${problems.map((p, i) => `${i + 1}. ${p}`).join('\n')}`);
     if (c.redo_art) bits.push('Replace the picture on this slide.');
+    bits.push('If bigger type or spacing would overflow, shorten list items or body copy so every word stays inside its box.');
     return bits.join('\n\n').trim().slice(0, 1000);
   }
 
@@ -1284,16 +1285,31 @@
         toast(`Kept slide ${index + 1}: ${why}`, 'info');
         return;
       }
+      const audit = out.audit || null;
+      const warned = out.audit_failed === true || (audit && audit.passed === false);
+      const critic = warned && audit
+        ? {
+          score: Number(audit.score) || (slide.critic && slide.critic.score) || 3,
+          problems: (audit.problems || []).map(String).slice(0, 6),
+          fix: String(audit.fix || '').trim(),
+          redo_art: !!audit.redo_art,
+        }
+        : (slide.critic || null);
       result.slides[index] = Object.assign({}, out.slide, {
-        critic: slide.critic || null,
+        critic,
         history: (slide.history || []).concat([versionOf(slide)]).slice(-10),
         future: [],
         pending: true,
-        audit: out.audit || null,
+        audit,
       });
       persistResult(result);
       showResult(result, false);
-      toast(`Slide ${index + 1} ready — Accept or Reject`, 'success');
+      toast(
+        warned
+          ? `Slide ${index + 1} ready — some review notes remain. Accept or Reject`
+          : `Slide ${index + 1} ready — Accept or Reject`,
+        warned ? 'info' : 'success',
+      );
     } catch (e) {
       if (card) showResult(result, false);
       toast(e.message || 'Could not apply the review', 'error');
