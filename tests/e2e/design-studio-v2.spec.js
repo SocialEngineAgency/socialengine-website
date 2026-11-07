@@ -483,3 +483,34 @@ test('Recipes: save a carousel as a recipe, rerun it with a new topic, edit and 
   expect(calls.find((c) => c[0] === 'recipeDelete')[1]).toBe('rcp_1');
   expect(errors).toEqual([]);
 });
+
+test('Convert to Reel opens Motion Reels with kinetic lines from slide slots', async ({ page }) => {
+  const calls = [];
+  const design = designMock({ hasSystem: true, calls });
+  await mockApi(page, srv.base, {
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/motion/options') {
+        json(200, {
+          enabled: true,
+          defaults: { palette: { bg: '#102030', accent: '#22C55E' }, handle: 'clinic', cta: 'Book a check' },
+          fonts: ['inter'],
+          music: [{ name: 'Warm', url: 'https://cdn.example/music/warm.mp3' }],
+          daily_cap: 20,
+          used_today: 0,
+        });
+        return 'handled';
+      }
+      return design(entry, route, json);
+    },
+  });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('brand-design'));
+  await page.locator('#dsv2-brief').fill('Heartburn myths vs facts for adults over 40');
+  await page.locator('#dsv2-go').click();
+  await expect(page.locator('#dsv2-done .dsv2-slide')).toHaveCount(3, { timeout: 10000 });
+  await expect(page.locator('#dsv2-convert-reel')).toHaveText('Convert to Reel');
+  await page.locator('#dsv2-convert-reel').click();
+  await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
+  await expect(page.locator('#mr-lines')).toHaveValue(/Title 1/);
+  await expect(page.locator('#mr-go')).toHaveText('Convert');
+});

@@ -1119,6 +1119,7 @@
         <div class="dsv2-row">
           <button type="button" class="dsv2-btn" id="dsv2-rcp-save">Save as recipe</button>
           <button type="button" class="dsv2-btn" id="dsv2-zip">Download</button>
+          <button type="button" class="dsv2-btn" id="dsv2-convert-reel" title="Open a kinetic Reel from these slide lines">Convert to Reel</button>
           <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-queue">Add to queue</button>
         </div>
       </div>
@@ -1164,8 +1165,37 @@
     box.querySelectorAll('[data-undo-grid]').forEach((b) => b.addEventListener('click', () => undoGridSlide(result, Number(b.dataset.undoGrid))));
     el('dsv2-zip').addEventListener('click', () => downloadZip(urls));
     el('dsv2-rcp-save').addEventListener('click', () => openSaveRecipe(result));
+    el('dsv2-convert-reel')?.addEventListener('click', () => convertResultToReel(result, urls));
     el('dsv2-queue').addEventListener('click', () => queue(urls, result));
     if (scroll) reveal(box.firstElementChild);
+  }
+
+  /** Handoff finished carousel → Motion Reels (kinetic text when slots exist). */
+  function convertResultToReel(result, urls) {
+    if (typeof window.seOpenMotionReel !== 'function') {
+      toast('Motion Reels is not ready. Hard refresh and try again.', 'error');
+      return;
+    }
+    const helper = window.seCarouselReelLines;
+    const lines = helper && typeof helper.linesFromSlides === 'function'
+      ? helper.linesFromSlides(result && result.slides)
+      : [];
+    const name = String((result && result.title) || 'Carousel reel').slice(0, 60);
+    if (lines.length) {
+      window.seOpenMotionReel({
+        kind: 'text',
+        lines: helper.joinLines(lines),
+        name,
+        origin: 'carousel',
+      });
+      return;
+    }
+    const https = (urls || []).filter((u) => /^https:\/\//i.test(String(u || '')));
+    if (https.length) {
+      window.seOpenMotionReel({ kind: 'carousel', slides: https, name, origin: 'carousel' });
+      return;
+    }
+    toast('Add finished slides first', 'info');
   }
 
   function persistResult(result) {

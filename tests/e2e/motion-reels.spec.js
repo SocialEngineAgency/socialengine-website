@@ -300,7 +300,8 @@ test('Carousel → Reel sends slides in order with seconds per slide; a failed r
     },
   });
   await login(page, srv.base);
-  await page.evaluate(() => window.seOpenMotionReel({ kind: 'carousel', slides: ['https://cdn.example/s1.png', 'http://insecure/s2.png', 'https://cdn.example/s3.png'], name: 'Linen care' }));
+  await page.evaluate(() => window.seOpenMotionReel({ kind: 'carousel', slides: ['https://cdn.example/s1.png', 'http://insecure/s2.png', 'https://cdn.example/s3.png'], name: 'Linen care', origin: 'carousel' }));
+  await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
   await expect(page.locator('.mr-thumbs img')).toHaveCount(2);
   await page.selectOption('#mr-secs', '3.5');
   await page.click('#mr-go');
