@@ -492,10 +492,11 @@
         <input class="mr-input" id="mr-cta" maxlength="60" value="${esc(d.cta || '')}" placeholder="Book a free check" />
         <label class="mr-label" for="mr-handle">Handle</label>
         <input class="mr-input" id="mr-handle" maxlength="40" value="${esc(d.handle || '')}" placeholder="yourbrand" />
-        <span class="mr-label">Colours</span>
+        ${kind === 'design' ? '' : `<span class="mr-label">Colours</span>
         <div class="mr-colors"><label class="mr-hint">Background <input type="color" id="mr-bg" value="${esc(p.bg || '#0F172A')}"></label><label class="mr-hint">Accent <input type="color" id="mr-accent" value="${esc(p.accent || '#A78BFA')}"></label></div>
         <label class="mr-label" for="mr-font">Font</label>
-        <select class="mr-select" id="mr-font">${(o.fonts || ['inter']).map((f) => `<option value="${esc(f)}">${esc(FONT_LABELS[f] || f)}</option>`).join('')}</select>
+        <select class="mr-select" id="mr-font">${(o.fonts || ['inter']).map((f) => `<option value="${esc(f)}">${esc(FONT_LABELS[f] || f)}</option>`).join('')}</select>`}
+        ${kind === 'design' ? '<input type="hidden" id="mr-bg" value="#0F172A"><input type="hidden" id="mr-accent" value="#A78BFA"><input type="hidden" id="mr-font" value="inter">' : ''}
         <label class="mr-label" for="mr-music">Music</label>
         ${musicHtml(o)}
         <div class="mr-row"><button type="button" class="mr-btn mr-btn--primary" id="mr-go" ${ready ? '' : 'disabled'}>${fromCarousel ? 'Convert' : 'Make the Reel'}</button><span class="mr-hint" id="mr-cap">${esc(capUsed)} of ${esc(capMax)} used today</span></div>`;
@@ -672,10 +673,14 @@
         kind,
         cta: form.querySelector('#mr-cta').value.trim(),
         handle: form.querySelector('#mr-handle').value.trim(),
-        palette: { bg: form.querySelector('#mr-bg').value, accent: form.querySelector('#mr-accent').value },
         font: form.querySelector('#mr-font').value,
         name: opts.name || '',
       };
+      // Design reels use the brand system (+ Direction). Motion colour pickers are navy/purple
+      // defaults that would wipe carousel ink and hide titles.
+      if (kind !== 'design') {
+        body.palette = { bg: form.querySelector('#mr-bg').value, accent: form.querySelector('#mr-accent').value };
+      }
       const musicPick = form.querySelector('#mr-music').value;
       if (musicPick === 'ai') {
         body.music = 'ai';

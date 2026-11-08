@@ -537,4 +537,6 @@ test('Convert to Reel opens design-system Motion composer with Direction', async
       { pattern: 'hook', slots: { title: 'Title 3' } },
     ],
   });
+  expect(renders[0].palette).toBeUndefined();
+  await expect(page.locator('.mr-colors')).toHaveCount(0);
 });
