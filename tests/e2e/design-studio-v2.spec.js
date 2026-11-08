@@ -539,4 +539,7 @@ test('Convert to Reel opens design-system Motion composer with Direction', async
   });
   expect(renders[0].palette).toBeUndefined();
   await expect(page.locator('.mr-colors')).toHaveCount(0);
+  await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel.mp4', { timeout: 15000 });
+  await expect(page.locator('#mr-queue')).toBeVisible();
+  await expect(page.locator('#mr-download')).toBeVisible();
 });
