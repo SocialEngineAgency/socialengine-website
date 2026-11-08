@@ -579,6 +579,9 @@ test('new look Home: greeting, approvals with Approve/Reject, goes live today, c
   await expect(row.locator('button', { hasText: 'Reject' })).toBeVisible();
   await expect(page.locator('.nl-lrow')).toContainText('Last call for sign-ups');
   await expect(page.locator('#nl-home-coach')).toContainText('open Reel');
+  await page.locator('#nl-home-coach button', { hasText: 'Create this' }).click();
+  await expect(page.locator('#create-segments [data-segment="animation-studio"]')).toHaveClass(/active/, { timeout: 10000 });
+  await expect(page.locator('#anim-story-type')).toHaveValue('pov', { timeout: 10000 });
   await expect(page.locator('.nl-conn')).toHaveText('Connected');
   await expect(page.locator('.nl-plan')).toContainText('Growth plan');
   await page.click('.dash-sidebar__user');

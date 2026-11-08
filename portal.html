@@ -6153,6 +6153,16 @@
             ['Create this', () => {
               const idx = p.slots.indexOf(slot);
               window.__SE_SLOT_CONTEXT = { slot, index: idx, week: p.week_start };
+              // Reel slots belong in Create → Reels, not Post (which was filling the still-post form).
+              if (slot.format === 'reel') {
+                window.__SE_ANIM_STORY_PRESET = {
+                  story_type: slot.story_type || 'auto',
+                  message: String(slot.brief || slot.topic || slot.goal || '').slice(0, 800),
+                };
+                if (typeof window.switchNav === 'function') window.switchNav('animation-studio');
+                else document.querySelector('.create-seg[data-segment="animation-studio"]')?.click();
+                return;
+              }
               if (typeof window.switchNav === 'function') window.switchNav('design-studio');
               apiFetch(`${API}/api/meta-planner/ideas`, {
                 method: 'POST',
