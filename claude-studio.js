@@ -2480,18 +2480,17 @@
       if (typeof window.seOpenMotionReel !== 'function') return;
       const cap = document.getElementById('cs-caption-box')?.value || '';
       const name = (cap.split('\n')[0] || 'Carousel reel').slice(0, 60);
-      const urls = reelSlideUrls();
-      if (!urls.length) return;
       const slides = hasCarousel() ? carouselQueueOrder().map((i) => _csCarousel.slides[i]).filter(Boolean) : [];
       const helper = window.seCarouselReelLines;
       const lines = helper && typeof helper.linesFromSlides === 'function' ? helper.linesFromSlides(slides) : [];
-      window.seOpenMotionReel({
-        kind: 'carousel',
-        slides: urls,
-        name,
-        origin: 'carousel',
-        lines: lines.length && helper ? helper.joinLines(lines) : undefined,
-      });
+      const joined = lines.length && helper ? helper.joinLines(lines) : '';
+      if (joined) {
+        window.seOpenMotionReel({ kind: 'text', lines: joined, name, origin: 'carousel' });
+        return;
+      }
+      const urls = reelSlideUrls();
+      if (!urls.length) return;
+      window.seOpenMotionReel({ kind: 'carousel', slides: urls, name, origin: 'carousel' });
     });
     document.getElementById('cs-picker-close')?.addEventListener('click', closePicker);
     document.getElementById('cs-picker-modal')?.addEventListener('click', (e) => {
