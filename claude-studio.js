@@ -2481,11 +2481,16 @@
       const cap = document.getElementById('cs-caption-box')?.value || '';
       const name = (cap.split('\n')[0] || 'Carousel reel').slice(0, 60);
       const slides = hasCarousel() ? carouselQueueOrder().map((i) => _csCarousel.slides[i]).filter(Boolean) : [];
-      const helper = window.seCarouselReelLines;
-      const lines = helper && typeof helper.linesFromSlides === 'function' ? helper.linesFromSlides(slides) : [];
-      const joined = lines.length && helper ? helper.joinLines(lines) : '';
-      if (joined) {
-        window.seOpenMotionReel({ kind: 'text', lines: joined, name, origin: 'carousel' });
+      const designSlides = slides
+        .filter((s) => s && s.pattern && s.slots && typeof s.slots === 'object')
+        .map((s) => ({
+          pattern: s.pattern,
+          slots: s.slots,
+          style: s.style && typeof s.style === 'object' ? s.style : null,
+        }))
+        .slice(0, 10);
+      if (designSlides.length) {
+        window.seOpenMotionReel({ kind: 'design', designSlides, name, origin: 'carousel' });
         return;
       }
       const urls = reelSlideUrls();

@@ -484,9 +484,10 @@ test('Recipes: save a carousel as a recipe, rerun it with a new topic, edit and 
   expect(errors).toEqual([]);
 });
 
-test('Convert to Reel opens Motion Reels with kinetic lines from the carousel', async ({ page }) => {
+test('Convert to Reel opens design-system Motion composer with Direction', async ({ page }) => {
   const calls = [];
   const design = designMock({ hasSystem: true, calls });
+  const renders = [];
   await mockApi(page, srv.base, {
     onRequest: async (entry, route, json) => {
       if (entry.path === '/api/motion/options') {
@@ -500,6 +501,15 @@ test('Convert to Reel opens Motion Reels with kinetic lines from the carousel', 
         });
         return 'handled';
       }
+      if (entry.path === '/api/motion/render') {
+        renders.push(JSON.parse(entry.body || '{}'));
+        json(202, { job_id: 'mot_1', status: 'processing', used_today: 1, daily_cap: 20 });
+        return 'handled';
+      }
+      if (entry.path === '/api/motion/jobs/mot_1') {
+        json(200, { job_id: 'mot_1', status: 'done', video_url: 'https://cdn.example/reel.mp4', duration: 18 });
+        return 'handled';
+      }
       return design(entry, route, json);
     },
   });
@@ -511,10 +521,20 @@ test('Convert to Reel opens Motion Reels with kinetic lines from the carousel', 
   await expect(page.locator('#dsv2-convert-reel')).toHaveText('Convert to Reel');
   await page.locator('#dsv2-convert-reel').click();
   await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
-  await expect(page.locator('#mr-lines')).toBeVisible();
-  await expect(page.locator('#mr-lines')).toHaveValue(/Title 1[\s\S]*Title 2[\s\S]*Title 3/);
-  await expect(page.locator('.mr-lead')).toContainText(/kinetic/i);
-  await expect(page.locator('#mr-style')).toHaveValue('pop');
+  await expect(page.locator('.mr-lead')).toContainText(/branded scenes|design system/i);
+  await expect(page.locator('#mr-design-scenes')).toContainText(/Title 1/);
+  await expect(page.locator('#mr-direction')).toBeVisible();
+  await page.locator('#mr-direction').fill('pink and green backgrounds');
   await expect(page.locator('#mr-go')).toHaveText('Convert');
-  await expect(page.locator('.mr-thumbs')).toHaveCount(0);
+  await page.locator('#mr-go').click();
+  await expect.poll(() => renders.length).toBe(1);
+  expect(renders[0]).toMatchObject({
+    kind: 'design',
+    direction: 'pink and green backgrounds',
+    slides: [
+      { pattern: 'hook', slots: { title: 'Title 1' } },
+      { pattern: 'hook', slots: { title: 'Title 2' } },
+      { pattern: 'hook', slots: { title: 'Title 3' } },
+    ],
+  });
 });

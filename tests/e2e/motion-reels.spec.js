@@ -286,28 +286,35 @@ test('Music: AI music made to fit is the default, with an optional style; tracks
   expect(renders[1].music_url).toBeUndefined();
 });
 
-test('Convert to Reel (kinetic) seeds text beats, Convert CTA, and pop animation', async ({ page }) => {
+test('Convert to Reel (design) shows scenes, Direction, and posts kind design', async ({ page }) => {
   const renders = [];
   await mockApi(page, srv.base, { data: clientData({}), onRequest: motionMock(renders) });
   await login(page, srv.base);
   await page.evaluate(() => window.seOpenMotionReel({
-    kind: 'text',
-    lines: 'Most people wash linen wrong.\nHot water *shrinks* it.\nCold wash, hang dry.',
-    name: 'Linen care',
+    kind: 'design',
+    designSlides: [
+      { pattern: 'hook', slots: { title: 'Early signs you should not ignore' } },
+      { pattern: 'list', slots: { heading: 'How we can help', points: ['Helpline', 'Buddies'] } },
+    ],
+    name: 'Carers',
     origin: 'carousel',
   }));
   await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
-  await expect(page.locator('.mr-lead')).toContainText(/kinetic/i);
-  await expect(page.locator('#mr-lines')).toHaveValue(/Most people wash linen wrong/);
-  await expect(page.locator('#mr-style')).toHaveValue('pop');
+  await expect(page.locator('.mr-lead')).toContainText(/design system|branded scenes/i);
+  await expect(page.locator('#mr-design-scenes')).toContainText(/Early signs/);
+  await expect(page.locator('#mr-direction')).toBeVisible();
+  await page.fill('#mr-direction', 'calmer motion');
   await expect(page.locator('#mr-go')).toHaveText('Convert');
   await page.click('#mr-go');
   await expect(page.locator('#mr-video')).toBeVisible({ timeout: 15000 });
   expect(renders[0]).toMatchObject({
-    kind: 'text',
-    beats: ['Most people wash linen wrong.', 'Hot water *shrinks* it.', 'Cold wash, hang dry.'],
-    style: 'pop',
-    name: 'Linen care',
+    kind: 'design',
+    direction: 'calmer motion',
+    name: 'Carers',
+    slides: [
+      { pattern: 'hook', slots: { title: 'Early signs you should not ignore' } },
+      { pattern: 'list', slots: { heading: 'How we can help', points: ['Helpline', 'Buddies'] } },
+    ],
   });
 });
 
