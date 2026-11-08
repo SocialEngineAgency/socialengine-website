@@ -366,7 +366,7 @@ test('Editor: live preview while typing, text styling, Save & next slide, undo/r
   await ed.locator('.dsv2-ed-thumb[data-slide="1"]').click();
   await expect(ed).toContainText('slide 2 of 3');
   await ed.locator('#dsv2-ed-undo').click();
-  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /#slide2$/);
+  await expect(page.locator('#dsv2-done .dsv2-slide img').nth(1)).toHaveAttribute('src', /slide2\.png$/);
   await expect(ed.locator('[data-slot="title"]')).toHaveValue('Title 2');
   await ed.locator('#dsv2-ed-redo').click();
   await expect(ed.locator('[data-slot="title"]')).toHaveValue('Live headline');
