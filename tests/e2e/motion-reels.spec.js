@@ -55,6 +55,7 @@ test('Text Reel from a Content Review caption: writes beats, sends brand default
   await page.selectOption('#mr-music', 'https://cdn.example/music/warm.mp3');
   await page.click('#mr-go');
   await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel.mp4', { timeout: 15000 });
+  await expect(page.locator('#mr-queue')).toBeVisible();
   await expect(page.locator('#mr-download')).toBeVisible();
   await expect(page.locator('#mr-cap')).toHaveText('3 of 20 used today');
   expect(renders[0]).toMatchObject({
@@ -62,6 +63,39 @@ test('Text Reel from a Content Review caption: writes beats, sends brand default
     beats: ['Linen hates hot water.', 'It *shrinks* fast.', 'Cold wash, hang dry.'],
     palette: { bg: '#102030', accent: '#22c55e' }, music_url: 'https://cdn.example/music/warm.mp3',
   });
+});
+
+test('Finished Reel: Add to queue posts the video (no download-upload)', async ({ page }) => {
+  const renders = [];
+  const queues = [];
+  const base = motionMock(renders, { pollsBeforeDone: 0 });
+  const data = clientData({ content: [{ id: 'recP1', status: 'Ready for Review', platform: 'instagram', full_post_text: 'Most people wash linen wrong.\n\n#linen' }] });
+  await mockApi(page, srv.base, {
+    data,
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/studio/design-queue' && entry.method === 'POST') {
+        queues.push(JSON.parse(entry.body || '{}'));
+        json(200, { ok: true, record_id: 'recQ1' });
+        return 'handled';
+      }
+      return base(entry, route, json);
+    },
+  });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="content"]');
+  await page.click('.studio-card[data-post-id="recP1"] .studio-card__caption');
+  await page.locator('.mr-attach').first().click();
+  await page.click('#mr-go');
+  await expect(page.locator('#mr-video')).toHaveAttribute('src', 'https://cdn.example/reel.mp4', { timeout: 15000 });
+  await page.click('#mr-queue');
+  await expect(page.locator('#mr-queue')).toHaveText('Added ✓');
+  expect(queues).toHaveLength(1);
+  expect(queues[0]).toMatchObject({
+    type: 'video',
+    video_url: 'https://cdn.example/reel.mp4',
+    status: 'Pending',
+  });
+  expect(String(queues[0].caption || '')).toMatch(/wash linen/i);
 });
 
 const SWATCH = (c) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="90" height="160"><rect width="90" height="160" fill="${c}"/></svg>`)}`;

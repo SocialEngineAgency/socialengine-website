@@ -594,6 +594,64 @@
 
     // ── The end card of a finished Reel, made again on its own (same voice, footage and music) ──
     let endJob = null;
+    let finishedUrl = '';
+
+    function queuePlatforms() {
+      const data = global.__clientData || global.clientData || global._studioClientData || {};
+      const c = data.client || data.fields || data;
+      const raw = c.social_connected_platforms;
+      const lower = (Array.isArray(raw) ? raw : String(raw || '').split(',')).map((p) => String(p || '').trim().toLowerCase());
+      const fbFlag = String(c.facebook_connected || '').toLowerCase();
+      const fbOff = fbFlag === 'false' || fbFlag === '0' || fbFlag === 'no';
+      const out = [];
+      if (lower.includes('instagram') || String(c.instagram_user_id || '').trim()) out.push('Instagram');
+      if (lower.includes('facebook') || (!fbOff && c.meta_page_id && c.meta_page_token)) out.push('Facebook');
+      return out;
+    }
+
+    function queueCaption() {
+      const ready = global.studioQueueReady || {};
+      const typed = String(opts.caption || opts.text || '').trim();
+      if (typeof ready.captionForQueue === 'function') return ready.captionForQueue({ typedCaption: typed, generatedCaption: '' });
+      return typed;
+    }
+
+    function showFinished(url, note = '') {
+      finishedUrl = String(url || '');
+      const plats = queuePlatforms();
+      const platHint = plats.length ? `Posts to ${plats.join(' + ')}.` : 'Connect Instagram or Facebook in Settings to post.';
+      stage.innerHTML = `<video id="mr-video" src="${esc(finishedUrl)}" controls autoplay muted loop playsinline></video>`;
+      out.innerHTML = `<button type="button" class="mr-btn mr-btn--primary" id="mr-queue">Add to queue</button>
+        <a class="mr-btn" id="mr-download" href="${esc(finishedUrl)}" download="reel.mp4" target="_blank" rel="noopener">Download MP4</a>
+        <span class="mr-hint" id="mr-queue-hint">Saved to Library, Motion reels. ${platHint}</span>
+        ${note ? `<div class="mr-done-note" id="mr-note">${esc(note)}</div>` : ''}`;
+      out.querySelector('#mr-queue').addEventListener('click', queueFinished);
+    }
+
+    async function queueFinished() {
+      const btn = out.querySelector('#mr-queue');
+      const ready = global.studioQueueReady || {};
+      if (!finishedUrl) { toast('Make the Reel first', 'warning'); return; }
+      if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+      try {
+        const body = typeof ready.buildUploadVideoQueueBody === 'function'
+          ? ready.buildUploadVideoQueueBody({
+              videoUrl: finishedUrl,
+              caption: queueCaption(),
+              platform: queuePlatforms().join(',') || 'Instagram,Facebook',
+            })
+          : { type: 'video', video_url: finishedUrl, caption: queueCaption(), status: 'Pending', platform: 'Instagram,Facebook' };
+        const r = await api('/api/studio/design-queue', { method: 'POST', body: JSON.stringify(body) });
+        if (!(r.ok || r.success)) throw new Error(r.error || 'Queue failed');
+        toast('Added to content queue', 'success');
+        if (btn) btn.textContent = 'Added ✓';
+        if (typeof ready.openContentReviewAfterQueue === 'function') ready.openContentReviewAfterQueue();
+      } catch (e) {
+        toast(e.message || 'Queue failed', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to queue'; }
+      }
+    }
+
     function showEndCard(s, said = '') {
       endJob = s;
       const wrap = ov.querySelector('#mr-end-wrap');
@@ -620,11 +678,14 @@
 
     /** The new Reel plays from its end card, so the change is the first thing seen. */
     function playFromEnd(url) {
-      stage.innerHTML = `<video id="mr-video" src="${esc(url)}" controls autoplay muted loop playsinline></video>`;
+      finishedUrl = String(url || '');
+      stage.innerHTML = `<video id="mr-video" src="${esc(finishedUrl)}" controls autoplay muted loop playsinline></video>`;
       const v = stage.querySelector('video');
       v.addEventListener('loadedmetadata', () => { if (v.duration > 3) v.currentTime = Math.max(0, v.duration - 2.4); }, { once: true });
       const dl = out.querySelector('#mr-download');
-      if (dl) dl.href = url;
+      if (dl) dl.href = finishedUrl;
+      const q = out.querySelector('#mr-queue');
+      if (q) { q.disabled = false; q.textContent = 'Add to queue'; }
     }
 
     async function remakeEndCard(e) {
@@ -721,8 +782,7 @@
         const s = await poll(job.job_id);
         if (!s) return;
         if (s.status !== 'done') throw Object.assign(new Error(s.error || 'The video did not render.'), { detail: s.detail || '', failedJob: !!s.job_id });
-        stage.innerHTML = `<video id="mr-video" src="${esc(s.video_url)}" controls autoplay muted loop playsinline></video>`;
-        out.innerHTML = `<a class="mr-btn mr-btn--primary" id="mr-download" href="${esc(s.video_url)}" download="reel.mp4" target="_blank" rel="noopener">Download MP4</a><span class="mr-hint">Saved to Library, Motion reels.</span>${s.note ? `<div class="mr-done-note" id="mr-note">${esc(s.note)}</div>` : ''}`;
+        showFinished(s.video_url, s.note || '');
         showEndCard(s);
         toast('Reel ready');
       } catch (err) {

@@ -1186,11 +1186,13 @@
         style: s.style && typeof s.style === 'object' ? s.style : null,
       }))
       .slice(0, 10);
+    const caption = (el('dsv2-caption') && el('dsv2-caption').value.trim()) || captionWithTags(result);
     if (designSlides.length) {
       window.seOpenMotionReel({
         kind: 'design',
         designSlides,
         name,
+        caption,
         origin: 'carousel',
       });
       return;
@@ -1201,6 +1203,7 @@
         kind: 'carousel',
         slides: https,
         name,
+        caption,
         origin: 'carousel',
       });
       return;
