@@ -1,7 +1,7 @@
 # Convert to Reel — Design
 
 **Date:** 2026-11-07  
-**Status:** Approved for implementation (Reels handoff revised 2026-11-07)
+**Status:** Superseded by `2026-11-08-convert-to-reel-design-system-motion-design.md` (design-system motion happy path)
 
 ## Goal
 
