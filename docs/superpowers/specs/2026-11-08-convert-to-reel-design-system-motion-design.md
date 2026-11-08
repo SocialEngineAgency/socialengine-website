@@ -23,9 +23,10 @@ From finished carousel slides in Create → **Carousels**, **Convert to Reel** p
 2. Clicks **Convert to Reel** (visible when ≥1 finished slide with pattern/slots, or fallback assets).
 3. Opens Motion composer in **design** mode (carousel origin):
    - Scene list derived from slides (pattern label + editable key slot copy).
-   - Brand palette / fonts / logo defaults on.
+   - Optional **Direction** prompt (free text) for look/feel overrides on this reel only.
+   - Brand palette / fonts / logo defaults on (Direction can override colours / energy).
    - Music: same picker / AI bed as Motion Reels today.
-4. User adjusts music / scene copy if needed → **Convert** → render → Library → Motion reels.
+4. User adjusts direction / music / scene copy if needed → **Convert** → render → Library → Motion reels.
 5. **Out of v1:** Review-surface CTA; Voiceover + footage tab on this path (v1.1 if it slows ship); carousel designer redesign.
 
 ## Technical shape
@@ -39,16 +40,20 @@ From finished carousel slides in Create → **Carousels**, **Convert to Reel** p
   - `kind: 'design'`
   - `slides: [{ pattern, slots, style? }]` (strip image-only noise for editable lines; keep image slot URLs for layout)
   - brand hints available client-side (handle, cta) plus server loads full design system
-- Composer UI: scene list + music + Convert; lead copy per table below. Not a free-text chrome dump into `#mr-lines`.
+- Composer UI: scene list + **Direction** textarea + music + Convert; lead copy per table below. Not a free-text chrome dump into `#mr-lines`.
+- Direction field: optional, maxlength ~300; placeholder e.g. `e.g. pink and green backgrounds, calmer motion`.
+- Pass `direction` string on render when non-empty.
 - Cache-bust portal scripts on ship.
 
 **API**
 
 - New HyperFrames composition (e.g. `designReel` in `lib/motion/compose.js`) registered on `/api/motion/render` for `kind: 'design'`.
 - For each slide, reuse design-system slide composition (`composeSlide` / pattern HTML + tokens from `lib/design/system.js`): real colours, fonts, frame (page/total/logo), slot structure.
+- **Direction (v1):** optional `direction` string. Before compose, parse into structured overrides applied on top of the brand system for **this job only** — primarily palette (`bg` / `surface` / `ink` / `accent` / `primary`), plus coarse motion energy (`calmer` | `default` | `punchier`). Layouts, patterns, and slide copy stay unless the user edits scenes. Empty direction → pure brand system.
+- Parsing: small structured extract (cheap model or rules+hex) → `{ palette?, motion? }`; ignore requests that would invent new layouts, rewrite all copy, or swap the design system. Do not turn Direction into freeform Claude Design invent.
 - GSAP timeline per scene animates `data-slot` (and list children) in; soft exit; no Ken Burns on finished PNGs as the happy path.
 - Shared chrome: Instagram-style **segment progress bars**; ghost page numbers from frame; end card with logo + CTA/handle (defaults on when brand provides them).
-- Timing: hold ≈3.5–6s by density (lists longer); cap scenes ≈8–10 to match Motion limits.
+- Timing: hold ≈3.5–6s by density (lists longer); cap scenes ≈8–10 to match Motion limits; Direction `calmer`/`punchier` may nudge hold ±15% and entrance ease.
 - Music: same `music_url` / AI music plumbing as existing kinds.
 
 ### Fallback
@@ -70,6 +75,8 @@ From finished carousel slides in Create → **Carousels**, **Convert to Reel** p
 | Modal title (carousel origin) | Convert to Reel |
 | Lead | Your carousel layouts animate as branded scenes — type moves in on the real design system, with music. |
 | Primary action | Convert |
+| Direction label | Direction (optional) |
+| Direction placeholder | e.g. pink and green backgrounds, calmer motion |
 | Fallback note | Using slide images instead — layouts weren’t available to animate. |
 
 ## Motion (v1)
@@ -88,7 +95,8 @@ From finished carousel slides in Create → **Carousels**, **Convert to Reel** p
 - Voiceover + footage on the design Convert path (follow-up)
 - Carousel designer UX redesign
 - Platform-wide CTA language sweep
-- Freeform Claude Design invent as the Convert engine
+- Freeform Claude Design invent as the Convert engine (Direction is overrides only, not a redesign agent)
+- Direction that rewrites slide copy or swaps patterns (user edits scenes for copy)
 
 ## Risks
 
@@ -99,6 +107,7 @@ From finished carousel slides in Create → **Carousels**, **Convert to Reel** p
 | Image slots / art URLs missing | Compose with placeholders or skip art slot animation; still animate type |
 | Long carousels | Scene cap 8–10; readable holds |
 | Regress to textReel/PNG as default | Explicit `kind: 'design'` from Convert; e2e asserts design payload |
+| Direction becomes unbounded redesign | Structured overrides only (palette + motion energy); ignore layout/copy invent |
 
 ## Success
 
