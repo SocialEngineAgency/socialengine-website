@@ -11,3 +11,4 @@ test-results/
 *.backup-*
 _ads_mvp_*.js
 CURSOR_*.md
+.tmp-ref-reel/
