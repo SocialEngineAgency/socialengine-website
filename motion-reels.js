@@ -95,8 +95,9 @@
 
   function openMotionReel(opts = {}) {
     injectStyles();
-    let kind = ['carousel', 'faceless'].includes(opts.kind) ? opts.kind : 'text';
+    let kind = ['carousel', 'faceless', 'design'].includes(opts.kind) ? opts.kind : 'text';
     const slides = (opts.slides || []).filter((u) => /^https:\/\//i.test(String(u || '')));
+    const designSlides = (opts.designSlides || []).filter((s) => s && s.pattern).slice(0, 10);
     const fromCarousel = opts.origin === 'carousel' || opts.convert === true;
     const seedLines = Array.isArray(opts.lines)
       ? opts.lines.map((l) => String(l || '').trim()).filter(Boolean).join('\n')
@@ -107,9 +108,10 @@
     let busy = false;
     const ov = document.createElement('div');
     ov.className = 'mr-overlay';
+    const hideTabs = kind === 'carousel' || kind === 'design';
     ov.innerHTML = `<div class="mr-modal" role="dialog" aria-label="${fromCarousel ? 'Convert to Reel' : 'Motion Reel'}">
       <div class="mr-head"><h3 id="mr-title"></h3><button type="button" class="mr-x" aria-label="Close">×</button></div>
-      ${kind === 'carousel' ? '' : `<div class="mr-tabs" role="tablist"><button type="button" class="mr-tab" data-mode="text">Text on screen</button><button type="button" class="mr-tab" data-mode="faceless">Voiceover + footage</button></div>`}
+      ${hideTabs ? '' : `<div class="mr-tabs" role="tablist"><button type="button" class="mr-tab" data-mode="text">Text on screen</button><button type="button" class="mr-tab" data-mode="faceless">Voiceover + footage</button></div>`}
       <p class="mr-lead" id="mr-lead"></p>
       <div class="mr-grid"><div class="mr-form"><div class="mr-hint">Loading…</div></div>
       <div><div class="mr-stage" id="mr-stage"><div class="mr-hint" style="padding:20px;text-align:center">Your Reel appears here.</div></div><div class="mr-row" id="mr-out"></div><div id="mr-end-wrap"></div></div></div>
@@ -123,8 +125,9 @@
     const stage = ov.querySelector('#mr-stage');
     const out = ov.querySelector('#mr-out');
     const COPY = {
+      design: ['Convert to Reel', 'Your carousel layouts animate as branded scenes — type moves in on the real design system, with music.'],
       carousel: [fromCarousel ? 'Convert to Reel' : 'Turn this carousel into a Reel', fromCarousel
-        ? 'Your finished carousel slides stay on screen — each one holds, then the next. Add music below; the brand look from the carousel is kept.'
+        ? 'Using slide images instead — layouts weren’t available to animate. Each slide holds, then the next.'
         : 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
       text: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', fromCarousel
         ? 'Carousel copy becomes kinetic text — bold lines animate in one beat at a time, with music. Built to outperform a slide show on Reels.'
@@ -133,6 +136,23 @@
         ? 'Same carousel lines, now as a voiceover script over footage. Switch back to Text on screen anytime for kinetic type.'
         : 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
     };
+
+    function designSceneLabel(s, i) {
+      const slots = s.slots || {};
+      const prefer = ['title', 'heading', 'headline', 'hook', 'kicker', 'body'];
+      let line = '';
+      for (const k of prefer) {
+        const v = slots[k];
+        if (typeof v === 'string' && v.trim() && !/^https:\/\//i.test(v)) { line = v.trim(); break; }
+        if (Array.isArray(v) && v[0]) { line = String(v[0]).trim(); break; }
+      }
+      if (!line) {
+        for (const v of Object.values(slots)) {
+          if (typeof v === 'string' && v.trim() && !/^https:\/\//i.test(v)) { line = v.trim(); break; }
+        }
+      }
+      return `${i + 1}. ${esc(s.pattern || 'slide')}${line ? ` — ${esc(line.slice(0, 72))}` : ''}`;
+    }
 
     function syncHead() {
       ov.querySelector('#mr-title').textContent = COPY[kind][0];
@@ -336,12 +356,19 @@
         return words ? words / 2.6 + 0.5 + end : 0;
       }
       if (kind === 'carousel') return slides.length * (Number(form.querySelector('#mr-secs')?.value) || 2.6) + end;
+      if (kind === 'design') return designSlides.length * 4.5 + end;
       const beats = (form.querySelector('#mr-lines')?.value || '').split('\n').map((x) => x.trim()).filter(Boolean);
       return beats.length ? beats.reduce((n, b) => n + beatSecs(b), 0) + end : 0;
     }
     function reelText() {
       if (kind === 'faceless') return scenes.map((sc) => sc.line).filter(Boolean).join('\n') || form.querySelector('#mr-idea')?.value || '';
       if (kind === 'carousel') return [opts.name, opts.text].filter(Boolean).join('\n');
+      if (kind === 'design') {
+        return [
+          form.querySelector('#mr-direction')?.value || '',
+          ...designSlides.map((s) => Object.values(s.slots || {}).filter((v) => typeof v === 'string').join(' ')),
+        ].filter(Boolean).join('\n');
+      }
       return form.querySelector('#mr-lines')?.value || opts.text || '';
     }
     function trackOption(m) {
@@ -445,8 +472,15 @@
       const capUsed = kind === 'faceless' ? fl.used_today || 0 : o.used_today || 0;
       const capMax = kind === 'faceless' ? fl.daily_cap || 5 : o.daily_cap || 20;
       const ready = kind === 'faceless' ? o.enabled && fl.enabled && (fl.stock || fl.library_media) : o.enabled;
+      const designForm = kind === 'design'
+        ? `<span class="mr-label">Scenes (${designSlides.length})</span>
+          <div class="mr-hint" id="mr-design-scenes" style="margin:0 0 8px;line-height:1.55">${designSlides.map(designSceneLabel).join('<br>') || 'No layouts found'}</div>
+          <label class="mr-label" for="mr-direction">Direction (optional)</label>
+          <textarea class="mr-text" id="mr-direction" maxlength="300" style="min-height:72px" placeholder="e.g. pink and green backgrounds, calmer motion">${esc(opts.direction || '')}</textarea>`
+        : '';
       form.innerHTML = `${!o.enabled ? '<div class="mr-note">Motion videos are being switched on. Try again shortly.</div>' : ''}
-        ${kind === 'faceless' ? facelessHtml(o) : kind === 'carousel' ? `<span class="mr-label">Slides (${slides.length})</span><div class="mr-thumbs">${slides.map((u) => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer">`).join('')}</div>
+        ${kind === 'faceless' ? facelessHtml(o) : kind === 'design' ? designForm : kind === 'carousel' ? `<span class="mr-label">Slides (${slides.length})</span><div class="mr-thumbs">${slides.map((u) => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer">`).join('')}</div>
+          ${fromCarousel ? '<div class="mr-note">Using slide images instead — layouts weren’t available to animate.</div>' : ''}
           <label class="mr-label" for="mr-secs">Seconds per slide</label>
           <select class="mr-select" id="mr-secs"><option value="2">2 (snappy)</option><option value="2.6" selected>2.6 (balanced)</option><option value="3.5">3.5 (time to read)</option><option value="4.5">4.5 (text-heavy slides)</option></select>`
         : `<label class="mr-label" for="mr-lines">Lines, one per beat</label>
@@ -649,7 +683,11 @@
       } else {
         body.music_url = musicPick;
       }
-      if (kind === 'carousel') {
+      if (kind === 'design') {
+        body.slides = designSlides;
+        body.direction = (form.querySelector('#mr-direction')?.value || '').trim().slice(0, 300);
+        if (!body.slides.length) { toast('No carousel layouts to convert', 'warning'); return; }
+      } else if (kind === 'carousel') {
         body.slides = slides;
         body.seconds_per_slide = Number(form.querySelector('#mr-secs').value);
       } else if (kind === 'faceless') {

@@ -1120,7 +1120,7 @@
         <div class="dsv2-row">
           <button type="button" class="dsv2-btn" id="dsv2-rcp-save">Save as recipe</button>
           <button type="button" class="dsv2-btn" id="dsv2-zip">Download</button>
-          <button type="button" class="dsv2-btn" id="dsv2-convert-reel" title="Open a kinetic Reel from these slide lines">Convert to Reel</button>
+          <button type="button" class="dsv2-btn" id="dsv2-convert-reel" title="Animate these layouts as a branded Reel">Convert to Reel</button>
           <button type="button" class="dsv2-btn dsv2-btn--primary" id="dsv2-queue">Add to queue</button>
         </div>
       </div>
@@ -1171,22 +1171,25 @@
     if (scroll) reveal(box.firstElementChild);
   }
 
-  /** Handoff finished carousel → Motion Reels kinetic text (PNG slideshow only if no usable lines). */
+  /** Handoff finished carousel → design-system Motion Reel (PNG slideshow only if no patterns). */
   function convertResultToReel(result, urls) {
     if (typeof window.seOpenMotionReel !== 'function') {
       toast('Motion Reels is not ready. Hard refresh and try again.', 'error');
       return;
     }
     const name = String((result && result.title) || 'Carousel reel').slice(0, 60);
-    const helper = window.seCarouselReelLines;
-    const lines = helper && typeof helper.linesFromSlides === 'function'
-      ? helper.linesFromSlides(result && result.slides)
-      : [];
-    const joined = lines.length && helper ? helper.joinLines(lines) : '';
-    if (joined) {
+    const designSlides = (result && Array.isArray(result.slides) ? result.slides : [])
+      .filter((s) => s && s.pattern && s.slots && typeof s.slots === 'object')
+      .map((s) => ({
+        pattern: s.pattern,
+        slots: s.slots,
+        style: s.style && typeof s.style === 'object' ? s.style : null,
+      }))
+      .slice(0, 10);
+    if (designSlides.length) {
       window.seOpenMotionReel({
-        kind: 'text',
-        lines: joined,
+        kind: 'design',
+        designSlides,
         name,
         origin: 'carousel',
       });
@@ -1202,7 +1205,7 @@
       });
       return;
     }
-    toast('Slides need text or finished uploads first, then Convert to Reel again', 'info');
+    toast('Slides need layouts or finished uploads first, then Convert to Reel again', 'info');
   }
 
   function persistResult(result) {
