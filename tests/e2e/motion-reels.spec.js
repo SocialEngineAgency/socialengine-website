@@ -286,6 +286,31 @@ test('Music: AI music made to fit is the default, with an optional style; tracks
   expect(renders[1].music_url).toBeUndefined();
 });
 
+test('Convert to Reel (kinetic) seeds text beats, Convert CTA, and pop animation', async ({ page }) => {
+  const renders = [];
+  await mockApi(page, srv.base, { data: clientData({}), onRequest: motionMock(renders) });
+  await login(page, srv.base);
+  await page.evaluate(() => window.seOpenMotionReel({
+    kind: 'text',
+    lines: 'Most people wash linen wrong.\nHot water *shrinks* it.\nCold wash, hang dry.',
+    name: 'Linen care',
+    origin: 'carousel',
+  }));
+  await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
+  await expect(page.locator('.mr-lead')).toContainText(/kinetic/i);
+  await expect(page.locator('#mr-lines')).toHaveValue(/Most people wash linen wrong/);
+  await expect(page.locator('#mr-style')).toHaveValue('pop');
+  await expect(page.locator('#mr-go')).toHaveText('Convert');
+  await page.click('#mr-go');
+  await expect(page.locator('#mr-video')).toBeVisible({ timeout: 15000 });
+  expect(renders[0]).toMatchObject({
+    kind: 'text',
+    beats: ['Most people wash linen wrong.', 'Hot water *shrinks* it.', 'Cold wash, hang dry.'],
+    style: 'pop',
+    name: 'Linen care',
+  });
+});
+
 test('Carousel → Reel sends slides in order with seconds per slide; a failed render shows the reason', async ({ page }) => {
   const renders = [];
   const base = motionMock(renders);

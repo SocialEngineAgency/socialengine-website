@@ -484,7 +484,7 @@ test('Recipes: save a carousel as a recipe, rerun it with a new topic, edit and 
   expect(errors).toEqual([]);
 });
 
-test('Convert to Reel opens Motion Reels with the carousel slide graphics', async ({ page }) => {
+test('Convert to Reel opens Motion Reels with kinetic lines from the carousel', async ({ page }) => {
   const calls = [];
   const design = designMock({ hasSystem: true, calls });
   await mockApi(page, srv.base, {
@@ -511,8 +511,10 @@ test('Convert to Reel opens Motion Reels with the carousel slide graphics', asyn
   await expect(page.locator('#dsv2-convert-reel')).toHaveText('Convert to Reel');
   await page.locator('#dsv2-convert-reel').click();
   await expect(page.locator('.mr-modal #mr-title')).toHaveText('Convert to Reel');
-  await expect(page.locator('.mr-thumbs img')).toHaveCount(3);
-  await expect(page.locator('.mr-lead')).toContainText(/carousel slides stay|brand look/i);
+  await expect(page.locator('#mr-lines')).toBeVisible();
+  await expect(page.locator('#mr-lines')).toHaveValue(/Title 1[\s\S]*Title 2[\s\S]*Title 3/);
+  await expect(page.locator('.mr-lead')).toContainText(/kinetic/i);
+  await expect(page.locator('#mr-style')).toHaveValue('pop');
   await expect(page.locator('#mr-go')).toHaveText('Convert');
-  await expect(page.locator('#mr-lines')).toHaveCount(0);
+  await expect(page.locator('.mr-thumbs')).toHaveCount(0);
 });

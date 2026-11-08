@@ -126,8 +126,12 @@
       carousel: [fromCarousel ? 'Convert to Reel' : 'Turn this carousel into a Reel', fromCarousel
         ? 'Your finished carousel slides stay on screen — each one holds, then the next. Add music below; the brand look from the carousel is kept.'
         : 'Your slides animate in one after another over a soft blurred background, with a progress bar and a closing call to action.'],
-      text: ['Make a Reel', 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
-      faceless: ['Make a Reel', 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
+      text: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', fromCarousel
+        ? 'Carousel copy becomes kinetic text — bold lines animate in one beat at a time, with music. Built to outperform a slide show on Reels.'
+        : 'Short lines of bold text animate in, one beat at a time. Great for tips, myths and "3 signs" posts. No images needed.'],
+      faceless: [fromCarousel ? 'Convert to Reel' : 'Make a Reel', fromCarousel
+        ? 'Same carousel lines, now as a voiceover script over footage. Switch back to Text on screen anytime for kinetic type.'
+        : 'A voice reads your script over video clips, with captions that light up word by word. No filming needed.'],
     };
 
     function syncHead() {
@@ -449,7 +453,7 @@
           <textarea class="mr-text" id="mr-lines" maxlength="1500" placeholder="Most people wash linen wrong.&#10;Hot water *shrinks* it.&#10;Cold wash, low spin, hang dry.">${esc(opts.lines || '')}</textarea>
           <div class="mr-row" style="margin-top:6px"><button type="button" class="mr-btn" id="mr-beats">Write the beats for me</button><span class="mr-hint">Put *stars* round a word to colour it.</span></div>
           <label class="mr-label" for="mr-style">Animation</label>
-          <select class="mr-select" id="mr-style"><option value="rise">Rise (calm)</option><option value="pop">Pop (energetic)</option></select>`}
+          <select class="mr-select" id="mr-style"><option value="rise"${fromCarousel ? '' : ' selected'}>Rise (calm)</option><option value="pop"${fromCarousel ? ' selected' : ''}>Pop (energetic)</option></select>`}
         <label class="mr-label" for="mr-cta">Closing line</label>
         <input class="mr-input" id="mr-cta" maxlength="60" value="${esc(d.cta || '')}" placeholder="Book a free check" />
         <label class="mr-label" for="mr-handle">Handle</label>
