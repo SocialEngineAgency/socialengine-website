@@ -316,6 +316,7 @@ test('Convert to Reel (design) shows scenes, Direction, and posts kind design', 
       { pattern: 'list', slots: { heading: 'How we can help', points: ['Helpline', 'Buddies'] } },
     ],
   });
+  expect(renders[0].palette).toBeUndefined();
 });
 
 test('Carousel → Reel sends slides in order with seconds per slide; a failed render shows the reason', async ({ page }) => {
