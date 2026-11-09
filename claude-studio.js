@@ -4851,7 +4851,12 @@
         if (!made) throw new Error((result.posts && result.posts[0] && result.posts[0].error) || 'The post was not made.');
         await landSlotPiece({ slot, idea, image_urls: [made.url] });
       } else if (make.kind === 'reel') {
-        window.__SE_ANIM_STORY_PRESET = { story_type: slot.story_type, message: idea.brief };
+        // Always set story_type (default auto) so animation-studio treats this as a
+        // fresh Calendar/Make-this handoff and skips last-project auto-resume.
+        window.__SE_ANIM_STORY_PRESET = {
+          story_type: slot.story_type || 'auto',
+          message: String(idea.brief || idea.title || '').slice(0, 800),
+        };
         if (typeof window.switchNav === 'function') window.switchNav('animation-studio');
         appendDesignCoachBubble('assistant', 'The idea is in Reels. The video is checked before anything is made.');
       } else if (make.kind === 'story' && typeof window.openStoriesComposer === 'function') {

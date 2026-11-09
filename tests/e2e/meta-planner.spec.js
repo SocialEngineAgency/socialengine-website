@@ -130,3 +130,105 @@ test('Calendar open Feed slot parks ideas then opens Post Coach', async ({ page 
   await expect(page.locator('#cs-coach-log')).toContainText('Three reflux myths', { timeout: 15000 });
   await expect(page.getByRole('button', { name: 'Make this' }).first()).toBeVisible();
 });
+
+test('Calendar filled slot opens Content; Make this reel from ideas starts a fresh Reels compose', async ({ page }) => {
+  const data = clientData();
+  data.story_types = [{ id: 'pov', label: 'POV' }, { id: 'bts', label: 'Behind the scenes' }];
+  const existing = {
+    id: 'anim_old',
+    status: 'brief_ready',
+    title: 'Old bakery Reel',
+    user_prompt: 'Old project that must not stay open',
+    scenes: [{ id: 's1', status: 'ready', video_url: 'https://cdn.example/old.mp4' }],
+  };
+  await mockApi(page, srv.base, {
+    data,
+    animProjects: [existing],
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/meta-planner' && entry.method === 'GET') {
+        json(200, {
+          ...plan('grow'),
+          slots: [
+            { date: '2026-10-05', format: 'reel', goal: 'grow', story_type: 'bts', story_type_label: 'Behind the scenes', status: 'filled', post_id: 'rec1' },
+            { date: '2026-10-11', format: 'feed', goal: 'grow', story_type: 'qa', story_type_label: 'Q&A', status: 'open', post_id: null },
+          ],
+        });
+        return 'handled';
+      }
+      if (entry.path === '/api/calendar-history') { json(200, { posts: [] }); return 'handled'; }
+      if (entry.path === '/api/meta-planner/ideas' && entry.method === 'POST') {
+        json(200, {
+          ideas: [{
+            title: 'Kitchen POV at 5am',
+            why: 'Sends well.',
+            brief: 'POV: unlocking the kitchen before dawn.',
+            make: { kind: 'reel' },
+          }],
+          slot: { date: '2026-10-11', format: 'feed', story_type: 'qa', status: 'open' },
+        });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se_anim_last_project', 'anim_old'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="schedule"]');
+
+  // Filled slot → Content Review, not Create.
+  await page.locator('#meta-week-planner .mwp__slot--filled').click();
+  await expect(page.locator('.dash-nav-item[data-nav="content"]')).toHaveClass(/active/, { timeout: 10000 });
+
+  // Open feed ideas, then Make this reel → fresh Reels compose (not anim_old).
+  await page.click('.dash-nav-item[data-nav="schedule"]');
+  await page.locator('#meta-week-planner .mwp__slot--open').click();
+  await expect(page.locator('#cs-coach-log')).toContainText('Kitchen POV at 5am', { timeout: 15000 });
+  await page.getByRole('button', { name: 'Make this' }).first().click();
+  await expect(page.locator('#create-segments [data-segment="animation-studio"]')).toHaveClass(/active/, { timeout: 10000 });
+  await expect(page.locator('#anim-prompt')).toHaveValue(/unlocking the kitchen/i, { timeout: 15000 });
+  await expect(page.locator('#anim-prompt')).not.toHaveValue(/Old project/i);
+});
+
+test('Reel handoff remounts even when Reels is already open with a project', async ({ page }) => {
+  const data = clientData();
+  data.story_types = [{ id: 'pov', label: 'POV' }, { id: 'tutorial', label: 'Tutorial / how-to' }];
+  const existing = {
+    id: 'anim_old',
+    status: 'brief_ready',
+    title: 'Old bakery Reel',
+    user_prompt: 'Old project that must not stay open',
+    scenes: [{ id: 's1', status: 'ready', video_url: 'https://cdn.example/old.mp4' }],
+  };
+  await mockApi(page, srv.base, {
+    data,
+    animProjects: [existing],
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/meta-planner' && entry.method === 'GET') {
+        json(200, {
+          ...plan('grow'),
+          slots: [
+            { date: '2026-10-11', format: 'reel', goal: 'grow', story_type: 'tutorial', story_type_label: 'Tutorial / how-to', status: 'open', post_id: null, brief: 'Teach the morning batch fold.' },
+          ],
+        });
+        return 'handled';
+      }
+      if (entry.path === '/api/calendar-history') { json(200, { posts: [] }); return 'handled'; }
+      return undefined;
+    },
+  });
+  await page.addInitScript(() => { try { localStorage.setItem('se_anim_last_project', 'anim_old'); } catch (_) {} });
+  await login(page, srv.base);
+  await page.evaluate(() => window.switchNav('animation-studio'));
+  await expect(page.locator('#anim-prompt')).toBeVisible({ timeout: 15000 });
+  // Simulate being mid-project on Reels, then Calendar Reel slot.
+  await page.evaluate(() => {
+    window.__SE_ANIM_STORY_PRESET = {
+      story_type: 'tutorial',
+      message: 'Teach the morning batch fold.',
+    };
+    window.switchNav('animation-studio');
+  });
+  await expect(page.locator('#anim-story-type')).toHaveValue('tutorial', { timeout: 15000 });
+  await expect(page.locator('#anim-prompt')).toHaveValue(/morning batch fold/i);
+  await expect(page.locator('#anim-prompt')).not.toHaveValue(/Old project/i);
+});
