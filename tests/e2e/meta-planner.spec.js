@@ -76,10 +76,45 @@ test('Calendar shows the week plan; Engage saves the week; an open Reel slot ope
   await expect(card.locator('[data-mwp-mode="engage"]')).toHaveClass(/is-on/);
   await expect(card.locator('.mwp__meter').first()).toContainText('2/3');
 
-  // An open slot opens as ideas in the Post Coach (since 8830010); a Reel idea opens Animate with the slot's story type.
+  // An open Reel slot goes straight to Create → Reels with the slot's story type
+  // (same door as Home "Create this" — not Post, which left the coach empty).
   await card.locator('.mwp__slot--open').click();
-  const make = page.getByRole('button', { name: 'Make this' }).first();
-  await expect(make).toBeVisible({ timeout: 15000 });
-  await make.click();
+  await expect(page.locator('#create-segments [data-segment="animation-studio"]')).toHaveClass(/active/, { timeout: 10000 });
   await expect(page.locator('#anim-story-type')).toHaveValue('pov', { timeout: 15000 });
+});
+
+test('Calendar open Feed slot parks ideas then opens Post Coach', async ({ page }) => {
+  const data = clientData();
+  const ideasPosts = [];
+  await mockApi(page, srv.base, {
+    data,
+    onRequest: async (entry, route, json) => {
+      if (entry.path === '/api/meta-planner' && entry.method === 'GET') {
+        json(200, {
+          ...plan('grow'),
+          slots: [
+            { date: '2026-10-11', format: 'feed', goal: 'grow', story_type: 'facts_list', story_type_label: 'Facts list', status: 'open', post_id: null },
+          ],
+        });
+        return 'handled';
+      }
+      if (entry.path === '/api/calendar-history') { json(200, { posts: [] }); return 'handled'; }
+      if (entry.path === '/api/meta-planner/ideas' && entry.method === 'POST') {
+        ideasPosts.push(JSON.parse(entry.body || '{}'));
+        json(200, {
+          ideas: [{ title: 'Three reflux myths', why: 'Feed lists get saves.', brief: 'Bust three reflux myths.', make: { kind: 'post' } }],
+          slot: { date: '2026-10-11', format: 'feed', story_type: 'facts_list', status: 'open' },
+        });
+        return 'handled';
+      }
+      return undefined;
+    },
+  });
+  await login(page, srv.base);
+  await page.click('.dash-nav-item[data-nav="schedule"]');
+  await page.locator('#meta-week-planner .mwp__slot--open').click();
+  await expect.poll(() => ideasPosts.length).toBe(1);
+  await expect(page.locator('#create-segments [data-segment="design-studio"]')).toHaveClass(/active/, { timeout: 10000 });
+  await expect(page.locator('#cs-coach-log')).toContainText('Three reflux myths', { timeout: 15000 });
+  await expect(page.getByRole('button', { name: 'Make this' }).first()).toBeVisible();
 });

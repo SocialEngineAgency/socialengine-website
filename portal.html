@@ -35,7 +35,7 @@
   <script src="./carousel-templates.js?v=20261010" defer></script>
   <script src="./create-coach-thread.js?v=20261026a"></script>
   <script src="./content-project-handoff.js?v=20261102-all-handoffs"></script>
-  <script src="./claude-studio.js?v=20261108-design" defer></script>
+  <script src="./claude-studio.js?v=20261109-slot" defer></script>
   <script src="./carousel-reel-lines.js?v=20261108" defer></script>
   <script src="./design-studio-v2.js?v=20261108-design" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
@@ -6152,27 +6152,21 @@
           paint('Coach · this week', `Your plan has an open ${fmt} on ${day}${slot.story_type_label ? `: ${slot.story_type_label}` : ''}. Making it now keeps the week on target.`, [
             ['Create this', () => {
               const idx = p.slots.indexOf(slot);
+              if (typeof window.openMetaPlannerSlot === 'function') {
+                window.openMetaPlannerSlot({ slot, index: idx, week: p.week_start });
+                return;
+              }
+              // Fallback if Calendar script has not loaded yet.
               window.__SE_SLOT_CONTEXT = { slot, index: idx, week: p.week_start };
-              // Reel slots belong in Create → Reels, not Post (which was filling the still-post form).
               if (slot.format === 'reel') {
                 window.__SE_ANIM_STORY_PRESET = {
                   story_type: slot.story_type || 'auto',
-                  message: String(slot.brief || slot.topic || slot.goal || '').slice(0, 800),
+                  message: String(slot.brief || slot.topic || slot.story_type_label || slot.goal || '').slice(0, 800),
                 };
                 if (typeof window.switchNav === 'function') window.switchNav('animation-studio');
-                else document.querySelector('.create-seg[data-segment="animation-studio"]')?.click();
-                return;
+              } else if (typeof window.switchNav === 'function') {
+                window.switchNav('design-studio');
               }
-              if (typeof window.switchNav === 'function') window.switchNav('design-studio');
-              apiFetch(`${API}/api/meta-planner/ideas`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ week: p.week_start, slot_index: idx }),
-              }).then((r) => r.json().then((data) => ({ ok: r.ok, data }))).then(({ ok, data }) => {
-                if (!ok) throw new Error(data.error || 'Could not write ideas');
-                if (typeof window.seShowSlotIdeas === 'function') window.seShowSlotIdeas(data);
-                else window.__SE_PENDING_SLOT_IDEAS = data;
-              }).catch((e) => showToast(e.message || 'Could not write ideas'));
             }, true],
             ['Not now', notNow],
           ]);
@@ -20292,29 +20286,57 @@
     }
   }
 
-  async function _mwpOpenSlot(i) {
-    const slot = _mwpPlan && _mwpPlan.slots[i];
+  /**
+   * One door for Calendar slots and Home "Create this".
+   * Reels → Create → Reels (story-type preset). Feed → ideas in Post Coach.
+   * Ideas are parked on __SE_PENDING_SLOT_IDEAS *before* switching tabs so Post
+   * render always finds them (the old switch-then-fetch race left the coach empty).
+   */
+  async function openMetaPlannerSlot({ slot, index, week } = {}) {
     if (!slot) return;
     if (slot.post_id) {
       document.querySelector('[data-nav="content"]')?.click();
       return;
     }
-    window.__SE_SLOT_CONTEXT = { slot, index: i, week: _mwpPlan.week_start };
-    if (typeof window.switchNav === 'function') window.switchNav('design-studio');
+    const weekStart = week || (_mwpPlan && _mwpPlan.week_start) || '';
+    const idx = Number.isInteger(index) ? index : -1;
+    window.__SE_SLOT_CONTEXT = { slot, index: idx, week: weekStart };
+
+    if (slot.format === 'reel') {
+      window.__SE_ANIM_STORY_PRESET = {
+        story_type: slot.story_type || 'auto',
+        message: String(slot.brief || slot.topic || slot.story_type_label || slot.goal || '').slice(0, 800),
+      };
+      if (typeof window.switchNav === 'function') window.switchNav('animation-studio');
+      else document.querySelector('.create-seg[data-segment="animation-studio"]')?.click();
+      return;
+    }
+
     showToast('Writing a few ideas…');
     try {
       const res = await apiFetch(`${API}/api/meta-planner/ideas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ week: _mwpPlan.week_start, slot_index: i }),
+        body: JSON.stringify({ week: weekStart, slot_index: idx }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not write ideas');
-      if (typeof window.seShowSlotIdeas === 'function') window.seShowSlotIdeas(data);
-      else window.__SE_PENDING_SLOT_IDEAS = data;
+      // Park first, then open Post — renderClaudeStudio drains pending on paint.
+      window.__SE_PENDING_SLOT_IDEAS = data;
+      if (typeof window.switchNav === 'function') window.switchNav('design-studio');
+      else document.querySelector('.create-seg[data-segment="design-studio"]')?.click();
+      if (document.getElementById('cs-coach-log') && typeof window.seShowSlotIdeas === 'function') {
+        window.seShowSlotIdeas(data);
+      }
     } catch (e) {
       showToast(e.message || 'Could not write ideas');
     }
+  }
+
+  async function _mwpOpenSlot(i) {
+    const slot = _mwpPlan && _mwpPlan.slots[i];
+    if (!slot) return;
+    await openMetaPlannerSlot({ slot, index: i, week: _mwpPlan.week_start });
   }
 
   function _renderMetaPlanner() {
@@ -20404,6 +20426,7 @@
   }
   window._mwpShift = _mwpShift;
   window._mwpOpenSlot = _mwpOpenSlot;
+  window.openMetaPlannerSlot = openMetaPlannerSlot;
 
   function _openBatchUpload() {
     const el = document.getElementById('sched-file-input');
