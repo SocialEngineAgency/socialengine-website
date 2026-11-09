@@ -2530,6 +2530,8 @@
     }
     hydrateDesignCoachLog();
     restoreBusyUiIfGenerating();
+    // Calendar / Home feed slots park ideas here before switchNav — paint them once the coach log exists.
+    if (window.__SE_PENDING_SLOT_IDEAS) seShowSlotIdeas(window.__SE_PENDING_SLOT_IDEAS);
     const seed = window.__SE_DESIGN_COACH_SEED;
     if (seed) {
       window.__SE_DESIGN_COACH_SEED = '';
@@ -3905,6 +3907,7 @@
           log.innerHTML = '';
           msgs.slice(-12).forEach((m) => appendDesignCoachBubble(m.role === 'user' ? 'user' : 'assistant', String(m.content || '')));
           scrollCoachLogToBottom();
+          if (window.__SE_LAST_SLOT_IDEAS || window.__SE_PENDING_SLOT_IDEAS) seShowSlotIdeas();
         });
       }
       appendDesignCoachBubble('assistant', csTab() === 'post'
@@ -3912,6 +3915,8 @@
         : 'Tell me what you want to post, or describe it on the canvas. Once it is made, ask me for any change and it updates here.');
     }
     if (window.seWork && typeof window.seWork.attach === 'function') window.seWork.attach(); // work still going comes back to the top of the log
+    // Calendar feed ideas: chat-picker remounts wipe the log — put them back.
+    if (window.__SE_PENDING_SLOT_IDEAS || window.__SE_LAST_SLOT_IDEAS) seShowSlotIdeas();
   }
 
   async function generateFromCoach(prompt, opts = {}) {
@@ -4765,24 +4770,35 @@
   }
 
   function seShowSlotIdeas(data) {
-    const payload = data || window.__SE_PENDING_SLOT_IDEAS;
+    const payload = data || window.__SE_PENDING_SLOT_IDEAS || window.__SE_LAST_SLOT_IDEAS;
     if (!payload || !Array.isArray(payload.ideas)) return;
     const log = document.getElementById('cs-coach-log');
     if (!log) {
       window.__SE_PENDING_SLOT_IDEAS = payload;
+      // Post tab may still be mounting after Calendar → Create. Retry briefly.
+      if (!payload._retry) {
+        payload._retry = 1;
+        setTimeout(() => { if (window.__SE_PENDING_SLOT_IDEAS === payload) seShowSlotIdeas(payload); }, 250);
+      }
       return;
     }
+    // Chat-picker hydrate can re-run after we paint — keep the payload so hydrate can restore it.
+    window.__SE_LAST_SLOT_IDEAS = payload;
     window.__SE_PENDING_SLOT_IDEAS = null;
+    delete payload._retry;
     if (payload.slot) {
       window.__SE_SLOT_CONTEXT = Object.assign({}, window.__SE_SLOT_CONTEXT || {}, { slot: payload.slot });
     }
-    appendDesignCoachBubble('assistant', 'Three ideas for this day. Make one, or tell me what to change.');
+    if (log.querySelector('[data-slot-ideas]')) return; // already on screen
+    const intro = appendDesignCoachBubble('assistant', 'Three ideas for this day. Make one, or tell me what to change.');
+    if (intro) intro.setAttribute('data-slot-ideas', '1');
     payload.ideas.forEach((idea) => {
       const points = Array.isArray(idea.points) && idea.points.length
         ? `\n${idea.points.map((p) => `• ${p}`).join('\n')}`
         : '';
       const row = appendDesignCoachBubble('assistant', `${idea.title}${idea.why ? `\n${idea.why}` : ''}${points}`);
       if (!row) return;
+      row.setAttribute('data-slot-ideas', '1');
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = 'Make this';
@@ -4806,6 +4822,8 @@
     appendDesignCoachBubble('assistant', line);
     toast('Added to that day', 'success');
     window.__SE_SLOT_CONTEXT = null;
+    window.__SE_LAST_SLOT_IDEAS = null;
+    window.__SE_PENDING_SLOT_IDEAS = null;
   }
 
   async function seMakeSlotIdea(idea) {
