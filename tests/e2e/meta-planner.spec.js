@@ -43,8 +43,16 @@ test('Calendar shows the week plan; Engage saves the week; an open Reel slot ope
   const posts = [];
   const data = clientData();
   data.story_types = [{ id: 'pov', label: 'POV' }, { id: 'bts', label: 'Behind the scenes' }];
+  const existing = {
+    id: 'anim_old',
+    status: 'brief_ready',
+    title: 'Old bakery Reel',
+    user_prompt: 'Old project that must not stay open',
+    scenes: [{ id: 's1', status: 'ready', video_url: 'https://cdn.example/old.mp4' }],
+  };
   await mockApi(page, srv.base, {
     data,
+    animProjects: [existing],
     onRequest: async (entry, route, json) => {
       if (entry.path === '/api/meta-planner' && entry.method === 'GET') { json(200, plan(mode)); return 'handled'; }
       if (entry.path === '/api/meta-planner' && entry.method === 'POST') {
@@ -62,6 +70,7 @@ test('Calendar shows the week plan; Engage saves the week; an open Reel slot ope
       return undefined;
     },
   });
+  await page.addInitScript(() => { try { localStorage.setItem('se_anim_last_project', 'anim_old'); } catch (_) {} });
   await login(page, srv.base);
   await page.click('.dash-nav-item[data-nav="schedule"]');
   const card = page.locator('#meta-week-planner');
@@ -76,11 +85,14 @@ test('Calendar shows the week plan; Engage saves the week; an open Reel slot ope
   await expect(card.locator('[data-mwp-mode="engage"]')).toHaveClass(/is-on/);
   await expect(card.locator('.mwp__meter').first()).toContainText('2/3');
 
-  // An open Reel slot goes straight to Create → Reels with the slot's story type
-  // (same door as Home "Create this" — not Post, which left the coach empty).
+  // An open Reel slot goes straight to Create → Reels with a fresh compose + story type
+  // (same door as Home "Create this" — not Post, and not the last open project).
   await card.locator('.mwp__slot--open').click();
   await expect(page.locator('#create-segments [data-segment="animation-studio"]')).toHaveClass(/active/, { timeout: 10000 });
   await expect(page.locator('#anim-story-type')).toHaveValue('pov', { timeout: 15000 });
+  await expect(page.locator('#anim-prompt')).toBeVisible();
+  await expect(page.locator('#anim-prompt')).toHaveValue(/POV/i);
+  await expect(page.locator('#anim-prompt')).not.toHaveValue(/Old project/i);
 });
 
 test('Calendar open Feed slot parks ideas then opens Post Coach', async ({ page }) => {

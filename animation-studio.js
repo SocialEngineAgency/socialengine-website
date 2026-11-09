@@ -5382,12 +5382,24 @@
   window.renderAnimationStudio = async function renderAnimationStudio(data) {
     window.__clientData = data || window.__clientData || window.clientData;
     const storyPreset = window.__SE_ANIM_STORY_PRESET;
-    if (storyPreset && storyPreset.story_type) {
+    // Calendar / Home "Create this" for a Reel slot: start a fresh compose with that story type,
+    // never keep the last open project on screen.
+    const fromStoryPreset = !!(storyPreset && storyPreset.story_type);
+    if (fromStoryPreset) {
       window.__SE_ANIM_STORY_PRESET = null;
-      _storyDraft = Object.assign({}, _storyDraft, {
+      _storyDraft = {
         story_type: storyPreset.story_type,
-        message: storyPreset.message || _storyDraft.message || '',
-      });
+        motivator: '',
+        barrier: '',
+        benefit: '',
+        message: String(storyPreset.message || '').slice(0, 200),
+      };
+      _project = null;
+      _refs = [];
+      _pendingFormatTemplateId = null;
+      _pendingStylePackId = null;
+      stopPoll();
+      rememberOpenProject('');
     }
     window.__clientEmail = window.clientEmail || window.__clientEmail || '';
     window.API = typeof API !== 'undefined' ? API : window._seAPI;
@@ -5814,6 +5826,11 @@
     });
     applyAnimEntryUI(readAnimEntry());
     bindStoryComposer();
+    // Calendar Reel preset: put the slot brief in the prompt so they are not staring at a blank box.
+    if (fromStoryPreset && _storyDraft.message) {
+      const ta = document.getElementById('anim-prompt');
+      if (ta && !ta.value.trim()) ta.value = _storyDraft.message;
+    }
     const growPrompt = () => {
       const ta = document.getElementById('anim-prompt');
       if (!ta) return;
@@ -5996,7 +6013,7 @@
     // Auto-resume in-flight work. Never auto-delete on expired media.
     if (_project && projectMediaExpired(_project)) {
       toast('Some media links died after a restart — re-upload Char refs if needed.', 'warning');
-    } else if (!_project && !contentProject && !staleContentDestination && !(remixSession && remixSession.referenceUrl) && !(coachSession && coachSession.prompt && coachSession.destination === 'animate')) {
+    } else if (!_project && !fromStoryPreset && !contentProject && !staleContentDestination && !(remixSession && remixSession.referenceUrl) && !(coachSession && coachSession.prompt && coachSession.destination === 'animate')) {
       const lastId = lastOpenProjectId();
       const inflight = _recent.find((p) =>
         !projectMediaExpired(p)
