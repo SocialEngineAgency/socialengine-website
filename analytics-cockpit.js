@@ -911,7 +911,11 @@
     if (!idea) return;
     const prompt = [idea.hook, idea.angle].filter(Boolean).join('\n\n');
     if (where === 'animate') {
-      if (idea.story_type) global.__SE_ANIM_STORY_PRESET = { story_type: idea.story_type };
+      // Mirror Calendar Reel handoff: force a fresh Reels compose with story type.
+      global.__SE_ANIM_STORY_PRESET = {
+        story_type: idea.story_type || 'auto',
+        message: String(prompt || '').slice(0, 800),
+      };
       global.__SE_COACH_CREATE_SESSION = { destination: 'animate', prompt };
       if (typeof _deps.switchNav === 'function') _deps.switchNav('animation-studio');
     } else {

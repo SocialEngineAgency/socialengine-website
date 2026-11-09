@@ -35,15 +35,15 @@
   <script src="./carousel-templates.js?v=20261010" defer></script>
   <script src="./create-coach-thread.js?v=20261026a"></script>
   <script src="./content-project-handoff.js?v=20261102-all-handoffs"></script>
-  <script src="./claude-studio.js?v=20261109-slot" defer></script>
+  <script src="./claude-studio.js?v=20261109-handoffs" defer></script>
   <script src="./carousel-reel-lines.js?v=20261108" defer></script>
   <script src="./design-studio-v2.js?v=20261108-design" defer></script>
   <script src="./portal-assets.js?v=20261011-video"></script>
   <script src="./coach-create-session.js?v=20261020work"></script>
   <script src="./video-coach.js?v=20261102-projects"></script>
-  <script src="./animation-studio.js?v=20261102-projects" defer></script>
+  <script src="./animation-studio.js?v=20261109-handoffs" defer></script>
   <script src="./story-builder.js?v=20261102-projects" defer></script>
-  <script src="./analytics-cockpit.js?v=20261018warm" defer></script>
+  <script src="./analytics-cockpit.js?v=20261109-handoffs" defer></script>
   <script src="./inbox-moderation.js?v=20261009" defer></script>
   <script src="./brand-worksheet-suggest.js?v=20261025" defer></script>
   <script src="./stories-composer.js?v=20261020ship" defer></script>
@@ -6156,7 +6156,8 @@
                 window.openMetaPlannerSlot({ slot, index: idx, week: p.week_start });
                 return;
               }
-              // Fallback if Calendar script has not loaded yet.
+              // Fallback if Calendar script has not loaded yet — same contracts
+              // as openMetaPlannerSlot (reel → fresh Reels; feed → park ideas then Post).
               window.__SE_SLOT_CONTEXT = { slot, index: idx, week: p.week_start };
               if (slot.format === 'reel') {
                 window.__SE_ANIM_STORY_PRESET = {
@@ -6164,8 +6165,20 @@
                   message: String(slot.brief || slot.topic || slot.story_type_label || slot.goal || '').slice(0, 800),
                 };
                 if (typeof window.switchNav === 'function') window.switchNav('animation-studio');
-              } else if (typeof window.switchNav === 'function') {
-                window.switchNav('design-studio');
+              } else {
+                (async () => {
+                  try {
+                    const ir = await apiFetch(`${API}/api/meta-planner/ideas`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ week: p.week_start, slot_index: idx }),
+                    });
+                    const data = await ir.json().catch(() => ({}));
+                    if (ir.ok) window.__SE_PENDING_SLOT_IDEAS = data;
+                  } catch (_) { /* open Post anyway */ }
+                  if (typeof window.switchNav === 'function') window.switchNav('design-studio');
+                  else document.querySelector('.create-seg[data-segment="design-studio"]')?.click();
+                })();
               }
             }, true],
             ['Not now', notNow],
@@ -7741,11 +7754,24 @@
         setCreateSegment('brand-design');
         return;
       }
-      if (nav === 'creation-studio' || nav === 'video-studio' || nav === 'animation-studio') {
-        const seg = nav === 'animation-studio' ? 'animation-studio' : 'creation-studio';
-        seWriteHash('create/' + CREATE_SEGMENT_SLUG[seg]);
+      // Reels remounts via setCreateSegment directly (same as Post / Carousels /
+      // Storyboard) so Calendar / Home / Make-this presets always re-enter the
+      // studio instead of bouncing through a Create-nav click.
+      if (nav === 'animation-studio') {
+        seWriteHash('create/reels');
+        showIf(true, document.getElementById('create-segments'));
+        const createBtn = document.querySelector('[data-nav="create"]');
+        if (createBtn) {
+          document.querySelectorAll('.dash-nav-item').forEach((n) => n.classList.remove('active'));
+          createBtn.classList.add('active');
+        }
+        setCreateSegment('animation-studio');
+        return;
+      }
+      if (nav === 'creation-studio' || nav === 'video-studio') {
+        seWriteHash('create/' + CREATE_SEGMENT_SLUG['creation-studio']);
         const el = document.querySelector('[data-nav="create"]');
-        if (el) el.click(); else renderCreatePage(seg);
+        if (el) el.click(); else renderCreatePage('creation-studio');
         return;
       }
       if (nav === 'brand-voice') {
