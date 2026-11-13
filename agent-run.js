@@ -30,6 +30,7 @@
 .se-agent__spin{width:13px;height:13px;border:2px solid rgba(255,255,255,0.18);border-top-color:#C4B5FD;border-radius:50%;animation:se-agent-spin .8s linear infinite;flex:none}
 @keyframes se-agent-spin{to{transform:rotate(360deg)}}
 .se-agent__time{margin-left:auto;font-weight:500;font-size:0.7rem;color:rgba(255,255,255,0.45)}
+.se-agent__cost{margin-top:8px;font-size:0.7rem;color:rgba(255,255,255,0.45);font-weight:500}
 .se-agent__steps{list-style:none;margin:9px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
 .se-agent__steps li{display:flex;gap:8px;align-items:flex-start;font-size:0.76rem;color:rgba(255,255,255,0.75)}
 .se-agent__steps li[data-s=say]{color:rgba(255,255,255,0.55);font-style:italic}
@@ -70,6 +71,33 @@
   function dur(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
     return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+  }
+
+  function fmtTok(n) {
+    const v = Number(n) || 0;
+    if (v >= 1000) return `${(Math.round(v / 100) / 10).toFixed(1).replace(/\.0$/, '')}k`;
+    return String(v);
+  }
+
+  /** Unit-economics line from run.stats (turns / tools / makes / tokens). */
+  function costHtml(stats) {
+    if (!stats || typeof stats !== 'object') return '';
+    const parts = [];
+    const turns = Number(stats.turns) || 0;
+    const tools = Number(stats.tool_calls) || 0;
+    const makes = Number(stats.makes) || 0;
+    const expensive = Number(stats.expensive) || 0;
+    const tok = stats.tokens || stats.usage || {};
+    const input = Number(tok.input != null ? tok.input : tok.input_tokens) || 0;
+    const output = Number(tok.output != null ? tok.output : tok.output_tokens) || 0;
+    const total = input + output;
+    if (turns) parts.push(`${turns} turn${turns === 1 ? '' : 's'}`);
+    if (tools) parts.push(`${tools} tool${tools === 1 ? '' : 's'}`);
+    if (makes) parts.push(`${makes} make${makes === 1 ? '' : 's'}`);
+    if (expensive) parts.push(`${expensive} expensive`);
+    if (total) parts.push(`${fmtTok(total)} tokens`);
+    if (!parts.length) return '';
+    return `<div class="se-agent__cost">${esc(parts.join(' · '))}</div>`;
   }
 
   function stepsHtml(run, finished) {
@@ -139,6 +167,7 @@
       if (!live) {
         if (status === 'failed') html += `<div class="se-agent__sum">${esc(run.error || 'Something went wrong and nothing was posted.')} You can ask the Coach to try again.</div>`;
         else html += `<div class="se-agent__sum">${esc(r.summary || '')}</div>`;
+        html += costHtml(run.stats || run.usage);
         if (q) {
           html += `<div class="se-agent__q"><div style="font-weight:700">${esc(q.question)}</div>${(q.options || []).length ? `<div class="se-agent__opts">${q.options.map((o, i) => `<button type="button" class="se-agent__btn se-agent__btn--ghost" data-opt="${i}">${esc(o)}</button>`).join('')}</div>` : ''}<div class="se-agent__note">Reply in the chat and the Coach will carry on.</div></div>`;
         }

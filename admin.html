@@ -1062,13 +1062,35 @@
       <td style="${t.fail_rate >= 0.25 ? 'color:var(--red);' : ''}">${Math.round(t.fail_rate * 100)}%</td>
       <td>${t.avg_ms >= 60000 ? Math.round(t.avg_ms / 60000) + ' min' : Math.round(t.avg_ms / 1000) + ' s'}</td></tr>`).join('')}</tbody></table>`;
   }
+  function formatRunCost(stats) {
+    if (!stats || typeof stats !== 'object') return '';
+    const parts = [];
+    const turns = Number(stats.turns) || 0;
+    const tools = Number(stats.tool_calls) || 0;
+    const makes = Number(stats.makes) || 0;
+    const expensive = Number(stats.expensive) || 0;
+    const tok = stats.tokens || {};
+    const input = Number(tok.input != null ? tok.input : tok.input_tokens) || 0;
+    const output = Number(tok.output != null ? tok.output : tok.output_tokens) || 0;
+    const total = input + output;
+    const ms = Number(stats.ms) || 0;
+    if (turns) parts.push(turns + ' turn' + (turns === 1 ? '' : 's'));
+    if (tools) parts.push(tools + ' tool' + (tools === 1 ? '' : 's'));
+    if (makes) parts.push(makes + ' make' + (makes === 1 ? '' : 's'));
+    if (expensive) parts.push(expensive + ' expensive');
+    if (total >= 1000) parts.push((Math.round(total / 100) / 10).toFixed(1).replace(/\.0$/, '') + 'k tok');
+    else if (total) parts.push(total + ' tok');
+    if (ms) parts.push(ms >= 60000 ? Math.round(ms / 60000) + ' min' : Math.round(ms / 1000) + 's');
+    return parts.join(' · ');
+  }
   function drawAgentRuns(runs) {
     const el = document.getElementById('agent-runs');
     if (!runs.length) { el.innerHTML = '<div class="empty">No projects yet.</div>'; return; }
     const tone = { done: 'tag-green', failed: 'tag-red', needs_you: 'tag-gold', running: 'tag-blue', queued: 'tag-grey' };
-    el.innerHTML = `<table class="table"><thead><tr><th>When</th><th>Brand</th><th>Goal</th><th>Result</th></tr></thead><tbody>${runs.map((r) => `<tr>
+    el.innerHTML = `<table class="table"><thead><tr><th>When</th><th>Brand</th><th>Goal</th><th>Cost</th><th>Result</th></tr></thead><tbody>${runs.map((r) => `<tr>
       <td>${relativeTime(r.created_at)}</td><td>${escape(r.client_id || '')}</td>
       <td style="max-width:280px;">${escape(r.goal)}</td>
+      <td style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${escape(formatRunCost(r.stats))}</td>
       <td><span class="tag ${tone[r.status] || 'tag-grey'}">${escape(r.status)}</span> ${escape(r.error || r.summary || '')}</td></tr>`).join('')}</tbody></table>`;
   }
   let agentItems = [];

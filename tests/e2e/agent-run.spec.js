@@ -41,7 +41,10 @@ const DONE = {
       caption: 'Small habits, better sleep.', hashtags: ['#OPA', '#Sleep'], audit: { overall: 8, pass: true }, record_id: 'rec1', queued: true,
     }],
   },
-  stats: { ms: 52000, turns: 6, tool_calls: 4, tool_failures: 0, makes: 1, expensive: 0 },
+  stats: {
+    ms: 52000, turns: 6, tool_calls: 4, tool_failures: 0, makes: 1, expensive: 0,
+    tokens: { input: 12400, output: 860, calls: 6 },
+  },
 };
 
 async function openCoach(page, onRequest) {
@@ -92,6 +95,10 @@ test('a project handed to the agent shows a live card that ends with the finishe
   await card.locator('summary', { hasText: 'Caption' }).click();
   await expect(card).toContainText('#Sleep');
   await expect(card).toContainText('3 steps taken');
+  await expect(card.locator('.se-agent__cost')).toContainText('6 turns');
+  await expect(card.locator('.se-agent__cost')).toContainText('4 tools');
+  await expect(card.locator('.se-agent__cost')).toContainText('1 make');
+  await expect(card.locator('.se-agent__cost')).toContainText('13.3k tokens');
 
   // The queue is one click away.
   await card.locator('[data-open-review]').click();
