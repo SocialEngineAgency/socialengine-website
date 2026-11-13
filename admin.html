@@ -436,6 +436,7 @@
       <div class="nav-item" data-section="merchants">Merchants</div>
       <div class="nav-item" data-section="failed">Failed Videos</div>
       <div class="nav-item" data-section="agent">Coach Agent</div>
+      <div class="nav-item" data-section="agencies">Agencies</div>
       <div class="nav-item" data-section="models">Video Models</div>
       <div class="nav-item disabled">Content Pipeline <span class="coming-soon">Soon</span></div>
       <div class="nav-item disabled">Usage &amp; Cost <span class="coming-soon">Soon</span></div>
@@ -465,6 +466,7 @@
         <section id="section-merchants" class="hidden"></section>
         <section id="section-failed" class="hidden"></section>
         <section id="section-agent" class="hidden"></section>
+        <section id="section-agencies" class="hidden"></section>
         <section id="section-models" class="hidden"></section>
       </div>
     </main>
@@ -614,11 +616,13 @@
       document.getElementById('section-merchants').classList.toggle('hidden', sec !== 'merchants');
       document.getElementById('section-failed').classList.toggle('hidden', sec !== 'failed');
       document.getElementById('section-agent').classList.toggle('hidden', sec !== 'agent');
+      document.getElementById('section-agencies').classList.toggle('hidden', sec !== 'agencies');
       document.getElementById('section-models').classList.toggle('hidden', sec !== 'models');
       if (sec === 'health') renderHealth();
       if (sec === 'merchants') renderMerchants();
       if (sec === 'failed') renderFailed();
       if (sec === 'agent') renderAgent();
+      if (sec === 'agencies') renderAgencies();
       if (sec === 'models') renderModels();
     });
   });
@@ -1135,6 +1139,136 @@
         if (e.message !== 'unauth') toast('Could not save: ' + e.message, 'error');
       }
     });
+  }
+
+  let agencySelectedId = '';
+  async function renderAgencies() {
+    const root = document.getElementById('section-agencies');
+    root.innerHTML = `
+      <h1 class="section-title">Agencies</h1>
+      <p class="section-sub">Thin seats: create an agency, attach brands, add operator emails. Seat email must match a brand contact email so they can log in, then switch brands in the portal.</p>
+      <div class="card" style="padding:14px; margin-bottom:14px;">
+        <div style="font-weight:700; margin-bottom:8px;">Create agency</div>
+        <div class="row-bar" style="margin-bottom:0;">
+          <input id="agency-name" class="input-search" style="max-width:280px;" type="text" placeholder="Agency name">
+          <button class="btn-sm primary" id="agency-create-btn">Create</button>
+        </div>
+      </div>
+      <div id="agency-list">${skeletonBlock('', 2)}</div>
+      <div id="agency-detail"></div>
+    `;
+    root.querySelector('#agency-create-btn').addEventListener('click', createAgency);
+    await drawAgencyList();
+    if (agencySelectedId) await drawAgencyDetail(agencySelectedId);
+  }
+  async function createAgency() {
+    const name = (document.getElementById('agency-name').value || '').trim();
+    if (!name) { toast('Enter an agency name', 'error'); return; }
+    try {
+      const r = await adminFetch('/api/admin/agencies', { method: 'POST', body: JSON.stringify({ name }) });
+      agencySelectedId = r.agency.id;
+      document.getElementById('agency-name').value = '';
+      toast('Agency created', 'success');
+      await drawAgencyList();
+      await drawAgencyDetail(agencySelectedId);
+    } catch (e) {
+      if (e.message !== 'unauth') toast('Could not create: ' + e.message, 'error');
+    }
+  }
+  async function drawAgencyList() {
+    const el = document.getElementById('agency-list');
+    if (!el) return;
+    try {
+      const r = await adminFetch('/api/admin/agencies');
+      const agencies = r.agencies || [];
+      if (!agencies.length) { el.innerHTML = '<div class="empty">No agencies yet.</div>'; return; }
+      el.innerHTML = `<table class="table"><thead><tr><th>Name</th><th>Id</th><th></th></tr></thead><tbody>${agencies.map((a) => `<tr>
+        <td>${escape(a.name)}</td><td style="font-size:11px;color:var(--text-muted);">${escape(a.id)}</td>
+        <td><button class="btn-sm" data-agency-open="${escape(a.id)}">Open</button></td></tr>`).join('')}</tbody></table>`;
+      el.querySelectorAll('[data-agency-open]').forEach((b) => b.addEventListener('click', () => {
+        agencySelectedId = b.dataset.agencyOpen;
+        drawAgencyDetail(agencySelectedId);
+      }));
+    } catch (e) {
+      if (e.message !== 'unauth') el.innerHTML = `<div class="empty" style="color:var(--red);">Error: ${escape(e.message)}</div>`;
+    }
+  }
+  async function drawAgencyDetail(id) {
+    const el = document.getElementById('agency-detail');
+    if (!el || !id) return;
+    el.innerHTML = skeletonBlock('', 2);
+    try {
+      const d = await adminFetch('/api/admin/agencies/' + encodeURIComponent(id));
+      const brands = d.brands || [];
+      const members = d.members || [];
+      el.innerHTML = `
+        <div class="card" style="padding:14px; margin-top:14px;">
+          <div style="font-weight:700; margin-bottom:6px;">${escape(d.agency.name)}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">${escape(d.agency.id)}</div>
+          <div style="font-weight:600; margin-bottom:8px;">Attach brand</div>
+          <div class="row-bar">
+            <input id="agency-brand-email" class="input-search" style="max-width:260px;" type="email" placeholder="Brand contact email">
+            <input id="agency-brand-id" class="input-search" style="max-width:200px;" type="text" placeholder="or client id">
+            <button class="btn-sm primary" id="agency-attach-btn">Attach</button>
+          </div>
+          <table class="table" style="margin-top:10px;"><thead><tr><th>Brand</th><th>Email</th><th></th></tr></thead><tbody>
+            ${brands.length ? brands.map((b) => `<tr>
+              <td>${escape(b.business_name || b.id)}</td><td>${escape(b.contact_email || '')}</td>
+              <td><button class="btn-sm" data-detach="${escape(b.id)}">Detach</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">No brands attached</td></tr>'}
+          </tbody></table>
+          <div style="font-weight:600; margin:16px 0 8px;">Members (seats)</div>
+          <div class="row-bar">
+            <input id="agency-member-email" class="input-search" style="max-width:260px;" type="email" placeholder="ops@agency.com">
+            <select id="agency-member-role" class="input-search" style="max-width:140px;"><option value="operator">operator</option><option value="admin">admin</option></select>
+            <button class="btn-sm primary" id="agency-member-btn">Add seat</button>
+          </div>
+          <table class="table" style="margin-top:10px;"><thead><tr><th>Email</th><th>Role</th><th></th></tr></thead><tbody>
+            ${members.length ? members.map((m) => `<tr>
+              <td>${escape(m.principal)}</td><td>${escape(m.role)}</td>
+              <td><button class="btn-sm" data-unseat="${escape(m.principal)}">Remove</button></td></tr>`).join('') : '<tr><td colspan="3" class="empty">No seats yet</td></tr>'}
+          </tbody></table>
+        </div>`;
+      el.querySelector('#agency-attach-btn').addEventListener('click', async () => {
+        const email = (document.getElementById('agency-brand-email').value || '').trim();
+        const client_id = (document.getElementById('agency-brand-id').value || '').trim();
+        if (!email && !client_id) { toast('Enter brand email or client id', 'error'); return; }
+        try {
+          await adminFetch('/api/admin/agencies/' + encodeURIComponent(id) + '/brands', { method: 'POST', body: JSON.stringify({ email, client_id }) });
+          toast('Brand attached', 'success');
+          drawAgencyDetail(id);
+        } catch (e) { if (e.message !== 'unauth') toast('Attach failed: ' + e.message, 'error'); }
+      });
+      el.querySelectorAll('[data-detach]').forEach((b) => b.addEventListener('click', () => {
+        confirmModal('Detach this brand from the agency?', async () => {
+          try {
+            await adminFetch('/api/admin/agencies/' + encodeURIComponent(id) + '/brands/' + encodeURIComponent(b.dataset.detach), { method: 'DELETE' });
+            toast('Detached', 'success');
+            drawAgencyDetail(id);
+          } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
+        });
+      }));
+      el.querySelector('#agency-member-btn').addEventListener('click', async () => {
+        const principal = (document.getElementById('agency-member-email').value || '').trim();
+        const role = document.getElementById('agency-member-role').value;
+        if (!principal) { toast('Enter seat email', 'error'); return; }
+        try {
+          await adminFetch('/api/admin/agencies/' + encodeURIComponent(id) + '/members', { method: 'POST', body: JSON.stringify({ principal, role }) });
+          toast('Seat added', 'success');
+          drawAgencyDetail(id);
+        } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
+      });
+      el.querySelectorAll('[data-unseat]').forEach((b) => b.addEventListener('click', () => {
+        confirmModal('Remove this seat?', async () => {
+          try {
+            await adminFetch('/api/admin/agencies/' + encodeURIComponent(id) + '/members/' + encodeURIComponent(b.dataset.unseat), { method: 'DELETE' });
+            toast('Removed', 'success');
+            drawAgencyDetail(id);
+          } catch (e) { if (e.message !== 'unauth') toast(e.message, 'error'); }
+        });
+      }));
+    } catch (e) {
+      if (e.message !== 'unauth') el.innerHTML = `<div class="empty" style="color:var(--red);">Error: ${escape(e.message)}</div>`;
+    }
   }
 
   // ── Drawer ────────────────────────────────────────────────────────
