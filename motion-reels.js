@@ -455,7 +455,13 @@
         syncMusic();
         const prev = form.querySelector('#mr-music-preview');
         if (prev) prev.play().catch(() => {});
-        toast('Music saved to your Library', 'success');
+        if (d.library_saved === false) {
+          const msg = d.library_error || 'Music made, but your Library is full so it was not saved.';
+          if (fit) fit.textContent = msg;
+          toast(msg, 'warning');
+        } else {
+          toast('Music saved to your Library', 'success');
+        }
       } catch (err) {
         if (fit) fit.textContent = err.message;
         toast(err.message, 'error');
@@ -746,8 +752,11 @@
       if (musicPick === 'ai') {
         body.music = 'ai';
         body.music_style = (form.querySelector('#mr-music-style')?.value || '').trim();
-      } else {
+      } else if (musicPick) {
         body.music_url = musicPick;
+        const opt = form.querySelector('#mr-music')?.selectedOptions?.[0];
+        const lenSec = Number(opt && opt.dataset.len) || 0;
+        if (lenSec > 0) body.music_length_ms = Math.round(lenSec * 1000);
       }
       if (kind === 'design') {
         body.slides = designSlides;
